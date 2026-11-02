@@ -41,11 +41,16 @@ const (
 	// values of RFC 3834 the outgoing messages carry.
 	ruleAutoForwarded = "auto-forwarded"
 	ruleAutoReplied   = "auto-replied"
+	// ruleOutRawBudget bounds the originals the queues hold in memory
+	// (only a forward of a message the rules move to a folder that is
+	// never downloaded carries one); past it the job reads the original
+	// by id, which then is gone, and is skipped.
+	ruleOutRawBudget = 64 << 20
 )
 
 // ruleOutJob is one outgoing action of a rule on a message: the message
-// as it was when the rule ran, and for a forward its original when it
-// was at hand whole then.
+// as it was when the rule ran, and for a forward its original when the
+// rules sent the message where its row goes away (see noteRules).
 type ruleOutJob struct {
 	ruleID    string
 	action    api.RuleAction
@@ -54,8 +59,14 @@ type ruleOutJob struct {
 	raw       []byte
 }
 
+// key identifies a job: one action of one rule on one message.
+func (j ruleOutJob) key() string {
+	return j.ruleID + "\x00" + string(j.action.Kind) + "\x00" + j.msg.ID
+}
+
 type ruleOutQueue struct {
 	jobs    []ruleOutJob
+	queued  map[string]bool
 	running bool
 }
 
@@ -70,14 +81,25 @@ func (b *Backend) ruleEnqueue(j ruleOutJob) {
 	}
 	q := r.queues[j.accountID]
 	if q == nil {
-		q = &ruleOutQueue{}
+		q = &ruleOutQueue{queued: map[string]bool{}}
 		r.queues[j.accountID] = q
+	}
+	if q.queued[j.key()] {
+		return
 	}
 	if len(q.jobs) >= ruleOutQueueMax {
 		b.log.Warn("rules: outgoing queue full, action dropped", "rule", j.ruleID, "account", j.accountID)
 		return
 	}
+	if j.raw != nil {
+		if r.rawBytes+int64(len(j.raw)) > ruleOutRawBudget {
+			j.raw = nil
+		} else {
+			r.rawBytes += int64(len(j.raw))
+		}
+	}
 	r.pending.Add(1)
+	q.queued[j.key()] = true
 	q.jobs = append(q.jobs, j)
 	if !q.running {
 		q.running = true
@@ -98,7 +120,10 @@ func (b *Backend) ruleOutNext(accountID string) (ruleOutJob, bool) {
 		return ruleOutJob{}, false
 	}
 	j := q.jobs[0]
+	q.jobs[0] = ruleOutJob{}
 	q.jobs = q.jobs[1:]
+	delete(q.queued, j.key())
+	r.rawBytes -= int64(len(j.raw))
 	return j, true
 }
 
@@ -161,6 +186,7 @@ func (b *Backend) ruleOutOne(ctx context.Context, j ruleOutJob) {
 		err = b.ruleAutoReply(ctx, a, j, to, now)
 	}
 	var skip *ruleSkip
+	var ae *api.Error
 	switch {
 	case err == nil:
 		b.Delivery.Wake(a.ID)
@@ -168,9 +194,15 @@ func (b *Backend) ruleOutOne(ctx context.Context, j ruleOutJob) {
 		b.log.Info("rules: message queued", "rule", j.ruleID, "kind", j.action.Kind, "account", a.ID)
 	case errors.As(err, &skip):
 		b.ruleOutSkipped(ctx, j, skip.reason)
-	default:
-		b.log.Warn("rules: outgoing message not queued", "rule", j.ruleID, "kind", j.action.Kind, "err", err)
+	case errors.As(err, &ae):
+		// The message itself cannot be built or queued (the account's
+		// address, the rule's): every later one would fail alike.
+		b.log.Warn("rules: outgoing message not queued", "rule", j.ruleID, "kind", j.action.Kind, "code", ae.Code.String())
 		b.disableRule(ctx, j.ruleID, api.RuleProblemSendFailed)
+	default:
+		// The store or the time ran out: this message is left out.
+		b.log.Warn("rules: outgoing message not queued", "rule", j.ruleID, "kind", j.action.Kind, "err", err)
+		b.ruleOutSkipped(ctx, j, "not queued")
 	}
 }
 
@@ -259,9 +291,6 @@ func (b *Backend) ruleForward(ctx context.Context, a store.Account, j ruleOutJob
 
 // ruleAutoReply queues the action's text to the message's sender.
 func (b *Backend) ruleAutoReply(ctx context.Context, a store.Account, j ruleOutJob, to api.Address, now time.Time) error {
-	if err := validateAddress(to); err != nil {
-		return &ruleSkip{reason: "the sender's address is not usable"}
-	}
 	subject := capSubject(cleanSubject(j.action.Subject))
 	if strings.TrimSpace(subject) == "" {
 		subject = replySubject(j.msg.Subject)
@@ -313,7 +342,7 @@ func ruleReplyTarget(m store.Message) (api.Address, bool) {
 		if len(list) > 0 {
 			a := api.Address{Name: list[0].Name, Address: strings.TrimSpace(list[0].Address)}
 			if a.Address != "" {
-				if c, ok := cleanAddress(a); ok {
+				if c, ok := cleanAddress(a); ok && validateAddress(c) == nil {
 					return c, true
 				}
 				return api.Address{}, false

@@ -1584,7 +1584,8 @@ address someone talked the user, or an agent, into adding.
   neither run rules on stored mail nor delete them.
 - **Never automatically on old mail, never twice.** The automatic run
   sees a Message-ID once (`rule_seen`) and leaves mail that arrived more
-  than a day before the rule was enabled; `rules.apply` never runs
+  than a day before the rule was enabled or before the account was added
+  (a rule for every account and a new account's first sync); `rules.apply` never runs
   outgoing actions. So enabling a rule cannot answer a mailbox's history,
   and moving a message back into the inbox does not answer it again.
 - **Not to automatic or untrusted senders.** Nothing is sent for a

@@ -58,7 +58,10 @@ func (r *rulesRecorder) count() int {
 func newRulesEnv(t *testing.T) *rulesEnv {
 	t.Helper()
 	b, _ := newSyncBackend(t)
-	e := &rulesEnv{t: t, b: b, rec: &rulesRecorder{}, now: time.Now().UTC().Truncate(time.Second)}
+	// The test's clock starts two days after the account was added, so
+	// that mail of the day before a rule was enabled is not older than the
+	// account.
+	e := &rulesEnv{t: t, b: b, rec: &rulesRecorder{}, now: time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)}
 	b.SetNotifier(e.rec)
 	b.rules.now = e.clock
 	e.acc = api.AccountID(seedAccount(t, b, "me@example.invalid"))
@@ -368,6 +371,46 @@ func TestRulesOnlyNewInboxMailOnce(t *testing.T) {
 	before := e.arrive("INBOX", ruleMail("A <a@example.org>", "news between", "o4@example.org"), e.clock().Add(-48*time.Hour))
 	if e.get(before).FolderID != inbox {
 		t.Error("mail from before the re-enabling was moved")
+	}
+}
+
+// A rule for every account does not run on the first sync of an account
+// added after it was enabled: mail from before the account was added is
+// left alone, later mail is not.
+func TestRulesNotOnANewAccountsHistory(t *testing.T) {
+	e := newRulesEnv(t)
+	e.mu.Lock()
+	e.now = time.Now().UTC().Add(-30 * 24 * time.Hour)
+	e.mu.Unlock()
+	e.create(subjectRule("all", "hello", "", api.RuleAction{Kind: api.RuleActionFlag}), false)
+	other := seedAccount(t, e.b, "second@example.invalid")
+	inbox := seedFolders(t, e.b, other, []store.Folder{
+		{Mailbox: "INBOX", Name: "Inbox", Path: "Inbox", Role: api.RoleInbox, Subscribed: true, Selectable: true},
+	})["INBOX"]
+	put := func(subject, id string, arrived time.Time) string {
+		m := &store.Message{AccountID: other, FolderID: inbox.ID, UID: e.nextUID.Add(1), Subject: subject,
+			From: []api.Address{{Address: "a@example.org"}}, Date: arrived, InternalDate: arrived, RFCMessageID: id}
+		if err := e.b.store.UpsertMessages(context.Background(), []*store.Message{m}); err != nil {
+			t.Fatal(err)
+		}
+		e.b.afterMailStored(context.Background(), other, m.ID, ingest.Policy{})
+		got, err := e.b.store.GetMessage(context.Background(), other, m.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(func() []string {
+			var out []string
+			for _, f := range got.Flags {
+				out = append(out, string(f))
+			}
+			return out
+		}(), ",")
+	}
+	if flags := put("hello history", "hist@x", time.Now().Add(-time.Hour)); flags != "" {
+		t.Errorf("a rule ran on the new account's history: %q", flags)
+	}
+	if flags := put("hello new", "new@x", time.Now().Add(time.Minute)); flags != string(api.FlagFlagged) {
+		t.Errorf("new mail of the new account: %q", flags)
 	}
 }
 

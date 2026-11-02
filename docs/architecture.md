@@ -1746,7 +1746,8 @@ nor written.
 - Automatic run (`core/rules_engine.go`): the last step of the mail
   syncers' Stored hook (`afterMailStored`), only for a message of an
   enabled `imap`/`graph` account's inbox, each Message-ID once, never
-  when it arrived more than a day before the rule was enabled. The local
+  when it arrived more than a day before the rule was enabled or before
+  the account was added. The local
   actions go through `FlagMessages`, `MoveMessages` and `TrashMessages` at
   once, then `Supervisor.Trigger` and `notify.messagesChanged`;
   `notify.newMessage` reads the message after the hook and leaves out

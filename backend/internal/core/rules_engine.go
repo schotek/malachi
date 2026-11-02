@@ -45,14 +45,6 @@ func (b *Backend) rulesFor(ctx context.Context, accountID string) ([]store.Rule,
 	return out, nil
 }
 
-func ruleInputs(list []store.Rule) []api.Rule {
-	out := make([]api.Rule, 0, len(list))
-	for _, r := range list {
-		out = append(out, r.Rule)
-	}
-	return out
-}
-
 // noteRules is the Stored hook's part (see the file comment). It never
 // fails: a message the rules cannot judge is left as it is.
 func (b *Backend) noteRules(ctx context.Context, accountID, messageID string) {
@@ -86,9 +78,19 @@ func (b *Backend) noteRules(ctx context.Context, accountID, messageID string) {
 	if arrived.IsZero() {
 		arrived = now
 	}
+	// A rule runs on mail that arrived at most a day before it was
+	// enabled, and never on mail from before the account was added (the
+	// first sync of an account added after a rule for every account).
 	var inTime []store.Rule
 	for _, r := range list {
-		if !r.EnabledAt.IsZero() && !arrived.Before(r.EnabledAt.Add(-ruleEnabledSlack)) {
+		if r.EnabledAt.IsZero() {
+			continue
+		}
+		from := r.EnabledAt.Add(-ruleEnabledSlack)
+		if created := a.CreatedAt.Truncate(time.Second); created.After(from) {
+			from = created
+		}
+		if !arrived.Before(from) {
 			inTime = append(inTime, r)
 		}
 	}
@@ -105,19 +107,23 @@ func (b *Backend) noteRules(ctx context.Context, accountID, messageID string) {
 	if !claimed {
 		return // its Message-ID went through the rules before
 	}
-	steps := rules.Plan(ruleInputs(inTime), b.ruleMessage(ctx, m, rules.NeedsBody(ruleInputs(inTime))))
+	inputs := apiRules(inTime)
+	steps := rules.Plan(inputs, b.ruleMessage(ctx, m, rules.NeedsBody(inputs)))
 	if len(steps) == 0 {
 		return
 	}
 	eff := rules.EffectsOf(steps)
 	run := b.newRuleRun(a)
 
-	// The outgoing actions are judged and their originals read before the
-	// message moves (a move to an unsynced folder takes the row along).
+	// The outgoing actions are judged before the message moves. The worker
+	// reads a forward's original by id, after its limits; only when the
+	// message goes to a folder that is never downloaded (Gmail's All
+	// Mail), which takes the row along, is the original read here, when
+	// it is whole on disk and the queue's memory allows.
 	var jobs []ruleOutJob
 	skipped := map[string]int{}
 	if len(eff.Outgoing) > 0 {
-		target := run.placeRole(ctx, eff.Place)
+		target, unsynced := run.placeRole(ctx, eff.Place)
 		self := b.allSelfAddresses(ctx, a)
 		for _, o := range eff.Outgoing {
 			if reason := ruleOutgoingRefusal(m, f.Role, target, o.Action, self); reason != "" {
@@ -126,8 +132,8 @@ func (b *Backend) noteRules(ctx context.Context, accountID, messageID string) {
 				continue
 			}
 			job := ruleOutJob{ruleID: o.RuleID, action: o.Action, accountID: a.ID, msg: m}
-			if o.Action.Kind == api.RuleActionForward {
-				if raw, ok := b.storedWhole(ctx, a.ID, m); ok {
+			if o.Action.Kind == api.RuleActionForward && unsynced {
+				if raw, ok := b.storedWhole(ctx, a.ID, m); ok && int64(len(raw)) <= quotedPartLimit {
 					job.raw = raw
 				}
 			}
@@ -190,19 +196,22 @@ func (b *Backend) newRuleRun(a store.Account) *ruleRun {
 	return &ruleRun{b: b, a: a, roles: map[api.FolderRole]*store.Folder{}, gone: map[string]bool{}}
 }
 
-// folder looks one of the account's folders up.
-func (r *ruleRun) folder(ctx context.Context, id string) (store.Folder, bool) {
+// folder looks one of the account's folders up; an error when the store
+// could not say (then nothing is decided about the folder).
+func (r *ruleRun) folder(ctx context.Context, id string) (store.Folder, bool, error) {
 	if !r.loaded {
-		r.folders = map[string]store.Folder{}
-		if list, err := r.b.store.ListFolders(ctx, r.a.ID); err == nil {
-			for _, f := range list {
-				r.folders[f.ID] = f
-			}
+		list, err := r.b.store.ListFolders(ctx, r.a.ID)
+		if err != nil {
+			return store.Folder{}, false, err
+		}
+		r.folders = make(map[string]store.Folder, len(list))
+		for _, f := range list {
+			r.folders[f.ID] = f
 		}
 		r.loaded = true
 	}
 	f, ok := r.folders[id]
-	return f, ok
+	return f, ok, nil
 }
 
 // byRole is the account's folder of a role; nil without one.
@@ -232,7 +241,11 @@ func (r *ruleRun) target(ctx context.Context, act *api.RuleAction, ruleID string
 			return *f, true
 		}
 	case api.RuleActionMove:
-		if f, ok := r.folder(ctx, string(act.FolderID)); ok && ruleMoveTarget(f) {
+		f, ok, err := r.folder(ctx, string(act.FolderID))
+		if err != nil {
+			return store.Folder{}, false // the store could not say: not gone
+		}
+		if ok && ruleMoveTarget(f) {
 			return f, true
 		}
 		if !r.gone[ruleID] {
@@ -244,22 +257,22 @@ func (r *ruleRun) target(ctx context.Context, act *api.RuleAction, ruleID string
 }
 
 // placeRole is the role of the folder a placing action would send the
-// message to ("" for none or an ordinary folder), without disabling
-// anything.
-func (r *ruleRun) placeRole(ctx context.Context, act *api.RuleAction) api.FolderRole {
+// message to ("" for none or an ordinary folder) and whether that folder
+// is never downloaded, without disabling anything.
+func (r *ruleRun) placeRole(ctx context.Context, act *api.RuleAction) (api.FolderRole, bool) {
 	if act == nil {
-		return ""
+		return "", false
 	}
 	switch act.Kind {
 	case api.RuleActionJunk:
-		return api.RoleJunk
+		return api.RoleJunk, false
 	case api.RuleActionTrash:
-		return api.RoleTrash
+		return api.RoleTrash, false
 	}
-	if f, ok := r.folder(ctx, string(act.FolderID)); ok {
-		return f.Role
+	if f, ok, _ := r.folder(ctx, string(act.FolderID)); ok {
+		return f.Role, f.Unsynced
 	}
-	return ""
+	return "", false
 }
 
 // disableRule stops a rule the daemon cannot run any more.
@@ -294,7 +307,11 @@ func (r *ruleRun) apply(ctx context.Context, plans []rulePlan) (int, error) {
 	var order []string
 	for _, p := range plans {
 		m := p.m
-		if src, ok := r.folder(ctx, m.FolderID); ok && (src.Role == api.RoleOutbox || src.Role == api.RoleDrafts) {
+		src, ok, err := r.folder(ctx, m.FolderID)
+		if err != nil {
+			return 0, err
+		}
+		if !ok || src.Role == api.RoleOutbox || src.Role == api.RoleDrafts {
 			continue
 		}
 		if p.eff.MarkRead && !slices.Contains(m.Flags, api.FlagSeen) {
@@ -463,7 +480,7 @@ func (s *rulesService) Apply(ctx context.Context, p api.RulesApplyParams) (*api.
 		res.Examined = len(ids)
 		return res, nil
 	}
-	inputs := ruleInputs(list)
+	inputs := apiRules(list)
 	body := rules.NeedsBody(inputs)
 	run := s.b.newRuleRun(a)
 	applied := map[string]int{}

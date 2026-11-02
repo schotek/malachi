@@ -4990,8 +4990,10 @@ moves, trashes or marks read is not announced as new mail of the inbox.
 Each Message-ID of an account goes through the automatic run once (a
 message moved back into the inbox, also by another client, is left
 alone), and mail whose arrival is older than the day before the rule was
-enabled is never touched, so neither the first sync of an account nor a
-backfill runs rules. The server's own rules (Graph `messageRules`,
+enabled, or than the account's addition, is never touched, so neither
+the first sync of an account nor a backfill runs rules. The automatic
+run sees a message when its body is stored; one whose body is too big
+to download or cannot be parsed is not run through the rules. The server's own rules (Graph `messageRules`,
 Sieve) are neither read nor changed.
 
 ```jsonc

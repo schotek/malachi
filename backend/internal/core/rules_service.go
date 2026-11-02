@@ -37,6 +37,7 @@ type rulesState struct {
 	// the next reader read them again (every write invalidates it).
 	list   []store.Rule
 	loaded bool
+	gen    uint64 // bumped by every invalidation
 
 	// The coalesced notify.rulesChanged.
 	lastNotify time.Time
@@ -44,8 +45,9 @@ type rulesState struct {
 
 	// The outgoing actions' queues, one worker per mail account
 	// (rules_outgoing.go); pending counts the jobs queued or running.
-	queues  map[string]*ruleOutQueue
-	pending sync.WaitGroup
+	queues   map[string]*ruleOutQueue
+	rawBytes int64 // the originals the queued jobs hold
+	pending  sync.WaitGroup
 
 	// now is the clock of the engine and the outgoing limits (tests); nil
 	// = time.Now.
@@ -74,13 +76,18 @@ func (b *Backend) cachedRules(ctx context.Context) ([]store.Rule, error) {
 		r.mu.Unlock()
 		return out, nil
 	}
+	gen := r.gen
 	r.mu.Unlock()
 	list, err := b.store.ListRules(ctx)
 	if err != nil {
 		return nil, err
 	}
 	r.mu.Lock()
-	r.list, r.loaded = list, true
+	// A write that committed while this read ran invalidated the cache:
+	// what was read may be older, so it is used once but not kept.
+	if r.gen == gen {
+		r.list, r.loaded = list, true
+	}
 	r.mu.Unlock()
 	return list, nil
 }
@@ -89,6 +96,7 @@ func (b *Backend) cachedRules(ctx context.Context) ([]store.Rule, error) {
 func (b *Backend) rulesInvalidate() {
 	b.rules.mu.Lock()
 	b.rules.loaded, b.rules.list = false, nil
+	b.rules.gen++
 	b.rules.mu.Unlock()
 }
 
