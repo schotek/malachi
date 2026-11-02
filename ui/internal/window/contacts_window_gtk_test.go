@@ -29,6 +29,12 @@ func TestContactsWindowGTKSmoke(t *testing.T) {
 		t.Skip("set MALACHI_GTK_SMOKE=1 with a GTK display")
 	}
 	t.Setenv(contactsctl.SamplesEnv, "1")
+	// The photo hub is the application's and keeps the caller of the first
+	// window that used it; after an earlier smoke test that was a window
+	// without the samples, whose contact.photo fails as not connected.
+	prevPhotos := contactPhotos
+	contactPhotos = nil
+	t.Cleanup(func() { contactPhotos = prevPhotos })
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	adw.Init()
