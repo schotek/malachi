@@ -19,8 +19,8 @@
 # (the NativeAOT keyring helper links with them) and the WebView2 runtime.
 #
 # pwsh runs the steps and judges a step by the exit status of the last
-# program it ran, so no step runs more than one. Pull requests and a manual
-# run test, lint and build; a tag only builds the two installers, keeps
+# program it ran, so no step runs more than one. A run by hand tests,
+# lints and builds; a tag only builds the two installers, keeps
 # them and attaches them to its release (the release job), as what it tags
 # was tested before (docs/releasing.md §3). They are the only
 # Windows artefacts of a release, built nowhere else (docs/releasing.md §7).
@@ -30,26 +30,6 @@ on:
   push:
     # Only release tags (v1.2.3); pushes to main build nothing.
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
-  pull_request:
-    paths:
-      - windows/**
-      - backend/**
-      - po/**
-      - docs/malachi_icon.png
-      - Makefile
-      - .github/workflows/windows.yml
-      # What else the build and the tests read outside windows/: the GTK
-      # UI's sources (the drift tests compare timeouts, the editor bridge,
-      # the viewer's document and the icon names with them), the gschema
-      # (the settings' keys and defaults), the API document, the licences
-      # that go into the app folder, and the line endings of the checkout.
-      - ui/**
-      - data/io.github.schotek.Malachi.gschema.xml
-      - docs/api.md
-      - LICENSE
-      - LICENSING.md
-      - THIRD-PARTY-NOTICES.md
-      - .gitattributes
   workflow_dispatch:
     inputs:
       canary:
@@ -68,7 +48,7 @@ jobs:
   go:
     name: backend (go vet, go test)
     # Not on a tag, as no test of the client job: a release builds what
-    # pull requests have tested (docs/releasing.md §3).
+    # was tested on Windows before (docs/releasing.md §3).
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: windows-2025
     timeout-minutes: 30
