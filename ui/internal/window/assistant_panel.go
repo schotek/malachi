@@ -308,9 +308,9 @@ func (p *assistantPanel) selectionContext() *assistantpanel.Context {
 	if subject == "" {
 		subject = row.Message.Subject
 	}
-	thread := string(w.model.rawThread(row.Summary.ID))
+	thread := string(p.w.model.rawThread(row.Summary.ID))
 	if thread == "" {
-		thread = string(w.model.rawThread(row.Key.Thread))
+		thread = string(p.w.model.rawThread(row.Key.Thread))
 	}
 	acc := string(row.Message.AccountID)
 	if ids := p.w.model.rowIDs(row); ids != nil {
