@@ -541,7 +541,7 @@ public sealed class ApiRoundTripTests
         // RpcError.cs
         [nameof(RpcError)] = Case<RpcError>(Error),
         // Search.cs
-        [nameof(SearchQueryParams)] = Case<SearchQueryParams>("""{"accountId":"acc_1","folderId":"f_inbox","query":"from:alice přílohy","page":@page@}"""),
+        [nameof(SearchQueryParams)] = Case<SearchQueryParams>("""{"accountId":"acc_1","folderId":"f_inbox","query":"from:alice přílohy","page":@page@,"withSent":true}"""),
         [nameof(MatchRange)] = Case<MatchRange>("""{"start":13,"end":22}"""),
         [nameof(SearchResult)] = Case<SearchResult>("""{"message":@summary@,"snippet":"…posílám přílohy k faktuře…","ranges":[{"start":13,"end":22}],"score":0}"""),
         [nameof(SearchQueryResult)] = Case<SearchQueryResult>("""{"results":[{"message":@summary@,"snippet":"x","score":0.5}],"page":@pageinfo@}"""),
@@ -746,6 +746,9 @@ public sealed class ApiRoundTripTests
         ["ThreadGetResult without sent"] = Case<ThreadGetResult>(
             """{"thread":@thread@,"messages":[],"drafts":null}""",
             """{"thread":@thread@,"messages":[],"sent":[],"drafts":[]}"""),
+        ["SearchQueryParams without withSent"] = Case<SearchQueryParams>(
+            """{"query":"x","page":{"cursor":"c","limit":50},"withSent":null}""",
+            """{"query":"x","page":{"cursor":"c","limit":50}}"""),
         ["ThreadGetParams without withSent"] = Case<ThreadGetParams>(
             """{"accountId":"a","threadId":"t","withSent":null,"withDrafts":null}""",
             """{"accountId":"a","threadId":"t"}"""),
