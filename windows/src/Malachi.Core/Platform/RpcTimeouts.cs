@@ -117,4 +117,10 @@ public static class RpcTimeouts
     /// GitHub asset within 70 s (core's updateCheckLimit) before it answers.
     /// </summary>
     public static readonly TimeSpan UpdateCheck = TimeSpan.FromSeconds(75);
+
+    /// <summary>
+    /// <c>message.signatureRevocation</c>: the daemon gives the check 15 s
+    /// (api.RevocationTimeout); the client waits 20 s (docs/api.md §4.21).
+    /// </summary>
+    public static readonly TimeSpan SignatureRevocation = TimeSpan.FromSeconds(20);
 }

@@ -159,6 +159,7 @@ public sealed partial class MessageView : UserControl
         Reader.Addresses.RowChanged += (_, kind) => FillAddressRow(kind);
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
+        SignatureBadge.Attach(services, () => HostWindow);
         // The No Accounts page's note on the update check (ui/internal/updates WizardNote).
         UpdateNote.Text = Malachi.Core.Updates.UpdateCheck.WizardNote();
         UpdateBodyFit();
@@ -635,6 +636,7 @@ public sealed partial class MessageView : UserControl
         // same one with what loaded since: the bar answers it.
         FeedQuickReply();
         RenderInvitation(r);
+        RenderSignature(r);
         RenderCrm();
         if (headersOf == r.Summary.Id)
         {
@@ -653,6 +655,20 @@ public sealed partial class MessageView : UserControl
             return;
         }
         invitation.Show(r.Summary, r.Loaded?.Msg, InvitationReading.ShowsInvitationCard(services.AccountOf(r.Summary.AccountId)));
+    }
+
+    // The badge of a signed message (docs/plans/signatures.md §6): the verdict
+    // message.get carried, with the From address the explanation of a
+    // signature of someone else names; an attached message has none.
+    private void RenderSignature(ReaderRender r)
+    {
+        if (Reader.Mode == ReaderMode.Embedded)
+        {
+            SignatureBadge.Show(null, r.Summary.Id, "");
+            return;
+        }
+        var from = r.Summary.From.Count > 0 ? r.Summary.From[0].Email : "";
+        SignatureBadge.Show(r.Loaded?.Msg?.Signature, r.Summary.Id, from);
     }
 
     // openInvitationLink: Join Video Call through the link confirmation of

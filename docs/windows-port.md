@@ -4271,6 +4271,139 @@ without a compiler: `InfoBar.Content` with a `WrapBox`, the `Root` row
 shift (nothing reads the rows by number), `ContentDialog` content with a
 `CheckBox`.
 
+### 11.17 Signed mail (2026-11-02)
+
+Written 2026-11-02 on a Linux machine without .NET, from the Go reference
+`ui/internal/signature` and the contract `docs/api.md` §4.21 (design,
+decisions S1 to S17 and the as-built notes of every client in
+`docs/plans/signatures.md`; the macOS port was written at the same time and
+is not the source). Phase 1 only: the daemon verifies S/MIME and OpenPGP/MIME
+signatures of incoming mail, nothing is signed, decrypted or encrypted.
+**Nothing here is built or run**: the Windows agent builds, tests and walks it.
+
+API: `Api/Signature.cs` mirrors `backend/pkg/api/signature.go` (eleven wire
+enums; the records, Go's `PGP` and `SMIME` spelt `Pgp` and `Smime`;
+`SignatureDetails` derives from `SignatureSummary` as Go's embeds it);
+`MessageSummary.Signature` (`MessageSignature`) and `Message.Signature`
+(`SignatureSummary`) share the wire key `signature` as `invitation` does
+(`MessageConverter`); `message.signature`, `message.signatureRevocation`
+(`RpcTimeouts.SignatureRevocation`, 20 s: the daemon gives the check 15 s),
+`pgp.keyImport`, `pgp.keyVerify`, `pgp.keyList`, `pgp.keyRemove` end
+`API.Methods` (125); `ErrorCode.RevocationFailed` 1510 (54 codes);
+`notify.signaturesChanged` ends `AllNotifications` and decodes as
+`DaemonNotification.SignaturesChanged` (no params,
+`NotificationHub.AddSignaturesChanged`); the nine limits of signature.go
+are in `API.Limits` (102).
+
+Core: `Signatures/SignatureView.cs` (signature.go: `SeverityOf`, `IconOf`,
+`StyleOf`, `ListIconFor`, `BadgeFor`, `SignerLabel`, `HidesPart`,
+`TileAttachments`, `DetailsFor`, `ImportParams`, `ConfirmParams`,
+`RevocationFailureOf`, `ImportFailureOf`, `PastedParams`, `FileParams`,
+`KeyRows`, `FormatFingerprint`, `Clean`), `SignatureText.cs` (text.go, every
+text a GTK msgid through `L10n`, none new, none excluded) and
+`SignatureTypes.cs` (the view models: `SignatureBadge`, `SignatureRow`,
+`SignatureSection`, `SignatureButton`, `SignatureDetailsView` for Go's
+`Details`, `SignatureKeyRow`, …). `Controllers/SignatureDetailsController.cs`
+(Windows-first: the details of one message from its summary, then
+`message.signature`; Check Revocation with its busy button and the class of
+a failure; Import Key; Confirm Key; `Refresh` on `notify.signaturesChanged`)
+and `Controllers/PgpKeysController.cs` (the key list of Preferences →
+Security, import, confirm, unconfirm, remove, each a toast).
+`MessageRow` has `SignatureIcon`, `SignatureStyle`, `SignatureTooltip`
+(the latest member's on a conversation row); `AttachmentChips.ChipAttachments`
+takes the verdict and drops its signature part (S15: the panel, the cards
+and the bubble's paper clip count); `ConversationController.NeedsBody` asks
+`message.get` for a member with a verdict (the card has no signer without
+it); `IconGlyphs` has `security-high`, `-medium` and `-low`, all the one
+shield `U+EA18` (Segoe MDL2 Assets "Shield", **to be checked on Windows
+11**): the colour tells the verdicts apart and a key not confirmed is drawn
+at 60 %.
+
+App: `Controls/SignatureGlyph` (the shield in the colour of the verdict:
+visual states over `SystemFillColor…Brush`); the list's icon is a column of
+`MessageRowView` between the paper clip and the star. `Signatures/` holds
+`SignatureBadgeButton` (the flat button in a message's header: under the
+date in `MessageView`, in the header `WrapBox` of an open
+`ConversationCard`; never in a chat bubble or an attached message's window),
+`SignatureDetailsPresenter` (the `Flyout` under the badge, built in code
+from `SignatureDetailsView`: shield and short name, explanation, rows
+selectable and monospaced where the reference says, notes, certificate
+sections, the caveat, the buttons and a Close button; the Confirm Key…
+question is a `ContentDialog` with the fingerprint in monospace, and the
+session outlives the flyout while it is asked) and `ImportKeyDialog` (the
+text area with the armour's first line as placeholder, Choose File… through
+the shell's `ComposeFileDialog` with the filter OpenPGP keys, at most
+`MaxPGPKeyBytes + 1` bytes read, Import enabled while `PastedParams` is
+not null, the failure's sentence under the field). `Preferences/SecurityPage`
+is Preferences → Security (after Contacts; `security-high`): the group
+OpenPGP Keys with its description and Import Key…, one `SettingsCard` per
+key (title, fingerprint, origin, the pills, a menu with Confirm Key… or
+Remove Confirmation and Remove Key…). `Shell/Integration` turns
+`notify.signaturesChanged` into the reading of every enabled account's
+messages as `notify.messagesChanged` does (the cache lets go, the pane, the
+list and the cards ask again).
+
+Differences from the other clients: the details are a flyout (macOS a
+popover, GTK a dialog); the three icon names share one glyph; the badge of a
+folded conversation card appears when the card has been opened (its signer
+comes with `message.get`); a failed `pgp.keyVerify` or `pgp.keyRemove` has
+no sentence in the reference, so the toast says "Confirming the key",
+"Removing the confirmation" or "Removing the key" through `RpcErrorText`
+(Windows-only strings, English); the board's conversation cards have no
+badge (`board.get` carries no verdict, the same gap as GTK and macOS).
+
+Tests: `Signatures/SignatureViewTests` (signature_test.go),
+`Controllers/SignatureControllersTests` (against `FakeDaemon`),
+`Presentation/SignatureMessageRowTests` (the row's icon, S15 in
+`ChipAttachments`), and the updated `GoContractTests` (125 methods, the
+eleven wire enums, `EveryEnumAndStructOfSignatureGoIsMirrored`, the 102
+limits, signature.go in `EveryRecordHasTheMembersOfItsGoStruct`),
+`ApiCodingTests` (`GoMethods`, `GoCodes`, the notifications),
+`ApiRoundTripTests` (a sample of every signature record, `Message` with
+`signature`) and `NotificationDecodeTests`.
+
+The Windows agent: `build.ps1 app`, `test` (the classes above first, then
+`IconGlyphsTests` and the whole of `Malachi.Conventions.Tests`), `lint`
+(formatting; `StringsCheckTests.EveryTemplateMsgidIsUsedOrExcluded` with
+every msgid of signature/text.go used, nothing added to
+`windows/parity-exclusions.txt`). Then by hand against a daemon that has
+verdicts (or `MALACHI_DEVMAIL` mail signed with the test CA of
+`backend/testdata/signatures`):
+
+- the list: the icon next to the paper clip for a valid, valid-seen,
+  invalid, revoked and mismatching message and none for the others, a
+  conversation row with its latest member's, the tooltip, the row's name;
+- the reading pane, the message window and an open conversation card: the
+  badge under the date (in the card's header), its sentence per verdict and
+  its colour, none in a chat bubble, none in an attached message's window,
+  Tab and Enter reach it;
+- the flyout: heading, explanation, rows, notes, certificate sections, signed
+  headers, the caveat of a valid verdict; Check Revocation (the button says
+  Checking…, the 20 s limit, each failure's sentence, Check Revocation Again,
+  the caption), Import Key from an attachment and from the Autocrypt header,
+  Confirm Key… (the question shows the fingerprint, Cancel is the default;
+  the flyout closes under the dialog and the answer still arrives), Close;
+  values selectable, fingerprints monospaced, a hostile name (bidi, control
+  characters) harmless; narrow and tall windows;
+- the signature part of a signed message has no attachment tile, a message
+  with a signature hidden deeper does;
+- Preferences → Security: empty state, Import Key… by pasting (button
+  disabled while empty, the secret-key failure, the armour placeholder) and
+  by file (a binary key, an armoured one, one over 1 MiB), the toast, the
+  card of a key, Confirm Key… and Remove Confirmation, Remove Key… (the
+  destructive question), the pills (Confirmed, Not confirmed, Revoked,
+  Expired), the update after a change made in another client
+  (`notify.signaturesChanged`);
+- the dark and the high-contrast themes of the shield and the badge, and
+  other display scales.
+
+Guessed without a compiler: `Flyout` with a `ScrollViewer` and a
+`FlyoutPresenter` style set from code, `ContentDialog` subclass
+`ImportKeyDialog` keeping itself open (`args.Cancel`) until the daemon has
+the key, the glyph `U+EA18`, `VisualStateManager` groups on a `FontIcon`
+inside a `UserControl`, a `SettingsCard` whose `Description` is a panel,
+`record SignatureDetails : SignatureSummary` through the source generator.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

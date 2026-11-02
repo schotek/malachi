@@ -1157,14 +1157,14 @@ public sealed partial class ApiCodingTests
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
         (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"), (1507, "malformedCalendar"),
-        (1508, "recurrenceUnsupported"), (1509, "addressBookReadOnly"),
+        (1508, "recurrenceUnsupported"), (1509, "addressBookReadOnly"), (1510, "revocationFailed"),
     ];
 
     [Fact]
     public void ErrorCodesAreNamed()
     {
-        Assert.Equal(53, ErrorCode.All.Count);
-        Assert.Equal(53, ErrorCode.All.Distinct().Count());
+        Assert.Equal(54, ErrorCode.All.Count);
+        Assert.Equal(54, ErrorCode.All.Distinct().Count());
         Assert.Equal(GoCodes.Select(c => c.Code), ErrorCode.All.Select(c => c.Value));
         Assert.Equal(GoCodes.Select(c => c.Name), ErrorCode.All.Select(c => c.Name));
         foreach (var code in ErrorCode.All)
@@ -1334,13 +1334,15 @@ public sealed partial class ApiCodingTests
         "contact.create", "contact.update", "contact.delete",
         "contact.photo",
         "update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice",
+        "message.signature", "message.signatureRevocation",
+        "pgp.keyImport", "pgp.keyVerify", "pgp.keyList", "pgp.keyRemove",
     ];
 
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(119, API.AllMethods.Count);
-        Assert.Equal(119, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(125, API.AllMethods.Count);
+        Assert.Equal(125, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
@@ -1348,7 +1350,7 @@ public sealed partial class ApiCodingTests
             [
                 "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged",
                 "notify.draftsChanged", "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
-                "notify.assistantProfileChanged", "notify.contactsChanged", "notify.updateChanged",
+                "notify.assistantProfileChanged", "notify.contactsChanged", "notify.updateChanged", "notify.signaturesChanged",
             ],
             API.AllNotifications);
     }
@@ -1415,6 +1417,8 @@ public sealed partial class ApiCodingTests
         Assert.Equal(TimeSpan.FromSeconds(60), API.ContactDelete.Timeout);
         // update.check waits for the daemon's check (70 s inside).
         Assert.Equal(TimeSpan.FromSeconds(75), API.UpdateCheck.Timeout);
+        // message.signatureRevocation: the daemon's check takes at most 15 s, the client waits 20.
+        Assert.Equal(TimeSpan.FromSeconds(20), API.MessageSignatureRevocation.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",
@@ -1427,7 +1431,7 @@ public sealed partial class ApiCodingTests
             "event.create", "event.update", "event.delete", "event.respond", "invitation.respond", "invitation.applyCancel",
             "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
             "contact.create", "contact.update", "contact.delete", "contact.photo",
-            "update.check",
+            "update.check", "message.signatureRevocation",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

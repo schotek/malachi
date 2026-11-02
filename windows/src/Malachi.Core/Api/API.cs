@@ -655,6 +655,36 @@ public static class API
     public static readonly RpcMethod<UpdateDismissNoticeParams, UpdateStatus> UpdateDismissNotice =
         new("update.dismissNotice", RpcTimeouts.Default, Wire.UpdateDismissNoticeParams, Wire.UpdateStatus);
 
+    // Signatures and OpenPGP keys (docs/api.md §4.21; Signature.cs)
+
+    /// <summary><c>message.signature</c>: the details of a message's verdict; a null signature is no verdict.</summary>
+    public static readonly RpcMethod<MessageSignatureParams, MessageSignatureResult> MessageSignature =
+        new("message.signature", RpcTimeouts.Default, Wire.MessageSignatureParams, Wire.MessageSignatureResult);
+
+    /// <summary>
+    /// <c>message.signatureRevocation</c>: checks whether the signer's S/MIME
+    /// certificate was revoked (Check Revocation); the daemon gives up after
+    /// api.RevocationTimeout (15 s), the client after 20 s.
+    /// </summary>
+    public static readonly RpcMethod<MessageSignatureRevocationParams, MessageSignatureResult> MessageSignatureRevocation =
+        new("message.signatureRevocation", RpcTimeouts.SignatureRevocation, Wire.MessageSignatureRevocationParams, Wire.MessageSignatureResult);
+
+    /// <summary><c>pgp.keyImport</c>: stores OpenPGP public keys as seen.</summary>
+    public static readonly RpcMethod<PgpKeyImportParams, PgpKeyImportResult> PgpKeyImport =
+        new("pgp.keyImport", RpcTimeouts.Default, Wire.PgpKeyImportParams, Wire.PgpKeyImportResult);
+
+    /// <summary><c>pgp.keyVerify</c>: confirms a key, or takes the confirmation back.</summary>
+    public static readonly RpcMethod<PgpKeyVerifyParams, PgpKeyVerifyResult> PgpKeyVerify =
+        new("pgp.keyVerify", RpcTimeouts.Default, Wire.PgpKeyVerifyParams, Wire.PgpKeyVerifyResult);
+
+    /// <summary><c>pgp.keyList</c>: every stored key.</summary>
+    public static readonly RpcMethod<EmptyParams, PgpKeyListResult> PgpKeyList =
+        new("pgp.keyList", RpcTimeouts.Default, Wire.EmptyParams, Wire.PgpKeyListResult);
+
+    /// <summary><c>pgp.keyRemove</c>: removes a stored key.</summary>
+    public static readonly RpcMethod<PgpKeyRemoveParams, EmptyResult> PgpKeyRemove =
+        new("pgp.keyRemove", RpcTimeouts.Default, Wire.PgpKeyRemoveParams, Wire.EmptyResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -698,6 +728,8 @@ public static class API
         ContactCreate, ContactUpdate, ContactDelete,
         ContactPhoto,
         UpdateStatus, UpdateCheck, UpdateSetPrefs, UpdateDismiss, UpdateDismissNotice,
+        MessageSignature, MessageSignatureRevocation,
+        PgpKeyImport, PgpKeyVerify, PgpKeyList, PgpKeyRemove,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -751,6 +783,13 @@ public static class API
 
         /// <summary>api.NotifyUpdateChanged: the update status changed; no params, clients call <c>update.status</c>.</summary>
         public const string UpdateChanged = "notify.updateChanged";
+
+        /// <summary>
+        /// api.NotifySignaturesChanged: trust changed (a key imported, confirmed
+        /// or removed, a revocation check); no params, clients read the
+        /// messages they show, an open details dialog and the key list again.
+        /// </summary>
+        public const string SignaturesChanged = "notify.signaturesChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
@@ -762,6 +801,7 @@ public static class API
         Notify.AssistantProfileChanged,
         Notify.ContactsChanged,
         Notify.UpdateChanged,
+        Notify.SignaturesChanged,
     ];
 
     /// <summary>
@@ -1069,5 +1109,35 @@ public static class API
 
         /// <summary>api.MaxContactPhotoPixels: a side of the photo's square.</summary>
         public const int MaxContactPhotoPixels = 256;
+
+        // signature.go (docs/api.md §4.21); exceeding an input limit is
+        // invalidArgument.
+
+        /// <summary>api.MaxSignatureTextBytes: every string from a certificate or key.</summary>
+        public const int MaxSignatureTextBytes = 256;
+
+        /// <summary>api.MaxSignatureChain: <see cref="SmimeDetails.Chain"/>.</summary>
+        public const int MaxSignatureChain = 16;
+
+        /// <summary>api.MaxSignatureEmails: <see cref="SignatureCertificate.Emails"/> and <see cref="PgpKey.Emails"/>.</summary>
+        public const int MaxSignatureEmails = 16;
+
+        /// <summary>api.MaxSignatureUserIDs: <see cref="PgpDetails.UserIds"/> and <see cref="PgpKey.UserIds"/>.</summary>
+        public const int MaxSignatureUserIDs = 32;
+
+        /// <summary>api.MaxProtectedHeaders: <see cref="SignatureDetails.ProtectedHeaders"/>.</summary>
+        public const int MaxProtectedHeaders = 6;
+
+        /// <summary>api.MaxPGPKeyBytes: the key data of <c>pgp.keyImport</c>.</summary>
+        public const int MaxPGPKeyBytes = 1 << 20;
+
+        /// <summary>api.MaxPGPImportKeys: the keys one <c>pgp.keyImport</c> may carry.</summary>
+        public const int MaxPGPImportKeys = 20;
+
+        /// <summary>api.MaxPGPStoredKeys: the stored keys; an import over it is refused.</summary>
+        public const int MaxPGPStoredKeys = 5000;
+
+        /// <summary>api.MaxRevocationResponseBytes: an OCSP response or a CRL.</summary>
+        public const int MaxRevocationResponseBytes = 1 << 20;
     }
 }

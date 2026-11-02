@@ -205,6 +205,20 @@ public sealed partial class Integration : IDisposable
         // notify.draftsChanged: the conversations it names ask thread.get
         // again for their drafts (conversation_draft.go onDraftsChanged).
         tokens.Add(hub.AddDraftsChanged(Mailbox.HandleDraftsChanged));
+        // notify.signaturesChanged (docs/api.md §4.21): trust changed (a key
+        // imported, confirmed or removed, a revocation check). What the window
+        // shows of the account's messages is read again like a
+        // notify.messagesChanged of any of its folders: the list, the pane and
+        // the cards ask for the verdicts afresh (the rows whose verdict changed
+        // come as notify.messagesChanged too). An open details flyout and the
+        // key list follow it on their own.
+        tokens.Add(hub.AddSignaturesChanged(() =>
+        {
+            foreach (var account in Mailbox.Model.EnabledAccounts)
+            {
+                Mailbox.HandleMessagesChanged(new Malachi.Core.Api.MessagesChangedNotification { AccountId = account.Id });
+            }
+        }));
         tokens.Add(hub.AddAccountsChanged(() =>
         {
             Mailbox.HandleAccountsChanged();

@@ -70,6 +70,13 @@ public static class IconGlyphs
         ["web-browser"] = G(0xE774),
         ["dialog-warning"] = G(0xE7BA),
         ["dialog-error"] = G(0xE783),
+        // Signed mail (ui/internal/signature): the font has one shield (EA18, Segoe MDL2 Assets
+        // "Shield"; to be checked on Windows 11 with the other glyphs), not Adwaita's full, half and
+        // empty ones. The three names share it: the badge's colour tells green, yellow and grey
+        // apart, and a key not confirmed (security-medium) is drawn fainter (docs/windows-port.md §11.17).
+        ["security-high"] = G(0xEA18),
+        ["security-medium"] = G(0xEA18),
+        ["security-low"] = G(0xEA18),
         ["dialog-question"] = Unknown,
         ["emblem-ok"] = G(0xE930),
         ["list-add"] = G(0xE710),

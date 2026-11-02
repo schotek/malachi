@@ -152,7 +152,7 @@ public static partial class Conversation
     {
         if (loaded?.Msg is { } m)
         {
-            var n = AttachmentChips.ChipAttachments(m.Attachments, loaded.Body, InvitationReading.Read(m, cardOn)).Count;
+            var n = AttachmentChips.ChipAttachments(m.Attachments, loaded.Body, InvitationReading.Read(m, cardOn), m.Signature).Count;
             return n > 0 ? new BubbleAttachments.Count(n) : new BubbleAttachments.None();
         }
         return summary?.HasAttachments == true ? new BubbleAttachments.Some() : new BubbleAttachments.None();
