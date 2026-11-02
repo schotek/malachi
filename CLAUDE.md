@@ -179,6 +179,13 @@ kontejneru, kde poslouchá démon. Broadway
 po popoverech. Po každé práci `container system stop` (`gtk.sh stop`; oba
 cíle ho volají samy). Zmínky o Toolbxu níže jsou historické;
 `flatpak-builder` a balíčky zůstávají na linuxovém hostiteli.
+CI pro GTK je `.github/workflows/gtk.yml` (od 2026-11-02): pull request,
+který mění `ui/`, `backend/`, `po/`, `data/` a další vstupy buildu, a ruční
+běh postaví v kontejneru `fedora:42` s balíčky Containerfile `make build`,
+pustí testy `ui/` pod Xvfb jako `gtk.sh test-ui`, smoke testy GTK
+(`MALACHI_GTK_SMOKE=1` i editor a karty) a `make lint`; tag ani push do
+`main` nic, artefakty žádné. Cache Go a ccache PR obnoví z `main`, kterou
+zapíše jen ruční běh na `main` (`gh workflow run gtk.yml --ref main`).
 
 Ověřené verze (2026-09-02): Go 1.25, GTK 4.18, libadwaita 1.7, GLib 2.84,
 WebKitGTK 2.52 (API 6.0), Blueprint 0.16, SQLite 3.47, gsound 1.0.3
