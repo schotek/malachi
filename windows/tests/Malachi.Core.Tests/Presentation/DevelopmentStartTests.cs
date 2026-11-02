@@ -45,7 +45,7 @@ public sealed class DevelopmentStartTests
     public void ParsesTheSceneSteps()
     {
         var steps = DevelopmentStart.Parse(
-            "group=on;chat=off;folder=Web;row=Q4 planning;board:list:select;board:columns;compose-open;crm-save;shot=C:\\shots\\a b.png;quit");
+            "group=on;chat=off;folder=Web;row=Q4 planning;board:list:select;board:columns;compose-open;crm-save;prefs-rules;rules-editor;shot=C:\\shots\\a b.png;quit");
         DevelopmentStep[] want =
         [
             new() { Kind = DevelopmentStepKind.Group, Name = "group=on", On = true },
@@ -56,6 +56,8 @@ public sealed class DevelopmentStartTests
             new() { Kind = DevelopmentStepKind.Board, Name = "board:columns", Style = BoardStyle.Columns },
             new() { Kind = DevelopmentStepKind.ComposeOpen, Name = "compose-open" },
             new() { Kind = DevelopmentStepKind.CrmSave, Name = "crm-save" },
+            new() { Kind = DevelopmentStepKind.PrefsRules, Name = "prefs-rules" },
+            new() { Kind = DevelopmentStepKind.RulesEditor, Name = "rules-editor" },
             new() { Kind = DevelopmentStepKind.Shot, Name = "shot=C:\\shots\\a b.png", Text = "C:\\shots\\a b.png" },
             new() { Kind = DevelopmentStepKind.Quit, Name = "quit" },
         ];

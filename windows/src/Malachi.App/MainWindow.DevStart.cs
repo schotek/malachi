@@ -15,6 +15,8 @@
 // step found ("MALACHI_START row: selected '…'").
 //
 //   MALACHI_START="group=on;chat=off;row=DevConf;shot=C:\shots\inbox.png;quit"
+//   prefs-rules and rules-editor show the Rules page and the editor of a new
+//   rule; with MALACHI_RULES_SAMPLES=1 over invented rules
 //   MALACHI_START_SIZE=1440x900   (the window's visible frame, optional)
 //   MALACHI_START_INTERVAL=4      (seconds between steps, optional, 3)
 //
@@ -31,6 +33,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Malachi.App.Crm;
+using Malachi.App.Preferences;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
@@ -161,6 +164,17 @@ public sealed partial class MainWindow
                 else
                 {
                     DevelopmentPrint("MALACHI_START crm-save: no CRM controller");
+                }
+                break;
+            case DevelopmentStepKind.PrefsRules:
+                // The Preferences on the Rules page (the invented rules of MALACHI_RULES_SAMPLES=1).
+                PreferencesWindow.Show(state)?.ShowRules();
+                break;
+            case DevelopmentStepKind.RulesEditor:
+                // The editor of a new rule stays open (the invented accounts of the samples or devmail).
+                if (state.Rules.AddRule(this) is null)
+                {
+                    DevelopmentPrint("MALACHI_START rules-editor: no window to open it over");
                 }
                 break;
             case DevelopmentStepKind.Shot:

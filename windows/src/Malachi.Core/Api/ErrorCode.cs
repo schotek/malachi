@@ -127,6 +127,9 @@ public readonly record struct ErrorCode(int Value)
     /// <summary>No address book with that id.</summary>
     public const int AddressBookNotFound = 1111;
 
+    /// <summary>No mail rule with that id (docs/api.md §4.21).</summary>
+    public const int RuleNotFound = 1112;
+
     // 1200–1299: authentication.
 
     /// <summary>Credentials missing or token expired; see notify.authRequired.</summary>
@@ -291,6 +294,7 @@ public readonly record struct ErrorCode(int Value)
         [CrmItemNotFound] = "crmItemNotFound",
         [ContactNotFound] = "contactNotFound",
         [AddressBookNotFound] = "addressBookNotFound",
+        [RuleNotFound] = "ruleNotFound",
         [AuthRequired] = "authRequired",
         [AuthFailed] = "authFailed",
         [KeyringError] = "keyringError",
@@ -332,6 +336,7 @@ public readonly record struct ErrorCode(int Value)
         ReadOnly, InvitationsUnavailable,
         AccountNotFound, FolderNotFound, MessageNotFound, ThreadNotFound, DraftNotFound, AttachmentNotFound,
         CaseNotFound, CalendarNotFound, EventNotFound, CrmItemNotFound, ContactNotFound, AddressBookNotFound,
+        RuleNotFound,
         AuthRequired, AuthFailed, KeyringError, OAuthClientMissing, CalendarConsentRequired, CrmSignInUnsupported,
         ContactsConsentRequired,
         Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone, EventGone, CrmDuplicate,

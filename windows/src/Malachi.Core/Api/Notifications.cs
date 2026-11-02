@@ -197,6 +197,14 @@ public abstract record DaemonNotification
     /// </summary>
     public sealed record UpdateChanged : DaemonNotification;
 
+    /// <summary>
+    /// <c>notify.rulesChanged</c>: a rule was added, changed, reordered,
+    /// deleted or disabled by the daemon, or its counts moved (Rules.cs); no
+    /// params, the application's rules controller calls <c>rules.list</c>
+    /// again.
+    /// </summary>
+    public sealed record RulesChanged : DaemonNotification;
+
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
     public sealed record Unknown(string Method) : DaemonNotification;
@@ -247,6 +255,7 @@ public abstract record DaemonNotification
             API.Notify.AssistantProfileChanged => new AssistantProfileChanged(),
             API.Notify.ContactsChanged => new ContactsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.ContactsChangedNotification)),
             API.Notify.UpdateChanged => new UpdateChanged(),
+            API.Notify.RulesChanged => new RulesChanged(),
             _ => new Unknown(method),
         };
     }

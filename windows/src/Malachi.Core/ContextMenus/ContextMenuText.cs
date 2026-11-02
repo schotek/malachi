@@ -12,6 +12,7 @@
 
 using Malachi.Core.Crm;
 using Malachi.Core.I18n;
+using Malachi.Core.Rules;
 
 namespace Malachi.Core.ContextMenus;
 
@@ -70,6 +71,8 @@ public static partial class ContextMenu
         ItemId.CrmOpen => CrmText.MenuLabel(CrmMenuId.Open),
         ItemId.CrmEditLinks => CrmText.MenuLabel(CrmMenuId.EditLinks),
         ItemId.CrmRemove => CrmText.MenuLabel(CrmMenuId.Remove),
+        ItemId.CreateRule => RulesText.CreateFromMessageLabel,
+        ItemId.ApplyRules => RulesText.ApplyLabel,
         ItemId.CheckMail => L10n.T("Check for New Mail"),
         // TRANSLATORS: In the menu of a folder in the sidebar.
         ItemId.MarkAllRead => L10n.T("Mark All as Read"),

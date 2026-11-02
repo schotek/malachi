@@ -40,6 +40,7 @@ using Malachi.Core.ContextMenus;
 using Malachi.Core.Controllers;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Presentation;
+using Malachi.Core.Rules;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -67,6 +68,20 @@ public sealed partial class SidebarPane : UserControl
 
     /// <summary>The rows, in the mailbox's order.</summary>
     public ObservableCollection<SidebarRow> Rows { get; } = [];
+
+    /// <summary>
+    /// The main window's Apply Rules… (MainWindow.Rules.cs): the folder
+    /// menu's item of a folder of a mail account runs the account's rules on
+    /// its messages after the question (contextmenu.go ApplyRules); none
+    /// before the Integration.
+    /// </summary>
+    internal Action<Folder>? ApplyRules { get; set; }
+
+    /// <summary>
+    /// Whether an enabled rule runs on the account's mail (the rules
+    /// controller's AppliesTo): Apply Rules… is disabled without one.
+    /// </summary>
+    internal Func<AccountId, bool>? RulesApply { get; set; }
 
     /// <summary>The folder list, for the keyboard (the overlay puts the focus there).</summary>
     public ListView List => FolderList;
@@ -321,11 +336,20 @@ public sealed partial class SidebarPane : UserControl
                     Total = f.Total,
                     CanDelete = m.Model.Account(k.Account)?.Can(Capability.Delete) ?? false,
                     Foldable = row.TwistyActive && !row.Key.Favourite,
+                    // Apply Rules…: a folder of a mail account that holds messages,
+                    // enabled with an enabled rule for the account (RuleBook.AppliesToAccount).
+                    OfferRules = ApplyRules is not null && m.Model.Account(k.Account) is { } ruleAccount
+                        && RuleBook.MailAccounts([ruleAccount]).Count > 0 && RuleBook.CanApplyIn(f),
+                    Rules = RulesApply?.Invoke(k.Account) ?? false,
                 });
                 labels = new ContextMenu.Labels { Junk = f.Role == FolderRole.Junk, Favourite = row.Starred, Collapsed = row.Collapsed };
                 run[ContextMenu.ItemId.CheckMail] = () => m.TriggerSync(k);
                 run[ContextMenu.ItemId.Favourite] = () => m.ToggleFavourite(k);
                 run[ContextMenu.ItemId.Fold] = () => ToggleFold(row);
+                if (ApplyRules is { } apply)
+                {
+                    run[ContextMenu.ItemId.ApplyRules] = () => apply(f);
+                }
                 if (actions is { } a)
                 {
                     run[ContextMenu.ItemId.MarkAllRead] = () => a.MarkFolderRead(k);
