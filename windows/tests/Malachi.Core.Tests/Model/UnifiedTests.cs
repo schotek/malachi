@@ -23,7 +23,7 @@ public sealed class UnifiedTests
     {
         Id = id,
         Enabled = enabled,
-        Config = new AccountConfig { Kind = kind is null ? null : new AccountKind(kind) },
+        Config = new AccountConfig { Name = id, Email = id + "@example.com", Kind = kind is null ? null : (AccountKind?)new AccountKind(kind) },
         State = new SyncState { AccountId = id, Status = SyncStatus.Idle },
     };
 
@@ -249,6 +249,8 @@ public sealed class UnifiedTests
             Subject = "",
             Snippet = "",
             Date = System.DateTimeOffset.UnixEpoch,
+            HasAttachments = false,
+            Size = 0,
         };
         var scoped = ThreadScope.ScopeMessage(s);
         Assert.Equal(a, scoped.ThreadId);
