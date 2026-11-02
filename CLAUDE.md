@@ -521,6 +521,30 @@ Pořadí prací:
 17. Přílohy jako dlaždice (podle Outlooku) — větev `feat/attachment-tiles`
     2026-11-02, všechny tři klienty ověřené vlastníkem na obrazovce; viz
     odstavec Přílohy jako dlaždice níže
+18. Pravidla pošty (filtry) — větev `claude/sleepy-hawking-7gu54a`
+    2026-11-02, démon i všechny tři klienty napsané, čekají brány B1–B3;
+    viz odstavec Pravidla pošty níže a `docs/plans/rules.md`
+
+Pravidla pošty (2026-11-02, všechny tři klienty, nesloučené do `main`;
+plán, rozhodnutí R1–R14 a stav ověření v `docs/plans/rules.md`, API
+`docs/api.md` §4.21, bezpečnost `docs/security.md` §7.5). Démon vyhodnocuje
+pravidla lokálně v hooku `afterMailStored` jen pro Doručenou poštovních
+účtů, každé Message-ID nejvýš jednou (`rule_seen`), nikdy na poštu starší
+než den před zapnutím pravidla (`internal/rules` čistý matcher, migrace
+0025, `core/rules_engine.go`); lokální akce synchronně před
+`notify.newMessage`, přeposlání a automatická odpověď přes frontu na účet
+(`core/rules_outgoing.go`) s ochranami (hromadná a automatická pošta,
+vlastní adresy, noreply, `X-Loop`, 20 za hodinu, odpověď odesílateli
+jednou za 4 dny, hlavičky `Auto-Submitted`), zapnutí odchozího pravidla
+jen s `confirmOutgoing`; `rules.apply` jen lokální akce. MCP `list_rules`,
+za `--allow-modify` `create_rule`/`update_rule`, odchozí akce navíc jen
+s `--allow-send`. Reference `ui/internal/rules` (model, validace, texty)
+a `ui/internal/rulesctl` (GTK kontrolery), porty `MalachiCore/Rules`
+a `Malachi.Core/Rules`; Předvolby → Pravidla za Integracemi, editor,
+*Vytvořit pravidlo ze zprávy…* a *Použít pravidla…* v kontextových
+menu, vzorová data `MALACHI_RULES_SAMPLES=1`. Msgid zapsané ručně bez
+xgettext (`make po` je přerovná). Nic z GTK, Swiftu ani `Malachi.App`
+se tu nepřeložilo.
 
 Přílohy jako dlaždice (2026-11-02, všechny tři klienty, rozhodnutí
 vlastníka podle srovnání s Outlookem). Příloha je dlaždice pevné šířky

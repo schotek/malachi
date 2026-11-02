@@ -1,8 +1,8 @@
 # Pravidla pošty (filtry) — návrh
 
-Stav: návrh schválený vlastníkem 2026-11-02, implementace na větvi
-`claude/sleepy-hawking-7gu54a` (paralelní agenti T1–T4 po kontraktu T0).
-Ověření na skutečných systémech (brány B1–B3) až po dokončení všech částí.
+Stav: implementováno ve všech třech klientech a v démonu na větvi
+`claude/sleepy-hawking-7gu54a` (2026-11-02); čeká na brány B1–B3 na
+skutečných systémech (§Stav ověření).
 
 ## Kontext
 
@@ -84,3 +84,64 @@ Každý agent dostane: tento plán, cestu ke vzorovým souborům (Kontakty: `ui/
   v `po/malachi.pot` a česky v `po/cs.po` zapsané skriptem bez xgettext
   (`make po` je přerovná a přečísluje). Ověřeno: `go vet`, `go test`
   `pkg/api`, `rpc`, `ui/internal/rules`, `contextmenu`.
+- **T1 démon a most (2026-11-02, `rules/daemon`):** `internal/rules`
+  (matcher, plánovač, validace, fuzz), migrace `0025_rules.sql`,
+  `store/rules.go`, `core/rules_service.go`, `rules_engine.go`,
+  `rules_outgoing.go`, `smtp.BuildInput.Headers`, `X-Loop` v kurátorských
+  hlavičkách, MCP `tools_rules.go`, `docs/security.md` §7.5,
+  `docs/architecture.md` §3.11 a §7. Ověřeno `go vet ./...`, `go test`
+  (mimo testy `malachi-mcp`, které v kontejneru padají kvůli běhu jako
+  root i na T0), `-race` nad pravidly, fuzz 20 s, e2e test nad IMAP
+  serverem v paměti. Odchylky: `notify.newMessage` už neohlašuje žádnou
+  zprávu přečtenou při stažení (minimální oprava, aby se neohlašovala
+  zpráva, kterou pravidlo označilo nebo přesunulo); zprávy bez staženého
+  těla (příliš velké, nečitelné) pravidly neprojdou; druhá kopie téhož
+  Message-ID se nevyhodnocuje; přeposlání je příloha `.eml`
+  (`application/octet-stream`), ne `message/rfc822`; navíc se nic
+  neodesílá u zprávy poslané pravidlem do nevyžádané a u příchozího
+  `X-Loop`.
+- **T2 GTK (`rules/gtk`):** `ui/internal/rulesctl` (testy i s `-race`),
+  stránka `rules_page` v `preferences.blp`, `rules_editor.blp`,
+  `window/preferences_rules.go`, `rules_editor.go`, `rules_menus.go`,
+  `rules_notify.go`, kroky `MALACHI_GTK_START=prefs-rules|rules-editor`
+  (`MALACHI_RULES_SAMPLES=1` vzorová data), smoke `TestRulesGTKSmoke`.
+  `ui/internal/window` jen typová kontrola bez cgo. Do `po/POTFILES`
+  přibyly `window/rules_editor.go` a `preferences_rules.go` (existující
+  msgid), `make lint` selže do `make po`. Ikona `funnel-symbolic`
+  neověřená.
+- **T3 macOS (`rules/macos`):** `API/RulesAPI.swift`, `MalachiCore/Rules`,
+  `Controllers/RulesController.swift`, `RulesPaneViewController`,
+  `Rules/RuleEditorWindowController.swift`, `AppRules`, kontextová menu,
+  kroky `MALACHI_START=prefs-rules|rules-editor`, testy `RulesTests`,
+  `ContextMenuRulesTests`, `RulesControllerTests`, `APICodingTests+Rules`
+  (126 metod). Nepřeloženo (Swift tu není), `check-strings.py` bez
+  chybějících msgid. Riziková místa podle agenta: kódování vloženého
+  `RuleInput` druhým keyed kontejnerem, `RuleInvalidData.index` čtený
+  z doublu, pořadí složek v `RulesControllerTests.editorValidatesAndCreates`.
+- **T4 Windows (`rules/windows`):** `Api/Rules.cs`, `Malachi.Core/Rules`
+  (`RuleBook`, `RuleForm`, `RulesText`), `RulesController`,
+  `RuleEditorController`, App `Malachi.App.MailRules` (`RulesPage`,
+  `RuleEditorWindow`), kontextová menu, kroky vývojového startu,
+  `docs/windows-port.md` §11.17, 5 řádků odchylek ve `windows/README.md`.
+  Core a testy přeložené .NET SDK 10.0.114 na Linuxu: testy pravidel,
+  `Api` a `ContextMenus` zelené, konvence 28/28 bez exclusions; celá
+  sada Core 8261 s 8 nesouvisejícími selháními (prostředí Linuxu,
+  neověřeno proti `main`). `Malachi.App` nepřeložené.
+- **T5 (2026-11-02):** sloučeno do `claude/sleepy-hawking-7gu54a`, Go
+  testy po sloučení zelené (`rpc` jednou časový flake, samostatně
+  zelený).
+
+### Čeká na vlastníka (brány)
+
+- **B1 macOS:** `swift build`, `swift test`, `check-strings.py`,
+  rozložení `MALACHI_RULES_SAMPLES=1 MALACHI_START="prefs-rules;rules-editor;quit"`,
+  ručně nad kopií dat (migrace 0025 je nevratná): pravidlo ze zprávy,
+  přesun a označení nové pošty, Použít pravidla na složku, automatická
+  odpověď a přeposlání jen mezi vlastními testovacími adresami.
+- **B2 GTK:** `gtk.sh make build`, `test-ui`, `MALACHI_GTK_SMOKE=1 … -run
+  TestRulesGTKSmoke`, `make po` (přerovná ručně zapsané msgid
+  a přečísluje odkazy), `make lint`, totéž ručně v XQuartz.
+- **B3 Windows:** `build.ps1 app`/`test`/`lint`, UI smoke, ruční průchod
+  podle `docs/windows-port.md` §11.17.
+- Rozhodnutí: ponechat širší potlačení `notify.newMessage` pro zprávy
+  přečtené už při stažení, nebo ho zúžit na zprávy změněné pravidlem.
