@@ -544,9 +544,15 @@ Pořadí prací:
     `claude/keen-planck-bgzc8z` 2026-11-02; démon (migrace 0026, při sloučení
     `main` přečíslovaná z 0025, kterou mají pravidla; API `docs/api.md`
     §4.22; opaque S/MIME rozbalený v parseru, `RulesVersion` "9") s Go testy a fuzz,
-    Go reference `ui/internal/signature`, GTK, macOS a Windows napsané
-    bez překladu; plán, rozhodnutí a „As built“ v `docs/plans/signatures.md`,
-    čeká ověření na skutečných systémech
+    Go reference `ui/internal/signature`, GTK, macOS a Windows, odznak
+    i na kartách Nástěnky (`BoardMessage.signature`); 2026-11-03 sestavené
+    a otestované na Macu (`swift test`, kontejner `gtk.sh make build`,
+    `test-ui`, smoke, `make po`, `make lint`) a na Windows 11 x64
+    (`build.ps1 app`/`test`/`lint`), vlastník schválil macOS, GTK
+    i Windows na obrazovce nad devmailem se 39 podepsanými fixturami;
+    neověřené: skutečné podepsané zprávy (Outlook, Graph `$value`, Apple
+    Mail, Thunderbird, Proton); plán, rozhodnutí a „As built“
+    v `docs/plans/signatures.md`
 
 Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
 U1–U4 v `docs/plans/unified-inbox.md`). Položka nahoře v postranním panelu
