@@ -107,7 +107,9 @@ public sealed partial class SignatureBadgeButton : UserControl
     /// <summary>Opens the details of the shown verdict (the badge's click, also for a test).</summary>
     public void Open()
     {
-        if (summary is null || presenter is null || services is null || host is null)
+        // A message without an id (the board's invented samples) shows its
+        // badge and has no details to ask for.
+        if (summary is null || presenter is null || services is null || host is null || string.IsNullOrEmpty(id.Value))
         {
             return;
         }

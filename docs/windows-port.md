@@ -4401,6 +4401,8 @@ the key, the glyph `U+EA18`, `VisualStateManager` groups on a `FontIcon`
 inside a `UserControl`, a `SettingsCard` whose `Description` is a panel,
 `record SignatureDetails : SignatureSummary` through the source generator.
 
+Board card badge (2026-11-03): `BoardMessage.Signature` (board.get) reaches `Board.CaseMessage` and `Board.MessageCard` (compared by value), `ConversationCards.Key` carries each member's verdict (`VerdictOf`) so a changed one updates the cards in place, `DaemonBoardSource.SignaturesChanged` asks the shown conversation again, and `BoardMessageCardView` holds the same `SignatureBadgeButton` under an open card's header (no badge in a chat bubble); written without .NET, see `docs/plans/signatures.md` "Board card badge (Windows)".
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

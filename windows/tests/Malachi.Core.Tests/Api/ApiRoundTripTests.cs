@@ -109,7 +109,7 @@ public sealed class ApiRoundTripTests
         """{"id":"k_1","caseId":"@caseid@","accountId":"acc_1","messageId":"m_3","text":"Send the report","quote":"I will send the report on Monday.","due":"2026-10-05T09:00:00Z","state":"closed","closedReason":"replied","at":"2026-09-30T08:31:00Z"}""";
 
     private const string BoardMessage =
-        """{"id":"m_1","folderId":"f_inbox","from":@address@,"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign the contract?","trimmed":true}""";
+        """{"id":"m_1","folderId":"f_inbox","from":@address@,"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign the contract?","trimmed":true,"signature":@sigsummary@}""";
 
     private const string BoardRun =
         """{"at":"2026-09-30T08:00:00Z","endedAt":"2026-09-30T08:02:00Z","trigger":"auto","source":"claude-opus","annotated":3,"error":"timeout"}""";

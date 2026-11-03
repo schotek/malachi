@@ -357,6 +357,22 @@ public static partial class Board
         /// ask for one.
         /// </summary>
         public string Address { get; init; } = "";
+
+        /// <summary>
+        /// The message's signature verdict (<see cref="CaseMessage.Signature"/>);
+        /// null without one. The conversation card shows its badge, the chat
+        /// bubble none.
+        /// </summary>
+        public SignatureSummary? Signature { get; init; }
+
+        /// <summary>Whether both say the same, the verdicts compared by value.</summary>
+        public bool Equals(MessageCard? other) =>
+            other is not null && Id == other.Id && From == other.From && When == other.When && Text == other.Text
+            && Mine == other.Mine && Sender == other.Sender && Date == other.Date && Address == other.Address
+            && SameSignature(Signature, other.Signature);
+
+        /// <inheritdoc/>
+        public override int GetHashCode() => HashCode.Combine(Id, From, When, Text, Mine);
     }
 
     /// <summary>The selected case in full. An empty string hides its block.</summary>

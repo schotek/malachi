@@ -44,7 +44,8 @@ public static partial class Board
             new(club, "Rowing Club", "IMAP", CanDelete: true),
             new(jira, "Demo Jira", Jira.KindBadge),
         ];
-        static CaseMessage Msg(string from, DateTimeOffset date, string text) => new() { From = from, Date = date, Text = text };
+        static CaseMessage Msg(string from, DateTimeOffset date, string text, SignatureSummary? signature = null) =>
+            new() { From = from, Date = date, Text = text, Signature = signature };
         static CaseMessage Mine(DateTimeOffset date, string text) => new() { From = "You", Date = date, Text = text, Mine = true };
         static Visibility DoneNow() => Visibility.Done();
 
@@ -87,7 +88,13 @@ public static partial class Board
                         + "initials on each page. A scan is enough for now; the original can follow by post.\n\n"
                         + "If the copy is not back today, the old terms run on for another year and the new service levels "
                         + "would only start in 2028. I am at my desk until six if anything is unclear.\n\n"
-                        + "Thank you, and best regards,\nAda"),
+                        + "Thank you, and best regards,\nAda",
+                        new SignatureSummary
+                        {
+                            Kind = SignatureKind.Smime,
+                            Status = SignatureStatus.Valid,
+                            Signer = new SignatureSigner { Name = "Ada Example", Email = "ada@example.org" },
+                        }),
                 ],
             },
             new()

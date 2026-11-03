@@ -761,6 +761,38 @@ public sealed class DaemonBoardSourceTests
         Assert.NotNull((await h.CAsync("2"))?.Messages);
     }
 
+    /// <summary>The verdict of a member comes with board.get; notify.signaturesChanged asks for the shown conversation again.</summary>
+    [Fact]
+    public async Task SignaturesChangedAsksTheShownConversationAgain()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.StartedAsync();
+        await h.LoadAsync("1");
+        await h.LoadAsync("2");
+        Assert.Null((await h.CAsync("2"))?.Messages?[0].Signature);
+        Assert.Equal(2, h.Script.Count(API.BoardGet.Name));
+        h.Script.Signature = new SignatureSummary
+        {
+            Kind = SignatureKind.Pgp,
+            Status = SignatureStatus.Valid,
+            Signer = new SignatureSigner { Name = "Ann", Email = "ann@example.invalid" },
+            Notes = [SignatureNote.KeyChanged],
+        };
+        await h.Ui.RunAsync(h.Source.SignaturesChanged);
+        await h.IdleAsync();
+        // The one on show was asked for again and carries the verdict; the other is forgotten.
+        Assert.Equal(3, h.Script.Count(API.BoardGet.Name));
+        var shown = (await h.CAsync("2"))?.Messages?[0].Signature;
+        Assert.True(shown is { Status.Value: SignatureStatus.Valid, Kind.Value: SignatureKind.Pgp });
+        Assert.Equal([new SignatureNote(SignatureNote.KeyChanged)], shown!.Notes);
+        Assert.Null((await h.CAsync("1"))?.Messages);
+        // The same verdict again changes nothing a view would redraw.
+        var before = await h.SnapshotAsync();
+        await h.Ui.RunAsync(h.Source.SignaturesChanged);
+        await h.IdleAsync();
+        Assert.Equal(before.Cases.First(x => x.Id == Id("2")), (await h.SnapshotAsync()).Cases.First(x => x.Id == Id("2")));
+    }
+
     /// <summary>The source keeps the conversations of the most recently opened cases only.</summary>
     [Fact]
     public async Task ConversationsAreBounded()
@@ -1016,6 +1048,9 @@ public sealed class DaemonBoardSourceTests
 
         public RpcException? GetFailure { get; set; }
 
+        /// <summary>The verdict board.get gives the member (BoardMessage.signature).</summary>
+        public SignatureSummary? Signature { get; set; }
+
         public RpcException? MoveFailure { get; set; }
 
         /// <summary>board.archive answers without moved (an archive folder the daemon does not sync).</summary>
@@ -1229,10 +1264,12 @@ public sealed class DaemonBoardSourceTests
             BoardCase? c;
             RpcException? failure;
             var q = JsonCoding.Decode<BoardGetParams>(p);
+            SignatureSummary? signature;
             lock (gate)
             {
                 calls.Add(API.BoardGet.Name);
                 failure = GetFailure;
+                signature = Signature;
                 c = cases.FirstOrDefault(x => x.Id == q.CaseId);
             }
             await Gets.PassAsync();
@@ -1252,6 +1289,7 @@ public sealed class DaemonBoardSourceTests
                 Date = T0,
                 Mine = false,
                 Text = $"version {c.Version}",
+                Signature = signature,
             };
             return JsonCoding.EncodeToString(new BoardGetResult { Case = c, Messages = [m] });
         }

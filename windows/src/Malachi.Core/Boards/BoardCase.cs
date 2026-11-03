@@ -259,6 +259,22 @@ public static partial class Board
 
         /// <summary>The quoted history, the signature or the rest past the cap was cut off <see cref="Text"/>.</summary>
         public bool Trimmed { get; init; }
+
+        /// <summary>
+        /// The message's signature verdict, as <c>message.get</c> has it
+        /// (board.get's BoardMessage.signature); null without one. The
+        /// conversation card shows its badge, never the chat bubble.
+        /// </summary>
+        public SignatureSummary? Signature { get; init; }
+
+        /// <summary>Whether both say the same, the verdicts compared by value.</summary>
+        public bool Equals(CaseMessage? other) =>
+            other is not null && Id == other.Id && Folder == other.Folder && From == other.From
+            && Address == other.Address && Date == other.Date && Text == other.Text && Mine == other.Mine
+            && Trimmed == other.Trimmed && SameSignature(Signature, other.Signature);
+
+        /// <inheritdoc/>
+        public override int GetHashCode() => HashCode.Combine(Id, Date, Text, Mine);
     }
 
     /// <summary>
@@ -599,6 +615,18 @@ public static partial class Board
             return StateSource.AssistantKept;
         }
         return StateSource.AssistantChanged(c.RuleState);
+    }
+
+    // Two verdicts that say the same: a record compares its notes by
+    // reference, a board.get answer builds new ones every time.
+    internal static bool SameSignature(SignatureSummary? a, SignatureSummary? b)
+    {
+        if (ReferenceEquals(a, b))
+        {
+            return true;
+        }
+        return a is not null && b is not null && a.Kind == b.Kind && a.Status == b.Status
+            && a.Signer == b.Signer && a.PartId == b.PartId && SameList(a.Notes, b.Notes);
     }
 
     // Two lists of the same items in the same order; two nulls are the same.

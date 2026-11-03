@@ -213,6 +213,39 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
         });
     }
 
+    /// <summary>
+    /// notify.signaturesChanged: trust changed (a key imported, confirmed or
+    /// removed, a revocation check), which may change the verdict of a
+    /// member without changing its case (board.get is cached by the case's
+    /// version). The conversation on show is asked for again, the old one
+    /// staying until the answer; the others are forgotten and asked for when
+    /// they are shown.
+    /// </summary>
+    public void SignaturesChanged()
+    {
+        scope.VerifyAccess();
+        if (!started || stopped)
+        {
+            return;
+        }
+        if (messageOrder.Count == 0)
+        {
+            return;
+        }
+        var shown = messageOrder[^1];
+        foreach (var id in messageOrder.Where(id => id != shown).ToList())
+        {
+            messages.Remove(id);
+            messageOrder.Remove(id);
+        }
+        if (messages.TryGetValue(shown, out var m))
+        {
+            // A version no case has: the load below asks, and the old list stays in the snapshot until the answer.
+            messages[shown] = (-1, m.List);
+            LoadMessages(shown);
+        }
+    }
+
     /// <summary>notify.accountsChanged: the accounts' names and the board again.</summary>
     public void AccountsChanged()
     {
@@ -674,6 +707,7 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
             Text = m.Text,
             Mine = m.Mine,
             Trimmed = m.Trimmed ?? false,
+            Signature = m.Signature,
         };
     }
 

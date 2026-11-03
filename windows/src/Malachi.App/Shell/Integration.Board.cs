@@ -164,6 +164,8 @@ public sealed partial class Integration
         var hub = state.Notifications;
         tokens.Add(hub.AddBoardChanged(n => StartedBoardSource?.BoardChanged(n)));
         tokens.Add(hub.AddAccountsChanged(() => StartedBoardSource?.AccountsChanged()));
+        // The verdict of a member may change with the trust, not with the case.
+        tokens.Add(hub.AddSignaturesChanged(() => StartedBoardSource?.SignaturesChanged()));
         tokens.Add(hub.AddConnectionState(s =>
             StartedBoardSource?.ConnectionChanged(s is ConnectionState.Connected or ConnectionState.InfoFailed)));
     }
