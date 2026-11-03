@@ -21,9 +21,14 @@
 // -lang (samples/en.json, samples/cs.json: one story in two languages,
 // the same people, dates relative to -now) under the user it names, or,
 // with -corpus, every .eml file of that directory in the INBOX of
-// test@example.test (what the Windows UI tests' devmail seeds). Mail
-// submitted over SMTP to a user of the server lands in their INBOX; the
-// rest is accepted and dropped. The password of every user is "test".
+// test@example.test (what the Windows UI tests seed: MALACHI_DEVMAIL,
+// docs/windows-port.md §12). Mail submitted over SMTP to a user of the
+// server lands in their INBOX; the rest is accepted and dropped. The
+// password of every user is "test". The IMAP server is a copy of
+// go-imap's in-memory server (internal/imapmemserver) that describes a
+// multipart without parts instead of dropping the connection, so every
+// deliberately broken file of backend/testdata/mime syncs; a panic of the
+// server is printed on stderr.
 //
 // get, set and delete make the binary the daemon's keyring helper
 // (MALACHI_KEYRING=helper, MALACHI_KEYRING_HELPER=<this binary>;
