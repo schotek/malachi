@@ -4407,9 +4407,14 @@ took the flip for a click on the container's former rule, so Ctrl+Down on
 one sample turned the disabled *Project Atlas* on (the samples' update then
 dropped its warning). `RulesPage.OnRowToggled` now judges the flip once the
 container has settled and acts only when the switch disagrees with its
-row's rule. `AccountListSection` has the same `Toggled` shape and was not
-checked. The editor's field and operator are fixed columns (172 and 160)
-so that the condition rows line up. The page names each row's container
+row's rule. `AccountListSection` (Preferences → Accounts and Integrations)
+had the same `Toggled` shape and the same bug: over four mail accounts, two
+of them paused, Ctrl+Down on the first turned the last one on in the daemon
+(every run). It now judges the flip the same way; `AccountsSmokeTests`
+moves a row, reorders the accounts from another client and flips a switch,
+and checks `account.list` and every switch after each step. The editor's
+field and operator are fixed columns (172 and 160) so that the condition
+rows line up. The page names each row's container
 `RuleRow:<id>` with the rule's name (as the contacts' rows) and the row's
 warning `RuleProblem` and sending icon `RuleOutgoing`.
 
