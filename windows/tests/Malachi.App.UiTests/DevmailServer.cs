@@ -1,13 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// devmail, the local IMAP and SMTP test server (a folder outside the
-// repository, named by MALACHI_DEVMAIL; its README describes it), started
-// for the opt-in suite on ports of its own on 127.0.0.1, so it never meets
-// another devmail on the default ones: in memory, seeded with the mailbox
-// of test@example.test (password "test") and the MIME corpus of
-// backend/testdata/mime, stopped with the suite. Its control endpoint
-// answers how many messages each folder holds.
+// devmail, the repository's local IMAP and SMTP test server
+// (backend/cmd/malachi-devmail, its doc comment in main.go), built as
+// devmail.exe into the folder MALACHI_DEVMAIL names, from backend\:
+//
+//     go build -o <folder>\devmail.exe ./cmd/malachi-devmail
+//
+// Started for the opt-in suites as "devmail.exe serve" on ports of its own
+// on 127.0.0.1, so it never meets another devmail on the default ones: in
+// memory, the MIME corpus of backend/testdata/mime (-corpus) in the INBOX
+// of test@example.test (password "test"), stopped with the suite. A
+// message a suite needs beyond the corpus it submits itself over SMTP
+// (DevmailSmtp) before the account is added. Its control endpoint answers
+// how many messages each folder holds.
 
 using System;
 using System.Diagnostics;
@@ -72,6 +78,7 @@ internal sealed class DevmailServer : IDisposable
         };
         foreach (var argument in new[]
         {
+            "serve",
             "-imap-port", imap.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "-smtp-port", smtp.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "-control-port", control.ToString(System.Globalization.CultureInfo.InvariantCulture),
