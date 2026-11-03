@@ -4292,8 +4292,9 @@ value). `rules.list`, `create`, `update`, `delete`, `reorder`, `test`,
 `apply` end `API.Methods` (126); `notify.rulesChanged` ends
 `AllNotifications`, decodes as `DaemonNotification.RulesChanged` (no
 params) and fans out through `NotificationHub.AddRulesChanged`; error 1112
-is `ErrorCode.RuleNotFound`. Timeouts: `RpcTimeouts.RulesTest` 30 s and
-`RulesApply` 120 s (the contract names none; the other five are 5 s).
+is `ErrorCode.RuleNotFound`. Timeouts: `RpcTimeouts.RulesTest` 60 s and
+`RulesApply` 5 min, as Go's `rulesctl` and macOS (the contract names none;
+the other five are 5 s).
 
 Core: `Rules/RuleBook.cs` is `rules.go` one to one (`Fields`,
 `ActionKinds`, `OperatorsFor`, `NewCondition`, `NewForm`, `FromRule`,
