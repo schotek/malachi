@@ -118,13 +118,13 @@ func TestListIconOfRows(t *testing.T) {
 	}
 }
 
-func TestActionWhat(t *testing.T) {
+func TestKeyActionFailedText(t *testing.T) {
 	for a, want := range map[signature.Action]string{
-		signature.ActionConfirmKey:   "Confirm Key",
-		signature.ActionUnconfirmKey: "Remove Confirmation",
-		signature.ActionRemoveKey:    "Remove Key",
+		signature.ActionConfirmKey:   "The key could not be confirmed.",
+		signature.ActionUnconfirmKey: "The confirmation could not be removed.",
+		signature.ActionRemoveKey:    "The key could not be removed.",
 	} {
-		if got := actionWhat(a); got != want {
+		if got := keyActionFailedText(a); got != want {
 			t.Errorf("%d: %q, want %q", a, got, want)
 		}
 	}

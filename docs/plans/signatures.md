@@ -930,3 +930,21 @@ nevracejí `notImplemented`, verdikty přicházejí v souhrnech, v
   vnějších; přiložená zpráva verdikt nemá; skutečné vzorky T0 (Outlook,
   Graph `$value`, Apple Mail, Thunderbird, Proton) neověřené; `board.get`
   verdikt nenese (karty nástěnky ve všech UI bez odznaku, viz výše).
+
+## Doplněk 2026-11-03: věty selhání u klíčů OpenPGP (rozhodnutí vlastníka)
+
+Vlastník rozhodl přidat vlastní msgid pro selhání `pgp.keyVerify`
+a `pgp.keyRemove` do všech tří klientů naráz; tím neplatí poznámky výše
+o `widget.RPCErrorText` s popiskem tlačítka (GTK), třech anglických
+větách `// macOS-only string` (macOS) a „Confirming the key“ přes
+`RpcErrorText` (Windows). Reference `KeyVerifyFailedText(verified)`
+(„The key could not be confirmed.“ / „The confirmation could not be
+removed.“) a `KeyRemoveFailedText` („The key could not be removed.“),
+česky „Klíč se nepodařilo potvrdit.“, „Potvrzení se nepodařilo zrušit.“,
+„Klíč se nepodařilo odebrat.“; GTK `keyActionFailedText` v
+`window/signature_details.go`, macOS `SignatureView.keyVerifyFailedText`
+/ `keyRemoveFailedText`, Windows `SignatureText.KeyVerifyFailedText` /
+`KeyRemoveFailedText`. Řádky odchylek v `macos/README.md`
+a `windows/README.md` jsou pryč. Ověřeno jen `go test
+./internal/signature` a `check-strings.py`; GTK, Swift a C# čekají na
+sestavení jako zbytek fáze 1.

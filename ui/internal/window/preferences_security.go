@@ -265,7 +265,7 @@ func (p *securityPage) call(action signature.Action, method string, params any, 
 			}
 			if err != nil {
 				p.d.log.Info(method+" failed", "err", err)
-				p.d.AddToast(widget.PlainToast(widget.RPCErrorText(actionWhat(action), err)))
+				p.d.AddToast(widget.PlainToast(keyActionFailedText(action)))
 			} else {
 				p.d.AddToast(widget.PlainToast(done))
 			}

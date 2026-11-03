@@ -550,5 +550,8 @@ public sealed class SignatureViewTests
         Assert.Equal("Key confirmed", SignatureText.KeyConfirmedText());
         Assert.Equal("Confirmation removed", SignatureText.ConfirmationRemovedText());
         Assert.Equal("Key removed", SignatureText.KeyRemovedText());
+        Assert.Equal("The key could not be confirmed.", SignatureText.KeyVerifyFailedText(verified: true));
+        Assert.Equal("The confirmation could not be removed.", SignatureText.KeyVerifyFailedText(verified: false));
+        Assert.Equal("The key could not be removed.", SignatureText.KeyRemoveFailedText());
     }
 }

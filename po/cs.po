@@ -9000,6 +9000,18 @@ msgstr "Importován ze zprávy %s"
 msgid "Imported on %s"
 msgstr "Importován %s"
 
+#: ui/internal/signature/text.go:570
+msgid "The key could not be confirmed."
+msgstr "Klíč se nepodařilo potvrdit."
+
+#: ui/internal/signature/text.go:572
+msgid "The confirmation could not be removed."
+msgstr "Potvrzení se nepodařilo zrušit."
+
+#: ui/internal/signature/text.go:577
+msgid "The key could not be removed."
+msgstr "Klíč se nepodařilo odebrat."
+
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21
 #: ui/data/ui/preferences.ui:23
 msgid "Add Account"

@@ -562,3 +562,17 @@ func keyOrigin(s api.PGPKeySource, when string, tr Translator) string {
 	// TRANSLATORS: %s is a date
 	return fmt.Sprintf(tr.T("Imported on %s"), when)
 }
+
+// KeyVerifyFailedText is the error of pgp.keyVerify: verified says
+// whether the call confirmed the key (true) or took the confirmation back.
+func KeyVerifyFailedText(verified bool, tr Translator) string {
+	if verified {
+		return tr.T("The key could not be confirmed.")
+	}
+	return tr.T("The confirmation could not be removed.")
+}
+
+// KeyRemoveFailedText is the error of pgp.keyRemove.
+func KeyRemoveFailedText(tr Translator) string {
+	return tr.T("The key could not be removed.")
+}

@@ -430,6 +430,17 @@ extension SignatureView {
     public static var confirmationRemovedText: String { L10n.T("Confirmation removed") }
     public static var keyRemovedText: String { L10n.T("Key removed") }
 
+    /// signature.KeyVerifyFailedText: the error of pgp.keyVerify;
+    /// `verified` says whether the call confirmed the key.
+    public static func keyVerifyFailedText(verified: Bool) -> String {
+        verified
+            ? L10n.T("The key could not be confirmed.")
+            : L10n.T("The confirmation could not be removed.")
+    }
+
+    /// signature.KeyRemoveFailedText: the error of pgp.keyRemove.
+    public static var keyRemoveFailedText: String { L10n.T("The key could not be removed.") }
+
     /// signature.RevocationFailedText: the error of
     /// message.signatureRevocation, by the class in its data ("" or another
     /// error: the general sentence).

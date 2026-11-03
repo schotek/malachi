@@ -200,8 +200,7 @@ public final class SignatureController {
                     controller.load()
                 }
             } failure: { _ in
-                // macOS-only string
-                "The key could not be confirmed."
+                SignatureView.keyVerifyFailedText(verified: true)
             }
         }
     }

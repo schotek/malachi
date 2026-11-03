@@ -16,9 +16,7 @@ using System;
 using System.Collections.Generic;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
-using Malachi.Core.I18n;
 using Malachi.Core.Signatures;
-using Malachi.Core.Text;
 using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -148,7 +146,7 @@ public sealed partial class PgpKeysController : IDisposable
             else
             {
                 LogFailure(API.PgpKeyRemove.Name, error);
-                scope.Raise(ToastRequested, this, RpcErrorText.Text(L10n.T("Removing the key"), error)); // Windows-only string
+                scope.Raise(ToastRequested, this, SignatureText.KeyRemoveFailedText());
             }
             Refresh();
         });
@@ -174,10 +172,7 @@ public sealed partial class PgpKeysController : IDisposable
             else
             {
                 LogFailure(API.PgpKeyVerify.Name, error);
-                scope.Raise(
-                    ToastRequested,
-                    this,
-                    RpcErrorText.Text(verified ? L10n.T("Confirming the key") : L10n.T("Removing the confirmation"), error)); // Windows-only string
+                scope.Raise(ToastRequested, this, SignatureText.KeyVerifyFailedText(verified));
             }
             Refresh();
         });

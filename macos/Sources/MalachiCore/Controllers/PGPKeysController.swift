@@ -132,8 +132,7 @@ public final class PGPKeysController {
                     controller.load()
                 }
             } failure: { _ in
-                // macOS-only string
-                "The key could not be changed."
+                SignatureView.keyVerifyFailedText(verified: false)
             }
         case .removeKey:
             removeKey(fingerprint)
@@ -163,8 +162,7 @@ public final class PGPKeysController {
                     controller.load()
                 }
             } failure: { _ in
-                // macOS-only string
-                "The key could not be confirmed."
+                SignatureView.keyVerifyFailedText(verified: true)
             }
         }
     }
@@ -189,8 +187,7 @@ public final class PGPKeysController {
                     controller.load()
                 }
             } failure: { _ in
-                // macOS-only string
-                "The key could not be removed."
+                SignatureView.keyRemoveFailedText
             }
         }
     }

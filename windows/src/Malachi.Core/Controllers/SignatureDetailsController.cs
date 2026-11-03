@@ -22,9 +22,7 @@
 using System;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
-using Malachi.Core.I18n;
 using Malachi.Core.Signatures;
-using Malachi.Core.Text;
 using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -203,7 +201,7 @@ public sealed partial class SignatureDetailsController : IDisposable
                 return;
             }
             LogFailure(API.PgpKeyVerify.Name, error);
-            End(RpcErrorText.Text(L10n.T("Confirming the key"), error)); // Windows-only string
+            End(SignatureText.KeyVerifyFailedText(verified: true));
         });
     }
 

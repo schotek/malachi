@@ -6,7 +6,8 @@
 // keyTrustText, keySourceText, revocationText, sectionTitle, headerName,
 // DialogTitle, BadgeTooltip, CloseLabel, buttonLabel, RevocationCaption,
 // ConfirmKeyQuestion, RemoveKeyQuestion, KeyConfirmedText,
-// ConfirmationRemovedText, KeyRemovedText, RevocationFailedText,
+// ConfirmationRemovedText, KeyRemovedText, KeyVerifyFailedText,
+// KeyRemoveFailedText, RevocationFailedText,
 // ImportFailedText, ImportedText, ImportDialogTexts, SecurityPageTexts,
 // keyTrustPill, keyStatePill, keyOrigin).
 //
@@ -478,6 +479,14 @@ public static class SignatureText
 
     /// <summary>signature.KeyRemovedText: the toast after <c>pgp.keyRemove</c>.</summary>
     public static string KeyRemovedText() => L10n.T("Key removed");
+
+    /// <summary>signature.KeyVerifyFailedText: the error of <c>pgp.keyVerify</c>;
+    /// <paramref name="verified"/> says whether the call confirmed the key.</summary>
+    public static string KeyVerifyFailedText(bool verified) =>
+        verified ? L10n.T("The key could not be confirmed.") : L10n.T("The confirmation could not be removed.");
+
+    /// <summary>signature.KeyRemoveFailedText: the error of <c>pgp.keyRemove</c>.</summary>
+    public static string KeyRemoveFailedText() => L10n.T("The key could not be removed.");
 
     /// <summary>
     /// signature.RevocationFailedText: the error of <c>message.signatureRevocation</c>,

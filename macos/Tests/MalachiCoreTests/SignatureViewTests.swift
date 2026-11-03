@@ -402,4 +402,10 @@ private func keys(_ rows: [SignatureView.Row]) -> [SignatureView.RowKey] { rows.
         #expect(d.import == "_Import" && d.chooseFile == "Choose File…")
         #expect(SignatureView.dialogTitle == "Signature Details" && SignatureView.closeLabel == "Close")
     }
+
+    @Test func keyActionFailures() {
+        #expect(SignatureView.keyVerifyFailedText(verified: true) == "The key could not be confirmed.")
+        #expect(SignatureView.keyVerifyFailedText(verified: false) == "The confirmation could not be removed.")
+        #expect(SignatureView.keyRemoveFailedText == "The key could not be removed.")
+    }
 }

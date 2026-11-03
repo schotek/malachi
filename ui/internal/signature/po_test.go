@@ -124,6 +124,9 @@ func exercise(tr Translator) {
 	KeyConfirmedText(tr)
 	ConfirmationRemovedText(tr)
 	KeyRemovedText(tr)
+	KeyVerifyFailedText(true, tr)
+	KeyVerifyFailedText(false, tr)
+	KeyRemoveFailedText(tr)
 	for _, r := range []api.RevocationFailure{"", api.RevocationFailNetwork, api.RevocationFailTimeout, api.RevocationFailServer, api.RevocationFailResponse, api.RevocationFailAddress} {
 		RevocationFailedText(r, tr)
 	}

@@ -8654,6 +8654,18 @@ msgstr ""
 msgid "Imported on %s"
 msgstr ""
 
+#: ui/internal/signature/text.go:570
+msgid "The key could not be confirmed."
+msgstr ""
+
+#: ui/internal/signature/text.go:572
+msgid "The confirmation could not be removed."
+msgstr ""
+
+#: ui/internal/signature/text.go:577
+msgid "The key could not be removed."
+msgstr ""
+
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21
 #: ui/data/ui/preferences.ui:23
 msgid "Add Account"

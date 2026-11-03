@@ -5,7 +5,6 @@ package window
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -395,7 +394,7 @@ func (d *signatureDialog) askConfirm() {
 				d.busy = signature.ActionNone
 				if err != nil {
 					w.log.Info("pgp.keyVerify failed", "err", err)
-					d.problem = widget.RPCErrorText(actionWhat(signature.ActionConfirmKey), err)
+					d.problem = keyActionFailedText(signature.ActionConfirmKey)
 					d.render()
 					return
 				}
@@ -442,20 +441,14 @@ func askSignatureQuestion(parent gtk.Widgetter, q signature.Question, fingerprin
 	dlg.Present(parent)
 }
 
-// actionWhat is the action a button names, without its mnemonic and
-// ellipsis, as the subject of widget.RPCErrorText ("Confirm Key failed:
-// …"): the reference has no progressive form for these rare failures and
-// the clients add no msgid of their own (plan §11.4).
-func actionWhat(a signature.Action) string {
-	label := ""
-	for _, b := range signature.KeyRowFor(api.PGPKey{}, time.Time{}, func(time.Time) string { return "" }, i18n.Tr).Actions {
-		if b.Action == a {
-			label = b.Label
-		}
+// keyActionFailedText is the reference sentence for a failed
+// pgp.keyVerify or pgp.keyRemove.
+func keyActionFailedText(a signature.Action) string {
+	switch a {
+	case signature.ActionUnconfirmKey:
+		return signature.KeyVerifyFailedText(false, i18n.Tr)
+	case signature.ActionRemoveKey:
+		return signature.KeyRemoveFailedText(i18n.Tr)
 	}
-	if label == "" && a == signature.ActionUnconfirmKey {
-		label = signature.KeyRowFor(api.PGPKey{Trust: api.PGPKeyVerified}, time.Time{}, func(time.Time) string { return "" }, i18n.Tr).Actions[0].Label
-	}
-	label = strings.ReplaceAll(label, "_", "")
-	return strings.TrimSpace(strings.TrimSuffix(label, "…"))
+	return signature.KeyVerifyFailedText(true, i18n.Tr)
 }

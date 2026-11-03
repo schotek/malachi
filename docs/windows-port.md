@@ -4346,10 +4346,7 @@ list and the cards ask again).
 Differences from the other clients: the details are a flyout (macOS a
 popover, GTK a dialog); the three icon names share one glyph; the badge of a
 folded conversation card appears when the card has been opened (its signer
-comes with `message.get`); a failed `pgp.keyVerify` or `pgp.keyRemove` has
-no sentence in the reference, so the toast says "Confirming the key",
-"Removing the confirmation" or "Removing the key" through `RpcErrorText`
-(Windows-only strings, English); the board's conversation cards have no
+comes with `message.get`); the board's conversation cards have no
 badge (`board.get` carries no verdict, the same gap as GTK and macOS).
 
 Tests: `Signatures/SignatureViewTests` (signature_test.go),
