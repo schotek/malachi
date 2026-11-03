@@ -3303,7 +3303,10 @@ needs no change here).
   message page, Send enabled by typing, the text kept across another row
   and back, no bar on the page of several rows (`AddToSelection`), Ctrl+Enter
   sending (Sent and INBOX of the server), the row turned into a conversation
-  whose chat has the bar, its text kept through the timeline. The Outbox and
+  whose chat has the bar, its text kept through the timeline (since
+  2026-11-03, when the test first ran: the reply lands in the Inbox too,
+  so the message read stays selected as a member and the test selects the
+  conversation's row, the one whose expander is in the tree). The Outbox and
   Drafts are covered by the Core tests only (the fixture has no way there).
 - Written on a Mac without `dotnet`; handed to the owner's Windows agent
   (`docs/plans/chat-view.md` §12.5 has the list of what to build, run and
@@ -4132,7 +4135,11 @@ not; the toast button's `Tapped` does not also dismiss the capsule. Open:
 `build.ps1 app`/`test`/`lint`, a `DevmailTests` smoke (Delete → toast →
 Ctrl+Z → the message back and selected; the board's Archive → Ctrl+Z;
 Ctrl+Z in the search box stays text undo), and by hand the toast in light,
-dark and a narrow window, keyboard focus on its button and Narrator.
+dark and a narrow window, keyboard focus on its button and Narrator. The
+smoke (`DevmailTests.CtrlZAndTheToastsButtonTakeBackAMoveToTrash`: Trash,
+Ctrl+Z in the search box and on a row, the toast's button) first ran, and
+passed, on 2026-11-03 against the repository's devmail (§12); the toast
+with Undo can wait behind the one before it (`ToastPresenter` queues).
 
 ### 11.15 Address books (contacts, 2026-10-30)
 
@@ -4400,9 +4407,14 @@ took the flip for a click on the container's former rule, so Ctrl+Down on
 one sample turned the disabled *Project Atlas* on (the samples' update then
 dropped its warning). `RulesPage.OnRowToggled` now judges the flip once the
 container has settled and acts only when the switch disagrees with its
-row's rule. `AccountListSection` has the same `Toggled` shape and was not
-checked. The editor's field and operator are fixed columns (172 and 160)
-so that the condition rows line up. The page names each row's container
+row's rule. `AccountListSection` (Preferences → Accounts and Integrations)
+had the same `Toggled` shape and the same bug: over four mail accounts, two
+of them paused, Ctrl+Down on the first turned the last one on in the daemon
+(every run). It now judges the flip the same way; `AccountsSmokeTests`
+moves a row, reorders the accounts from another client and flips a switch,
+and checks `account.list` and every switch after each step. The editor's
+field and operator are fixed columns (172 and 160) so that the condition
+rows line up. The page names each row's container
 `RuleRow:<id>` with the rule's name (as the contacts' rows) and the row's
 warning `RuleProblem` and sending icon `RuleOutgoing`.
 
@@ -4435,7 +4447,9 @@ only the corpus with `-corpus`, and its go-imap server drops the connection
 on the BODYSTRUCTURE of four corpus files (`missing-boundary`,
 `skeleton-empty-parts`, `skeleton-rfc822-same-boundary`,
 `skeleton-unterminated-quote`); over a wrapper that adds `serve` and leaves
-those four out, they fail on *Lunch tomorrow?* on `9c7d693` too.
+those four out, they fail on *Lunch tomorrow?* on `9c7d693` too. Fixed on
+2026-11-03: the harness passes `serve` and submits that message itself,
+and devmail serves the four files (§12).
 
 ### 11.18 Signed mail (2026-11-02)
 
@@ -4763,10 +4777,35 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   AI's triage hidden without Register with Claude). The classes
   share one collection without parallelism (the app is one instance per
   executable); one app serves the window checks, one the Board, one the
-  Quit, one the preferences; about a minute. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>` (the local
-  IMAP and SMTP server of the port's research, outside the repository)
-  adds a suite against a mail server: devmail started on free ports of
-  127.0.0.1 and seeded with `backend/testdata/mime`, the account added over
+  Quit, one the preferences; about a minute. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>`
+  adds the suites against a mail server (`DevmailTests`,
+  `RulesDevmailTests`, `ConversationChatSmokeTests`). devmail is the
+  repository's in-memory IMAP and SMTP server, `backend/cmd/malachi-devmail`
+  (its doc comment in `main.go`), built once into that folder from
+  `backend\` with
+  `go build -o <folder>\devmail.exe ./cmd/malachi-devmail`
+  (until 2026-11-03 the suites were written for a devmail of the port's
+  research outside the repository, with its own sample mailbox, which is
+  gone). Each fixture starts `devmail.exe serve` on free ports of
+  127.0.0.1 with `-corpus backend/testdata/mime`: the corpus in the INBOX
+  of test@example.test and nothing else. devmail's IMAP server is a copy
+  of go-imap's in-memory server (`internal/imapmemserver`, MIT, its
+  `LICENSE`) whose one change describes a multipart without parts as one
+  empty text/plain part (Dovecot's answer): go-imap's writer panics on it
+  and its server closes the connection, which the daemon saw as
+  "command: unexpected EOF" on the BODYSTRUCTURE of `missing-boundary`,
+  `skeleton-empty-parts`, `skeleton-rfc822-same-boundary` and
+  `skeleton-unterminated-quote`, so the Inbox never synced
+  (`TestCorpusOverIMAP` fetches the whole corpus as the daemon does). A
+  message a suite needs beyond the corpus it submits over SMTP
+  (`DevmailSmtp`), dated now: `DevmailFixture` a plain
+  *Lunch tomorrow?* from bob.smith@example.org before the account is
+  added, `ConversationChatFixture` its conversations, and the Undo test a
+  message of its own to move to Trash. Dated now, they are the Inbox's
+  first rows, which matters: the corpus files without a Date sort by the
+  file's modification time (a checkout's), and the list realizes only the
+  rows near what it shows, so a test that selects a row further down
+  scrolls the top rows out of the other tests' reach. Then the account is added over
   the app's socket as a client adds one (`account.add` through Core's
   `RpcClient`), then the Inbox listed, a message selected and shown in the
   reader (its subject and sender), Reply opening a composer the daemon

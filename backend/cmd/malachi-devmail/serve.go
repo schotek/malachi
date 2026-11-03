@@ -24,10 +24,10 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
-	"github.com/emersion/go-imap/v2/imapserver/imapmemserver"
 	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
 
+	"github.com/schotek/malachi/backend/cmd/malachi-devmail/internal/imapmemserver"
 	"github.com/schotek/malachi/backend/internal/eway/ewaytest"
 	"github.com/schotek/malachi/backend/internal/jira/jiratest"
 )
@@ -208,14 +208,7 @@ func serve(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	imapSrv := imapserver.New(&imapserver.Options{
-		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
-			return mem.NewSession(), nil, nil
-		},
-		Caps:         imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapUIDPlus: {}, imap.CapMove: {}, imap.CapListStatus: {}},
-		InsecureAuth: true,
-		Logger:       quiet{},
-	})
+	imapSrv := newIMAPServer(mem, quiet{stderr})
 	go func() { _ = imapSrv.Serve(imapLn) }()
 
 	smtpSrv := smtp.NewServer(&smtpBackend{box: box})
@@ -328,11 +321,30 @@ func (m *mailbox) status() map[string]any {
 	return map[string]any{"users": users}
 }
 
-// quiet drops the IMAP server's log (connections come and go while the
-// daemon syncs; a person reads the control endpoint instead).
-type quiet struct{}
+// newIMAPServer is serve's IMAP server over mem: plaintext, LOGIN allowed,
+// the extensions the daemon uses.
+func newIMAPServer(mem *imapmemserver.Server, logger imapserver.Logger) *imapserver.Server {
+	return imapserver.New(&imapserver.Options{
+		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
+			return mem.NewSession(), nil, nil
+		},
+		Caps:         imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapUIDPlus: {}, imap.CapMove: {}, imap.CapListStatus: {}},
+		InsecureAuth: true,
+		Logger:       logger,
+	})
+}
 
-func (quiet) Printf(string, ...any) {}
+// quiet drops the IMAP server's log (connections come and go while the
+// daemon syncs; a person reads the control endpoint instead), except a
+// panic: the server answers one by closing the connection, which the
+// client sees only as an unexpected EOF.
+type quiet struct{ w io.Writer }
+
+func (q quiet) Printf(format string, args ...any) {
+	if strings.HasPrefix(format, "panic") {
+		fmt.Fprintf(q.w, "malachi-devmail: imap: "+format+"\n", args...)
+	}
+}
 
 // smtpBackend accepts submissions from any authenticated user and delivers
 // mail addressed to a user of the server into their INBOX.

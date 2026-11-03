@@ -216,9 +216,27 @@ public sealed partial class AccountListSection : UserControl
         Controller.Select((AccountList.SelectedItem as AccountRowView)?.Id);
     }
 
+    // The switch pauses or resumes the row's account.
+    //
+    // Toggled also comes when the list gives a recycled container another
+    // row (a move, a drag, an account added or removed): x:Bind sets the
+    // switch's IsOn before the template's DataContext follows, so the flip
+    // names the container's former account (measured: Ctrl+Down on one
+    // account turned a paused one on, as it did on the Rules page). The flip
+    // is judged once the container has settled, and only one that disagrees
+    // with its row's account is the user's.
     private void OnRowToggled(object sender, RoutedEventArgs e)
     {
-        if (reverting || sender is not ToggleSwitch toggle || toggle.DataContext is not AccountRowView row || row.Applying)
+        if (reverting || Controller.IsClosed || sender is not ToggleSwitch toggle)
+        {
+            return;
+        }
+        DispatcherQueue.TryEnqueue(() => Toggled(toggle));
+    }
+
+    private void Toggled(ToggleSwitch toggle)
+    {
+        if (reverting || Controller.IsClosed || toggle.DataContext is not AccountRowView row || row.Applying || toggle.IsOn == row.IsOn)
         {
             return;
         }

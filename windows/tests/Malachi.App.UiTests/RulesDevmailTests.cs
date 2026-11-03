@@ -88,7 +88,9 @@ public sealed class RulesDevmailTests(RulesDevmailFixture fixture) : IClassFixtu
 
         // "Apply Rules to “Inbox”?": Apply and Cancel.
         Uia.Invoke(Uia.Find(main, "PrimaryButton", TimeSpan.FromSeconds(10)));
-        var toast = Uia.Find(main, "ToastText", TimeSpan.FromSeconds(10));
+        // A toast may wait behind the one before it (ToastPresenter), and
+        // build.ps1 test runs every test project at once.
+        var toast = Uia.Find(main, "ToastText", TimeSpan.FromSeconds(30));
         Uia.WaitFor(() => toast.Current.Name.Contains("12", StringComparison.Ordinal), "the toast of the result");
     }
 
