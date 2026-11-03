@@ -131,13 +131,21 @@ Každý agent dostane: tento plán, cestu ke vzorovým souborům (Kontakty: `ui/
   testy po sloučení zelené (`rpc` jednou časový flake, samostatně
   zelený).
 
+- **B1 macOS (2026-11-03, prošlo):** na Macu `go vet ./...` a testy
+  démona (`pkg/api`, `rules`, `store`, `smtp`, `mime`, `core -run Rule`),
+  `swift build` bez varování, celé `swift test` (2051) a `check-strings.py`
+  (18 varování jako na `main`, žádné v pravidlech). Opravy: `d78e998b`
+  (`rules.test` čeká 60 s jako `rulesctl.TestTimeout`, test časových
+  limitů zná obě metody; Windows srovnal `9827a6a6`), `f58ca527` (⊖ řádku
+  Přesunout do složky na konci řádku). Rozložení změřené ladicí binárkou
+  s razítkem SDK 27.0 nad vzorky. Vlastník prošel aplikaci nad kopií dat
+  s démonem větve (migrace 0025 jen na kopii) a schválil ji. K posouzení
+  zůstalo: řádky seznamu pravidel jsou na jeden řádek, takže důvod
+  vypnutí pravidla končí „…“ (celý v tooltipu), a řádek Vyzkoušet
+  v editoru je pod okrajem listu, dokud se neposune.
+
 ### Čeká na vlastníka (brány)
 
-- **B1 macOS:** `swift build`, `swift test`, `check-strings.py`,
-  rozložení `MALACHI_RULES_SAMPLES=1 MALACHI_START="prefs-rules;rules-editor;quit"`,
-  ručně nad kopií dat (migrace 0025 je nevratná): pravidlo ze zprávy,
-  přesun a označení nové pošty, Použít pravidla na složku, automatická
-  odpověď a přeposlání jen mezi vlastními testovacími adresami.
 - **B2 GTK:** `gtk.sh make build`, `test-ui`, `MALACHI_GTK_SMOKE=1 … -run
   TestRulesGTKSmoke`, `make po` (přerovná ručně zapsané msgid
   a přečísluje odkazy), `make lint`, totéž ručně v XQuartz.
