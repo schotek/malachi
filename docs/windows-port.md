@@ -4383,6 +4383,58 @@ set from code, the `TitleBar` of the editor over `ModalDialog` at 640 x 720,
 the `ComboBox` strings with `PlaceholderText`, the pattern
 `m.Bulk is { ListId.Length: > 0 }`.
 
+As built on Windows (gate B3, 2026-11-03, Windows 11 Pro 26100 x64, .NET SDK
+10.0.400, branch `claude/sleepy-hawking-7gu54a` from `2341d89`). The guesses
+held: x:Bind and the `InfoBar` in the row's template, `DropDownButton.Flyout`
+from code, the editor's `TitleBar` at 640 x 720 over `ModalDialog`, the
+namespace `Malachi.App.MailRules`, the folder `ComboBox` and Ctrl+Up/Down
+through the list's `PreviewKeyDown` all work. Fixes: `AppRules` made its
+controller after wiring the samples' notification (CS8602) and gave the
+shown account without a nullable cast (CS8625); the row's sending label and
+the new container hook read instance data (CA1822); GTK's `funnel` icon had
+no glyph (`IconGlyphsTests`); `FakeRulesCaller` was not formatted as
+`dotnet format` writes it. One real bug: a move (Ctrl+Down, a drag, a rule
+added or removed) gives recycled containers other rows, x:Bind sets the
+switch's `IsOn` before the template's `DataContext` follows, and `Toggled`
+took the flip for a click on the container's former rule, so Ctrl+Down on
+one sample turned the disabled *Project Atlas* on (the samples' update then
+dropped its warning). `RulesPage.OnRowToggled` now judges the flip once the
+container has settled and acts only when the switch disagrees with its
+row's rule. `AccountListSection` has the same `Toggled` shape and was not
+checked. The editor's field and operator are fixed columns (172 and 160)
+so that the condition rows line up. The page names each row's container
+`RuleRow:<id>` with the rule's name (as the contacts' rows) and the row's
+warning `RuleProblem` and sending icon `RuleOutgoing`.
+
+Verified: `go vet ./...` and the rules' Go tests; `build.ps1 app` without a
+warning; `build.ps1 test` with every Core class of the rules green
+(`RulesTests` 26, `ContextMenuRulesTests` 3, `RulesControllerTests` 15,
+`RuleEditorControllerTests` 13, `GoContractTests` 97, `ApiRoundTripTests`
+960, `ApiCodingTests` 58, `NotificationDecodeTests` 11) and the whole Core,
+Platform, Credentials and Conventions sets green; `build.ps1 lint` with no
+new line in `parity-exclusions.txt`. UI smoke: `RulesSmokeTests` (7, over
+the samples) and `RulesDevmailTests` (2, devmail with the samples) all
+green on an interactive desktop. By hand over an isolated copy (devmail's
+sample set, the branch's daemon): the empty state, Add Rule… with every
+field, operator and action kind, Try It, Save with the Turn On question, a
+message moved to Archive, one marked read and flagged and an auto-reply and
+a forward sent through devmail (copies in Sent, marked Automatic), no
+`notify.newMessage` for the message a rule moved out of the Inbox (watched
+on the socket), the switch, Edit, Remove's question, Create Rule from
+Message… prefilled, Apply Rules… asking and toasting "changed 1 message"
+with no outgoing action, and Apply Rules… disabled with every rule off.
+Not seen: a drag by hand and the context menus on screen (the desktop
+session was disconnected for the second half of the walk; their contents
+were read through UI Automation). The canary's `NoWindowOpened` and
+`ActivatedLinksReachTheReaderAndNothingElse` fail on `9c7d693` as well.
+`DevmailTests` need the seeded mailbox of the devmail the suite was written
+for: the repository's `malachi-devmail` wants the `serve` subcommand, seeds
+only the corpus with `-corpus`, and its go-imap server drops the connection
+on the BODYSTRUCTURE of four corpus files (`missing-boundary`,
+`skeleton-empty-parts`, `skeleton-rfc822-same-boundary`,
+`skeleton-unterminated-quote`); over a wrapper that adds `serve` and leaves
+those four out, they fail on *Lunch tomorrow?* on `9c7d693` too.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944
