@@ -27,6 +27,7 @@ ui/internal/compose/write.go
 ui/internal/compose/suggest.go
 ui/internal/contextmenu/text.go
 ui/internal/selection/text.go
+ui/internal/unified/text.go
 ui/internal/jira/compose.go
 ui/internal/jira/jira.go
 ui/internal/jira/wizard.go
@@ -116,4 +117,7 @@ ui/internal/window/contacts_consent.go
 ui/internal/window/contacts_detail.go
 ui/internal/undo/text.go
 ui/internal/updates/updates.go
+ui/internal/rules/text.go
+ui/internal/window/rules_editor.go
+ui/internal/window/preferences_rules.go
 ui/internal/signature/text.go

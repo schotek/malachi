@@ -62,6 +62,9 @@ type folderEntry struct {
 	// that plus every hidden descendant's while it is collapsed. Unread mail
 	// folded away is still visible on the ancestor.
 	Badge int
+	// Unified marks the All Inboxes item (unified.go): a row above
+	// everything else with a pseudo folder, no account, never pinned.
+	Unified bool
 }
 
 // mailModel holds what the main window currently shows.
@@ -83,6 +86,9 @@ type mailModel struct {
 	// favourites which folders are pinned to the top (favourites.go).
 	collapsed  collapseState
 	favourites favouriteState
+	// unifiedOn is the unified-inbox setting; the All Inboxes item is
+	// shown when it is on and there are two mail accounts (unified.go).
+	unifiedOn bool
 
 	// listFolder is the folder messages belong to (or are being loaded
 	// for); it lags selected between selectFolder and loadMessages.
@@ -154,6 +160,9 @@ const maxFolderDepth = 32
 // rebuildEntries recomputes the sidebar rows from accounts and folders.
 func (m *mailModel) rebuildEntries() {
 	m.entries = sortFolders(m.accounts, m.folders, m.collapsed, m.favourites)
+	if m.unifiedShown() {
+		m.entries = append([]folderEntry{m.unifiedEntry()}, m.entries...)
+	}
 }
 
 // refreshBadges recomputes the number every visible row shows, after an
@@ -164,6 +173,10 @@ func (m *mailModel) refreshBadges() {
 	for i := range m.entries {
 		e := &m.entries[i]
 		if e.Header {
+			continue
+		}
+		if e.Unified {
+			*e = m.unifiedEntry()
 			continue
 		}
 		e.Badge = badgeFor(m.folders[e.Account.ID], e.Folder, e.Collapsed)
@@ -314,6 +327,9 @@ func (m *mailModel) updateFlags(id api.MessageID, set, clear []api.Flag) bool {
 
 // folder looks a folder up by key.
 func (m *mailModel) folder(k folderKey) (api.Folder, bool) {
+	if isUnifiedKey(k) {
+		return m.unifiedFolder(), m.unifiedShown()
+	}
 	for _, f := range m.folders[k.Account] {
 		if f.ID == k.Folder {
 			return f, true
@@ -329,6 +345,9 @@ func (m *mailModel) folder(k folderKey) (api.Folder, bool) {
 func (m *mailModel) folderListed(k folderKey) bool {
 	if k == (folderKey{}) {
 		return false
+	}
+	if isUnifiedKey(k) {
+		return m.unifiedShown()
 	}
 	a, ok := m.account(k.Account)
 	if !ok || !a.Enabled {
@@ -494,7 +513,7 @@ func firstFolder(entries []folderEntry, favourite bool) (folderKey, bool) {
 	var first folderKey
 	found := false
 	for _, e := range entries {
-		if e.Header || e.Favourite != favourite || !e.Folder.Selectable {
+		if e.Header || e.Unified || e.Favourite != favourite || !e.Folder.Selectable {
 			continue
 		}
 		k := folderKey{Account: e.Account.ID, Folder: e.Folder.ID}

@@ -360,7 +360,7 @@ func (w *Window) editAccount(id api.AccountID) {
 // account when nothing is selected (win.refresh).
 func (w *Window) triggerSync() {
 	params := api.SyncTriggerParams{}
-	if w.model.selected.Folder != "" {
+	if w.model.selected.Folder != "" && !w.model.selectedUnified() {
 		params.AccountID = w.model.selected.Account
 		params.FolderID = w.model.selected.Folder
 	}

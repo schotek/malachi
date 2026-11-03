@@ -119,8 +119,20 @@ public static class RpcTimeouts
     public static readonly TimeSpan UpdateCheck = TimeSpan.FromSeconds(75);
 
     /// <summary>
+    /// <c>rules.test</c>: the daemon matches the rule against the folder's
+    /// stored messages, reading their bodies for a body condition.
+    /// </summary>
+    public static readonly TimeSpan RulesTest = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// <c>rules.apply</c>: the daemon runs the rules over a folder's stored
+    /// messages in batches and sends the changes to the server.
+    /// </summary>
+    public static readonly TimeSpan RulesApply = TimeSpan.FromMinutes(5);
+
+    /// <summary>
     /// <c>message.signatureRevocation</c>: the daemon gives the check 15 s
-    /// (api.RevocationTimeout); the client waits 20 s (docs/api.md §4.21).
+    /// (api.RevocationTimeout); the client waits 20 s (docs/api.md §4.22).
     /// </summary>
     public static readonly TimeSpan SignatureRevocation = TimeSpan.FromSeconds(20);
 }

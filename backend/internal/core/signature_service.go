@@ -23,7 +23,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-// The signature and OpenPGP key methods (docs/api.md §4.21).
+// The signature and OpenPGP key methods (docs/api.md §4.22).
 
 func (b *Backend) Signatures() api.SignatureService { return &signatureService{b} }
 func (b *Backend) PGP() api.PGPService              { return &pgpService{b} }

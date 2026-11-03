@@ -79,6 +79,38 @@ public enum Selection {
         return out
     }
 
+    /// selection.CombineAccounts: `combine` for the rows of a list that may
+    /// hold several accounts (the All Inboxes list, `Unified`); `accounts`
+    /// is the account of each row, index for index. When they are of more
+    /// than one account the selection stays (decision U2) and the actions
+    /// that run one call per account (read, star, Archive, Junk, Trash,
+    /// Open, the Assistant) keep `combine`'s verdict, while those that need
+    /// one account are off: Forward (one message from one account), Move To
+    /// (the folder picker is one account's folders) and Save to eWay-CRM
+    /// (one account's messages per save); `mixedAccounts` says so. Rows of
+    /// one account are `combine`'s.
+    public static func combineAccounts(_ rows: [ActionFlags], accounts: [AccountID]) -> ActionFlags {
+        var out = combine(rows)
+        guard rows.count >= 2, mixed(accounts) else { return out }
+        out.mixedAccounts = true
+        out.forward = false
+        out.move = false
+        out.crm = false
+        return out
+    }
+
+    /// selection.mixed: more than one distinct account.
+    private static func mixed(_ accounts: [AccountID]) -> Bool {
+        guard let first = accounts.first else { return false }
+        return accounts.dropFirst().contains { $0 != first }
+    }
+
+    /// selection.Mixed: whether the selected rows belong to more than one
+    /// account.
+    public static func mixed<K>(_ rows: [(key: K, account: AccountID)]) -> Bool {
+        mixed(rows.map(\.account))
+    }
+
     /// selection.FlagTarget: true stars the selected rows, false unstars
     /// them.
     public static func flagTarget(_ f: ActionFlags) -> Bool {
@@ -93,6 +125,16 @@ public enum Selection {
             return rows.map(\.key)
         }
         return rows.filter { $0.account == account }.map(\.key)
+    }
+
+    /// selection.RestrictIn: `restrict` in a list that may or may not span
+    /// accounts: in the All Inboxes list (`crossAccount`) the selection may
+    /// hold rows of every account and nothing leaves it (decision U2); in
+    /// any other list it is `restrict`.
+    public static func restrictIn<K: Hashable>(
+        _ rows: [(key: K, account: AccountID)], latest: K, crossAccount: Bool
+    ) -> [K] {
+        crossAccount ? rows.map(\.key) : restrict(rows, latest: latest)
     }
 
     /// selection.Reconcile: each previous key resolved to what the list

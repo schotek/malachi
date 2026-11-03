@@ -12,7 +12,7 @@ import Foundation
 // Settings → Security with the stored OpenPGP keys.
 //
 // The daemon verifies and decides the verdict (message.signature, pgp.*,
-// docs/api.md §4.21); this only turns its API values into texts and small
+// docs/api.md §4.22); this only turns its API values into texts and small
 // view models. Every string of a certificate or key is hostile input: the
 // daemon cleans it, `clean` cleans it again, and the views show it as
 // plain text only (`stringValue`). No Security.framework: nothing is

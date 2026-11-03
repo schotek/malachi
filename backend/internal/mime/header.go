@@ -32,6 +32,9 @@ var curatedHeaders = []string{
 	"List-Id",
 	"List-Post",
 	"Auto-Submitted",
+	// A loop marker of autoresponders and list software: the mail
+	// rules never answer or forward a message that carries one.
+	"X-Loop",
 	"Precedence",
 	"X-Priority",
 	"Importance",

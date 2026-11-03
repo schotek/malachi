@@ -15,7 +15,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-// Signature verdicts, revocation states and OpenPGP keys (migration 0025,
+// Signature verdicts, revocation states and OpenPGP keys (migration 0026,
 // docs/plans/signatures.md §4). message_signatures is a cache of
 // internal/signature's verdict per message; a row goes with its message.
 

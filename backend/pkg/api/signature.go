@@ -5,7 +5,7 @@ package api
 
 import "time"
 
-// Signatures of incoming mail (docs/api.md §4.21; the design is
+// Signatures of incoming mail (docs/api.md §4.22; the design is
 // docs/plans/signatures.md, phase 1: verifying S/MIME and OpenPGP/MIME
 // signatures, nothing is signed, decrypted or encrypted). The daemon
 // verifies a message's signature when it stores the message, keeps the

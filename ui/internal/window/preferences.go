@@ -33,6 +33,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/integrations"
 	"github.com/schotek/malachi/ui/internal/mcpsetup"
 	"github.com/schotek/malachi/ui/internal/settings"
+	"github.com/schotek/malachi/ui/internal/unified"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -51,6 +52,7 @@ type PreferencesDialog struct {
 	cal          func() calendardata.DataSource // the main window's calendar source (Preferences → Calendar, G16); may be nil or return nil
 	calendarPage *calendarPrefs                 // the Calendar page while open (preferences_calendar.go)
 	contactsPage *contactsPrefs                 // the Contacts page while open (preferences_contacts.go)
+	rulesPage    *rulesPrefs                    // the Rules page while open (preferences_rules.go)
 
 	// The account rows: mailList on Accounts, integrationList on
 	// Integrations (accounts_page.go); allAccounts is the last
@@ -249,6 +251,11 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		boardTriageTokens:      b.GetObject("board_triage_usage_value").Cast().(*gtk.Label),
 	}
 
+	// Show All Inboxes: the sidebar item (unified.go), texts from Go.
+	unifiedRow := b.GetObject("unified_inbox").Cast().(*adw.SwitchRow)
+	unifiedRow.SetTitle(unified.PreferenceTitle(i18n.Tr))
+	unifiedRow.SetSubtitle(unified.PreferenceSubtitle(i18n.Tr))
+
 	// The dialog is rebuilt on every open while the store lives for the whole
 	// process, so every binding is undone when the dialog closes.
 	refreshStorage, unbindStorage := d.bindStorage(c)
@@ -259,6 +266,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		s.Bind(settings.KeyDesktopNotifications, d.desktopNotifications.Object, "active"),
 		s.Bind(settings.KeyNotificationSound, d.notificationSound.Object, "active"),
 		s.Bind(settings.KeyShowPreviewLine, d.showPreview.Object, "active"),
+		s.Bind(settings.KeyUnifiedInbox, unifiedRow.Object, "active"),
 		s.Bind(settings.KeyGroupByConversation, d.groupByConversation.Object, "active"),
 		s.Bind(settings.KeyConversationChatHTML, d.conversationChatHTML.Object, "active"),
 		s.Bind(settings.KeyConversationChatTruncateMine, d.conversationChatMine.Object, "active"),
@@ -275,6 +283,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		unbindStorage,
 		d.bindAccounts(c),
 		d.bindIntegrations(c),
+		d.bindRules(b, c),
 		d.bindCalendar(b, c),
 		d.bindContacts(b, c, s),
 		d.bindMCP(), d.bindProfile(b, c),

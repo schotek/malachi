@@ -175,7 +175,15 @@ const (
 	MethodUpdateDismiss       = "update.dismiss"
 	MethodUpdateDismissNotice = "update.dismissNotice"
 
-	// Signatures and OpenPGP keys (docs/api.md §4.21).
+	// Mail rules (docs/api.md §4.21).
+	MethodRulesList    = "rules.list"
+	MethodRulesCreate  = "rules.create"
+	MethodRulesUpdate  = "rules.update"
+	MethodRulesDelete  = "rules.delete"
+	MethodRulesReorder = "rules.reorder"
+	MethodRulesTest    = "rules.test"
+	MethodRulesApply   = "rules.apply"
+	// Signatures and OpenPGP keys (docs/api.md §4.22).
 	MethodMessageSignature           = "message.signature"
 	MethodMessageSignatureRevocation = "message.signatureRevocation"
 	MethodPGPKeyImport               = "pgp.keyImport"
@@ -205,6 +213,7 @@ const (
 
 	NotifyUpdateChanged = "notify.updateChanged"
 
+	NotifyRulesChanged      = "notify.rulesChanged"
 	NotifySignaturesChanged = "notify.signaturesChanged"
 )
 
@@ -249,6 +258,8 @@ var AllMethods = []string{
 	MethodContactCreate, MethodContactUpdate, MethodContactDelete,
 	MethodContactPhoto,
 	MethodUpdateStatus, MethodUpdateCheck, MethodUpdateSetPrefs, MethodUpdateDismiss, MethodUpdateDismissNotice,
+	MethodRulesList, MethodRulesCreate, MethodRulesUpdate, MethodRulesDelete,
+	MethodRulesReorder, MethodRulesTest, MethodRulesApply,
 	MethodMessageSignature, MethodMessageSignatureRevocation,
 	MethodPGPKeyImport, MethodPGPKeyVerify, MethodPGPKeyList, MethodPGPKeyRemove,
 }
@@ -261,5 +272,6 @@ var AllNotifications = []string{
 	NotifyAssistantProfileChanged,
 	NotifyContactsChanged,
 	NotifyUpdateChanged,
+	NotifyRulesChanged,
 	NotifySignaturesChanged,
 }

@@ -109,6 +109,9 @@ final class AppState {
     /// address chips' Show Contact / Add to Contacts…, the suggestions'
     /// scope.
     private(set) var contacts: AppContacts!
+    /// The mail rules (Integration+Rules): Settings → Rules, the rule
+    /// editor, Create Rule from Message… and the folders' Apply Rules….
+    private(set) var rules: AppRules!
     /// The user's profile for the assistant (docs/api.md §4.18): every
     /// prompt carries it, Settings → AI → About You edits it, the panel's
     /// proposal cards resolve through it. Read when the connection comes
@@ -121,7 +124,7 @@ final class AppState {
     /// on notify.updateChanged.
     let updates: UpdateController
     var updateTokens: [NotificationHub.Token] = []
-    /// Signature trust (docs/api.md §4.21): the number every
+    /// Signature trust (docs/api.md §4.22): the number every
     /// notify.signaturesChanged raises, which the details popover and
     /// Settings → Security follow (Integration+Signatures wires it).
     let signatures = SignatureState()
@@ -196,6 +199,7 @@ final class AppState {
         wireUpdates()
         EventEditorManager.shared.state = self
         contacts = AppContacts(state: self)
+        rules = AppRules(state: self)
     }
 
     var selectedProvider: (any AssistantProvider)? { settings.assistantProvider == .chatgpt ? codex : nil }
@@ -408,6 +412,7 @@ final class NotificationHub {
     private var calendarNotification = HandlerList<CalendarNotification>()
     private var assistantProfileChanged = HandlerList<Void>()
     private var updateChanged = HandlerList<Void>()
+    private var rulesChanged = HandlerList<Void>()
     private var signaturesChanged = HandlerList<Void>()
     private var contactsChanged = HandlerList<ContactsChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
@@ -470,6 +475,12 @@ final class NotificationHub {
         updateChanged.add { _ in f() }
     }
 
+    /// notify.rulesChanged: the application's `RulesController` lists the
+    /// rules again (`AppRules`).
+    func addRulesChanged(_ f: @escaping @MainActor () -> Void) -> Token {
+        rulesChanged.add { _ in f() }
+    }
+
     /// notify.signaturesChanged: trust changed (a key imported, confirmed
     /// or removed, a revocation check); the messages on display, an open
     /// details popover and the key list ask again (`wireSignatures`).
@@ -506,6 +517,10 @@ final class NotificationHub {
         }
         if raw.method == API.Notify.updateChanged {
             updateChanged.fire(())
+            return
+        }
+        if raw.method == API.Notify.rulesChanged {
+            rulesChanged.fire(())
             return
         }
         if raw.method == API.Notify.signaturesChanged {

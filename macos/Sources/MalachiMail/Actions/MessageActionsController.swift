@@ -96,7 +96,7 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
     var flags: ActionFlags {
         let rows = list.selectedRows
         return rows.count > 1
-            ? Selection.combine(rows.map { actions.actionFlags(for: $0) })
+            ? Selection.combineAccounts(rows.map { actions.actionFlags(for: $0) }, accounts: rows.map { $0.message.accountId })
             : actions.actionFlags(for: rows.first)
     }
 

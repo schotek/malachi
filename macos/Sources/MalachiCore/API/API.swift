@@ -604,7 +604,7 @@ public enum API {
         BoardArchive.self, BoardTrash.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
         BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
         BoardRunStart.self, BoardRunEnd.self,
-    ] + calendarMethods + crmMethods + assistantProfileMethods + contactsMethods + updateMethods + signatureMethods
+    ] + calendarMethods + crmMethods + assistantProfileMethods + contactsMethods + updateMethods + rulesMethods + signatureMethods
 
     /// api.AllMethods: every callable method name.
     public static let allMethods: [String] = methods.map { $0.name }
@@ -645,6 +645,9 @@ public enum API {
         /// The update check's status changed; the application's
         /// `UpdateController` asks update.status again.
         public static let updateChanged = "notify.updateChanged"
+        /// `RulesChangedNotification`: the rules changed; Settings → Rules
+        /// and the application's copy (`AppRules`) call rules.list again.
+        public static let rulesChanged = "notify.rulesChanged"
         /// Trust changed (a key imported, confirmed or removed, a
         /// revocation check, other system roots): the application's
         /// `SignatureState` bumps its generation, so the messages on
@@ -660,6 +663,7 @@ public enum API {
         Notify.assistantProfileChanged,
         Notify.contactsChanged,
         Notify.updateChanged,
+        Notify.rulesChanged,
         Notify.signaturesChanged,
     ]
 

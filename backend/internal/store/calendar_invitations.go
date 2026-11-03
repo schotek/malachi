@@ -478,7 +478,7 @@ func attachInvitationsTo(ctx context.Context, q querier, msgs []*Message) error 
 	if err := attachCrmSavedTo(ctx, q, msgs); err != nil {
 		return err
 	}
-	// And the signature verdicts (migration 0025).
+	// And the signature verdicts (migration 0026).
 	if err := attachSignaturesTo(ctx, q, msgs); err != nil {
 		return err
 	}

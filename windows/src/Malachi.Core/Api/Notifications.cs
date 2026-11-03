@@ -198,8 +198,16 @@ public abstract record DaemonNotification
     public sealed record UpdateChanged : DaemonNotification;
 
     /// <summary>
+    /// <c>notify.rulesChanged</c>: a rule was added, changed, reordered,
+    /// deleted or disabled by the daemon, or its counts moved (Rules.cs); no
+    /// params, the application's rules controller calls <c>rules.list</c>
+    /// again.
+    /// </summary>
+    public sealed record RulesChanged : DaemonNotification;
+
+    /// <summary>
     /// <c>notify.signaturesChanged</c>: trust changed (Signature.cs, docs/api.md
-    /// §4.21); no params, the windows read the messages they show, an open
+    /// §4.22); no params, the windows read the messages they show, an open
     /// details dialog and the key list again.
     /// </summary>
     public sealed record SignaturesChanged : DaemonNotification;
@@ -254,6 +262,7 @@ public abstract record DaemonNotification
             API.Notify.AssistantProfileChanged => new AssistantProfileChanged(),
             API.Notify.ContactsChanged => new ContactsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.ContactsChangedNotification)),
             API.Notify.UpdateChanged => new UpdateChanged(),
+            API.Notify.RulesChanged => new RulesChanged(),
             API.Notify.SignaturesChanged => new SignaturesChanged(),
             _ => new Unknown(method),
         };

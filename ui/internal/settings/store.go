@@ -80,6 +80,10 @@ const (
 	KeyCollapsedFolders  = "collapsed-folders"
 	KeyCollapsedAccounts = "collapsed-accounts"
 	KeyFavouriteFolders  = "favourite-folders"
+	// KeyUnifiedInbox shows the All Inboxes item at the top of the
+	// sidebar while there are at least two mail accounts
+	// (ui/internal/unified Shown). Never part of the three keys above.
+	KeyUnifiedInbox = "unified-inbox"
 )
 
 // Keys of the main window's geometry, bound to its default-width,
@@ -267,6 +271,7 @@ var defaults = map[string]any{
 	KeyCollapsedFolders:  []string(nil),
 	KeyCollapsedAccounts: []string(nil),
 	KeyFavouriteFolders:  []string(nil),
+	KeyUnifiedInbox:      true,
 
 	KeyWindowWidth:     1200,
 	KeyWindowHeight:    760,
@@ -412,6 +417,9 @@ func (s *Store) SetShowAvatars(v bool) { s.set(KeyShowAvatars, v) }
 
 func (s *Store) MonochromeAvatars() bool     { return s.boolean(KeyMonochromeAvatars) }
 func (s *Store) SetMonochromeAvatars(v bool) { s.set(KeyMonochromeAvatars, v) }
+
+func (s *Store) UnifiedInbox() bool     { return s.boolean(KeyUnifiedInbox) }
+func (s *Store) SetUnifiedInbox(v bool) { s.set(KeyUnifiedInbox, v) }
 
 func (s *Store) GroupByConversation() bool     { return s.boolean(KeyGroupByConversation) }
 func (s *Store) SetGroupByConversation(v bool) { s.set(KeyGroupByConversation, v) }

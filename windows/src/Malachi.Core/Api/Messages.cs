@@ -160,7 +160,7 @@ public sealed record MessageSummary
     public bool IsCrmSaved => CrmSaved == true;
 
     /// <summary>
-    /// The verdict of the message's signature (docs/api.md §4.21): kind and
+    /// The verdict of the message's signature (docs/api.md §4.22): kind and
     /// status, what the list's icon needs. Absent for a message without a
     /// signature that is the verdict of the whole message, and while the
     /// verdict is pending. <see cref="Message.Signature"/> takes its place
@@ -333,7 +333,7 @@ public sealed record Message
 
     /// <summary>
     /// The summary of the signature's verdict (<c>message.get</c>,
-    /// <c>message.download</c>, docs/api.md §4.21). Go's Message shadows the
+    /// <c>message.download</c>, docs/api.md §4.22). Go's Message shadows the
     /// summary's <c>signature</c> with it: on the wire the one key
     /// <c>signature</c> holds this, so <see cref="MessageSummary.Signature"/>
     /// of <see cref="Summary"/> is null.
@@ -463,6 +463,15 @@ public sealed record MessageListParams
     /// <summary>The folder.</summary>
     [JsonPropertyName("folderId")]
     public required FolderId FolderId { get; init; }
+
+    /// <summary>
+    /// Instead of <see cref="AccountId"/> and <see cref="FolderId"/> (both
+    /// empty), the role whose folders of every enabled mail account are
+    /// listed in one page: the unified listing (docs/api.md §4.3 and §4.4;
+    /// the All Inboxes item). Only <c>inbox</c> is accepted.
+    /// </summary>
+    [JsonPropertyName("unified")]
+    public FolderRole? Unified { get; init; }
 
     /// <summary>Which page.</summary>
     [JsonPropertyName("page")]

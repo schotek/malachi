@@ -25,6 +25,9 @@ final class FolderCellView: NSTableCellView {
     private var starPinned = false
     /// The pointer or the selection is on the row.
     private var revealed = false
+    /// The All Inboxes row keeps the star's slot, so its badge lines up
+    /// with the folders' badges, but never shows or takes a click there.
+    private var starless = false
 
     init() {
         super.init(frame: .zero)
@@ -113,6 +116,8 @@ final class FolderCellView: NSTableCellView {
         // A container that cannot be opened cannot be pinned either, and its
         // row is dimmed.
         let selectable = folder.selectable
+        starless = false
+        star.isEnabled = true
         star.isHidden = !selectable
         title.textColor = selectable ? .labelColor : .tertiaryLabelColor
         icon.contentTintColor = selectable ? nil : .tertiaryLabelColor
@@ -125,6 +130,26 @@ final class FolderCellView: NSTableCellView {
         // In the Favourites section every row is pinned by definition, so a
         // column of stars would say nothing and the star waits there too.
         starPinned = starred && !entry.favourite
+        applyStar(animated: false)
+    }
+
+    /// Fills the row of the All Inboxes item: the Inbox's icon, its own
+    /// name and the unread count of the inboxes it covers. It cannot be
+    /// pinned: the star keeps its slot (the badge lines up with the
+    /// folders') but stays invisible and disabled.
+    func configureUnified(entry: FolderEntry) {
+        icon.image = SidebarIcons.image(roleIcon(Unified.role), pointSize: SidebarMetrics.iconPointSize)
+        title.stringValue = Unified.title
+        title.textColor = .labelColor
+        icon.contentTintColor = nil
+        subtitle.stringValue = ""
+        subtitle.isHidden = true
+        setUnread(entry.badge)
+        starless = true
+        star.isHidden = false
+        star.isEnabled = false
+        star.toolTip = nil
+        starPinned = false
         applyStar(animated: false)
     }
 
@@ -155,7 +180,7 @@ final class FolderCellView: NSTableCellView {
     }
 
     private func applyStar(animated: Bool) {
-        let alpha: CGFloat = revealed || starPinned ? 1 : 0
+        let alpha: CGFloat = !starless && (revealed || starPinned) ? 1 : 0
         guard animated else {
             star.alphaValue = alpha
             return
@@ -170,6 +195,8 @@ final class FolderCellView: NSTableCellView {
         super.prepareForReuse()
         revealed = false
         starPinned = false
+        starless = false
+        star.isEnabled = true
         star.alphaValue = 0
         onToggleFavourite = nil
     }

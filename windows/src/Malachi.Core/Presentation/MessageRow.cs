@@ -381,8 +381,9 @@ public sealed partial class MessageRow : ObservableObject
             SenderTooltip = string.Join("\n", t.Participants.Select(Format.FormatAddress));
             Fill(t.Subject, t.Snippet, t.Date, t.Unread > 0, t.Flagged, t.HasAttachments, now);
             Highlights = [];
-            Origin = "";
-            OriginTooltip = "";
+            // Only the All Inboxes list gives its rows an origin (the account).
+            Origin = message.Origin;
+            OriginTooltip = message.OriginTooltip;
             CountText = Format.ThreadCountText(t.Count);
             // TRANSLATORS: tooltip of the member count of a conversation row.
             CountTooltip = L10n.N("%d message", "%d messages", t.Count);

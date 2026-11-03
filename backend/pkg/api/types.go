@@ -771,6 +771,12 @@ const (
 	RoleOutbox  FolderRole = "outbox" // local-only queue of messages to send
 )
 
+// UnifiedRoles are the folder roles message.list and thread.list accept
+// as `unified` (docs/api.md §4.3, "Unified listing"): the inboxes of
+// every mail account. Other roles may join later without a change of the
+// contract.
+var UnifiedRoles = []FolderRole{RoleInbox}
+
 type Folder struct {
 	ID         FolderID   `json:"id"`
 	AccountID  AccountID  `json:"accountId"`
@@ -897,7 +903,7 @@ type MessageSummary struct {
 	// same Message-ID) is saved in an enabled CRM account (§4.17); a
 	// display cache, the CRM is the truth. Absent otherwise.
 	CrmSaved bool `json:"crmSaved,omitempty"`
-	// Signature is the verdict of the message's signature (§4.21): kind
+	// Signature is the verdict of the message's signature (§4.22): kind
 	// and status, for the list's icon. Absent for a message without a
 	// signature of the whole message and while the verdict is pending.
 	// Message.Signature shadows it with the summary in message.get.
@@ -1008,7 +1014,7 @@ type Message struct {
 	// (message.get, §4.17); absent when it is saved nowhere.
 	Crm []CrmRecord `json:"crm,omitempty"`
 	// Signature is the summary of the signature's verdict (message.get,
-	// message.download, §4.21); it takes the place of
+	// message.download, §4.22); it takes the place of
 	// MessageSummary.Signature on the wire.
 	Signature *SignatureSummary `json:"signature,omitempty"`
 }
@@ -1065,6 +1071,11 @@ type MessageListParams struct {
 	Page      Page          `json:"page"`
 	Sort      SortOrder     `json:"sort,omitempty"`
 	Filter    MessageFilter `json:"filter,omitempty"`
+	// Unified, instead of AccountID and FolderID (both empty), lists the
+	// folders of this role of every enabled mail account (kind imap or
+	// graph) in one page: the unified listing, docs/api.md §4.3. Only a
+	// role of UnifiedRoles is accepted.
+	Unified FolderRole `json:"unified,omitempty"`
 	// UnreadOnly restricts the list to messages without the "seen" flag.
 	//
 	// Deprecated: use Filter. Honoured only while Filter is empty, so that
@@ -1418,6 +1429,12 @@ type ThreadListParams struct {
 	// Filter narrows the listing like message.list's: a thread is unread
 	// or flagged when any member in the folder is. Empty = all.
 	Filter MessageFilter `json:"filter,omitempty"`
+	// Unified, instead of AccountID and FolderID (both empty), lists the
+	// conversations of the folders of this role of every enabled mail
+	// account, each row aggregated over its one folder as thread.list of
+	// that folder would: the unified listing, docs/api.md §4.4. Only a
+	// role of UnifiedRoles is accepted.
+	Unified FolderRole `json:"unified,omitempty"`
 }
 
 type ThreadListResult struct {
@@ -1925,6 +1942,15 @@ type SearchQueryParams struct {
 	FolderID  FolderID  `json:"folderId,omitempty"`
 	Query     string    `json:"query"`
 	Page      Page      `json:"page"`
+	// WithSent, with FolderID, also returns the matching rows of the
+	// account's folders of role sent whose thread has a visible member in
+	// the folder (the user's replies, as thread.get withSent): not a row
+	// whose Message-ID a visible member of the folder has, and of the sent
+	// rows sharing a Message-ID only the one with the lowest id. Nothing
+	// is added in a sent folder, the outbox or a virtual folder, or when
+	// the query has in: filters. Ignored without FolderID. A compatible
+	// extension of protocol 2: an older daemon ignores it.
+	WithSent bool `json:"withSent,omitempty"`
 }
 
 type SearchResult struct {

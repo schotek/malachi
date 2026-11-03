@@ -10,7 +10,7 @@
 // Security with the stored OpenPGP keys.
 //
 // The daemon verifies and decides the verdict (message.signature,
-// pgp.*, docs/api.md §4.21); this package only turns its API values into
+// pgp.*, docs/api.md §4.22); this package only turns its API values into
 // texts and small view models. It is pure (no GTK, no gettext, no cgo: the
 // caller passes a Translator) and the reference that is ported one to one
 // to macOS (macos/Sources/MalachiCore/Signatures/) and Windows

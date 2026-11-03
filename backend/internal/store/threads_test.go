@@ -850,7 +850,7 @@ func TestThreadSentMembers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := s.sentScope(ctx, "jira", views[0].ID); err != nil || ok {
+	if ok, err := s.SentScope(ctx, "jira", views[0].ID); err != nil || ok {
 		t.Errorf("virtual folder scope: %v %v", ok, err)
 	}
 }

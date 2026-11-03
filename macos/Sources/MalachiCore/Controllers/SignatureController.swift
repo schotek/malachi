@@ -4,7 +4,7 @@
 import Foundation
 import os
 
-/// What the application keeps of signature trust once (docs/api.md §4.21,
+/// What the application keeps of signature trust once (docs/api.md §4.22,
 /// §5): a number that goes up on every notify.signaturesChanged, and the
 /// observers that ask again when it does: an open details popover
 /// (`SignatureController`) and the key list of Settings → Security

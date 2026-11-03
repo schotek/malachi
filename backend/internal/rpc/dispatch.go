@@ -145,11 +145,31 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.registerAssistant(b)
 	s.registerAddressBooks(b)
 	s.registerUpdate(b)
+	s.registerRules(b)
 	s.registerSignatures(b)
 }
 
+// registerRules binds the mail rules (docs/api.md §4.21).
+func (s *Server) registerRules(b api.Backend) {
+	r := b.Rules()
+	s.handlers[api.MethodRulesList] = wrap(r.List)
+	s.handlers[api.MethodRulesCreate] = wrap(r.Create)
+	s.handlers[api.MethodRulesUpdate] = wrap(r.Update)
+	s.handlers[api.MethodRulesDelete] = wrap(r.Delete)
+	s.handlers[api.MethodRulesReorder] = wrap(r.Reorder)
+	s.handlers[api.MethodRulesTest] = wrap(r.Test)
+	s.handlers[api.MethodRulesApply] = wrap(r.Apply)
+}
+
+// Server also implements the optional api.RulesNotifier.
+var _ api.RulesNotifier = (*Server)(nil)
+
+func (s *Server) RulesChanged(n api.RulesChangedNotification) {
+	s.broadcast(api.NotifyRulesChanged, n)
+}
+
 // registerSignatures binds the signature and OpenPGP key methods
-// (docs/api.md §4.21).
+// (docs/api.md §4.22).
 func (s *Server) registerSignatures(b api.Backend) {
 	sig := b.Signatures()
 	s.handlers[api.MethodMessageSignature] = wrap(sig.Signature)

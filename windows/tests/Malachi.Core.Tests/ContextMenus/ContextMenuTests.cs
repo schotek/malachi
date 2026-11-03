@@ -140,6 +140,22 @@ public sealed class ContextMenuTests
     }
 
     /// <summary>
+    /// contextmenu_test.go TestMessageItemsMixedAccounts: several rows of
+    /// several accounts (the All Inboxes list): Forward, Move To and Save to
+    /// eWay-CRM stay but are disabled; one row is never mixed.
+    /// </summary>
+    [Fact]
+    public void MessageItemsMixedAccounts()
+    {
+        var s = Mail with { Count = 2, Open = true, Reply = false, ReplyAll = false, MixedAccounts = true, OfferCrm = true, Crm = true };
+        Assert.Equal("open | forward- | crmSave- | markUnread toggleFlag | archive moveTo- junk trash | assistant", Show(MessageItems(s)));
+        s = s with { MixedAccounts = false };
+        Assert.Equal("open | forward | crmSave | markUnread toggleFlag | archive moveTo junk trash | assistant", Show(MessageItems(s)));
+        var one = Mail with { MixedAccounts = true };
+        Assert.Equal(Show(MessageItems(Mail)), Show(MessageItems(one)));
+    }
+
+    /// <summary>
     /// contextmenu_test.go TestMessageItemsCrm (crm.OfferFor): Save after the
     /// answers, the saved-state items for one saved message, Save with the
     /// count for several (saved or not), nothing when not offered.
@@ -261,7 +277,7 @@ public sealed class ContextMenuTests
         Assert.Equal("", Label((ItemId)999, new Labels()));
         Assert.Equal(
             "open edit reply replyAll forward markRead markUnread toggleFlag changeStatus archive moveTo junk trash assistant "
-            + "crmSave crmOpen crmEditLinks crmRemove checkMail markAllRead empty favourite fold",
+            + "crmSave crmOpen crmEditLinks crmRemove createRule checkMail markAllRead empty favourite fold applyRules",
             string.Join(" ", Enum.GetValues<ItemId>().Select(Name)));
         Assert.Equal("", Name((ItemId)999));
     }

@@ -20,14 +20,14 @@ var contactsBookMethods = []string{
 }
 
 func TestContactsBookMethodsOrder(t *testing.T) {
-	n := len(AllMethods) - len(signatureMethods) - len(updateMethods)
+	n := len(AllMethods) - len(signatureMethods) - len(rulesMethods) - len(updateMethods)
 	if !reflect.DeepEqual(AllMethods[n-len(contactsBookMethods):n], contactsBookMethods) {
 		t.Fatalf("AllMethods does not end with the address-book methods: %v", AllMethods[n-len(contactsBookMethods):n])
 	}
 	if AllMethods[n-len(contactsBookMethods)-1] != MethodAssistantProfileResolve {
 		t.Fatal("the address-book methods do not follow the assistant profile's")
 	}
-	if AllNotifications[len(AllNotifications)-3] != NotifyContactsChanged {
+	if AllNotifications[len(AllNotifications)-4] != NotifyContactsChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

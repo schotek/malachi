@@ -33,6 +33,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/maildate"
 	"github.com/schotek/malachi/ui/internal/quickreply"
+	"github.com/schotek/malachi/ui/internal/rulesctl"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/sound"
@@ -187,6 +188,11 @@ type Window struct {
 	// shared by the pane, the conversation cards and the message windows;
 	// made on first use.
 	chipContacts *chipContacts
+	// rules is the controller of the mail rules behind the context menus
+	// (rules_menus.go), made on first use; rulesToast is the progress toast
+	// of a running Apply Rules….
+	rules      *rulesctl.Controller
+	rulesToast *adw.Toast
 
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
@@ -289,6 +295,7 @@ type Window struct {
 	// undoToast the toast of the newest, undoReselect what the next list
 	// of the folder on display selects after an Undo.
 	undo         undo.Stack
+	undoGroup    int // last group id of an action across accounts (nextUndoGroup)
 	undoToast    *adw.Toast
 	undoReselect []undo.Moved
 
@@ -513,6 +520,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}
 	w.model.favourites = loadFavourites(s)
 	s.OnChanged(settings.KeyFavouriteFolders, w.onFavouritesChanged)
+	// The All Inboxes item follows its preference (unified.go).
+	w.model.unifiedOn = s.UnifiedInbox()
+	s.OnChanged(settings.KeyUnifiedInbox, w.unifiedSettingChanged)
 	// The filter is deliberately not persisted: a window that came back
 	// still hiding most of the mailbox would be read as lost mail.
 	w.model.listFilter = api.FilterAll
@@ -938,6 +948,9 @@ func (w *Window) registerActions() {
 		w.addAction(r.name, false, forSelected(func(id api.MessageID) { w.openCompose(r.kind, id) }))
 	}
 	w.addAction("forward", false, w.forwardSelection)
+	// Create Rule from Message… of the message menu (rules_menus.go); the
+	// menu enables it when it offers it.
+	w.addAction("create-rule", false, w.createRuleFromSelection)
 	moveTo := gio.NewSimpleAction("move-to", glib.NewVariantType("s"))
 	moveTo.SetEnabled(false)
 	moveTo.ConnectActivate(func(v *glib.Variant) {
@@ -1081,6 +1094,7 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		go w.fetchSystemInfo()
 		w.loadAccounts()
 		w.loadSyncStatus()
+		w.rulesRefresh()
 		// The compose windows' accounts, and whether New Message is on
 		// (an issue tracker alone writes no mail), may have changed with
 		// the daemon.

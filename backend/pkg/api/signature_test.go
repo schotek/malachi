@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// signatureMethods end AllMethods, after the update check's;
+// signatureMethods end AllMethods, after the mail rules';
 // notify.signaturesChanged ends AllNotifications.
 var signatureMethods = []string{
 	"message.signature", "message.signatureRevocation",
@@ -22,8 +22,8 @@ func TestSignatureMethodsOrder(t *testing.T) {
 	if !reflect.DeepEqual(AllMethods[n-len(signatureMethods):], signatureMethods) {
 		t.Fatalf("AllMethods does not end with the signature methods: %v", AllMethods[n-len(signatureMethods):])
 	}
-	if AllMethods[n-len(signatureMethods)-1] != MethodUpdateDismissNotice {
-		t.Fatal("the signature methods do not follow the update check's")
+	if AllMethods[n-len(signatureMethods)-1] != MethodRulesApply {
+		t.Fatal("the signature methods do not follow the rules'")
 	}
 	if AllNotifications[len(AllNotifications)-1] != NotifySignaturesChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
@@ -46,7 +46,7 @@ func TestSignatureErrorCode(t *testing.T) {
 	}
 }
 
-// The enums' wire values are those of docs/api.md §4.21; the mirrors in
+// The enums' wire values are those of docs/api.md §4.22; the mirrors in
 // Swift and C# are checked against the same strings.
 func TestSignatureEnums(t *testing.T) {
 	got := []string{

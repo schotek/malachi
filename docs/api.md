@@ -231,6 +231,7 @@ can read the key file.
 | 1109 | crmItemNotFound | a CRM item named in `crm.save` (`link`, `superior`) is not an item of that CRM account, or for `crm.remove` the message is not saved there (§4.17) |
 | 1110 | contactNotFound | no stored contact with that id (deleted, its address book gone or its account's contacts switched off; §4.19) |
 | 1111 | addressBookNotFound | no address book with that id (§4.19) |
+| 1112 | ruleNotFound | no mail rule with that id (§4.21) |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
@@ -259,7 +260,7 @@ can read the key file.
 | 1507 | malformedCalendar | an iCalendar object or a server's calendar answer could not be read even leniently; the data is withheld |
 | 1508 | recurrenceUnsupported | the event's recurrence rule is outside what the daemon expands or edits; the event shows its first instance only and may be edited with scope `all` only |
 | 1509 | addressBookReadOnly | the address book or contact cannot be changed by the user: the recent book, a server's read-only collection or folder (§4.19) |
-| 1510 | revocationFailed | `message.signatureRevocation` got no answer it trusts from the certificate's OCSP responder or CRL; `data` = `{ "reason": "network" \| "timeout" \| "server" \| "response" \| "address" }` (§4.21); `message` is not for display |
+| 1510 | revocationFailed | `message.signatureRevocation` got no answer it trusts from the certificate's OCSP responder or CRL; `data` = `{ "reason": "network" \| "timeout" \| "server" \| "response" \| "address" }` (§4.22); `message` is not for display |
 
 `offline`, `networkError`, `serverError`, `serverTimeout`, `tlsError` (with
 `TLSErrorData` for CalDAV endpoints too), `authRequired`, `authFailed` and
@@ -336,7 +337,7 @@ Time      RFC 3339 string, UTC
 ```
 
 `signature` is present when the message has a signature of the whole
-message and the daemon has its verdict (§4.21): `{ "kind": "smime|pgp",
+message and the daemon has its verdict (§4.22): `{ "kind": "smime|pgp",
 "status": … }`, what the list's icon needs. It is absent for a message
 without such a signature and while the verdict is pending (it is computed
 after the message is stored; `notify.messagesChanged` follows).
@@ -465,7 +466,7 @@ map of a few interesting headers (`List-Unsubscribe`, `Auto-Submitted`, …),
 `unsubscribe` (below), `invitation`, `crm` and `signature`. The raw header block is never returned.
 
 `signature` of `message.get` and `message.download` is the
-`SignatureSummary` (§4.21: kind, status, signer, notes, the signature's
+`SignatureSummary` (§4.22: kind, status, signer, notes, the signature's
 part), which takes the place of the summary's `MessageSignature` under
 the same key; the header's badge is built from it.
 
@@ -1648,12 +1649,14 @@ anything deleted the daemon nudges the syncer and sends
 
 #### `message.list`
 - params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
-  "filter": MessageFilter (opt), "unreadOnly": bool (opt, deprecated) }`
+  "filter": MessageFilter (opt), "unreadOnly": bool (opt, deprecated),
+  "unified": FolderRole (opt) }`
 - result: `{ "messages": [MessageSummary], "page": PageInfo }`
 
 - errors: invalidArgument (missing ids, unknown `sort`, unknown `filter`,
-  bad cursor), accountNotFound, folderNotFound (unknown or another account's
-  folder), storageError
+  bad cursor, `unified` with `accountId` or `folderId`, `unified` not one
+  of `UnifiedRoles`), accountNotFound, folderNotFound (unknown or another
+  account's folder), storageError
 
 `filter` narrows the listing to messages without the `seen` flag (`unread`)
 or with the `flagged` flag (`flagged`). `unreadOnly` is the older spelling of
@@ -1678,6 +1681,27 @@ other accounts a locally computed one; see `docs/architecture.md` §3.4). It is 
 message stored by an older daemon that has not been linked yet, and it
 can change when two partial conversations turn out to be one (the larger
 keeps its id).
+
+**Unified listing.** With `unified` set to a folder role, `accountId` and
+`folderId` stay empty (otherwise invalidArgument) and the page lists the
+folders of that role of every enabled mail account at once: the client's
+"All Inboxes". Mail accounts are those of kind `imap` and `graph`; `jira`,
+`caldav` and `eway` accounts never join, nor do disabled accounts,
+folders that are not `synced` and virtual folders. The only accepted role
+today is `inbox` (`api.UnifiedRoles`); other roles may join later without
+a change of the contract, any other value is invalidArgument. The rows
+are the same `MessageSummary` a listing of their own folder returns
+(`accountId` and `folderId` say where each one is; never `outbox`), merged
+by date and then id, which is unique across accounts; `page.total` counts
+every folder in scope after `filter`. Unified cursors are their own: a
+cursor of a single-folder listing is invalidArgument in a unified one and
+vice versa, and a cursor is bound to `sort` as above. With no mail account
+the page is empty. There is no notification of its own: a client refreshes
+a unified list on `notify.newMessage` and `notify.messagesChanged` of any
+folder in its scope (it knows the roles from `folder.list`) and adds up
+the badge from the folders' `unread`. Actions on its rows go to the
+account of each row as always (a client splits a selection across
+accounts into one call per account).
 
 #### `message.get`
 - params: `{ "accountId", "messageId" }`
@@ -2249,10 +2273,11 @@ member of any thread listing.
 
 #### `thread.list`
 - params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
-  "filter": MessageFilter (opt) }`
+  "filter": MessageFilter (opt), "unified": FolderRole (opt) }`
 - result: `{ "threads": [ThreadSummary], "page": PageInfo }`
 - errors: invalidArgument (missing ids, unknown `sort` or `filter`, bad
-  cursor), accountNotFound, folderNotFound, storageError
+  cursor, `unified` with `accountId` or `folderId`, `unified` not one of
+  `UnifiedRoles`), accountNotFound, folderNotFound, storageError
 
 ```jsonc
 ThreadSummary { "id": "t_9", "accountId": "acc_1",
@@ -2311,6 +2336,16 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
 - Cursors follow §4.3: bound to `sort`, not to `filter`, stable across
   syncs. A cursor from `message.list` is rejected here (invalidArgument)
   and vice versa.
+- **Unified listing**: `unified` lists the conversations of the folders
+  of a role of every enabled mail account, with the scope, the refusals
+  and the separate cursors of `message.list`'s unified listing (§4.3).
+  Each row is one thread in one folder, exactly as `thread.list` of that
+  folder reports it: its aggregates, `sentCount` and `draftCount` are
+  the folder's, `accountId` names the account, `folderIds` and
+  `latest.folderId` the folder (a client passes that folder to
+  `thread.get`). Rows are ordered by the date of the latest member, ties
+  by folder id and then thread id (thread ids are unique only within an
+  account).
 
 #### `thread.get`
 - params: `{ "accountId", "threadId", "folderId" (opt), "withSent": bool (opt),
@@ -2720,7 +2755,8 @@ Nothing is stored.
 ### 4.6 search
 
 #### `search.query`
-- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…", "page": Page }`
+- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…",
+  "withSent": bool (opt), "page": Page }`
 - result: `{ "results": [SearchResult], "page": PageInfo }`
 - errors: invalidArgument (empty or blank `query`, longer than
   `api.MaxSearchQueryBytes` = 1024 bytes, more than `api.MaxSearchTerms` =
@@ -2746,6 +2782,19 @@ views of a `jira` account (§4.2) hold copies of messages of its space
 folders and are searched only when the scope names them (`folderId` or
 `in:`), so a message is found once. A hidden message (§4.1
 `notificationMail`) is never found.
+
+`withSent` (with `folderId`; ignored without it) also finds the user's
+replies to the folder's conversations, by the rule of `thread.get`
+`withSent` (§4.4): the matching visible rows in the account's folders of
+role `sent` whose thread has a visible member in the folder. A sent row
+whose `Message-ID` a visible member of the folder already has (a Bcc to
+oneself, a Gmail label) is left out, the folder's copy is the result; of
+the sent rows sharing a `Message-ID` only the one with the lowest `id` is
+found; a row without a thread id never is. Nothing is added when the
+folder is a sent folder, the outbox or a view of a `jira` account, or when
+the query has an `in:` filter (it names the folders itself). Ordering,
+paging, `page.total` and the excerpt are the same for both kinds of row;
+each result's `message.folderId` says where it lies.
 
 Query syntax (parsed by the backend, compiled to a parameterised FTS5
 expression; nothing typed is ever operator syntax):
@@ -3419,7 +3468,7 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
   `board.get` returns included; a client caches `board.get` by `(id,
   version)`.
 - `BoardMessage.signature`: the member's signature verdict exactly as
-  `Message.signature` of `message.get` (§4.21: kind, status, signer,
+  `Message.signature` of `message.get` (§4.22: kind, status, signer,
   notes, partId), absent when it has none (no signature, not verified
   yet, a Jira item); the clients show it as the badge of the board's
   conversation card, and its details come from `message.signature`.
@@ -5001,7 +5050,151 @@ a client asked about a security release.
 - result: `UpdateStatus`
 - errors: invalidArgument (no notice with that `id` in the manifest)
 
-### 4.21 signature
+### 4.21 rules
+
+Mail rules (filters; the design is `docs/plans/rules.md`). A rule is
+conditions over a message and actions on it. The daemon evaluates the
+enabled rules **locally**, in their order, on every message it stores in
+the **inbox** of a mail account (`imap`, `graph`; never issue-tracker,
+CalDAV or CRM accounts), before `notify.newMessage`, so a message a rule
+moves, trashes or marks read is not announced as new mail of the inbox.
+Each Message-ID of an account goes through the automatic run once (a
+message moved back into the inbox, also by another client, is left
+alone), and mail whose arrival is older than the day before the rule was
+enabled, or than the account's addition, is never touched, so neither
+the first sync of an account nor a backfill runs rules. The automatic
+run sees a message when its body is stored; one whose body is too big
+to download or cannot be parsed is not run through the rules. The server's own rules (Graph `messageRules`,
+Sieve) are neither read nor changed.
+
+```jsonc
+Rule          { "id": "r_…", "name": "…", "enabled": bool, "accountId": "acc_1" (opt; absent = every mail account),
+                "match": "all|any", "conditions": [RuleCondition], "actions": [RuleAction], "stop": bool,
+                "outgoing": bool, "problem": "folderGone|sendFailed" (opt),
+                "createdAt": Time, "updatedAt": Time,
+                "applied": 12, "lastAppliedAt": Time (opt), "skipped": 0 }
+RuleInput     { "name", "enabled", "accountId" (opt), "match", "conditions", "actions", "stop" }
+RuleCondition { "field": "from|to|cc|toOrCc|subject|body|listId|bulk|hasAttachments",
+                "op": "contains|notContains|is|isNot|startsWith|endsWith|domainIs", "value": "…" }
+RuleAction    { "kind": "move|markRead|flag|trash|junk|forward|autoReply",
+                "folderId" (move), "to" (forward), "subject" (autoReply, opt), "text" (autoReply) }
+```
+
+- **Conditions.** Text comparisons ignore case after NFC normalisation.
+  An address field (`from`, `to`, `cc`, `toOrCc`) compares each address
+  as `Name <address>` for `contains`/`notContains` and the bare address
+  for `is`, `isNot`, `startsWith`, `endsWith`; it holds when any address
+  does, `notContains` and `isNot` when none does; `domainIs` holds when
+  an address's domain is the value or a subdomain of it (address fields
+  only). `body` is the plain text of the message (the text part, else
+  the text of the HTML part), its first `MaxRuleBodyBytes`; a message
+  whose body is not stored yet does not match a `body` condition.
+  `listId` is `BulkInfo.listId`. `bulk` takes `is`/`isNot` with `any` or
+  a `BulkKind`; a message not classified yet is not bulk.
+  `hasAttachments` takes `is` with `true` or `false`. A rule has 1 to
+  `MaxRuleConditions` conditions and `match` combines them.
+- **Actions.** 1 to `MaxRuleActions`, each kind at most once, run in
+  this order whatever their order in the rule: `markRead`, `flag`,
+  `forward`, `autoReply`, then one of `move`, `junk`, `trash` (a rule
+  has at most one of these). `move` needs `accountId` and a selectable
+  folder of that account other than its outbox and drafts. `trash` and
+  `junk` need the account's folder of that role (else the action is
+  skipped). Over several rules the first move, junk or trash wins; later
+  rules still mark and flag. `stop`: no later rule runs on a message
+  this rule matched.
+- **Outgoing actions** (`forward`, `autoReply`; `outgoing` is true) are
+  queued to the account's outbox like any message and carry
+  `Auto-Submitted: auto-forwarded` or `auto-replied`. The daemon never
+  sends one for a message that is bulk, has `Auto-Submitted` other than
+  `no`, comes from one of the user's own addresses, from
+  `mailer-daemon`, `postmaster` or a `noreply`/`no-reply` address, or
+  lies in junk; a rule sends at most `RuleOutgoingPerHour` messages an
+  hour, and `autoReply` answers a sender at most once in
+  `RuleReplyInterval` (RFC 3834). Each refusal counts in `skipped`.
+  `forward` attaches the whole message as it came from the server to one
+  address (`to`), named after its subject with `.eml` and sent with the
+  media type `application/octet-stream` as `draft.create`'s forward of
+  several messages does (§4.5), under the subject `Fwd: ` and the
+  message's subject, with no text of its own; a message that is not
+  stored whole is downloaded first (`message.download`), one that cannot
+  be or is larger than `MaxOutgoingMessageBytes` counts in `skipped`; `autoReply` answers the message's `Reply-To`, else
+  `From`, with `text` (plain text, at most `MaxRuleReplyBytes`) and
+  `subject` (else `Re: ` and the message's subject), with `In-Reply-To`
+  and `References` of the message. Both carry `X-Loop` with the
+  account's address, and a message with an `X-Loop` field is never
+  answered or forwarded. The limits are kept per rule. Outgoing actions
+  run only automatically, never in `rules.apply`.
+- `problem`: the daemon disabled the rule (`enabled` false): the folder
+  of its `move` is gone (`folderGone`), or an outgoing action could not
+  be queued (`sendFailed`). Saving the rule again clears it.
+- Removing an account deletes its rules. Limits: `MaxRules` rules,
+  `name` 1 to `MaxRuleNameBytes` bytes, each `value`, `to` and `subject`
+  at most `MaxRuleValueBytes`; every string without control, bidi or
+  invisible characters. A refused rule is invalidArgument with
+  `error.data` `RuleInvalidData { "field": "name|accountId|conditions|actions|confirmOutgoing", "index": 0 (opt) }`.
+
+#### `rules.list`
+- params: `{}`
+- result: `{ "rules": [Rule] }` (in their order)
+
+#### `rules.create`
+- params: `{ "rule": RuleInput, "confirmOutgoing": bool (opt) }`
+- result: `{ "rule": Rule }` (added at the end)
+- errors: invalidArgument (see above; more than `MaxRules`),
+  accountNotFound, folderNotFound (`move`)
+
+`confirmOutgoing` must be true when the rule is enabled with an outgoing
+action: the client asked the user first (field `confirmOutgoing` in
+`error.data` otherwise).
+
+#### `rules.update`
+- params: `{ "id", "rule": RuleInput, "confirmOutgoing": bool (opt) }`
+- result: `{ "rule": Rule }`
+- errors: ruleNotFound, invalidArgument, accountNotFound, folderNotFound
+
+`confirmOutgoing` must be true when the updated rule is enabled with an
+outgoing action and either was not enabled with one before or the `to`,
+`subject` or `text` of an outgoing action changed. Enabling a rule
+counts from now on: mail stored before is not run through it.
+
+#### `rules.delete`
+- params: `{ "id" }`
+- result: `{}`
+- errors: ruleNotFound
+
+#### `rules.reorder`
+- params: `{ "ids": ["r_…"] }` (every rule's id exactly once)
+- result: `{ "rules": [Rule] }`
+- errors: invalidArgument (an id missing, repeated or unknown)
+
+#### `rules.test`
+- params: `{ "rule": RuleInput, "accountId", "folderId" }`
+- result: `{ "count": 3, "messages": [MessageSummary] }` (the newest
+  `MaxRuleTestMessages`, newest first)
+- errors: invalidArgument, accountNotFound, folderNotFound
+
+Which stored messages of the folder the rule, as edited, matches; the
+rule need not be saved or enabled, its actions are ignored and nothing
+changes.
+
+#### `rules.apply`
+- params: `{ "accountId", "folderId" (opt), "messageIds": ["m_1"] (opt), "ruleIds": ["r_…"] (opt) }`
+  (exactly one of `folderId` and `messageIds`, at most
+  `MaxMessageIDsPerCall` ids)
+- result: `{ "examined": 120, "matched": 14, "changed": 12, "skippedOutgoing": 2 }`
+- errors: invalidArgument, accountNotFound, folderNotFound,
+  messageNotFound, ruleNotFound
+
+Runs rules by hand on stored mail of one account: the folder's stored
+messages of the `offlineDays` window or the given messages, the rules of
+`ruleIds` or else every enabled rule of the account (the account's own
+and those for every account), in order, with `stop`. Only the local
+actions run; outgoing ones count in `skippedOutgoing`. Neither the
+once-per-Message-ID record nor the age limit of the automatic run
+applies. The changes go to the server as the user's own (§4.4) and
+`notify.messagesChanged` follows.
+
+### 4.22 signature
 
 Signatures of incoming mail, phase 1 of `docs/plans/signatures.md`: the
 daemon verifies S/MIME (CMS SignedData, `multipart/signed` and opaque
@@ -5225,6 +5418,7 @@ is imported again.
 | `notify.assistantProfileChanged` | `{}` |
 | `notify.contactsChanged` | `{ "accountId" (opt; absent for the recent book), "bookIds": ["b_1"] (opt) }` |
 | `notify.updateChanged` | `{}` |
+| `notify.rulesChanged` | `{}` |
 | `notify.signaturesChanged` | `{}` |
 
 Notifications are sent only to connections that completed the handshake
@@ -5355,6 +5549,12 @@ changed, or the time of a `later` (`remindAfter`) passed, so a client
 needs no clock of its own to show the banner again. It carries no payload; clients run `update.status` again. A
 client that does not know it ignores it.
 
+`notify.rulesChanged` is sent to every client when a rule was added,
+changed, reordered or deleted, the daemon disabled one (`problem`), or
+the counts of a rule moved (gathered within 1 s). It carries no
+payload; clients run `rules.list` again. A client that does not know it
+ignores it.
+
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
 progress-only changes at most every 500 ms per account (the last value is
@@ -5379,7 +5579,7 @@ failed this time (the account works now; the next `notify.syncState` may
 follow), or not kept at all under `MALACHI_KEYRING=none` (the account
 stays in `authRequired`).
 
-`notify.signaturesChanged` is sent when trust changed (§4.21): an OpenPGP
+`notify.signaturesChanged` is sent when trust changed (§4.22): an OpenPGP
 key was imported, confirmed or removed, a revocation check stored its
 result, or the daemon found another set of system roots. Clients call
 `message.get` again for the messages they show and `message.signature`
@@ -5780,8 +5980,23 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   methods `update.status`, `update.check`, `update.setPrefs`,
   `update.dismiss`, `update.dismissNotice` and the notification
   `notify.updateChanged`. No new error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: mail rules, §4.21): new
+  methods `rules.list`, `rules.create`, `rules.update`, `rules.delete`,
+  `rules.reorder`, `rules.test`, `rules.apply`, the notification
+  `notify.rulesChanged` and the error code 1112 `ruleNotFound`.
+  `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the unified inbox, §4.3 and
+  §4.4): `MessageListParams.unified` and `ThreadListParams.unified`
+  (`FolderRole`, only `inbox`, `api.UnifiedRoles`). No new methods,
+  notifications or error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the user's replies in a
+  folder's search): `search.query` gained `withSent` (§4.6), which also
+  finds the matching rows of the account's sent folders that belong to
+  the folder's conversations, by the rule of `thread.get` `withSent`. An
+  older daemon ignores it and searches the folder alone. No new error
+  codes; `ProtocolVersion` stays 2.
 - **2** (2026-11-02, compatible addition: signatures of incoming mail,
-  §4.21): `MessageSummary.signature` (`MessageSignature`) and
+  §4.22): `MessageSummary.signature` (`MessageSignature`) and
   `Message.signature` (`SignatureSummary`); new methods
   `message.signature`, `message.signatureRevocation`, `pgp.keyImport`,
   `pgp.keyVerify`, `pgp.keyList`, `pgp.keyRemove` and the notification

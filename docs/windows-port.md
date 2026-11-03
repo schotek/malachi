@@ -4271,10 +4271,176 @@ without a compiler: `InfoBar.Content` with a `WrapBox`, the `Root` row
 shift (nothing reads the rows by number), `ContentDialog` content with a
 `CheckBox`.
 
-### 11.17 Signed mail (2026-11-02)
+### 11.17 Mail rules (2026-11-02)
+
+Written 2026-11-02 on a Linux container without .NET, from the Go reference
+`ui/internal/rules` and `ui/internal/contextmenu` (items `createRule`,
+`applyRules`) and the contract `docs/api.md` §4.21 (decisions R1 to R14 in
+`docs/plans/rules.md`; task T4). The macOS client was written at the same
+time; nothing was ported from it. Not compiled, not run: the Windows agent
+builds and walks it (below). Never through `windows.yml`.
+
+API: `Api/Rules.cs` mirrors `backend/pkg/api/rules.go` (`RuleMatch`,
+`RuleField`, `RuleOperator`, `RuleActionKind` (with `IsOutgoing`),
+`RuleProblem`, `RuleCondition`, `RuleAction`, `RuleInput`, `Rule`,
+`RuleInvalidData` and the params and results of the seven methods; Go's
+`Rule` embeds `RuleInput`, so the record derives from it as `CalendarEvent`
+from `Occurrence`; `RulesListParams` is `EmptyParams`, `RulesDeleteResult`
+`EmptyResult`). `RuleLimits` holds the limits and `RuleValues.BulkAny`
+Go's `RuleBulkAny` (a constant of `RuleField` would be taken for a wire
+value). `rules.list`, `create`, `update`, `delete`, `reorder`, `test`,
+`apply` end `API.Methods` (126); `notify.rulesChanged` ends
+`AllNotifications`, decodes as `DaemonNotification.RulesChanged` (no
+params) and fans out through `NotificationHub.AddRulesChanged`; error 1112
+is `ErrorCode.RuleNotFound`. Timeouts: `RpcTimeouts.RulesTest` 60 s and
+`RulesApply` 5 min, as Go's `rulesctl` and macOS (the contract names none;
+the other five are 5 s).
+
+Core: `Rules/RuleBook.cs` is `rules.go` one to one (`Fields`,
+`ActionKinds`, `OperatorsFor`, `NewCondition`, `NewForm`, `FromRule`,
+`Input`, `AvailableActions`, `Validate`, `Clean`, `ValidAddress`,
+`FromMessage`, `NeedsConfirm`, `Toggled`, `Moved`, `AppliesToAccount`,
+`CanApplyIn`, `CanCreateFrom`, `MoveFolders`; lengths are UTF-8 bytes as in
+Go; the class is `RuleBook`, as `ContactBook`, so that the namespace
+`Malachi.Core.Rules` is not hidden; `MailAccounts` is Windows' own: imap
+and graph), `Rules/RuleForm.cs` (Go's `Form` as a class with `Clone`, the
+problem and value kinds) and `Rules/RulesText.cs` is `text.go`, every text
+a GTK msgid through `L10n`, none new, none excluded (the 127 msgids
+that name `ui/internal/rules` in the template are all used). The context
+menu got `ItemId.CreateRule` and `ApplyRules` (Go ids `createRule`,
+`applyRules`), `MessageState.OfferRule`, `FolderState.OfferRules` and
+`Rules`. `Controllers/RulesController.cs` (the application's: the rules as
+last listed, `Refresh` on `notify.rulesChanged` and on a new connection,
+`SetEnabledAsync` with the outgoing question, `MoveAsync` shown at once and
+put back on a refusal, `DeleteAsync`, `ApplyAsync`, `ErrorText`:
+`ruleNotFound` and the daemon's `RuleInvalidData` have their sentences,
+anything else the action's; never the daemon's message) and
+`Controllers/RuleEditorController.cs` (the editor's form edits, the
+problems of `Validate`, Save with `confirmOutgoing`, Try It) go through
+`IRulesCaller` (`RpcRulesCaller`; `RulesSampleCaller` for
+`MALACHI_RULES_SAMPLES=1`). Questions are delegates the views answer;
+nothing in Core makes a dialog.
+
+App: `Shell/AppState.Rules.cs` and `Rules/AppRules.cs` (the controller, the
+routing, the ways in to the editor and Apply Rules…; the folder `Rules/` is the
+namespace `Malachi.App.MailRules`, because a namespace `Malachi.App.Rules` would
+take the name from the alias `Rules` of `ConversationQuickReplyBar`); Preferences →
+Rules (`Preferences/RulesPage`, `RuleRowView`) is the page right after
+Integrations (icon `folder-saved-search`, the Filter glyph): description,
+Add Rule…, a `ListView` of cards like the account lists (drag by the
+handle, Ctrl+Up and Ctrl+Down, the window's `MoveUp` and `MoveDown`) with
+the switch, the sending icon, the warning `InfoBar` of a rule the daemon
+turned off, Edit and Remove, and the empty state. The editor is
+`Rules/RuleEditorWindow`, a 640 x 720 modal window like the CalDAV wizard
+(`ModalDialog`, `WindowKind.Wizard`, so Escape and Ctrl+W cancel it): the
+rows of conditions and actions are made in code and built again only when
+their structure changes, so that a caret stays; a problem is shown once the
+user changed something (or the form came with a name or from a stored rule),
+Save is disabled while there is one. Questions are `IAlerts` dialogs
+(`ConfirmDestructiveAsync` for Remove, `ConfirmAsync` with Turn On / Apply and
+Cancel for the others, in the order of a Windows dialog). The message menu's
+Create Rule from Message… (`MessageListPane.CreateRule`) is offered for one
+row of a mail account in a folder that `CanCreateFrom`; the folder menu's
+Apply Rules… (`SidebarPane.ApplyRules`, `RulesApply`) for a folder
+that `CanApplyIn` of a mail account, enabled with an enabled rule for the
+account (`AppliesTo`) and messages; it asks, shows Applying rules as a toast
+and then the result (`MainWindow.Rules.cs`). `MALACHI_START` has the steps
+`prefs-rules` and `rules-editor`.
+
+Deviations from the Go reference and from GTK (decisions of this port; also in
+`windows/README.md`): `RuleBook.MailAccounts` (imap and graph; the editor lists
+the enabled ones and the rule's own) is Windows' own; a
+change of account in the editor clears the folder of a Move To action and
+removes the action for every account; a failure that has no sentence of its
+own is `RulesController.FailureText` (the generic sentence, never the
+daemon's message); the page draws its rows again when the mailbox's folders
+change, because the names of accounts and folders come from it; Try It is enabled only for a form
+without problems; the folder choices are the account's folders in the
+sidebar's order without the indentation of the Move To submenu; the page
+shows the account and the status as two dim lines, not one.
+
+Tests: `Rules/RulesTests` (`rules_test.go`), `ContextMenus/ContextMenuRulesTests`
+(`contextmenu/rules_test.go`, with the Go ids), `Controllers/RulesControllerTests`
+and `RuleEditorControllerTests` (against `FakeRulesCaller`), and the updated
+`GoContractTests` (126 methods, the five wire enums,
+`EveryEnumAndStructOfRulesGoIsMirrored`, rules.go in
+`EveryRecordHasTheMembersOfItsGoStruct`), `ApiCodingTests` (`GoMethods`,
+`GoCodes`, the notifications), `ApiRoundTripTests` (a sample of every
+rules record), `NotificationDecodeTests` and `DevelopmentStartTests`.
+
+The Windows agent: `build.ps1 app`, `test` (the classes above first), `lint`
+(formatting, `StringsCheckTests.EveryTemplateMsgidIsUsedOrExcluded`,
+conventions); then by hand against a daemon that has the rules (or
+`MALACHI_RULES_SAMPLES=1 MALACHI_START="prefs-rules;rules-editor"`): the
+page (switch, an outgoing rule asking, drag and the keys, Edit, Remove with
+its question, a rule with a problem), the editor (every field, Add
+Condition and Add Action, the account change, Try It, Save of an outgoing
+rule, the daemon's refusals), Create Rule from Message… (the prefill from a
+sender and from a mailing list), Apply Rules… (question, toast, a folder
+without a rule). Guessed without a compiler: x:Bind in the rule row's
+`DataTemplate` (an `InfoBar` in a `ListViewItem`), `DropDownButton.Flyout`
+set from code, the `TitleBar` of the editor over `ModalDialog` at 640 x 720,
+the `ComboBox` strings with `PlaceholderText`, the pattern
+`m.Bulk is { ListId.Length: > 0 }`.
+
+As built on Windows (gate B3, 2026-11-03, Windows 11 Pro 26100 x64, .NET SDK
+10.0.400, branch `claude/sleepy-hawking-7gu54a` from `2341d89`). The guesses
+held: x:Bind and the `InfoBar` in the row's template, `DropDownButton.Flyout`
+from code, the editor's `TitleBar` at 640 x 720 over `ModalDialog`, the
+namespace `Malachi.App.MailRules`, the folder `ComboBox` and Ctrl+Up/Down
+through the list's `PreviewKeyDown` all work. Fixes: `AppRules` made its
+controller after wiring the samples' notification (CS8602) and gave the
+shown account without a nullable cast (CS8625); the row's sending label and
+the new container hook read instance data (CA1822); GTK's `funnel` icon had
+no glyph (`IconGlyphsTests`); `FakeRulesCaller` was not formatted as
+`dotnet format` writes it. One real bug: a move (Ctrl+Down, a drag, a rule
+added or removed) gives recycled containers other rows, x:Bind sets the
+switch's `IsOn` before the template's `DataContext` follows, and `Toggled`
+took the flip for a click on the container's former rule, so Ctrl+Down on
+one sample turned the disabled *Project Atlas* on (the samples' update then
+dropped its warning). `RulesPage.OnRowToggled` now judges the flip once the
+container has settled and acts only when the switch disagrees with its
+row's rule. `AccountListSection` has the same `Toggled` shape and was not
+checked. The editor's field and operator are fixed columns (172 and 160)
+so that the condition rows line up. The page names each row's container
+`RuleRow:<id>` with the rule's name (as the contacts' rows) and the row's
+warning `RuleProblem` and sending icon `RuleOutgoing`.
+
+Verified: `go vet ./...` and the rules' Go tests; `build.ps1 app` without a
+warning; `build.ps1 test` with every Core class of the rules green
+(`RulesTests` 26, `ContextMenuRulesTests` 3, `RulesControllerTests` 15,
+`RuleEditorControllerTests` 13, `GoContractTests` 97, `ApiRoundTripTests`
+960, `ApiCodingTests` 58, `NotificationDecodeTests` 11) and the whole Core,
+Platform, Credentials and Conventions sets green; `build.ps1 lint` with no
+new line in `parity-exclusions.txt`. UI smoke: `RulesSmokeTests` (7, over
+the samples) and `RulesDevmailTests` (2, devmail with the samples) all
+green on an interactive desktop. By hand over an isolated copy (devmail's
+sample set, the branch's daemon): the empty state, Add Rule… with every
+field, operator and action kind, Try It, Save with the Turn On question, a
+message moved to Archive, one marked read and flagged and an auto-reply and
+a forward sent through devmail (copies in Sent, marked Automatic), no
+`notify.newMessage` for the message a rule moved out of the Inbox (watched
+on the socket), the switch, Edit, Remove's question, Create Rule from
+Message… prefilled, Apply Rules… asking and toasting "changed 1 message"
+with no outgoing action, and Apply Rules… disabled with every rule off.
+The agent could not see a drag by hand or the context menus on screen (the
+desktop session was disconnected for the second half of its walk; their
+contents were read through UI Automation); the owner walked those, the
+keys and the editor over an isolated copy with devmail and approved B3
+the same day. The canary's `NoWindowOpened` and
+`ActivatedLinksReachTheReaderAndNothingElse` fail on `9c7d693` as well.
+`DevmailTests` need the seeded mailbox of the devmail the suite was written
+for: the repository's `malachi-devmail` wants the `serve` subcommand, seeds
+only the corpus with `-corpus`, and its go-imap server drops the connection
+on the BODYSTRUCTURE of four corpus files (`missing-boundary`,
+`skeleton-empty-parts`, `skeleton-rfc822-same-boundary`,
+`skeleton-unterminated-quote`); over a wrapper that adds `serve` and leaves
+those four out, they fail on *Lunch tomorrow?* on `9c7d693` too.
+
+### 11.18 Signed mail (2026-11-02)
 
 Written 2026-11-02 on a Linux machine without .NET, from the Go reference
-`ui/internal/signature` and the contract `docs/api.md` §4.21 (design,
+`ui/internal/signature` and the contract `docs/api.md` §4.22 (design,
 decisions S1 to S17 and the as-built notes of every client in
 `docs/plans/signatures.md`; the macOS port was written at the same time and
 is not the source). Phase 1 only: the daemon verifies S/MIME and OpenPGP/MIME

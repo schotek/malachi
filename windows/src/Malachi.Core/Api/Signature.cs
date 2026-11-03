@@ -3,7 +3,7 @@
 
 // Go: backend/pkg/api/signature.go (all of it), the signature parts of
 // types.go (MessageSummary.Signature, Message.Signature) and errors.go
-// (1510 revocationFailed); contract: docs/api.md §4.21, §5
+// (1510 revocationFailed); contract: docs/api.md §4.22, §5
 // (notify.signaturesChanged); design: docs/plans/signatures.md. Written
 // from the Go types beside the Swift mirror, which was written at the same
 // time.

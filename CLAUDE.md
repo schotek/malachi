@@ -302,7 +302,18 @@ Vyhledávání: `search.query` jen nad lokálním úložištěm (okno
 `core.Maintain` pod `search.indexed`), `internal/search` = čistý parser
 syntaxe, FTS5 výraz s každou hodnotou v uvozovkách a výřez se zvýrazněním;
 rozsahy složka / účet / všechny povolené účty, koš a nevyžádaná jen jako
-vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000.
+vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000;
+rozsah složky posílá ve všech třech klientech `withSent` (2026-11-02,
+větev `claude/search-sent-mail-lrccj5`, rozhodnutí vlastníka): démon
+přidá vlastní odeslané zprávy z Odeslaných, které patří do vláken složky
+(pravidlo `store.sentMember` jako `sentCount`; ne v Odeslaných, Outboxu,
+virtuálních složkách ani s `in:`), řádek je odliší jen jménem složky
+(`searchOutside`); na Macu zelené Go testy démona, GTK v kontejneru
+(`make build`, celé `test-ui`, `make lint`, `po/` beze změny) i celé
+`swift test` a vlastník hledání ručně ověřil v macOS i GTK nad kopií dat;
+Windows agent na ARM64 `build.ps1 app` a `lint` zelené, `test` po opravě
+vzorku round-trip (`a2a0df2`) bez selhání větve (zbylá jsou prostředí
+a padají i na `main`) a vlastník ho ručně ověřil na Windows.
 GTK: lišta hledání nad seznamem (Ctrl+F, `window/search.go`,
 `search_model.go`, GSettings `search-scope`), hledá při psaní od 2 znaků,
 výsledky ploše se složkou/účtem a tučnými shodami, jednopísmenné zkratky
@@ -521,12 +532,66 @@ Pořadí prací:
 17. Přílohy jako dlaždice (podle Outlooku) — větev `feat/attachment-tiles`
     2026-11-02, všechny tři klienty ověřené vlastníkem na obrazovce; viz
     odstavec Přílohy jako dlaždice níže
-18. Ověřování podpisů (S/MIME, OpenPGP, fáze 1) — větev
-    `claude/keen-planck-bgzc8z` 2026-11-02; démon (migrace 0025, opaque
-    S/MIME rozbalený v parseru, `RulesVersion` "9") s Go testy a fuzz,
+18. Společná doručená pošta (Všechny doručené) — větev
+    `claude/exciting-ritchie-dy3qqt` 2026-11-02, démon, GTK, macOS i Windows
+    sestavené, otestované a ověřené vlastníkem na obrazovce; viz odstavec níže
+    a `docs/plans/unified-inbox.md`
+19. Pravidla pošty (filtry) — větev `claude/sleepy-hawking-7gu54a`
+    2026-11-02, démon i všechny tři klienty napsané, macOS (B1), GTK (B2)
+    a Windows (B3) schválené vlastníkem 2026-11-03;
+    viz odstavec Pravidla pošty níže a `docs/plans/rules.md`
+20. Ověřování podpisů (S/MIME, OpenPGP, fáze 1) — větev
+    `claude/keen-planck-bgzc8z` 2026-11-02; démon (migrace 0026, při sloučení
+    `main` přečíslovaná z 0025, kterou mají pravidla; API `docs/api.md`
+    §4.22; opaque S/MIME rozbalený v parseru, `RulesVersion` "9") s Go testy a fuzz,
     Go reference `ui/internal/signature`, GTK, macOS a Windows napsané
     bez překladu; plán, rozhodnutí a „As built“ v `docs/plans/signatures.md`,
     čeká ověření na skutečných systémech
+
+Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
+U1–U4 v `docs/plans/unified-inbox.md`). Položka nahoře v postranním panelu
+nad Oblíbenými, jen při ≥ 2 povolených poštovních účtech (`imap`, `graph`)
+a se zapnutým klíčem `unified-inbox` (Předvolby → Seznam zpráv). Démon:
+`message.list`/`thread.list` s `unified: "inbox"` bez `accountId`/`folderId`
+(`api.UnifiedRoles`, `core/unified.go`, `store.ListMessagesIn`/`ListThreadsIn`,
+vlastní prefixy kurzoru, bez migrace a nové notifikace). Reference
+`ui/internal/unified` (zástupný klíč `@unified:inbox`, `Covers`, `GroupByAccount`),
+`selection.CombineAccounts`/`RestrictIn` (výběr přes účty, akce po účtech,
+Přeposlat více/Přesunout do/eWay u smíšeného výběru vypnuté), `undo.Entry.Group`
+(jedno Zpět pro akci přes účty); vlákna ve sjednoceném seznamu klíčovaná
+(účet, vlákno), protože Graph `conversationId` se mezi schránkami opakuje.
+Ověřeno 2026-11-02: GTK v kontejneru (build, celé `test-ui`, smoke, `make po`,
+`make lint`), macOS (`swift build`, celé `swift test` 2052, `check-strings`),
+Windows ARM64 (`build.ps1 app`/`lint`, `test` 9100 se čtyřmi selháními
+prostředí jako na `main`), vlastník prošel všechny tři nad dvěma účty
+z `malachi-devmail`; podrobnosti v „As built“ plánu.
+
+Pravidla pošty (2026-11-02, všechny tři klienty, v PR do `main`;
+plán, rozhodnutí R1–R14 a stav ověření v `docs/plans/rules.md`, API
+`docs/api.md` §4.21, bezpečnost `docs/security.md` §7.5). Démon vyhodnocuje
+pravidla lokálně v hooku `afterMailStored` jen pro Doručenou poštovních
+účtů, každé Message-ID nejvýš jednou (`rule_seen`), nikdy na poštu starší
+než den před zapnutím pravidla (`internal/rules` čistý matcher, migrace
+0025, `core/rules_engine.go`); lokální akce synchronně před
+`notify.newMessage`, přeposlání a automatická odpověď přes frontu na účet
+(`core/rules_outgoing.go`) s ochranami (hromadná a automatická pošta,
+vlastní adresy, noreply, `X-Loop`, 20 za hodinu, odpověď odesílateli
+jednou za 4 dny, hlavičky `Auto-Submitted`), zapnutí odchozího pravidla
+jen s `confirmOutgoing`; `rules.apply` jen lokální akce. MCP `list_rules`,
+za `--allow-modify` `create_rule`/`update_rule`, odchozí akce navíc jen
+s `--allow-send`. Reference `ui/internal/rules` (model, validace, texty)
+a `ui/internal/rulesctl` (GTK kontrolery), porty `MalachiCore/Rules`
+a `Malachi.Core/Rules`; Předvolby → Pravidla za Integracemi, editor,
+*Vytvořit pravidlo ze zprávy…* a *Použít pravidla…* v kontextových
+menu, vzorová data `MALACHI_RULES_SAMPLES=1`. Brány: B1 macOS (2026-11-03,
+`swift build`/`swift test` zelené, vlastník schválil nad kopií dat), B2
+GTK (`gtk.sh make build`, `test-ui`, `TestRulesGTKSmoke`, `make po`,
+`make lint`, vlastník schválil v XQuartz) a B3 Windows (`build.ps1
+app`/`test`/`lint`, UI smoke `RulesSmokeTests` a `RulesDevmailTests`,
+vlastník schválil na obrazovce; oprava přepínače, který přesun řádku
+přepínal u jiného pravidla) prošly; čeká rozhodnutí vlastníka, zda
+nechat potlačení `notify.newMessage` pro každou zprávu přečtenou už při
+stažení, nebo ho zúžit na zprávy změněné pravidlem.
 
 Přílohy jako dlaždice (2026-11-02, všechny tři klienty, rozhodnutí
 vlastníka podle srovnání s Outlookem). Příloha je dlaždice pevné šířky

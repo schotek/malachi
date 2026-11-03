@@ -1270,7 +1270,7 @@ import Testing
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
         (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"),
         (1107, "calendarNotFound"), (1108, "eventNotFound"), (1109, "crmItemNotFound"), (1110, "contactNotFound"),
-        (1111, "addressBookNotFound"),
+        (1111, "addressBookNotFound"), (1112, "ruleNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
         (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"), (1206, "contactsConsentRequired"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
@@ -1283,7 +1283,7 @@ import Testing
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 54 && Set(ErrorCode.all).count == 54)
+        #expect(ErrorCode.all.count == 55 && Set(ErrorCode.all).count == 55)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1391,13 +1391,15 @@ import Testing
         "contact.create", "contact.update", "contact.delete",
         "contact.photo",
         "update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice",
+        "rules.list", "rules.create", "rules.update", "rules.delete",
+        "rules.reorder", "rules.test", "rules.apply",
         "message.signature", "message.signatureRevocation",
         "pgp.keyImport", "pgp.keyVerify", "pgp.keyList", "pgp.keyRemove",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 125)
-        #expect(Set(API.allMethods).count == 125, "no duplicates")
+        #expect(API.allMethods.count == 132)
+        #expect(Set(API.allMethods).count == 132, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1408,6 +1410,7 @@ import Testing
             "notify.assistantProfileChanged",
             "notify.contactsChanged",
             "notify.updateChanged",
+            "notify.rulesChanged",
             "notify.signaturesChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
@@ -1445,6 +1448,9 @@ import Testing
         // A contact is written to the server first (contactsctl WriteTimeout).
         #expect(API.ContactCreate.timeout == .seconds(60) && API.ContactUpdate.timeout == .seconds(60))
         #expect(API.ContactDelete.timeout == .seconds(60))
+        // As the GTK UI (rulesctl TestTimeout, ApplyTimeout): rules.test reads
+        // a folder, rules.apply runs the rules over a whole folder.
+        #expect(API.RulesTest.timeout == .seconds(60) && API.RulesApply.timeout == .seconds(300))
         // The daemon's revocation check is allowed 15 s; a key import may fetch it (remote).
         #expect(API.MessageSignatureRevocation.timeout == .seconds(20) && RPCTimeouts.revocation == .seconds(20))
         #expect(API.PGPKeyImport.timeout == RPCTimeouts.remote)
@@ -1459,7 +1465,7 @@ import Testing
                                     "event.respond", "invitation.respond",
                                     "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
                                     "contact.create", "contact.update", "contact.delete", "contact.photo",
-                                    "update.check", "message.signatureRevocation", "pgp.keyImport"]
+                                    "update.check", "rules.test", "rules.apply", "message.signatureRevocation", "pgp.keyImport"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

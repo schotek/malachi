@@ -17,7 +17,7 @@
 // hides, and Preferences → Security with the stored OpenPGP keys.
 //
 // The daemon verifies and decides the verdict (message.signature, pgp.*,
-// docs/api.md §4.21); this only turns its API values into texts and small
+// docs/api.md §4.22); this only turns its API values into texts and small
 // view models. Every string of a certificate or key (names, addresses,
 // distinguished names, user IDs, signed header values) is hostile input: the
 // daemon cleans it, this cleans it again, and the client shows it as plain

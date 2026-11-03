@@ -26,9 +26,13 @@ public sealed partial class AppearancePage : UserControl
         var othersTitle = Core.Model.Conversation.ChatTruncateOthersRowTitle();
         ConversationChatTruncateOthersCard.Header = othersTitle;
         AutomationProperties.SetName(ConversationChatTruncateOthersSwitch, othersTitle);
+        UnifiedInboxCard.Header = Core.Model.Unified.PreferenceTitle;
+        UnifiedInboxCard.Description = Core.Model.Unified.PreferenceSubtitle;
+        AutomationProperties.SetName(UnifiedInboxSwitch, Core.Model.Unified.PreferenceTitle);
         var s = state.Settings;
         bindings.Choice(ColorSchemeBox, SettingsKey.ColorScheme, PreferenceChoices.ColorSchemeChoices, () => s.ColorScheme, v => s.ColorScheme = v);
         bindings.Choice(DensityBox, SettingsKey.Density, PreferenceChoices.DensityChoices, () => s.Density, v => s.Density = v);
+        bindings.Toggle(UnifiedInboxSwitch, SettingsKey.UnifiedInbox, () => s.UnifiedInbox, v => s.UnifiedInbox = v);
         bindings.Toggle(GroupByConversationSwitch, SettingsKey.GroupByConversation, () => s.GroupByConversation, v => s.GroupByConversation = v);
         bindings.Toggle(ConversationChatHtmlSwitch, SettingsKey.ConversationChatHtml, () => s.ConversationChatHtml, v => s.ConversationChatHtml = v);
         bindings.Toggle(ConversationChatTruncateMineSwitch, SettingsKey.ConversationChatTruncateMine, () => s.ConversationChatTruncateMine, v => s.ConversationChatTruncateMine = v);

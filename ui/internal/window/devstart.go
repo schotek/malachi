@@ -18,6 +18,8 @@ import (
 	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/calendar"
+	"github.com/schotek/malachi/ui/internal/rules"
+	"github.com/schotek/malachi/ui/internal/rulesctl"
 )
 
 // A development aid, not a feature (the macOS client's MALACHI_START,
@@ -38,7 +40,10 @@ import (
 // page), prefs-ai (Preferences on the AI page, About You on top),
 // contacts (the Contacts window), contacts:edit (the window with the
 // first listed contact's form open), prefs-contacts (Preferences on the
-// Contacts page), crm-dialog (the Save to eWay-CRM dialog over invented
+// Contacts page), prefs-rules (Preferences on the Rules page), rules-editor
+// (the editor of the first rule that sends mail, else of the first rule,
+// else of a new one; with MALACHI_RULES_SAMPLES=1 over invented rules and
+// accounts, no daemon), crm-dialog (the Save to eWay-CRM dialog over invented
 // suggestions, no daemon), eway-wizard (the eWay-CRM account assistant;
 // Next asks the daemon), size=WxH, quit.
 //
@@ -78,6 +83,8 @@ const (
 	devContacts
 	devContactsEdit
 	devPrefsContacts
+	devPrefsRules
+	devRulesEditor
 	devCrmDialog
 	devEwayWizard
 	devSize
@@ -154,6 +161,10 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind = devContactsEdit
 		case name == "prefs-contacts":
 			st.Kind = devPrefsContacts
+		case name == "prefs-rules":
+			st.Kind = devPrefsRules
+		case name == "rules-editor":
+			st.Kind = devRulesEditor
 		case name == "crm-dialog":
 			st.Kind = devCrmDialog
 		case name == "eway-wizard":
@@ -339,6 +350,12 @@ func (w *Window) runDevStep(n int, st devStep) {
 		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
 		d.SetVisiblePageName("contacts")
 		d.Present(w)
+	case devPrefsRules:
+		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
+		d.SetVisiblePageName("rules")
+		d.Present(w)
+	case devRulesEditor:
+		w.devRulesEditor()
 	case devCrmDialog:
 		w.showCrmSample()
 	case devEwayWizard:
@@ -652,6 +669,47 @@ func (w *Window) devEditFirstContact() {
 		cw.inner.SetShowContent(true)
 		glib.IdleAdd(w.devPrintToplevels)
 		devBusy--
+		return false
+	})
+}
+
+// devRulesEditor opens the rule editor over the rules the window knows once
+// they are loaded (rules-editor): the first rule that sends mail, else the
+// first rule, else a new one for the first mail account; the next step
+// waits for it.
+func (w *Window) devRulesEditor() {
+	c := w.rulesController()
+	if c == nil {
+		developmentPrint("LAYOUT: rules-editor needs a daemon or MALACHI_RULES_SAMPLES=1")
+		return
+	}
+	devBusy++
+	deadline := time.Now().Add(10 * time.Second)
+	glib.TimeoutAdd(100, func() bool {
+		loaded := c.Loaded()
+		if !loaded && time.Now().Before(deadline) {
+			return true
+		}
+		devBusy--
+		if !loaded {
+			developmentPrint("LAYOUT: rules-editor gave up")
+			return false
+		}
+		var old *api.Rule
+		for _, r := range c.Rules() {
+			if old == nil || (r.Outgoing && !old.Outgoing) {
+				r := r
+				old = &r
+			}
+		}
+		form := rules.NewForm("")
+		if old != nil {
+			form = rules.FromRule(*old)
+		} else if accounts := w.model.accounts; len(accounts) > 0 && !rulesctl.SamplesOn() {
+			form = rules.NewForm(accounts[0].ID)
+		}
+		w.openRuleEditor(form, old)
+		glib.IdleAdd(w.devPrintToplevels)
 		return false
 	})
 }

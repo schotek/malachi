@@ -276,10 +276,10 @@ Krok 1 fáze 1: kontrakt API, `docs/api.md`, Go reference
 `ui/internal/signature` a texty v `po/`. Démon nic neověřuje, žádná
 migrace ani worker; na tomto oddílu staví čtyři souběžné práce (démon,
 GTK, macOS, Windows). Co tu je, je pevné; změna kontraktu = změna
-`backend/pkg/api/signature.go` + `docs/api.md` §4.21 v jednom commitu
+`backend/pkg/api/signature.go` + `docs/api.md` §4.22 v jednom commitu
 a zpráva ostatním.
 
-### 11.1 Kontrakt (`backend/pkg/api/signature.go`, `docs/api.md` §4.21)
+### 11.1 Kontrakt (`backend/pkg/api/signature.go`, `docs/api.md` §4.22)
 
 Kompatibilní rozšíření protokolu 2, `ProtocolVersion` zůstává 2.
 
@@ -553,7 +553,7 @@ Klíče OpenPGP, Otisk klíče, Potvrzený / Nepotvrzený, Odvolaný, Propadlý.
 ### 11.5 Pro porty a GTK navíc
 
 - macOS: `MalachiCore/Signatures` (port 1:1 včetně testů
-  `signature_test.go`), API zrcadlo z `docs/api.md` §4.21, `L10n.T/N/C`
+  `signature_test.go`), API zrcadlo z `docs/api.md` §4.22, `L10n.T/N/C`
   s klíčem = msgid. Windows: `Malachi.Core/Signatures` (jmenný prostor
   `Signatures`, třída třeba `SignatureView`, aby se nestínila), zrcadlo
   API, `GoContractTests` (6 metod a 1 notifikace navíc, nový kód 1510,
@@ -684,7 +684,7 @@ bez Swiftu, takže nic není přeložené ani spuštěné). Reference
 GTK msgid, `check-strings.py` 0 missing); texty jen pro macOS jsou tři
 anglické věty selhání (viz níže).
 
-- **MalachiCore**: `API/SignatureAPI.swift` (zrcadlo §4.21: otevřené enumy
+- **MalachiCore**: `API/SignatureAPI.swift` (zrcadlo §4.22: otevřené enumy
   `SignatureKind/Status/Note/Reason`, `RevocationState/Source`,
   `PGPKeyTrust/Source`, `RevocationFailure`, `PGPImportFailure`, typy
   `MessageSignature`, `SignatureSummary`, `SignatureDetails` (Go vložení
@@ -767,12 +767,12 @@ anglické věty selhání (viz níže).
 
 Krok 6 fáze 1, Windows klient (2026-11-02, necommitnuté; napsané na stroji
 bez .NET, takže nic není přeložené ani spuštěné; podrobně a se seznamem
-ručních kontrol `docs/windows-port.md` §11.17). Reference
+ručních kontrol `docs/windows-port.md` §11.18). Reference
 `ui/internal/signature` je portovaná 1:1 přímo z Go (macOS port vznikal
 souběžně), **žádný nový msgid** a nic v `windows/parity-exclusions.txt`;
 tři anglické věty selhání (`// Windows-only string`) viz níže.
 
-- **Malachi.Core/Api**: `Signature.cs` (zrcadlo §4.21: jedenáct otevřených
+- **Malachi.Core/Api**: `Signature.cs` (zrcadlo §4.22: jedenáct otevřených
   enumů, záznamy s `Pgp`/`Smime` místo Go `PGP`/`SMIME`; `SignatureDetails`
   dědí z `SignatureSummary` jako Go vložení), `MessageSummary.Signature`
   (`MessageSignature`) a `Message.Signature` (`SignatureSummary`, sdílí klíč
@@ -815,7 +815,7 @@ tři anglické věty selhání (`// Windows-only string`) viz níže.
   s `signature`), `NotificationDecodeTests`.
 - **Čeká na Windows agenta**: `build.ps1 app`, `test` (třídy výše, pak
   `IconGlyphsTests`, `Malachi.Conventions.Tests`, celá sada), `lint`; ruční
-  průchod podle `docs/windows-port.md` §11.17 (ikona v seznamu, odznak v
+  průchod podle `docs/windows-port.md` §11.18 (ikona v seznamu, odznak v
   panelu, okně zprávy a kartě, flyout s Check Revocation / Import Key /
   Confirm Key…, skrytá podpisová dlaždice, Předvolby → Zabezpečení, tmavý a
   kontrastní motiv, jiná měřítka). Hádané bez překladače: `Flyout` s
@@ -828,7 +828,7 @@ tři anglické věty selhání (`// Windows-only string`) viz níže.
 
 Kroky 2–4 fáze 1, démon (2026-11-02, necommitnuté). Kontrakt §11.1
 **beze změny tvaru** (žádné pole, metoda ani kód navíc); upřesnění jen
-v textu `docs/api.md` §4.21 (viz „Změny kontraktu“). UI agenti: metody už
+v textu `docs/api.md` §4.22 (viz „Změny kontraktu“). UI agenti: metody už
 nevracejí `notImplemented`, verdikty přicházejí v souhrnech, v
 `message.get` i po backfillu staré pošty.
 
@@ -877,7 +877,7 @@ nevracejí `notImplemented`, verdikty přicházejí v souhrnech, v
   z prostředí), bez přesměrování, 1 MiB, 15 s; **delegovaný respondér
   musí mít EKU OCSPSigning a být vydaný vydavatelem** (`x/crypto/ocsp` to
   sám nekontroluje), odpověď víc než 7 dní po `nextUpdate` se nebere.
-- **Migrace `0025_signatures.sql`**: `message_signatures` (FK na
+- **Migrace `0026_signatures.sql`** (přečíslovaná z 0025 při sloučení `main`, kde 0025 jsou pravidla): `message_signatures` (FK na
   `messages` ON DELETE CASCADE — řádek jde se zprávou kteroukoli cestou
   mazání, žádný trigger), `smime_revocation`, `pgp_keys` (binární veřejný
   klíč, vyčištěné user ID a adresy). `store/signatures.go`; souhrny

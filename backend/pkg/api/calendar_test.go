@@ -178,7 +178,7 @@ func TestCalendarMethodsOrder(t *testing.T) {
 		"event.respond", "event.snoozeAlert", "event.dismissAlert",
 		"invitation.list", "invitation.respond", "invitation.applyCancel",
 	}
-	n := len(AllMethods) - len(signatureMethods) - len(updateMethods) - len(crmMethods) - len(assistantMethods) - len(contactsBookMethods)
+	n := len(AllMethods) - len(signatureMethods) - len(rulesMethods) - len(updateMethods) - len(crmMethods) - len(assistantMethods) - len(contactsBookMethods)
 	if n < len(methods) || !reflect.DeepEqual(AllMethods[n-len(methods):n], methods) {
 		t.Fatalf("AllMethods does not end with the calendar methods: %v", AllMethods[n-len(methods):n])
 	}
@@ -186,7 +186,7 @@ func TestCalendarMethodsOrder(t *testing.T) {
 		t.Fatalf("the calendar methods do not follow the board's")
 	}
 	notes := []string{"notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged"}
-	m := len(AllNotifications) - 4
+	m := len(AllNotifications) - 5
 	if !reflect.DeepEqual(AllNotifications[m-len(notes):m], notes) || AllNotifications[m-len(notes)-1] != NotifyDraftsChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}

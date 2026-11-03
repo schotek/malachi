@@ -73,7 +73,7 @@ public static class IconGlyphs
         // Signed mail (ui/internal/signature): the font has one shield (EA18, Segoe MDL2 Assets
         // "Shield"; to be checked on Windows 11 with the other glyphs), not Adwaita's full, half and
         // empty ones. The three names share it: the badge's colour tells green, yellow and grey
-        // apart, and a key not confirmed (security-medium) is drawn fainter (docs/windows-port.md §11.17).
+        // apart, and a key not confirmed (security-medium) is drawn fainter (docs/windows-port.md §11.18).
         ["security-high"] = G(0xEA18),
         ["security-medium"] = G(0xEA18),
         ["security-low"] = G(0xEA18),
@@ -153,6 +153,10 @@ public static class IconGlyphs
         // The quick-reply bar's Open in a Window (docs/plans/chat-view.md
         // Q2; macOS arrow.up.forward.square): OpenInNewWindow.
         ["window-new"] = G(0xE8A7),
+        // The mail rules' page of the Preferences (docs/plans/rules.md R14;
+        // GTK's funnel-symbolic, the Windows page has folder-saved-search):
+        // Filter.
+        ["funnel"] = G(0xE71C),
         // The Contacts window (docs/plans/address-book.md §5; GTK
         // contacts_detail.go): Copy of the detail, and a website row's
         // link that opens in the browser (Link).

@@ -71,6 +71,8 @@ const (
 	CodeContactNotFound ErrorCode = 1110
 	// CodeAddressBookNotFound: no address book with that id.
 	CodeAddressBookNotFound ErrorCode = 1111
+	// CodeRuleNotFound: no mail rule with that id (docs/api.md §4.21).
+	CodeRuleNotFound ErrorCode = 1112
 
 	// 1200–1299: authentication.
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
@@ -150,7 +152,7 @@ const (
 	CodeAddressBookReadOnly ErrorCode = 1509
 	// CodeRevocationFailed: message.signatureRevocation could not get an
 	// answer it trusts from the certificate's OCSP responder or CRL
-	// (§4.21); Error.Data is a RevocationFailedData with the class,
+	// (§4.22); Error.Data is a RevocationFailedData with the class,
 	// Error.Message is not for display.
 	CodeRevocationFailed ErrorCode = 1510
 )
@@ -189,6 +191,7 @@ var codeNames = map[ErrorCode]string{
 	CodeCrmItemNotFound:         "crmItemNotFound",
 	CodeContactNotFound:         "contactNotFound",
 	CodeAddressBookNotFound:     "addressBookNotFound",
+	CodeRuleNotFound:            "ruleNotFound",
 	CodeAuthRequired:            "authRequired",
 	CodeAuthFailed:              "authFailed",
 	CodeKeyringError:            "keyringError",

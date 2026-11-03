@@ -5,7 +5,7 @@ import Foundation
 import Testing
 @testable import MalachiCore
 
-/// The signature wire types (docs/api.md §4.21, backend/pkg/api/
+/// The signature wire types (docs/api.md §4.22, backend/pkg/api/
 /// signature.go) with invented data: the verdict in a summary and in
 /// message.get, the details of both formats with optional fields absent and
 /// present, params encoding, the error data, the limits and the methods.

@@ -4,7 +4,7 @@
 import AppKit
 import MalachiCore
 
-/// The shell's part of signature verification (docs/api.md §4.21, plan
+/// The shell's part of signature verification (docs/api.md §4.22, plan
 /// §6): a verdict is the daemon's, so all that happens here is hearing that
 /// trust changed. notify.signaturesChanged makes the messages on display
 /// ask message.get again (their badge turns; `MessageCache.refreshSignatures`

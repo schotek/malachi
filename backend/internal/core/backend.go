@@ -258,6 +258,10 @@ type Backend struct {
 	board boardState
 	// dn gathers notify.draftsChanged (drafts_notify.go).
 	dn draftNotify
+	// rules is the state of the mail rules: the cached list, the
+	// coalesced notification and the outgoing queues (rules_service.go,
+	// rules_outgoing.go).
+	rules rulesState
 
 	// profileMu serialises the writes of the assistant profile and its
 	// proposals (assistant_profile.go).
@@ -747,6 +751,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 	b.reevaluateIssueMail(ctx)
 	b.boardUpkeep(ctx)
 	b.crmFollowSweep(ctx)
+	b.pruneRuleLedgers(ctx)
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
@@ -758,6 +763,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 			b.reevaluateIssueMail(ctx)
 			b.boardUpkeep(ctx)
 			b.crmFollowSweep(ctx)
+			b.pruneRuleLedgers(ctx)
 		}
 	}
 }

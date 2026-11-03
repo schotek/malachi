@@ -157,7 +157,11 @@ func (w *Window) crmOffer(subjects []crmSubject) crm.Offer {
 		}
 		rows = append(rows, r)
 	}
-	return crm.OfferFor(w.model.accounts, rows)
+	o := crm.OfferFor(w.model.accounts, rows)
+	if o.Shown && crmSubjectsMixed(subjects) {
+		o.Enabled = false // the All Inboxes list: one save is one account's (decision U2)
+	}
+	return o
 }
 
 // crmBusy reports a save or removal running for any of the subjects.

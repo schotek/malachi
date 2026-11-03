@@ -75,6 +75,9 @@ public final class ActionsController {
     public var undoBoard: (@MainActor (Board.ArchiveOutcome) -> Void)?
     /// The session's moves of mail Undo takes back (window.go `undo`).
     var undoStack = Undo.Stack()
+    /// Numbers the actions that move messages of several accounts, whose
+    /// undo entries (one per account) share a group (`Undo.Entry.group`).
+    var undoGroupCounter = 0
 
     let toast: @MainActor (String) -> Void
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "actions")
@@ -173,6 +176,15 @@ public final class ActionsController {
     /// possibly of several of its folders (a search): each folder's count
     /// follows its own.
     public func setSeen(_ ids: [MessageID], _ seen: Bool) {
+        // A selection of the All Inboxes list may span accounts, and every
+        // message method takes one: one call per account (decision U2).
+        let groups = Unified.groupByAccount(ids) { [self] in summary($0)?.accountId ?? "" }
+        if groups.count > 1 {
+            for g in groups {
+                setSeen(g.items, seen)
+            }
+            return
+        }
         var todo: [MessageID] = []
         var key: FolderKey?
         var folderOf: [MessageID: FolderKey] = [:]
@@ -243,6 +255,14 @@ public final class ActionsController {
     /// (actions.go `setFlaggedIDs`); every star showing a changed message
     /// hears about it through `onStarChanged`.
     public func setFlagged(_ ids: [MessageID], _ on: Bool) {
+        // One call per account, as `setSeen`.
+        let groups = Unified.groupByAccount(ids) { [self] in summary($0)?.accountId ?? "" }
+        if groups.count > 1 {
+            for g in groups {
+                setFlagged(g.items, on)
+            }
+            return
+        }
         var todo: [MessageID] = []
         var account: AccountID?
         for id in ids {
@@ -337,7 +357,19 @@ public final class ActionsController {
     /// The confirmed half of `trash`: the rows go at once, the windows
     /// close, the folder counts follow, message.delete runs, a failure puts
     /// everything back and success withdraws the desktop notifications.
-    private func moveToTrash(_ msgs: [MessageSummary]) {
+    private func moveToTrash(_ msgs: [MessageSummary], group: Int = 0) {
+        // Rows of several accounts (the All Inboxes list): one move per
+        // account, each with its own Trash and its own Undo.
+        let groups = Unified.groupByAccount(msgs, account: \.accountId)
+        if groups.count > 1 {
+            // One undo entry per account, taken back together.
+            undoGroupCounter += 1
+            let group = undoGroupCounter
+            for g in groups {
+                moveToTrash(g.items, group: group)
+            }
+            return
+        }
         let ids = msgs.map(\.id)
         let restore = list.removeRows(ids)
         for s in msgs {
@@ -365,7 +397,7 @@ public final class ActionsController {
             self?.mailbox.withdrawNotifications(ids)
             // The moves to Trash can be taken back; an expunge cannot.
             if let trash {
-                self?.recordUndo(.trash, target: trash.id, msgs)
+                self?.recordUndo(.trash, target: trash.id, msgs, group: group)
             }
         })
     }
@@ -427,11 +459,15 @@ public final class ActionsController {
     /// is always asked: the move feeds the server's spam filter, which Undo
     /// (moving back) does not take back.
     public func junk(_ ids: [MessageID], subject: String, parent: AnyObject? = nil) {
-        let msgs = summaries(ids)
-        guard let first = msgs.first else { return }
+        // Rows of accounts without a Junk folder are left out; none left
+        // is the toast (in the All Inboxes list another account may have
+        // one).
+        let msgs = summaries(ids).filter { mailbox.model.folderByRole($0.accountId, .junk) != nil }
         let missing = L10n.T("This account has no junk folder")
-        guard mailbox.model.folderByRole(first.accountId, .junk) != nil else {
-            toast(missing)
+        guard !msgs.isEmpty else {
+            if !ids.isEmpty {
+                toast(missing)
+            }
             return
         }
         var heading = L10n.T("Mark as junk?")
@@ -460,12 +496,24 @@ public final class ActionsController {
     /// is a no-op. Undo takes the move back as `kind`.
     func moveToRole(_ ids: [MessageID], _ role: FolderRole, kind: Undo.Kind, missing: String, what: (Int) -> String) {
         let msgs = movable(ids)
-        guard let first = msgs.first else { return }
-        guard let target = mailbox.model.folderByRole(first.accountId, role) else {
-            toast(missing)
-            return
+        guard !msgs.isEmpty else { return }
+        // One move per account (the All Inboxes list may hold several);
+        // an account without the folder is skipped, and the toast says so
+        // when no account had it.
+        var moved = false
+        let groups = Unified.groupByAccount(msgs, account: \.accountId)
+        if groups.count > 1 {
+            undoGroupCounter += 1
         }
-        move(msgs, to: target.id, kind: kind, what: what)
+        let group = groups.count > 1 ? undoGroupCounter : 0
+        for g in groups {
+            guard let target = mailbox.model.folderByRole(g.account, role) else { continue }
+            moved = true
+            move(g.items, to: target.id, kind: kind, what: what, group: group)
+        }
+        if !moved {
+            toast(missing)
+        }
     }
 
     /// Moves messages to another folder of their account (Move To in a
@@ -485,7 +533,7 @@ public final class ActionsController {
     /// come back on failure, the counts follow, the windows close. Once the
     /// daemon took it, Undo can take it back as `kind`, unless the target is
     /// a folder the daemon does not keep (Gmail's All Mail drops the rows).
-    private func move(_ msgs: [MessageSummary], to target: FolderID, kind: Undo.Kind, what: (Int) -> String) {
+    private func move(_ msgs: [MessageSummary], to target: FolderID, kind: Undo.Kind, what: (Int) -> String, group: Int = 0) {
         // The messages already in the target stay where they are.
         let msgs = msgs.filter { $0.folderId != target }
         guard let first = msgs.first else { return }
@@ -505,7 +553,7 @@ public final class ActionsController {
                 guard let self else { return }
                 self.mailbox.withdrawNotifications(moving)
                 if self.mailbox.model.folder(FolderKey(account: acc, folder: target))?.synced != false {
-                    self.recordUndo(kind, target: target, msgs)
+                    self.recordUndo(kind, target: target, msgs, group: group)
                 }
             }
         )

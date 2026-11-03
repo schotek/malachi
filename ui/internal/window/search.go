@@ -339,6 +339,7 @@ func (w *Window) showSearchState() {
 func (w *Window) refreshSearchScope() {
 	k := w.model.selected
 	f, hasFolder := w.model.folder(k)
+	hasFolder = hasFolder && !isUnifiedKey(k) // see searchRequest
 	folderToggle := w.searchScope.ToggleByName(string(settings.SearchFolder))
 	accountToggle := w.searchScope.ToggleByName(string(settings.SearchAccount))
 	allToggle := w.searchScope.ToggleByName(string(settings.SearchAll))

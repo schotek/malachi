@@ -1149,7 +1149,7 @@ public sealed partial class ApiCodingTests
         (1005, "unauthenticated"), (1006, "readOnly"), (1007, "invitationsUnavailable"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
         (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"), (1107, "calendarNotFound"),
-        (1108, "eventNotFound"), (1109, "crmItemNotFound"), (1110, "contactNotFound"), (1111, "addressBookNotFound"),
+        (1108, "eventNotFound"), (1109, "crmItemNotFound"), (1110, "contactNotFound"), (1111, "addressBookNotFound"), (1112, "ruleNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
         (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"), (1206, "contactsConsentRequired"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
@@ -1163,8 +1163,8 @@ public sealed partial class ApiCodingTests
     [Fact]
     public void ErrorCodesAreNamed()
     {
-        Assert.Equal(54, ErrorCode.All.Count);
-        Assert.Equal(54, ErrorCode.All.Distinct().Count());
+        Assert.Equal(55, ErrorCode.All.Count);
+        Assert.Equal(55, ErrorCode.All.Distinct().Count());
         Assert.Equal(GoCodes.Select(c => c.Code), ErrorCode.All.Select(c => c.Value));
         Assert.Equal(GoCodes.Select(c => c.Name), ErrorCode.All.Select(c => c.Name));
         foreach (var code in ErrorCode.All)
@@ -1220,6 +1220,15 @@ public sealed partial class ApiCodingTests
         Assert.Null(Member(list, "sort"));
         Assert.Null(Member(list, "filter"));
         Assert.Null(Member(list, "unreadOnly"));
+        Assert.Null(Member(list, "unified"));
+
+        // The unified listing (the All Inboxes item): the role instead of the ids, which stay empty.
+        var unified = EncodeObject(Malachi.Core.Model.Unified.MessageParams(MessageFilter.Unread, "u1"));
+        Assert.Equal("inbox", unified.GetProperty("unified").GetString());
+        Assert.Equal("", unified.GetProperty("accountId").GetString());
+        Assert.Equal("", unified.GetProperty("folderId").GetString());
+        Assert.Equal("u1", unified.GetProperty("page").GetProperty("cursor").GetString());
+        Assert.Equal("inbox", EncodeObject(Malachi.Core.Model.Unified.ThreadParams(MessageFilter.All, null)).GetProperty("unified").GetString());
 
         var filtered = EncodeObject(new MessageListParams
         {
@@ -1334,6 +1343,7 @@ public sealed partial class ApiCodingTests
         "contact.create", "contact.update", "contact.delete",
         "contact.photo",
         "update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice",
+        "rules.list", "rules.create", "rules.update", "rules.delete", "rules.reorder", "rules.test", "rules.apply",
         "message.signature", "message.signatureRevocation",
         "pgp.keyImport", "pgp.keyVerify", "pgp.keyList", "pgp.keyRemove",
     ];
@@ -1341,8 +1351,8 @@ public sealed partial class ApiCodingTests
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(125, API.AllMethods.Count);
-        Assert.Equal(125, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(132, API.AllMethods.Count);
+        Assert.Equal(132, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
@@ -1350,7 +1360,7 @@ public sealed partial class ApiCodingTests
             [
                 "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged",
                 "notify.draftsChanged", "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
-                "notify.assistantProfileChanged", "notify.contactsChanged", "notify.updateChanged", "notify.signaturesChanged",
+                "notify.assistantProfileChanged", "notify.contactsChanged", "notify.updateChanged", "notify.rulesChanged", "notify.signaturesChanged",
             ],
             API.AllNotifications);
     }
@@ -1417,6 +1427,9 @@ public sealed partial class ApiCodingTests
         Assert.Equal(TimeSpan.FromSeconds(60), API.ContactDelete.Timeout);
         // update.check waits for the daemon's check (70 s inside).
         Assert.Equal(TimeSpan.FromSeconds(75), API.UpdateCheck.Timeout);
+        // rules.test reads the stored bodies of a folder, rules.apply changes them and tells the server.
+        Assert.Equal(TimeSpan.FromSeconds(60), API.RulesTest.Timeout);
+        Assert.Equal(TimeSpan.FromMinutes(5), API.RulesApply.Timeout);
         // message.signatureRevocation: the daemon's check takes at most 15 s, the client waits 20.
         Assert.Equal(TimeSpan.FromSeconds(20), API.MessageSignatureRevocation.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
@@ -1431,7 +1444,7 @@ public sealed partial class ApiCodingTests
             "event.create", "event.update", "event.delete", "event.respond", "invitation.respond", "invitation.applyCancel",
             "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
             "contact.create", "contact.update", "contact.delete", "contact.photo",
-            "update.check", "message.signatureRevocation",
+            "update.check", "rules.test", "rules.apply", "message.signatureRevocation",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

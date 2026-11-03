@@ -71,8 +71,8 @@ public sealed partial class SidebarRow : ObservableObject
     [ObservableProperty]
     public partial SidebarRowKind Kind { get; private set; }
 
-    /// <summary>A heading (the Favourites section's or an account's).</summary>
-    public bool IsHeading => Kind != SidebarRowKind.Folder;
+    /// <summary>A heading (the Favourites section's or an account's); the All Inboxes row and a folder are not.</summary>
+    public bool IsHeading => Kind is SidebarRowKind.FavouritesHeading or SidebarRowKind.AccountHeading;
 
     /// <summary>The folder the row stands for; null on a heading.</summary>
     public FolderKey? Folder { get; private set; }
@@ -199,6 +199,29 @@ public sealed partial class SidebarRow : ObservableObject
             StarTooltip = "";
             StarPinned = false;
             Selectable = false;
+            Dimmed = false;
+            return;
+        }
+        if (e.IsUnified)
+        {
+            // The All Inboxes item: a selectable row at the top, with the
+            // Inbox's icon and the unread badge of all the inboxes; it cannot
+            // be pinned or folded, and the arrow's column is not reserved.
+            Kind = SidebarRowKind.Unified;
+            Title = Unified.Title;
+            Capsule = "";
+            Subtitle = "";
+            Tooltip = "";
+            Indent = FolderInset;
+            Icon = FolderTree.RoleIcon(FolderRole.Inbox);
+            SetTwisty(shown: false, active: false, collapsed: false);
+            Badge = e.Badge > 0 ? e.Badge.ToString(CultureInfo.InvariantCulture) : "";
+            HasStar = false;
+            Starred = false;
+            StarIcon = "";
+            StarTooltip = "";
+            StarPinned = false;
+            Selectable = true;
             Dimmed = false;
             return;
         }

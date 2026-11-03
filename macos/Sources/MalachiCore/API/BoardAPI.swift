@@ -456,7 +456,7 @@ public struct BoardMessage: Codable, Sendable, Equatable {
     /// Something was cut off `text`. nil means false.
     public var trimmed: Bool?
     /// The member's signature verdict, as `Message.signature` (docs/api.md
-    /// §4.21); nil without a signed message or from an older daemon.
+    /// §4.22); nil without a signed message or from an older daemon.
     public var signature: SignatureSummary?
 
     public init(

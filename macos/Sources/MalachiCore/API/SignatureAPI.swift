@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Signatures of incoming mail and the OpenPGP key store (docs/api.md §4.21,
+// Signatures of incoming mail and the OpenPGP key store (docs/api.md §4.22,
 // §5 notify.signaturesChanged; backend/pkg/api/signature.go; the design is
 // docs/plans/signatures.md, phase 1: the daemon verifies S/MIME and
 // OpenPGP/MIME signatures, nothing is signed, decrypted or encrypted). A
@@ -457,7 +457,7 @@ public struct PGPKey: Codable, Sendable, Equatable {
     }
 }
 
-// MARK: Methods (§4.21)
+// MARK: Methods (§4.22)
 
 /// api.MessageSignatureParams, also the params of message.signatureRevocation.
 public struct MessageSignatureParams: Codable, Sendable, Equatable {

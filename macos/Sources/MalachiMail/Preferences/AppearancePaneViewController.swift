@@ -24,6 +24,7 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
     // Message List
     let density = NSPopUpButton(frame: .zero, pullsDown: false)
     let groupByConversation = NSSwitch()
+    let unifiedInbox = NSSwitch()
     let conversationChatHTML = NSSwitch()
     let conversationChatTruncateMine = NSSwitch()
     let conversationChatTruncateOthers = NSSwitch()
@@ -97,6 +98,7 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
             PreferenceRowView(title: L10n.T("Show Preview Line"), trailing: showPreviewLine),
             PreferenceRowView(title: L10n.T("Show Avatars"), trailing: showAvatars),
             PreferenceRowView(title: L10n.T("Monochrome Avatars"), subtitle: L10n.T("Neutral grey instead of a colour per sender"), trailing: monochromeAvatars),
+            PreferenceRowView(title: Unified.preferenceTitle, subtitle: Unified.preferenceSubtitle, trailing: unifiedInbox),
         ])
         addGroup(list)
 
@@ -160,6 +162,7 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
         textSizeToken = settings.onChange(.uiTextSize) { [weak self] in self?.offerRestart() }
         bindings.add(.bind(density, to: settings, .density, choices: densityChoices, \.density))
         bindings.add(.bind(groupByConversation, to: settings, .groupByConversation, \.groupByConversation))
+        bindings.add(.bind(unifiedInbox, to: settings, .unifiedInbox, \.unifiedInbox))
         bindings.add(.bind(conversationChatHTML, to: settings, .conversationChatHTML, \.conversationChatHTML))
         bindings.add(.bind(conversationChatTruncateMine, to: settings, .conversationChatTruncateMine, \.conversationChatTruncateMine))
         bindings.add(.bind(conversationChatTruncateOthers, to: settings, .conversationChatTruncateOthers, \.conversationChatTruncateOthers))

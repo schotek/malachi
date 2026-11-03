@@ -23,13 +23,7 @@ import (
 // calls it in grouped mode. gen is the list generation the reply belongs
 // to.
 func (w *Window) loadThreadPage(k folderKey, gen uint64) {
-	params := api.ThreadListParams{
-		AccountID: k.Account,
-		FolderID:  k.Folder,
-		Page:      api.Page{Limit: api.DefaultPageLimit},
-		Sort:      api.SortDateDesc,
-		Filter:    w.model.listFilter,
-	}
+	params := w.model.threadListParams(k, "")
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
@@ -61,13 +55,7 @@ func (w *Window) loadThreadPage(k folderKey, gen uint64) {
 // loadMoreThreads fetches the next page of conversations (loadMore in
 // grouped mode).
 func (w *Window) loadMoreThreads(k folderKey, gen uint64) {
-	params := api.ThreadListParams{
-		AccountID: k.Account,
-		FolderID:  k.Folder,
-		Page:      api.Page{Cursor: w.model.nextCursor, Limit: api.DefaultPageLimit},
-		Sort:      api.SortDateDesc,
-		Filter:    w.model.listFilter,
-	}
+	params := w.model.threadListParams(k, w.model.nextCursor)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
@@ -156,9 +144,9 @@ func (w *Window) refetchMembers(tid api.ThreadID) {
 func (w *Window) fetchMembers(tid api.ThreadID, quiet bool) {
 	mem := w.model.members[tid]
 	mem.fetching = true
-	k := w.model.listFolder
+	k := w.model.membersFolder(tid)
 	gen := w.model.listGen
-	params := api.ThreadGetParams{AccountID: k.Account, ThreadID: tid, FolderID: k.Folder, WithSent: true, WithDrafts: true}
+	params := api.ThreadGetParams{AccountID: k.Account, ThreadID: w.model.rawThread(tid), FolderID: k.Folder, WithSent: true, WithDrafts: true}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()

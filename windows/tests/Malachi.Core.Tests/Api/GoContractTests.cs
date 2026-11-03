@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(125, goMethods.Length);
+        Assert.Equal(132, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -59,6 +59,7 @@ public sealed class GoContractTests
         Assert.Equal(API.Notify.AssistantProfileChanged, constants["NotifyAssistantProfileChanged"]);
         Assert.Equal(API.Notify.ContactsChanged, constants["NotifyContactsChanged"]);
         Assert.Equal(API.Notify.UpdateChanged, constants["NotifyUpdateChanged"]);
+        Assert.Equal(API.Notify.RulesChanged, constants["NotifyRulesChanged"]);
         Assert.Equal(API.Notify.SignaturesChanged, constants["NotifySignaturesChanged"]);
     }
 
@@ -166,6 +167,11 @@ public sealed class GoContractTests
         { nameof(UpdateState), "update.go", "UpdateState" },
         { nameof(UpdateFailure), "update.go", "UpdateFailure" },
         { nameof(UpdateDismissAction), "update.go", "UpdateDismissAction" },
+        { nameof(RuleMatch), "rules.go", "RuleMatch" },
+        { nameof(RuleField), "rules.go", "RuleField" },
+        { nameof(RuleOperator), "rules.go", "RuleOperator" },
+        { nameof(RuleActionKind), "rules.go", "RuleActionKind" },
+        { nameof(RuleProblem), "rules.go", "RuleProblem" },
         { nameof(SignatureKind), "signature.go", "SignatureKind" },
         { nameof(SignatureStatus), "signature.go", "SignatureStatus" },
         { nameof(SignatureNote), "signature.go", "SignatureNote" },
@@ -277,6 +283,56 @@ public sealed class GoContractTests
         Assert.Equal(["UpdateChangedNotification"], structs.Where(s => s.Value.Count == 0).Select(s => s.Key));
         Assert.Contains("const UpdateRemindDelay = 72 * time.Hour", source, StringComparison.Ordinal);
         Assert.Contains("const UpdateCheckInterval = time.Minute", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The other way round for the mail rules: rules.go declares no string
+    /// type with constants that the table above leaves out, and every struct
+    /// of it with members has a record; the ones without (RulesListParams is
+    /// EmptyParams, RulesDeleteResult is EmptyResult, RulesChangedNotification,
+    /// notify.rulesChanged has no params, is DaemonNotification.RulesChanged).
+    /// The limits are the daemon's.
+    /// </summary>
+    [Fact]
+    public void EveryEnumAndStructOfRulesGoIsMirrored()
+    {
+        var source = GoContract.ApiSource("rules.go");
+        var enums = GoContract.StringTypes(source).Where(t => GoContract.TypedStringConstants(source, t).Count > 0).ToArray();
+        Assert.Equal(
+            ["RuleActionKind", "RuleField", "RuleMatch", "RuleOperator", "RuleProblem"],
+            enums.Order(StringComparer.Ordinal));
+        var structs = GoContract.Structs(source);
+        var records = typeof(API).Assembly.GetTypes().Where(t =>
+            t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
+            && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null)
+            .Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var name in structs.Where(s => s.Value.Count > 0).Select(s => s.Key))
+        {
+            Assert.True(records.Contains(name), $"rules.go has a struct {name}, Malachi.Core.Api no record {name}");
+        }
+        Assert.Equal(
+            ["RulesChangedNotification", "RulesDeleteResult", "RulesListParams"],
+            structs.Where(s => s.Value.Count == 0).Select(s => s.Key).Order(StringComparer.Ordinal));
+        // The bulk condition's fixed value, and the action kinds that send mail.
+        Assert.Equal(RuleValues.BulkAny, GoContract.StringConstants(source)["RuleBulkAny"]);
+        Assert.Contains("return k == RuleActionForward || k == RuleActionAutoReply", source, StringComparison.Ordinal);
+        Assert.True(new RuleActionKind(RuleActionKind.Forward).IsOutgoing && new RuleActionKind(RuleActionKind.AutoReply).IsOutgoing);
+        Assert.False(new RuleActionKind(RuleActionKind.Move).IsOutgoing);
+        // The limits (MaxRuleBodyBytes is 64 * 1024, which the constant reader does not read).
+        var go = GoContract.IntConstants(source);
+        Assert.Equal(8, go.Count);
+        Assert.Equal(RuleLimits.MaxRules, go["MaxRules"]);
+        Assert.Equal(RuleLimits.MaxRuleConditions, go["MaxRuleConditions"]);
+        Assert.Equal(RuleLimits.MaxRuleActions, go["MaxRuleActions"]);
+        Assert.Equal(RuleLimits.MaxRuleNameBytes, go["MaxRuleNameBytes"]);
+        Assert.Equal(RuleLimits.MaxRuleValueBytes, go["MaxRuleValueBytes"]);
+        Assert.Equal(RuleLimits.MaxRuleReplyBytes, go["MaxRuleReplyBytes"]);
+        Assert.Equal(RuleLimits.MaxRuleTestMessages, go["MaxRuleTestMessages"]);
+        Assert.Equal(RuleLimits.RuleOutgoingPerHour, go["RuleOutgoingPerHour"]);
+        Assert.Matches(@"MaxRuleBodyBytes\s*= 64 \* 1024", source);
+        Assert.Equal(64 * 1024, RuleLimits.MaxRuleBodyBytes);
+        Assert.Contains("const RuleReplyInterval = 4 * 24 * time.Hour", source, StringComparison.Ordinal);
+        Assert.Equal(TimeSpan.FromDays(4), RuleLimits.RuleReplyInterval);
     }
 
     /// <summary>
@@ -450,7 +506,7 @@ public sealed class GoContractTests
 
     /// <summary>
     /// Every record of the API layer has exactly the JSON members of its Go
-    /// struct (types.go, tls.go, errors.go, board.go, crm.go, assistant.go, contacts_book.go, update.go, signature.go), field by field, and a
+    /// struct (types.go, tls.go, errors.go, board.go, crm.go, assistant.go, contacts_book.go, update.go, rules.go, signature.go), field by field, and a
     /// Go int64 is a long: the contract's names as backend/pkg/api spells them.
     /// The calendar's (calendar.go) are among them; CalendarEvent is Go's Event.
     /// </summary>
@@ -460,7 +516,8 @@ public sealed class GoContractTests
         var structs = GoContract.Structs(
             GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"), GoContract.ApiSource("board.go"),
             GoContract.ApiSource("calendar.go"), GoContract.ApiSource("crm.go"), GoContract.ApiSource("assistant.go"),
-            GoContract.ApiSource("contacts_book.go"), GoContract.ApiSource("update.go"), GoContract.ApiSource("signature.go"));
+            GoContract.ApiSource("contacts_book.go"), GoContract.ApiSource("update.go"), GoContract.ApiSource("rules.go"),
+            GoContract.ApiSource("signature.go"));
         var records = typeof(API).Assembly.GetTypes().Where(t =>
             t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
             && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null

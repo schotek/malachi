@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/RuleEditorSheet.swift
+(buildContent); GTK: ui/data/ui/rules_editor.blp (docs/plans/rules.md R14,
+T2); the logic and every text are ui/internal/rules (Core's RuleBook,
+RulesText) and Core's RuleEditorController.
+The mail rule editor as an owned modal window of 640×720 like the CalDAV
+wizard (CalDAVWizardWindow.xaml): the title bar with New Rule or Edit
+Rule; one scrolling column clamped to 600 px: Name, Apply to (the mail
+accounts and All Mail Accounts), the Rule is on switch, "When a new
+message arrives" with the choice of how the conditions combine, the
+condition rows (field, operator, value, remove; built in code), Add
+Condition, "Do the following" with the action rows (built in code), Add
+Action (a menu of the kinds still available), the Stop check box with its
+hint, Try It over a folder, and the warning bar of a failed Save. At the
+bottom Save (the default, accented, enabled while the form has no
+problem) and Cancel, in the order of a Windows dialog. Everything that
+comes from mail (a prefilled sender or list id) is plain text.
+-->
+<Window
+    x:Class="Malachi.App.MailRules.RuleEditorWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls">
+    <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                    <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+                <!-- The colours are theme resources in styles, so that they are resolved in the theme of this window (the rows are made in code). -->
+                <Style x:Key="RuleCardStyle" TargetType="Border">
+                    <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                    <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+                    <Setter Property="Padding" Value="12" />
+                </Style>
+                <Style
+                    x:Key="RuleProblemStyle"
+                    BasedOn="{StaticResource SettingsGroupDescriptionStyle}"
+                    TargetType="TextBlock">
+                    <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                </Style>
+            </ResourceDictionary>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="Header"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="RuleEditorHeader"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False" />
+
+        <ScrollViewer
+            Grid.Row="1"
+            AutomationProperties.AutomationId="RuleEditor"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+            <Grid>
+                <StackPanel
+                    MaxWidth="600"
+                    Padding="24,12,24,16"
+                    Spacing="14">
+                    <!-- Name, Apply to, Rule is on. -->
+                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                        <tk:SettingsCard x:Name="NameRow">
+                            <TextBox
+                                x:Name="NameBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="RuleName"
+                                IsSpellCheckEnabled="False"
+                                TextChanged="OnNameChanged" />
+                        </tk:SettingsCard>
+                        <TextBlock
+                            x:Name="NameProblem"
+                            AutomationProperties.AutomationId="RuleNameProblem"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource SettingsGroupDescriptionStyle}"
+                            Visibility="Collapsed" />
+                        <tk:SettingsCard x:Name="AccountRow">
+                            <ComboBox
+                                x:Name="AccountBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="RuleAccount"
+                                SelectionChanged="OnAccountChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="EnabledRow">
+                            <ToggleSwitch
+                                x:Name="EnabledSwitch"
+                                MinWidth="0"
+                                AutomationProperties.AutomationId="RuleEnabled"
+                                OffContent="{x:Null}"
+                                OnContent="{x:Null}"
+                                Toggled="OnEnabledToggled" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+
+                    <!-- When a new message arrives … and all of these conditions are met. -->
+                    <StackPanel Spacing="8">
+                        <TextBlock
+                            x:Name="WhenText"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}" />
+                        <ComboBox
+                            x:Name="MatchBox"
+                            MinWidth="{StaticResource SettingsEntryWidth}"
+                            AutomationProperties.AutomationId="RuleMatch"
+                            SelectionChanged="OnMatchChanged" />
+                        <StackPanel x:Name="ConditionsPanel" Spacing="8" />
+                        <TextBlock
+                            x:Name="ConditionsProblem"
+                            AutomationProperties.AutomationId="RuleConditionsProblem"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource SettingsGroupDescriptionStyle}"
+                            Visibility="Collapsed" />
+                        <Button
+                            x:Name="AddConditionButton"
+                            AutomationProperties.AutomationId="RuleAddCondition"
+                            Click="OnAddConditionClick" />
+                    </StackPanel>
+
+                    <!-- Do the following. -->
+                    <StackPanel Spacing="8">
+                        <TextBlock
+                            x:Name="ActionsHeadingText"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}" />
+                        <StackPanel x:Name="ActionsPanel" Spacing="10" />
+                        <TextBlock
+                            x:Name="ActionsProblem"
+                            AutomationProperties.AutomationId="RuleActionsProblem"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Style="{StaticResource SettingsGroupDescriptionStyle}"
+                            Visibility="Collapsed" />
+                        <DropDownButton
+                            x:Name="AddActionButton"
+                            AutomationProperties.AutomationId="RuleAddAction" />
+                    </StackPanel>
+
+                    <!-- Stop processing more rules, with its hint. -->
+                    <StackPanel Spacing="2">
+                        <CheckBox
+                            x:Name="StopBox"
+                            AutomationProperties.AutomationId="RuleStop"
+                            Checked="OnStopChanged"
+                            Unchecked="OnStopChanged" />
+                        <TextBlock
+                            x:Name="StopHintText"
+                            Margin="28,0,0,0"
+                            Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                    </StackPanel>
+
+                    <!-- Try It over a folder. -->
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock
+                                x:Name="TryFolderLabel"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource DimLabelStyle}" />
+                            <ComboBox
+                                x:Name="TryFolderBox"
+                                MinWidth="180"
+                                AutomationProperties.AutomationId="RuleTryFolder"
+                                SelectionChanged="OnTryFolderChanged" />
+                            <Button
+                                x:Name="TryButton"
+                                AutomationProperties.AutomationId="RuleTry"
+                                Click="OnTryClick" />
+                            <ProgressRing
+                                x:Name="TrySpinner"
+                                Width="16"
+                                Height="16"
+                                VerticalAlignment="Center"
+                                IsActive="False"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="TryText"
+                            AutomationProperties.AutomationId="RuleTryResult"
+                            AutomationProperties.LiveSetting="Polite"
+                            Style="{StaticResource SettingsGroupDescriptionStyle}"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+
+                    <!-- A failed Save. -->
+                    <InfoBar
+                        x:Name="SaveErrorBar"
+                        AutomationProperties.AutomationId="RuleSaveError"
+                        IsClosable="False"
+                        IsOpen="False"
+                        Severity="Warning" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- Save (the default) and Cancel, in the order of a Windows dialog. -->
+        <Grid
+            Grid.Row="2"
+            Margin="12"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="SaveButton"
+                Grid.Column="1"
+                AutomationProperties.AutomationId="RuleSave"
+                Click="OnSaveClick"
+                IsEnabled="False"
+                Style="{StaticResource AccentButtonStyle}" />
+            <Button
+                x:Name="CancelButton"
+                Grid.Column="2"
+                l:MnemonicLabel.Text="{l:T Msgid='_Cancel'}"
+                AutomationProperties.AutomationId="RuleCancel"
+                Click="OnCancelClick" />
+        </Grid>
+
+        <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+    </Grid>
+</Window>

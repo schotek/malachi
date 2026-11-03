@@ -655,7 +655,37 @@ public static class API
     public static readonly RpcMethod<UpdateDismissNoticeParams, UpdateStatus> UpdateDismissNotice =
         new("update.dismissNotice", RpcTimeouts.Default, Wire.UpdateDismissNoticeParams, Wire.UpdateStatus);
 
-    // Signatures and OpenPGP keys (docs/api.md §4.21; Signature.cs)
+    // Mail rules (docs/api.md §4.21; Rules.cs)
+
+    /// <summary><c>rules.list</c>: every rule in its order.</summary>
+    public static readonly RpcMethod<EmptyParams, RulesListResult> RulesList =
+        new("rules.list", RpcTimeouts.Default, Wire.EmptyParams, Wire.RulesListResult);
+
+    /// <summary><c>rules.create</c>: adds a rule at the end; confirmOutgoing when it is enabled with an outgoing action.</summary>
+    public static readonly RpcMethod<RulesCreateParams, RulesCreateResult> RulesCreate =
+        new("rules.create", RpcTimeouts.Default, Wire.RulesCreateParams, Wire.RulesCreateResult);
+
+    /// <summary><c>rules.update</c>: replaces a rule's input.</summary>
+    public static readonly RpcMethod<RulesUpdateParams, RulesUpdateResult> RulesUpdate =
+        new("rules.update", RpcTimeouts.Default, Wire.RulesUpdateParams, Wire.RulesUpdateResult);
+
+    /// <summary><c>rules.delete</c>: ruleNotFound for an unknown id.</summary>
+    public static readonly RpcMethod<RulesDeleteParams, EmptyResult> RulesDelete =
+        new("rules.delete", RpcTimeouts.Default, Wire.RulesDeleteParams, Wire.EmptyResult);
+
+    /// <summary><c>rules.reorder</c>: every rule's id once, in the new order.</summary>
+    public static readonly RpcMethod<RulesReorderParams, RulesReorderResult> RulesReorder =
+        new("rules.reorder", RpcTimeouts.Default, Wire.RulesReorderParams, Wire.RulesReorderResult);
+
+    /// <summary><c>rules.test</c>: which stored messages of a folder a rule, as edited, matches.</summary>
+    public static readonly RpcMethod<RulesTestParams, RulesTestResult> RulesTest =
+        new("rules.test", RpcTimeouts.RulesTest, Wire.RulesTestParams, Wire.RulesTestResult);
+
+    /// <summary><c>rules.apply</c>: runs rules by hand on stored mail, local actions only.</summary>
+    public static readonly RpcMethod<RulesApplyParams, RulesApplyResult> RulesApply =
+        new("rules.apply", RpcTimeouts.RulesApply, Wire.RulesApplyParams, Wire.RulesApplyResult);
+
+    // Signatures and OpenPGP keys (docs/api.md §4.22; Signature.cs)
 
     /// <summary><c>message.signature</c>: the details of a message's verdict; a null signature is no verdict.</summary>
     public static readonly RpcMethod<MessageSignatureParams, MessageSignatureResult> MessageSignature =
@@ -728,6 +758,7 @@ public static class API
         ContactCreate, ContactUpdate, ContactDelete,
         ContactPhoto,
         UpdateStatus, UpdateCheck, UpdateSetPrefs, UpdateDismiss, UpdateDismissNotice,
+        RulesList, RulesCreate, RulesUpdate, RulesDelete, RulesReorder, RulesTest, RulesApply,
         MessageSignature, MessageSignatureRevocation,
         PgpKeyImport, PgpKeyVerify, PgpKeyList, PgpKeyRemove,
     ];
@@ -784,6 +815,9 @@ public static class API
         /// <summary>api.NotifyUpdateChanged: the update status changed; no params, clients call <c>update.status</c>.</summary>
         public const string UpdateChanged = "notify.updateChanged";
 
+        /// <summary>api.NotifyRulesChanged: a rule was added, changed, reordered, deleted or disabled by the daemon, or its counts moved; no params, clients call <c>rules.list</c>.</summary>
+        public const string RulesChanged = "notify.rulesChanged";
+
         /// <summary>
         /// api.NotifySignaturesChanged: trust changed (a key imported, confirmed
         /// or removed, a revocation check); no params, clients read the
@@ -801,6 +835,7 @@ public static class API
         Notify.AssistantProfileChanged,
         Notify.ContactsChanged,
         Notify.UpdateChanged,
+        Notify.RulesChanged,
         Notify.SignaturesChanged,
     ];
 
@@ -1110,7 +1145,7 @@ public static class API
         /// <summary>api.MaxContactPhotoPixels: a side of the photo's square.</summary>
         public const int MaxContactPhotoPixels = 256;
 
-        // signature.go (docs/api.md §4.21); exceeding an input limit is
+        // signature.go (docs/api.md §4.22); exceeding an input limit is
         // invalidArgument.
 
         /// <summary>api.MaxSignatureTextBytes: every string from a certificate or key.</summary>

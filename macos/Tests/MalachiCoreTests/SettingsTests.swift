@@ -50,6 +50,7 @@ private final class Scratch {
         #expect(s.collapsedFolders.isEmpty)
         #expect(s.collapsedAccounts.isEmpty)
         #expect(s.favouriteFolders.isEmpty)
+        #expect(s.unifiedInbox)
         s.markReadDelay = 999
         #expect(s.markReadDelay == Settings.markReadDelayMax)
         #expect(s.searchScope == .folder)
@@ -67,7 +68,7 @@ private final class Scratch {
         #expect(s.boardAccountFilter == "")
         #expect(s.calendarView == .week)
         #expect(s.contactsSuggestScope == .account)
-        #expect(Settings.Key.allCases.count == 44)
+        #expect(Settings.Key.allCases.count == 45)
         let providerDefaults = Settings.registrationDefaults()
         #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
         #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")

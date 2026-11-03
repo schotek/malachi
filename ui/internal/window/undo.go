@@ -36,11 +36,12 @@ func undoAccelAllowed(m board.Mode, typingAllows bool) bool {
 // recordUndo pushes the move of list (summaries taken before their rows
 // went) to target with kind, once the daemon took it, and shows its toast.
 // Nothing moved, nothing recorded.
-func (w *Window) recordUndo(kind undo.Kind, target api.FolderID, list []api.MessageSummary) {
+func (w *Window) recordUndo(kind undo.Kind, target api.FolderID, list []api.MessageSummary, group int) {
 	e, ok := undo.Record(kind, target, list)
 	if !ok {
 		return
 	}
+	e.Group = group
 	if kind == undo.Move {
 		if f, ok := w.model.folder(folderKey{Account: e.Account, Folder: target}); ok {
 			e.TargetName = f.Name
@@ -80,7 +81,7 @@ func (w *Window) showUndoToast(e undo.Entry, text string) {
 	id := e.ID
 	t.ConnectButtonClicked(func() {
 		if e, ok := w.undo.Take(id); ok {
-			w.runUndo(e)
+			w.runUndoGroup(e)
 		}
 	})
 	t.ConnectDismissed(func() {
@@ -107,7 +108,7 @@ func (w *Window) undoLast() {
 		w.Toast(undo.Nothing(i18n.Tr))
 		return
 	}
-	w.runUndo(e)
+	w.runUndoGroup(e)
 }
 
 // runUndo takes e back: the board's moves through the board (which puts
@@ -155,6 +156,9 @@ func (w *Window) runUndo(e undo.Entry) {
 // back to, selecting those that came back to it (takeUndoReselect).
 func (w *Window) afterUndo(e undo.Entry) {
 	w.loadFolders(e.Account, w.model.foldersGen)
+	if w.unifiedAfterUndo(e) {
+		return
+	}
 	sel := w.model.selected
 	if sel.Account != e.Account || w.model.search.active {
 		return

@@ -1,8 +1,8 @@
 -- SPDX-FileCopyrightText: 2026 Vladislav Janeček
 -- SPDX-License-Identifier: AGPL-3.0-only
 
--- 0025_signatures: the verdicts of signed mail and what they rest on
--- (docs/plans/signatures.md §4, docs/api.md §4.21; store/signatures.go).
+-- 0026_signatures: the verdicts of signed mail and what they rest on
+-- (docs/plans/signatures.md §4, docs/api.md §4.22; store/signatures.go).
 --
 -- message_signatures holds one verdict per message whose signature covers
 -- the whole message; a message without one has no row. It is a cache: the

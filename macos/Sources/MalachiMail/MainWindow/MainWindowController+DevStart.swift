@@ -76,6 +76,8 @@ import MalachiCore
 //   `contacts`, `contacts:edit`, `contacts:new`, `contacts:narrow`, `contacts:add` and
 //   `prefs-contacts` (with MALACHI_CONTACTS_SAMPLES=1):
 //   MainWindowController+DevStartContacts.swift.
+//   `prefs-rules` and `rules-editor` (with MALACHI_RULES_SAMPLES=1):
+//   MainWindowController+DevStartRules.swift.
 //   The assistant's scenes (`assistant-unread`, `assistant=`, `assistant-say=`,
 //   `board-select=`, `triage`, `suggest-reply`, `compose-new=`,
 //   `compose-rewrite=`, `reply`, `compose-write=`, `search-own=`, `prefs-ai`)
@@ -349,6 +351,9 @@ extension MainWindowController {
             return
         }
         if DevelopmentContacts.step(step, in: self) {
+            return
+        }
+        if DevelopmentRules.step(step, in: self) {
             return
         }
         if DevelopmentSignature.step(step, in: self) {

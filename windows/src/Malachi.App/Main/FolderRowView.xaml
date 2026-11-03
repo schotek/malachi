@@ -133,6 +133,14 @@ row shows is Core's SidebarRow; every text is plain.
                 TextLineBounds="Tight" />
         </Border>
 
+        <!-- starSlot: the All Inboxes row keeps the star's place. -->
+        <Border
+            Grid.Column="4"
+            Width="18"
+            Height="18"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind main:FolderRowView.StarSlot(Row.Kind), Mode=OneWay}" />
+
         <!-- newStar: Add to / Remove from Favourites; waits for the pointer,
              the selection or the keyboard, but a filled star in the tree. -->
         <Button

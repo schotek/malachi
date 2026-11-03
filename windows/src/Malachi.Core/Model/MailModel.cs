@@ -102,6 +102,34 @@ public sealed partial class MailModel
     public FavouriteState Favourites { get; set; }
 
     /// <summary>
+    /// The unified-inbox preference as the controller last read it: the
+    /// All Inboxes item is in the sidebar when it is on and there are two
+    /// mail accounts (<see cref="UnifiedShown"/>). False for a bare model.
+    /// </summary>
+    public bool UnifiedInbox { get; set; }
+
+    /// <summary>Whether the sidebar has the All Inboxes item (<see cref="Unified.Shown"/>).</summary>
+    public bool UnifiedShown => Unified.Shown(Accounts, UnifiedInbox);
+
+    /// <summary>The folders the All Inboxes list covers (<see cref="Unified.Inboxes"/>).</summary>
+    public IReadOnlyList<Folder> UnifiedInboxes => Unified.Inboxes(Accounts, Folders);
+
+    /// <summary>
+    /// Whether the list shown (<see cref="ListFolder"/>) is the All Inboxes
+    /// list: it covers the inboxes of every mail account.
+    /// </summary>
+    public bool ListIsUnified => ListFolder is { IsUnified: true };
+
+    /// <summary>
+    /// Whether a change of folder <paramref name="k"/> belongs to the list
+    /// shown: it is the listed folder itself, or the list is the All Inboxes
+    /// list and <paramref name="k"/> is one of the inboxes it covers
+    /// (the client's <c>listCovers</c>; <see cref="Unified.Covers"/>).
+    /// </summary>
+    public bool ListCovers(FolderKey k) =>
+        k == ListFolder || Unified.Covers(ListIsUnified, k.Account, k.Folder, UnifiedInboxes);
+
+    /// <summary>
     /// The folder messages belong to (or are being loaded for); it lags
     /// <see cref="Selected"/> between selectFolder and loadMessages.
     /// </summary>
@@ -188,6 +216,7 @@ public sealed partial class MailModel
     {
         var c = new MailModel(grouped: Grouped, listFilter: ListFilter, collapsed: Collapsed.Clone(), favourites: Favourites.Clone())
         {
+            UnifiedInbox = UnifiedInbox,
             Accounts = Accounts,
             Entries = Entries,
             Selected = Selected,
@@ -403,7 +432,7 @@ public sealed partial class MailModel
     // Folders and accounts
 
     /// <summary>Recomputes the sidebar rows from accounts and folders.</summary>
-    public void RebuildEntries() => Entries = FolderTree.SortFolders(Accounts, Folders, Collapsed, Favourites);
+    public void RebuildEntries() => Entries = FolderTree.SortFolders(Accounts, Folders, Collapsed, Favourites, UnifiedInbox);
 
     /// <summary>
     /// Recomputes the number every visible row shows, after an unread count
@@ -417,6 +446,11 @@ public sealed partial class MailModel
         for (var i = 0; i < entries.Length; i++)
         {
             var e = entries[i];
+            if (e.IsUnified)
+            {
+                entries[i] = e with { Badge = Unified.Unread(UnifiedInboxes) };
+                continue;
+            }
             if (e.Header || e.Account is not { } account || e.Folder is not { } folder)
             {
                 continue;
@@ -437,6 +471,11 @@ public sealed partial class MailModel
     /// </summary>
     public bool FolderListed(FolderKey? k)
     {
+        if (k is { IsUnified: true })
+        {
+            // The All Inboxes item: listed while the sidebar has it.
+            return UnifiedShown;
+        }
         if (k is not { } key || Account(key.Account) is not { Enabled: true })
         {
             return false;
@@ -452,9 +491,10 @@ public sealed partial class MailModel
 
     /// <summary>
     /// The special-use role of folder <paramref name="k"/>,
-    /// <see cref="FolderRole.None"/> when the folder is unknown or plain.
+    /// <see cref="FolderRole.None"/> when the folder is unknown or plain; the
+    /// All Inboxes item lists inboxes, so its role is <see cref="FolderRole.Inbox"/>.
     /// </summary>
-    public FolderRole FolderRole(FolderKey k) => Folder(k)?.Role ?? Api.FolderRole.None;
+    public FolderRole FolderRole(FolderKey k) => k.IsUnified ? Unified.Role : Folder(k)?.Role ?? Api.FolderRole.None;
 
     /// <summary>
     /// Whether <paramref name="s"/> is a queued outgoing message: the backend

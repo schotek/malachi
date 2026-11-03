@@ -38,6 +38,9 @@ public enum SettingsKey
     /// <summary><c>favourite-folders</c>.</summary>
     FavouriteFolders,
 
+    /// <summary><c>unified-inbox</c>.</summary>
+    UnifiedInbox,
+
     /// <summary><c>launch-at-login</c>.</summary>
     LaunchAtLogin,
 

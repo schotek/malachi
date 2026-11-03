@@ -71,7 +71,7 @@ public struct MessageSummary: Codable, Sendable, Equatable {
     /// Message-ID) is saved in an enabled CRM account (§4.17); a display
     /// cache, the CRM is the truth.
     @DefaultFalse public var crmSaved: Bool
-    /// The verdict of the message's signature (§4.21): the list's icon.
+    /// The verdict of the message's signature (§4.22): the list's icon.
     /// Absent without a signature that is the verdict of the whole message
     /// and while it is pending. In `message.get` the same JSON key carries
     /// the `SignatureSummary` (`Message.signature`); a `Message`'s summary
@@ -232,7 +232,7 @@ public struct Message: Codable, Sendable, Equatable {
     /// (`message.get`, §4.17); nil when it is saved nowhere.
     public var crm: [CrmRecord]?
     /// The summary of the signature's verdict (`message.get`,
-    /// `message.download`, §4.21): the header's badge. It takes the place
+    /// `message.download`, §4.22): the header's badge. It takes the place
     /// of `MessageSummary.signature` on the wire; nil without a verdict.
     public var signature: SignatureSummary?
 
@@ -314,10 +314,16 @@ public struct MessageListParams: Codable, Sendable, Equatable {
     public var sort: SortOrder?
     public var filter: MessageFilter?
     public var unreadOnly: Bool?
+    /// Instead of `accountId` and `folderId` (both empty, which is what
+    /// Go's zero value reads from `""`), lists the folders of this role of
+    /// every enabled mail account in one page: the unified listing
+    /// (docs/api.md §4.3, `Unified.messageParams`). Only a role of
+    /// `UnifiedRoles` (inbox) is accepted. Left out when nil.
+    public var unified: FolderRole?
 
     public init(
         accountId: AccountID, folderId: FolderID, page: Page = Page(), sort: SortOrder? = nil,
-        filter: MessageFilter? = nil, unreadOnly: Bool? = nil
+        filter: MessageFilter? = nil, unreadOnly: Bool? = nil, unified: FolderRole? = nil
     ) {
         self.accountId = accountId
         self.folderId = folderId
@@ -325,6 +331,7 @@ public struct MessageListParams: Codable, Sendable, Equatable {
         self.sort = sort
         self.filter = filter
         self.unreadOnly = unreadOnly
+        self.unified = unified
     }
 }
 

@@ -356,7 +356,7 @@ public final class ConversationController {
     /// `details`, or when the message has attachments, whose chips need
     /// it, or when it is a newsletter or list message, whose strip needs its
     /// unsubscribe offer, or when it carries an invitation, whose card is
-    /// message.get's, or a signature, whose badge is (§4.21), unless it
+    /// message.get's, or a signature, whose badge is (§4.22), unless it
     /// failed for this member before). An event
     /// has no body.
     /// The entry is held in `loaded` and announced through `onLoaded`

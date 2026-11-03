@@ -61,8 +61,14 @@ public enum RPCTimeouts {
     /// `update.check`: the daemon gives both requests of one check 70 s
     /// (core/update_service.go `updateCheckLimit`) before it answers.
     public static let updateCheck: Duration = .seconds(75)
+    /// `rules.test`: reads the folder's stored messages, their bodies too
+    /// for a body condition (rulesctl `TestTimeout`).
+    public static let rulesTest: Duration = .seconds(60)
+    /// `rules.apply`: a whole folder's stored mail in batches, every change
+    /// queued for the server, before it answers (rulesctl `ApplyTimeout`).
+    public static let rulesApply: Duration = .seconds(300)
     /// `message.signatureRevocation`: the daemon's whole check (OCSP, then
     /// the CRL) is allowed 15 s (api.RevocationTimeout); the client waits
-    /// 20 (docs/api.md §4.21).
+    /// 20 (docs/api.md §4.22).
     public static let revocation: Duration = .seconds(20)
 }

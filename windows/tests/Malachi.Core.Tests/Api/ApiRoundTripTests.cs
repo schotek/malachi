@@ -36,6 +36,12 @@ public sealed class ApiRoundTripTests
     private const string Config =
         """{"name":"Work","email":"me@example.org","displayName":"Me","kind":"imap","imap":@server@,"smtp":@server@,"oauth2":@oauth2@,"graph":{"source":"goa","goaAccountId":"account_1"},"jira":@jira@,"caldav":@calcaldavconfig@,"eway":@ewayconfig@,"calendar":@calconfig@,"syncIntervalSeconds":300}""";
 
+    private const string RuleInputJson =
+        """{"name":"Acme","enabled":true,"accountId":"acc_1","match":"any","conditions":[{"field":"from","op":"domainIs","value":"acme.cz"},{"field":"hasAttachments","op":"is","value":"true"}],"actions":[{"kind":"move","folderId":"f_news"},{"kind":"forward","to":"boss@acme.cz"},{"kind":"autoReply","subject":"Re","text":"Hi"}],"stop":true}""";
+
+    private const string RuleJson =
+        """{"id":"r_1","name":"Acme","enabled":true,"accountId":"acc_1","match":"any","conditions":[{"field":"from","op":"domainIs","value":"acme.cz"},{"field":"hasAttachments","op":"is","value":"true"}],"actions":[{"kind":"move","folderId":"f_news"},{"kind":"forward","to":"boss@acme.cz"},{"kind":"autoReply","subject":"Re","text":"Hi"}],"stop":true,"outgoing":true,"problem":"folderGone","createdAt":"2026-11-01T08:00:00Z","updatedAt":"2026-11-02T08:00:00Z","applied":12,"lastAppliedAt":"2026-11-02T08:30:00Z","skipped":2}""";
+
     private const string Error = """{"code":1302,"message":"550 no","data":{"limit":1,"size":2}}""";
 
     private const string State =
@@ -539,7 +545,7 @@ public sealed class ApiRoundTripTests
         [nameof(Malachi.Core.Api.Attachment)] = Case<Attachment>(Attachment),
         [nameof(Malachi.Core.Api.Message)] = Case<Message>(Message),
         [nameof(MessageListParams)] = Case<MessageListParams>(
-            """{"accountId":"acc_1","folderId":"f_inbox","page":@page@,"sort":"dateAsc","filter":"unread","unreadOnly":true}"""),
+            """{"accountId":"acc_1","folderId":"f_inbox","unified":"inbox","page":@page@,"sort":"dateAsc","filter":"unread","unreadOnly":true}"""),
         [nameof(MessageListResult)] = Case<MessageListResult>("""{"messages":[@summary@],"page":@pageinfo@}"""),
         [nameof(MessageGetParams)] = Case<MessageGetParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
         [nameof(MessageGetResult)] = Case<MessageGetResult>("""{"message":@message@}"""),
@@ -571,7 +577,7 @@ public sealed class ApiRoundTripTests
         // RpcError.cs
         [nameof(RpcError)] = Case<RpcError>(Error),
         // Search.cs
-        [nameof(SearchQueryParams)] = Case<SearchQueryParams>("""{"accountId":"acc_1","folderId":"f_inbox","query":"from:alice přílohy","page":@page@}"""),
+        [nameof(SearchQueryParams)] = Case<SearchQueryParams>("""{"accountId":"acc_1","folderId":"f_inbox","query":"from:alice přílohy","page":@page@,"withSent":true}"""),
         [nameof(MatchRange)] = Case<MatchRange>("""{"start":13,"end":22}"""),
         [nameof(SearchResult)] = Case<SearchResult>("""{"message":@summary@,"snippet":"…posílám přílohy k faktuře…","ranges":[{"start":13,"end":22}],"score":0}"""),
         [nameof(SearchQueryResult)] = Case<SearchQueryResult>("""{"results":[{"message":@summary@,"snippet":"x","score":0.5}],"page":@pageinfo@}"""),
@@ -590,7 +596,7 @@ public sealed class ApiRoundTripTests
         [nameof(SyncTriggerParams)] = Case<SyncTriggerParams>("""{"accountId":"acc_1","folderId":"f_inbox","full":true}"""),
         // Threads.cs
         [nameof(ThreadSummary)] = Case<ThreadSummary>(Thread),
-        [nameof(ThreadListParams)] = Case<ThreadListParams>("""{"accountId":"acc_1","folderId":"f_inbox","page":@page@,"sort":"dateDesc","filter":"flagged"}"""),
+        [nameof(ThreadListParams)] = Case<ThreadListParams>("""{"accountId":"acc_1","folderId":"f_inbox","unified":"inbox","page":@page@,"sort":"dateDesc","filter":"flagged"}"""),
         [nameof(ThreadListResult)] = Case<ThreadListResult>("""{"threads":[@thread@],"page":@pageinfo@}"""),
         [nameof(ThreadGetParams)] = Case<ThreadGetParams>("""{"accountId":"acc_1","threadId":"t_9","folderId":"f_inbox","withSent":true,"withDrafts":true}"""),
         [nameof(ThreadGetResult)] = Case<ThreadGetResult>("""{"thread":@thread@,"messages":[@summary@,@summary@],"sent":[@summary@],"drafts":[@draft@]}"""),
@@ -688,6 +694,24 @@ public sealed class ApiRoundTripTests
         [nameof(UpdateSetPrefsParams)] = Case<UpdateSetPrefsParams>("""{"enabled":false,"locale":"cs"}"""),
         [nameof(UpdateDismissParams)] = Case<UpdateDismissParams>("""{"version":"0.1.3","action":"later","locale":"cs"}"""),
         [nameof(UpdateDismissNoticeParams)] = Case<UpdateDismissNoticeParams>("""{"id":"n-1","locale":"cs"}"""),
+        // Rules.cs
+        [nameof(RuleCondition)] = Case<RuleCondition>("""{"field":"from","op":"domainIs","value":"acme.cz"}"""),
+        [nameof(RuleAction)] = Case<RuleAction>("""{"kind":"autoReply","folderId":"f_news","to":"boss@acme.cz","subject":"Re","text":"Hi"}"""),
+        [nameof(RuleInput)] = Case<RuleInput>(RuleInputJson),
+        [nameof(Rule)] = Case<Rule>(RuleJson),
+        [nameof(RuleInvalidData)] = Case<RuleInvalidData>("""{"field":"conditions","index":2}"""),
+        [nameof(RulesListResult)] = Case<RulesListResult>("{\"rules\":[" + RuleJson + "]}"),
+        [nameof(RulesCreateParams)] = Case<RulesCreateParams>("{\"rule\":" + RuleInputJson + ",\"confirmOutgoing\":true}"),
+        [nameof(RulesCreateResult)] = Case<RulesCreateResult>("{\"rule\":" + RuleJson + "}"),
+        [nameof(RulesUpdateParams)] = Case<RulesUpdateParams>("{\"id\":\"r_1\",\"rule\":" + RuleInputJson + ",\"confirmOutgoing\":true}"),
+        [nameof(RulesUpdateResult)] = Case<RulesUpdateResult>("{\"rule\":" + RuleJson + "}"),
+        [nameof(RulesDeleteParams)] = Case<RulesDeleteParams>("""{"id":"r_1"}"""),
+        [nameof(RulesReorderParams)] = Case<RulesReorderParams>("""{"ids":["r_2","r_1"]}"""),
+        [nameof(RulesReorderResult)] = Case<RulesReorderResult>("{\"rules\":[" + RuleJson + "]}"),
+        [nameof(RulesTestParams)] = Case<RulesTestParams>("{\"rule\":" + RuleInputJson + ",\"accountId\":\"acc_1\",\"folderId\":\"f_inbox\"}"),
+        [nameof(RulesTestResult)] = Case<RulesTestResult>("""{"count":3,"messages":[@summary@]}"""),
+        [nameof(RulesApplyParams)] = Case<RulesApplyParams>("""{"accountId":"acc_1","folderId":"f_inbox","messageIds":["m_1"],"ruleIds":["r_1"]}"""),
+        [nameof(RulesApplyResult)] = Case<RulesApplyResult>("""{"examined":120,"matched":14,"changed":12,"skippedOutgoing":2}"""),
         // Signature.cs
         [nameof(MessageSignature)] = Case<MessageSignature>("""{"kind":"pgp","status":"validSeen"}"""),
         [nameof(SignatureSigner)] = Case<SignatureSigner>(SigSigner),
@@ -717,6 +741,22 @@ public sealed class ApiRoundTripTests
     // Minimal documents: what the encoding adds to them.
     private static readonly Dictionary<string, Sample> Minimal = new(StringComparer.Ordinal)
     {
+        // Rules: a nil list of Go is null or absent, an empty string of an omitempty member goes out as absent, a false confirmation is left out.
+        ["Rule without conditions and actions"] = Case<Rule>(
+            """{"id":"r_2","name":"x","enabled":false,"match":"all","conditions":null,"actions":null,"stop":false,"outgoing":false,"createdAt":"2026-11-01T08:00:00Z","updatedAt":"2026-11-01T08:00:00Z","applied":0,"skipped":0}""",
+            """{"id":"r_2","name":"x","enabled":false,"match":"all","conditions":[],"actions":[],"stop":false,"outgoing":false,"createdAt":"2026-11-01T08:00:00Z","updatedAt":"2026-11-01T08:00:00Z","applied":0,"skipped":0}"""),
+        ["RuleAction with empty strings"] = Case<RuleAction>(
+            """{"kind":"flag","folderId":"","to":"","subject":"","text":""}""",
+            """{"kind":"flag"}"""),
+        ["RuleInput for every account"] = Case<RuleInput>(
+            """{"name":"n","enabled":true,"accountId":"","match":"all","conditions":[],"actions":[],"stop":false}""",
+            """{"name":"n","enabled":true,"match":"all","conditions":[],"actions":[],"stop":false}"""),
+        ["RulesCreateParams without a confirmation"] = Case<RulesCreateParams>(
+            """{"rule":{"name":"n","enabled":false,"match":"all","conditions":[],"actions":[],"stop":false},"confirmOutgoing":false}""",
+            """{"rule":{"name":"n","enabled":false,"match":"all","conditions":[],"actions":[],"stop":false}}"""),
+        ["RulesApplyParams to a folder"] = Case<RulesApplyParams>(
+            """{"accountId":"acc_1","folderId":"f_inbox","messageIds":null,"ruleIds":null}""",
+            """{"accountId":"acc_1","folderId":"f_inbox","messageIds":[],"ruleIds":[]}"""),
         // The calendar: members left out stay out, the lists Go never sends as null are written as arrays.
         ["Calendar without its optional members"] = Case<Calendar>(
             """{"id":"cal_1","accountId":"acc_1","remoteId":"AAMk-1","name":"Calendar","color":"#1f6feb","visible":true,"access":"read","kind":"somethingNewer"}""",
@@ -809,6 +849,9 @@ public sealed class ApiRoundTripTests
         ["ThreadGetResult without sent"] = Case<ThreadGetResult>(
             """{"thread":@thread@,"messages":[],"drafts":null}""",
             """{"thread":@thread@,"messages":[],"sent":[],"drafts":[]}"""),
+        ["SearchQueryParams without withSent"] = Case<SearchQueryParams>(
+            """{"query":"x","page":{"cursor":"c","limit":50},"withSent":null}""",
+            """{"query":"x","page":{"cursor":"c","limit":50}}"""),
         ["ThreadGetParams without withSent"] = Case<ThreadGetParams>(
             """{"accountId":"a","threadId":"t","withSent":null,"withDrafts":null}""",
             """{"accountId":"a","threadId":"t"}"""),

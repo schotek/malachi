@@ -75,6 +75,7 @@ using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
+using Malachi.Core.Rules;
 using Malachi.Core.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -294,6 +295,14 @@ public sealed partial class MessageListPane : UserControl
     /// before the Integration.
     /// </summary>
     internal Malachi.Core.Controllers.CrmController? Crm { get; set; }
+
+    /// <summary>
+    /// The main window's Create Rule from Message… (MainWindow.Rules.cs): the
+    /// message menu's item of one message of a mail account opens the rule
+    /// editor prefilled from it (contextmenu.go CreateRule); none before the
+    /// Integration.
+    /// </summary>
+    internal Action<MessageSummary>? CreateRule { get; set; }
 
     /// <summary>A conversation row's fold arrow (threads.go toggleThread).</summary>
     internal void ToggleThread(MessageRow row)
@@ -940,6 +949,8 @@ public sealed partial class MessageListPane : UserControl
             // crm.OfferFor of the selected rows (MessageState.SetCrm).
             state = state.WithCrm(crm.Offer);
         }
+        // Create Rule from Message…: one message of a mail account, not in the outbox, drafts or sent mail.
+        state = state with { OfferRule = rows.Count == 1 && CreateRule is not null && OffersRule(first.Message) };
         var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox, Count = rows.Count };
         var menu = new MenuFlyout();
         foreach (var group in ContextMenu.MessageItems(state))
@@ -1011,6 +1022,14 @@ public sealed partial class MessageListPane : UserControl
                     item = crm;
                     break;
                 }
+            case ContextMenu.ItemId.CreateRule:
+                {
+                    var create = new MenuFlyoutItem { IsEnabled = it.Enabled && CreateRule is not null };
+                    var message = rows[0].Message;
+                    create.Click += (_, _) => CreateRule?.Invoke(message);
+                    item = create;
+                    break;
+                }
             default:
                 {
                     var command = CommandOf(c, it.Id);
@@ -1023,6 +1042,19 @@ public sealed partial class MessageListPane : UserControl
         MnemonicLabel.Apply(item, ContextMenu.Label(it.Id, labels));
         AutomationProperties.SetAutomationId(item, "ContextMenu." + ContextMenu.Name(it.Id));
         return item;
+    }
+
+    // rules.CanCreateFrom of the folder the message is in, for a message of a
+    // mail account (imap, graph: never an issue tracker's).
+    private bool OffersRule(MessageSummary message)
+    {
+        if (mailbox is not { } m || m.Model.Account(message.AccountId) is not { } account || RuleBook.MailAccounts([account]).Count == 0)
+        {
+            return false;
+        }
+        return m.Model.Folders.TryGetValue(message.AccountId, out var folders)
+            && folders.FirstOrDefault(f => f.Id == message.FolderId) is { } folder
+            && RuleBook.CanCreateFrom(folder.Role);
     }
 
     // context_menus.go messageMenuActions: the eWay-CRM items run the main

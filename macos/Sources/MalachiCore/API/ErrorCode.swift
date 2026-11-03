@@ -65,6 +65,8 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     public static let contactNotFound: ErrorCode = 1110
     /// No address book with that id.
     public static let addressBookNotFound: ErrorCode = 1111
+    /// No mail rule with that id (docs/api.md §4.21).
+    public static let ruleNotFound: ErrorCode = 1112
 
     // 1200–1299: authentication.
     /// Credentials missing or token expired; see notify.authRequired.
@@ -158,6 +160,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .readOnly, .invitationsUnavailable,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
         .caseNotFound, .calendarNotFound, .eventNotFound, .crmItemNotFound, .contactNotFound, .addressBookNotFound,
+        .ruleNotFound,
         .authRequired, .authFailed, .keyringError, .oauthClientMissing, .calendarConsentRequired,
         .crmSignInUnsupported, .contactsConsentRequired,
         .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone, .eventGone, .crmDuplicate,
@@ -193,6 +196,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .crmItemNotFound: "crmItemNotFound",
         .contactNotFound: "contactNotFound",
         .addressBookNotFound: "addressBookNotFound",
+        .ruleNotFound: "ruleNotFound",
         .authRequired: "authRequired",
         .authFailed: "authFailed",
         .keyringError: "keyringError",
