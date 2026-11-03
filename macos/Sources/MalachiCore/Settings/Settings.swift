@@ -49,9 +49,10 @@ public final class Settings {
         case collapsedFolders = "collapsed-folders"
         case collapsedAccounts = "collapsed-accounts"
         case favouriteFolders = "favourite-folders"
-        /// The All Inboxes item at the top of the sidebar, while there are
-        /// two or more mail accounts (ui/internal/unified Shown). Never part
-        /// of the three keys above.
+        /// The All Inboxes item, the first row of the Favourites section,
+        /// while there are two or more mail accounts (ui/internal/unified
+        /// Shown). Never part of the three keys above (the section's own
+        /// fold is a sentinel among `collapsedAccounts`).
         case unifiedInbox = "unified-inbox"
         /// The Assistant menu (ui/internal/assistant): shown at all, and
         /// the Claude app it opens (Settings → AI → Assistant).

@@ -229,17 +229,39 @@ struct UnifiedTests {
         return m
     }
 
-    @Test func theItemIsTheFirstRowAboveFavourites() {
+    @Test func theItemHeadsTheFavouritesSection() {
         var m = twoAccountModel()
-        m.favourites.toggle(FolderKey(account: "a", folder: "a-in"))
-        m.rebuildEntries()
-        let first = m.entries[0]
-        #expect(first.unified && first.key == .unified && first.badge == 5)
-        #expect(first.account == nil && first.folder == nil && !first.header)
-        #expect(m.entries[1].header && m.entries[1].favourite, "the Favourites heading follows it")
+        // The item is the first row of the Favourites section, which exists
+        // for it alone (unified_test.go TestUnifiedEntryHeadsTheFavouritesSection).
+        #expect(ids(m.entries) == ["#favourites", "*@unified:inbox@0", "#a", "a-in@0", "#b", "b-in@0"])
+        let heading = m.entries[0]
+        #expect(heading.header && heading.favourite && heading.hasChildren && !heading.collapsed)
+        let item = m.entries[1]
+        #expect(item.unified && item.favourite && item.key == .unified && item.badge == 5 && item.depth == 0)
+        #expect(item.account == nil && item.folder == nil && !item.header)
         #expect(m.entries.filter(\.unified).count == 1)
         // initialFolder is still a real folder.
         #expect(m.initialFolder() == FolderKey(account: "a", folder: "a-in"))
+
+        // Pins follow the item (TestUnifiedEntryComesBeforeThePins).
+        m.favourites.toggle(FolderKey(account: "b", folder: "b-in"))
+        m.rebuildEntries()
+        #expect(Array(ids(m.entries).prefix(3)) == ["#favourites", "*@unified:inbox@0", "*b-in@0"])
+
+        // Folded, the section is its heading alone; the item stays listed
+        // and the pinned folder is still in the tree.
+        m.collapsed.setFavourites(true)
+        m.rebuildEntries()
+        #expect(ids(m.entries) == ["#favourites", "#a", "a-in@0", "#b", "b-in@0"])
+        #expect(m.entries[0].collapsed && m.entries[0].hasChildren)
+        #expect(m.folderListed(.unified))
+        #expect(m.initialFolder() == FolderKey(account: "a", folder: "a-in"))
+
+        // Without the item and without pins there is no section to fold.
+        m.unifiedSetting = false
+        m.favourites = FavouriteState()
+        m.rebuildEntries()
+        #expect(ids(m.entries) == ["#a", "a-in@0", "#b", "b-in@0"])
     }
 
     @Test func theItemNeedsTwoMailAccountsAndTheSetting() {
@@ -259,9 +281,10 @@ struct UnifiedTests {
     @Test func theBadgeFollowsTheInboxCounts() {
         var m = twoAccountModel()
         m.adjustCounts(FolderKey(account: "b", folder: "b-in"), -2, 0)
-        #expect(m.entries[0].badge == 3)
+        #expect(m.entries[1].badge == 3)
         m.adjustCounts(FolderKey(account: "a", folder: "a-in"), 4, 4)
-        #expect(m.entries[0].badge == 7)
+        #expect(m.entries[1].badge == 7)
+        #expect(m.entries[1].unified && m.entries[1].favourite, "the refreshed row is still the section's")
     }
 
     @Test func listCoversTheInboxesOnlyWhileTheListIsUnified() {

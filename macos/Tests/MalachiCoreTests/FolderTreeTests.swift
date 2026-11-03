@@ -11,7 +11,8 @@ import Testing
 
 /// Renders entries compactly (folders_test.go `ids`): "#acc" for an
 /// account heading, "#favourites" for the Favourites heading, "id@depth"
-/// for a tree row and "*id@depth" for a row of the Favourites section.
+/// for a tree row and "*id@depth" for a row of the Favourites section (the
+/// All Inboxes item by its key, "*@unified:inbox@0").
 func ids(_ entries: [FolderEntry]) -> [String] {
     entries.map { e in
         if e.header, e.favourite {
@@ -20,7 +21,7 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         if e.header {
             return "#" + (e.account?.id.rawValue ?? "")
         }
-        let id = e.folder?.id.rawValue ?? ""
+        let id = e.key?.folder.rawValue ?? ""
         if e.favourite {
             return "*\(id)@\(e.depth)"
         }

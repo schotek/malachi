@@ -3095,8 +3095,10 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   downloaded. Regex conditions and server-side rules are not in this
   version.
 - Unified inbox (2026-11-02): **decided** with the owner (U1–U4,
-  [plans/unified-inbox.md](plans/unified-inbox.md)). An "All Inboxes" item
-  at the top of the sidebar, above the favourites, lists the inboxes of
+  [plans/unified-inbox.md](plans/unified-inbox.md)). An "All Inboxes" item,
+  the first row of the Favourites section at the top of the sidebar (since
+  2026-11-03; the section folds like an account heading, its fold a
+  sentinel among `collapsed-accounts`), lists the inboxes of
   every enabled mail account (`imap`, `graph`; never `jira`, `caldav`,
   `eway`) in one list, flat or grouped by conversation as
   `group-by-conversation` says (U1). It is shown only with two or more

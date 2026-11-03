@@ -89,23 +89,25 @@ public func selfAddress(_ a: Account) -> Address {
     Address(name: a.config.displayName, address: a.config.email)
 }
 
-/// Lays the sidebar out (model.go `sortFolders`): the Favourites section
-/// when anything is pinned (`favouriteSection`), then the enabled accounts
-/// in list order (`mailSidebarAccounts`: no calendar-only CalDAV account),
-/// each preceded by a header row when there are at least
-/// two of them or a Favourites section above them, then the account's
-/// folders as a tree. Roots are ordered by (roleRank, path); the children
-/// of a folder follow it, ordered the same way. Depth comes from `parentId`;
-/// folders whose parent chain is cyclic or deeper than `maxFolderDepth` are
-/// appended after the tree with a depth counted from their display path.
-/// Non-selectable containers are kept so their children have somewhere to
-/// hang. With `unified` the All Inboxes item is the first row of all.
+/// Lays the sidebar out (model.go `sidebarEntries`; `sortFolders` without
+/// `unified`): the Favourites section when the All Inboxes item is shown
+/// (`unified`, decided by the caller: `Unified.shown`) or anything is
+/// pinned (`favouriteSection`), then the enabled accounts in list order
+/// (`mailSidebarAccounts`: no calendar-only CalDAV account), each preceded
+/// by a header row when there are at least two of them or a Favourites
+/// section above them, then the account's folders as a tree. Roots are
+/// ordered by (roleRank, path); the children of a folder follow it, ordered
+/// the same way. Depth comes from `parentId`; folders whose parent chain is
+/// cyclic or deeper than `maxFolderDepth` are appended after the tree with
+/// a depth counted from their display path. Non-selectable containers are
+/// kept so their children have somewhere to hang.
 public func sortFolders(
     _ accounts: [Account], _ folders: [AccountID: [Folder]], _ collapsed: CollapseState, _ favourites: FavouriteState,
     unified: Bool = false
 ) -> [FolderEntry] {
     let enabled = mailSidebarAccounts(accounts)
-    var out = favouriteSection(enabled, folders, favourites)
+    let item = unified ? unifiedEntry(accounts, folders) : nil
+    var out = favouriteSection(enabled, folders, favourites, collapsed: collapsed, unified: item)
     // A single account needs no heading of its own, unless a Favourites
     // section sits above its folders and the two would run into each other.
     let headers = enabled.count >= 2 || !out.isEmpty
@@ -121,33 +123,36 @@ public func sortFolders(
         }
         out.append(contentsOf: folderTree(a, folders[a.id] ?? [], collapsed, favourites))
     }
-    if unified {
-        // The All Inboxes item (`Unified.shown`, decided by the caller) is
-        // the very first row, above the Favourites heading. It does not
-        // count for `headers`: it only exists with two accounts.
-        out.insert(unifiedEntry(accounts, folders), at: 0)
-    }
     return out
 }
 
-/// The sidebar row of the All Inboxes item: its badge is the unread count
-/// of the inboxes it covers (`Unified.unread`).
+/// The sidebar row of the All Inboxes item (model.go `unifiedEntryOf`): a
+/// row of the Favourites section (`favourite` set) at depth 0, whose badge
+/// is the unread count of the inboxes it covers (`Unified.unread`).
 public func unifiedEntry(_ accounts: [Account], _ folders: [AccountID: [Folder]]) -> FolderEntry {
-    FolderEntry(badge: Unified.unread(Unified.inboxes(accounts, folders)), unified: true)
+    FolderEntry(favourite: true, badge: Unified.unread(Unified.inboxes(accounts, folders)), unified: true)
 }
 
 /// The block at the top of the sidebar (model.go `favouriteSection`): a
-/// heading and one row per pinned folder, in tree order (accounts in list
-/// order, then roles, then names), each at depth 0 and without its
-/// children. A pin that does not resolve (the folder gone or renamed on the
-/// server, its account switched off, a container that cannot be opened, an
-/// outbox with nothing in it) is left out silently; when none resolves
-/// there is no section at all. Account folds do not apply here: the section
-/// is what stays in view while the tree is folded away.
+/// heading, the All Inboxes item when it is shown (`unified`, its row: the
+/// first of the section) and one row per pinned folder, in tree order
+/// (accounts in list order, then roles, then names), each at depth 0 and
+/// without its children. A pin that does not resolve (the folder gone or
+/// renamed on the server, its account switched off, a container that cannot
+/// be opened, an outbox with nothing in it) is left out silently; when none
+/// resolves and there is no item there is no section at all. The heading
+/// folds like an account's (`CollapseState.favouritesCollapsed`): folded,
+/// the section is its heading alone, the item and the pins out of sight
+/// while their folders stay listed in the tree. Account folds do not apply
+/// here: the section is what stays in view while the tree is folded away.
 public func favouriteSection(
-    _ enabled: [Account], _ folders: [AccountID: [Folder]], _ favourites: FavouriteState
+    _ enabled: [Account], _ folders: [AccountID: [Folder]], _ favourites: FavouriteState,
+    collapsed: CollapseState = CollapseState(), unified: FolderEntry? = nil
 ) -> [FolderEntry] {
     var rows: [FolderEntry] = []
+    if let unified {
+        rows.append(unified)
+    }
     for a in enabled {
         let pinned = visibleFolders(folders[a.id] ?? []).filter { f in
             f.selectable && favourites.has(FolderKey(account: a.id, folder: f.id))
@@ -159,7 +164,12 @@ public func favouriteSection(
     if rows.isEmpty {
         return []
     }
-    return [FolderEntry(header: true, favourite: true)] + rows
+    let folded = collapsed.favouritesCollapsed()
+    let heading = FolderEntry(header: true, favourite: true, hasChildren: true, collapsed: folded)
+    if folded {
+        return [heading]
+    }
+    return [heading] + rows
 }
 
 /// Orders one account's folders (model.go `folderTree`; see `sortFolders`),

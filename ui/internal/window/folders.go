@@ -212,7 +212,9 @@ func (w *Window) rebuildFolderList() {
 	w.folderRows = make(map[rowKey]*folderRow, len(w.model.entries))
 	for idx, e := range w.model.entries {
 		if e.Header && e.Favourite {
-			row, _ := newHeaderRow(i18n.T("Favourites"), "", false, false)
+			row, twisty := newHeaderRow(i18n.T("Favourites"), "", e.Collapsed, true)
+			twisty.ConnectClicked(w.toggleFavourites)
+			w.attachFolderMenu(row, idx)
 			w.folderList.Append(row)
 			continue
 		}
@@ -227,7 +229,14 @@ func (w *Window) rebuildFolderList() {
 		k := folderKey{Account: e.Account.ID, Folder: e.Folder.ID}
 		subtitle := ""
 		if e.Favourite && several {
-			subtitle = accountLabel(e.Account)
+			// The All Inboxes item names no account, but keeps the line
+			// (a blank subtitle) so every row of the section is two lines
+			// tall and the section has one rhythm; macOS gives its row the
+			// subtitle row's height, Windows the same blank line.
+			subtitle = " "
+			if !e.Unified {
+				subtitle = accountLabel(e.Account)
+			}
 		}
 		r := newFolderRow(e, subtitle)
 		if e.HasChildren && r.twisty != nil {
@@ -272,12 +281,12 @@ func (w *Window) rebuildFolderList() {
 }
 
 // newHeaderRow builds a heading row with its fold arrow: an account, or the
-// Favourites section, which does not fold (foldable false keeps the arrow's
-// space so the headings line up, but nothing to click). badge, when given,
-// is a capsule after the text (the kind of a Jira account,
-// accountHeaderBadge). The row cannot be selected or activated, so the
-// row-selected handler never sees it; the arrow is a button and receives
-// its clicks regardless.
+// Favourites section, which folds the same way (toggleFavourites); foldable
+// false keeps the arrow's space so the headings line up, but nothing to
+// click. badge, when given, is a capsule after the text (the kind of a Jira
+// account, accountHeaderBadge). The row cannot be selected or activated, so
+// the row-selected handler never sees it; the arrow is a button and
+// receives its clicks regardless.
 func newHeaderRow(text, badge string, collapsed, foldable bool) (*gtk.ListBoxRow, *gtk.Button) {
 	row := gtk.NewListBoxRow()
 	row.SetActivatable(false)

@@ -13,10 +13,10 @@ import MalachiCore
 /// status line GTK has at the bottom of the sidebar is the window's status
 /// bar here (`StatusBarViewController`), so the outline runs to the bottom.
 ///
-/// A right click (or a Control-click) on a folder or an account heading
-/// opens its context menu (ui/internal/contextmenu `FolderItems`,
-/// `AccountItems`), which acts on the row clicked and leaves the selection
-/// alone; the Favourites heading has none.
+/// A right click (or a Control-click) on a folder, an account heading or
+/// the Favourites heading opens its context menu (ui/internal/contextmenu
+/// `FolderItems`, `AccountItems`, `FavouritesItems`), which acts on the row
+/// clicked and leaves the selection alone.
 ///
 /// The controller owns every decision; this view mirrors `model.entries`
 /// and sends clicks back. It installs the sidebar-facing callbacks of the
@@ -151,7 +151,7 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
 
     /// Expands and collapses the items as the model says, top down so that
     /// children are reachable once their parent is open. The Favourites
-    /// section is always open.
+    /// section folds like an account.
     private func applyExpansion() {
         isApplyingExpansion = true
         defer { isApplyingExpansion = false }
@@ -163,7 +163,11 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     private func applyExpansion(_ item: NSObject) {
         switch item {
         case let f as FavouritesNode:
-            outline.expandItem(f)
+            if f.entry.collapsed {
+                outline.collapseItem(f)
+            } else {
+                outline.expandItem(f)
+            }
         case let a as AccountNode:
             if a.entry.collapsed {
                 outline.collapseItem(a)
@@ -238,22 +242,12 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
         return folder.selectable
     }
 
-    func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
-        // The Favourites section does not fold; its chevron's space stays,
-        // so the headings line up (folders.go `newHeaderRow`).
-        !(item is FavouritesNode)
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, shouldCollapseItem item: Any) -> Bool {
-        !(item is FavouritesNode)
-    }
-
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         switch item {
         case let node as FolderNode:
             return node.subtitle.isEmpty ? SidebarMetrics.rowHeight : SidebarMetrics.subtitleRowHeight
-        case is UnifiedNode:
-            return SidebarMetrics.rowHeight
+        case let node as UnifiedNode:
+            return node.twoLines ? SidebarMetrics.subtitleRowHeight : SidebarMetrics.rowHeight
         default:
             return SidebarMetrics.headerRowHeight
         }
@@ -271,6 +265,8 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
             cell.configureUnified(entry: node.entry)
             return cell
         case is FavouritesNode:
+            // The heading folds with the chevron the outline draws for it,
+            // as an account's (folders.go `newHeaderRow`).
             let cell = headerCell()
             cell.configure(text: L10n.T("Favourites"))
             return cell
@@ -321,11 +317,16 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     }
 
     /// The user folded a heading or a folder (collapse.go `toggleAccount`,
-    /// `toggleFolder`). The model changes once the outline is out of its own
-    /// notification: the rebuild that follows reloads the rows.
+    /// `toggleFavourites`, `toggleFolder`). The model changes once the
+    /// outline is out of its own notification: the rebuild that follows
+    /// reloads the rows.
     private func folded(_ notification: Notification, collapsed: Bool) {
         guard !isApplyingExpansion, let item = notification.userInfo?["NSObject"] else { return }
-        if let account = item as? AccountNode {
+        if item is FavouritesNode {
+            Task { @MainActor [weak self] in
+                self?.mailbox.setFavouritesCollapsed(collapsed)
+            }
+        } else if let account = item as? AccountNode {
             let id = account.id
             Task { @MainActor [weak self] in
                 self?.mailbox.setAccountCollapsed(id, collapsed)
@@ -342,9 +343,9 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
 // MARK: - Context menu
 
 extension FolderSidebarViewController {
-    /// The menu of the outline's `row`: a folder's or an account
-    /// heading's, its items closures over the row clicked; nil for the
-    /// Favourites heading or nothing to offer.
+    /// The menu of the outline's `row`: a folder's, an account heading's or
+    /// the Favourites heading's, its items closures over the row clicked;
+    /// nil for nothing to offer.
     fileprivate func menu(forRow row: Int) -> NSMenu? {
         let node = outline.item(atRow: row)
         var groups: [[ContextMenu.Item]] = []
@@ -366,6 +367,10 @@ extension FolderSidebarViewController {
             // Nothing needs a real folder; checking mail covers every account.
             groups = ContextMenu.accountItems(foldable: false)
             run[.checkMail] = { mailbox.triggerSyncAllAccounts() }
+        case let f as FavouritesNode:
+            groups = ContextMenu.favouritesItems()
+            labels.collapsed = !outline.isItemExpanded(f)
+            run[.fold] = fold
         case let a as AccountNode:
             let id = a.id
             groups = ContextMenu.accountItems(foldable: outline.isExpandable(a))

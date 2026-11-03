@@ -262,9 +262,10 @@ public sealed class SettingsStore : IDisposable
 
     /// <summary>
     /// <c>unified-inbox</c> (Go <c>UnifiedInbox</c>): shows the All Inboxes
-    /// item at the top of the sidebar while there are at least two mail
-    /// accounts (<see cref="Model.Unified.Shown"/>). Never part of the
-    /// favourite or collapsed lists.
+    /// item, the first row of the Favourites section, while there are at
+    /// least two mail accounts (<see cref="Model.Unified.Shown"/>). Never
+    /// part of the favourite or collapsed lists (the section's own fold is a
+    /// sentinel among the collapsed accounts).
     /// </summary>
     public bool UnifiedInbox
     {

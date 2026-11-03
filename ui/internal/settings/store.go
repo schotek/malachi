@@ -80,9 +80,10 @@ const (
 	KeyCollapsedFolders  = "collapsed-folders"
 	KeyCollapsedAccounts = "collapsed-accounts"
 	KeyFavouriteFolders  = "favourite-folders"
-	// KeyUnifiedInbox shows the All Inboxes item at the top of the
-	// sidebar while there are at least two mail accounts
-	// (ui/internal/unified Shown). Never part of the three keys above.
+	// KeyUnifiedInbox shows the All Inboxes item, the first row of the
+	// Favourites section, while there are at least two mail accounts
+	// (ui/internal/unified Shown). Never part of the three keys above
+	// (the section's own fold is a sentinel in KeyCollapsedAccounts).
 	KeyUnifiedInbox = "unified-inbox"
 )
 

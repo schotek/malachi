@@ -84,7 +84,7 @@ public sealed partial class SidebarRow : ObservableObject
     [ObservableProperty]
     public partial string Title { get; private set; }
 
-    /// <summary>Under a pinned folder's name while two or more accounts are enabled: whose it is; "" otherwise.</summary>
+    /// <summary>Under a pinned folder's name while two or more accounts are enabled: whose it is (a blank line on the All Inboxes row); "" otherwise.</summary>
     [ObservableProperty]
     public partial string Subtitle { get; private set; }
 
@@ -189,9 +189,9 @@ public sealed partial class SidebarRow : ObservableObject
             Tooltip = "";
             Indent = 0;
             Icon = "";
-            // The Favourites section does not fold, but keeps the arrow's
-            // place so that the headings line up (folders.go newHeaderRow).
-            SetTwisty(shown: true, active: !e.Favourite, collapsed: !e.Favourite && e.Collapsed);
+            // The Favourites section folds like an account (folders.go
+            // newHeaderRow, toggleFavourites).
+            SetTwisty(shown: true, active: true, collapsed: e.Collapsed);
             Badge = "";
             HasStar = false;
             Starred = false;
@@ -204,13 +204,17 @@ public sealed partial class SidebarRow : ObservableObject
         }
         if (e.IsUnified)
         {
-            // The All Inboxes item: a selectable row at the top, with the
-            // Inbox's icon and the unread badge of all the inboxes; it cannot
-            // be pinned or folded, and the arrow's column is not reserved.
+            // The All Inboxes item: the first row of the Favourites section,
+            // with the Inbox's icon and the unread badge of all the inboxes;
+            // it cannot be pinned or folded, and the arrow's column is not
+            // reserved (the section's rows have none).
             Kind = SidebarRowKind.Unified;
             Title = Unified.Title;
             Capsule = "";
-            Subtitle = "";
+            // No account to name, but with several accounts the line stays
+            // (blank) so every row of the section is two lines tall and the
+            // section has one rhythm (folders.go rebuildFolderList).
+            Subtitle = several ? " " : "";
             Tooltip = "";
             Indent = FolderInset;
             Icon = FolderTree.RoleIcon(FolderRole.Inbox);
@@ -248,7 +252,7 @@ public sealed partial class SidebarRow : ObservableObject
     /// <summary>What a screen reader names the row: its text (a heading's with its capsule), and the unread count when there is one.</summary>
     public override string ToString()
     {
-        var name = Subtitle.Length > 0 ? Title + ", " + Subtitle : Capsule.Length > 0 ? Title + ", " + Capsule : Title;
+        var name = Subtitle.Trim().Length > 0 ? Title + ", " + Subtitle : Capsule.Length > 0 ? Title + ", " + Capsule : Title;
         return Badge.Length > 0 ? name + ", " + Badge : name;
     }
 

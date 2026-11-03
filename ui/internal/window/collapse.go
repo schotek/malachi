@@ -27,6 +27,16 @@ import (
 // backend/internal/store/ids.go), so the separator cannot occur inside one.
 const collapseSep = "/"
 
+// collapseFavourites is the entry of collapsed-accounts that stands for
+// the Favourites section: the section folds like an account heading (the
+// All Inboxes item and the pinned folders go out of sight, the heading
+// stays), and its fold is stored among the account folds under this
+// sentinel. An account id is "acc_" plus hex (backend/internal/store/ids.go),
+// so the sentinel cannot be one, and save never prunes it as an account
+// that is gone. The same entry in macOS `CollapseState.favouritesEntry`
+// and Windows `CollapseState.FavouritesEntry`.
+const collapseFavourites api.AccountID = "@favourites"
+
 // collapseState is the set of collapsed nodes. A missing entry means
 // expanded, which is what a fresh profile gets.
 type collapseState struct {
@@ -47,6 +57,13 @@ func (c collapseState) folderCollapsed(k folderKey) bool { return c.folders[k] }
 
 // accountCollapsed reports whether the account hides its folders.
 func (c collapseState) accountCollapsed(id api.AccountID) bool { return c.accounts[id] }
+
+// favouritesCollapsed reports whether the Favourites section hides its
+// rows (collapseFavourites).
+func (c collapseState) favouritesCollapsed() bool { return c.accounts[collapseFavourites] }
+
+// setFavourites folds the Favourites section away or unfolds it.
+func (c collapseState) setFavourites(collapsed bool) { c.setAccount(collapseFavourites, collapsed) }
 
 // setFolder folds k away or unfolds it.
 func (c collapseState) setFolder(k folderKey, collapsed bool) {
@@ -105,7 +122,7 @@ func (c collapseState) save(s *settings.Store, accounts []api.Account) {
 	}
 	accountIDs := make([]string, 0, len(c.accounts))
 	for id := range c.accounts {
-		if prune && !known[id] {
+		if prune && !known[id] && id != collapseFavourites {
 			continue
 		}
 		accountIDs = append(accountIDs, string(id))
@@ -132,6 +149,14 @@ func (w *Window) toggleFolder(k folderKey) {
 // toggleAccount folds a whole account's tree away, or brings it back.
 func (w *Window) toggleAccount(id api.AccountID) {
 	w.model.collapsed.setAccount(id, !w.model.collapsed.accountCollapsed(id))
+	w.saveCollapse()
+	w.rebuildFolderList()
+}
+
+// toggleFavourites folds the Favourites section away, or brings it back;
+// a selection among its rows stays, as under a folded account.
+func (w *Window) toggleFavourites() {
+	w.model.collapsed.setFavourites(!w.model.collapsed.favouritesCollapsed())
 	w.saveCollapse()
 	w.rebuildFolderList()
 }

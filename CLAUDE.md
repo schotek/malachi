@@ -555,8 +555,17 @@ Pořadí prací:
     v `docs/plans/signatures.md`
 
 Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
-U1–U4 v `docs/plans/unified-inbox.md`). Položka nahoře v postranním panelu
-nad Oblíbenými, jen při ≥ 2 povolených poštovních účtech (`imap`, `graph`)
+U1–U4 v `docs/plans/unified-inbox.md`). Položka je od 2026-11-03 první
+řádek sekce Oblíbené v postranním panelu (změna U3, varianta B vizuální
+revize: jedna mřížka šipka · ikona · text; sekce existuje i bez připnuté
+složky a její hlavička se skládá jako hlavička účtu, stav jako záznam
+`@favourites` v `collapsed-accounts`, kontextové menu jen Rozbalit/Sbalit;
+GTK `sidebarEntries`, macOS `FavouritesNode` s `UnifiedNode` jako dítětem,
+Windows `FolderTree.UnifiedEntry`; řádek položky je v sekci dvouřádkový
+jako připnuté složky; macOS sestavené, otestované a schválené vlastníkem,
+GTK v kontejneru sestavené, otestované a prošlé v XQuartz, Windows jen
+napsané — čeká `build.ps1`), jen při ≥ 2 povolených
+poštovních účtech (`imap`, `graph`)
 a se zapnutým klíčem `unified-inbox` (Předvolby → Seznam zpráv). Démon:
 `message.list`/`thread.list` s `unified: "inbox"` bez `accountId`/`folderId`
 (`api.UnifiedRoles`, `core/unified.go`, `store.ListMessagesIn`/`ListThreadsIn`,

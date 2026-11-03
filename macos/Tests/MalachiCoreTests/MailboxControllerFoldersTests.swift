@@ -136,9 +136,11 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         #expect(h.log.statuses.first == .status(icon: "", title: "Loading…", description: ""))
         try await h.settle(rebuilds: 1)
 
-        // Two enabled accounts: a header each, the disabled one left out.
+        // Two enabled accounts: a header each, the disabled one left out,
+        // and the Favourites heading of the All Inboxes item above them.
         let entries = h.mailbox.model.entries
-        #expect(entries.filter(\.header).count == 2)
+        #expect(entries.filter(\.header).count == 3)
+        #expect(entries.filter { $0.header && !$0.favourite }.count == 2)
         #expect(folderIDs(entries) == ["inbox", "trash", "alpha", "sub1", "deep", "sub2", "container", "leaf", "zeta", "in2"])
         #expect(h.mailbox.hasAccounts)
         #expect(h.log.accountsLoaded == 1)
@@ -471,8 +473,8 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         h.mailbox.toggleFavourite(in2)
         #expect(h.scratch.settings.favouriteFolders == ["acc2/in2"])
         let entries = h.mailbox.model.entries
-        #expect(entries[0].unified, "two accounts: All Inboxes stays the first row")
-        #expect(entries[1].header && entries[1].favourite)
+        #expect(entries[0].header && entries[0].favourite)
+        #expect(entries[1].unified, "two accounts: All Inboxes heads the section")
         #expect(entries[2].favourite && entries[2].key == in2)
         #expect(entries.last?.starred == true, "the tree row is starred too")
         #expect(h.log.rebuilds == 2)

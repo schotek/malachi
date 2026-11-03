@@ -199,6 +199,9 @@ func TestFolderItems(t *testing.T) {
 	if got := show(AccountItems(true)); got != "checkMail | fold" {
 		t.Errorf("account: %s", got)
 	}
+	if got := show(FavouritesItems()); got != "fold" {
+		t.Errorf("FavouritesItems = %q", got)
+	}
 	if got := show(AccountItems(false)); got != "checkMail" {
 		t.Errorf("account without folding: %s", got)
 	}

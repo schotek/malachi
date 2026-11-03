@@ -239,8 +239,8 @@ func (w *Window) attachFolderMenu(row gtk.Widgetter, idx int) {
 }
 
 // showFolderMenuAt shows the menu of the sidebar's row idx at (x, y) in
-// anchor: an account heading's or a folder's (the Favourites heading has
-// none). False when there is nothing to offer.
+// anchor: an account heading's, the Favourites heading's or a folder's.
+// False when there is nothing to offer.
 func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) bool {
 	if idx < 0 || idx >= len(w.model.entries) {
 		return false
@@ -257,7 +257,11 @@ func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) boo
 		groups = [][]contextmenu.Item{{{ID: contextmenu.CheckMail, Enabled: true}}}
 		actions[contextmenu.CheckMail] = func() { w.startSync(api.SyncTriggerParams{}) }
 	case e.Header && e.Favourite:
-		return false
+		// The Favourites heading folds like an account's, and that is all
+		// it offers (contextmenu.FavouritesItems).
+		groups = contextmenu.FavouritesItems()
+		labels.Collapsed = e.Collapsed
+		actions[contextmenu.Fold] = w.toggleFavourites
 	case e.Header:
 		acc := e.Account.ID
 		groups = contextmenu.AccountItems(true)

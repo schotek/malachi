@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiCore/ContextMenu/ContextMenu.swift; GTK:
 // ui/internal/contextmenu/contextmenu.go (ItemID, Item, MessageState and
-// its SetCrm, MessageItems, FolderState, FolderItems, AccountItems, groups, Entry,
+// its SetCrm, MessageItems, FolderState, FolderItems, AccountItems, FavouritesItems, groups, Entry,
 // Target, MoveTargets).
 //
 // What the right-click menus of the message list and of the sidebar offer,
@@ -482,6 +482,13 @@ public static partial class ContextMenu
         List<Item> fold = foldable ? [new Item(ItemId.Fold, true)] : [];
         return Groups([new Item(ItemId.CheckMail, true)], fold);
     }
+
+    /// <summary>
+    /// contextmenu.FavouritesItems: the Favourites heading's menu: its
+    /// folding, the one thing the heading does (the section has no account
+    /// to check, and its rows have menus of their own).
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<Item>> FavouritesItems() => Groups([new Item(ItemId.Fold, true)]);
 
     // contextmenu.groups: the non-empty groups.
     private static List<IReadOnlyList<Item>> Groups(params IReadOnlyList<Item>[] gs)

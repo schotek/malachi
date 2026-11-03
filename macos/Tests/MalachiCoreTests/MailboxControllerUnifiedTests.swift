@@ -108,8 +108,9 @@ private final class Harness {
     @Test func theItemListsEveryInboxNewestFirstUnderItsOwnTitle() async throws {
         let h = try await Harness()
         defer { Task { await h.stop() } }
-        #expect(h.mailbox.model.entries.first?.unified == true)
-        #expect(h.mailbox.model.entries.first?.badge == 4)
+        let item = h.mailbox.model.entries.first(where: \.unified)
+        #expect(item != nil && h.mailbox.model.entries.first?.favourite == true, "the item under the Favourites heading")
+        #expect(item?.badge == 4)
         #expect(h.mailbox.model.selected == aIn, "the initial folder is a real one")
 
         try await h.selectUnified()
@@ -147,7 +148,7 @@ private final class Harness {
         let fresh = msg("b9", 9)
         h.mailbox.handleNewMessage(NewMessageNotification(accountId: "b", folderId: "b-in", message: fresh))
         #expect(ids(h.list.rows).first == "b9")
-        #expect(h.mailbox.model.entries.first?.badge == 5, "the item's badge counts it")
+        #expect(h.mailbox.model.entries.first(where: \.unified)?.badge == 5, "the item's badge counts it")
         // Not an inbox: not in the list.
         h.mailbox.handleNewMessage(NewMessageNotification(accountId: "a", folderId: "a-trash", message: msg("t1", 10)))
         #expect(!ids(h.list.rows).contains("t1"))
@@ -305,7 +306,7 @@ private final class Harness {
         #expect(h.mailbox.selectedFolderTitle == "Inbox")
 
         h.scratch.settings.unifiedInbox = true
-        try await waitUntil { h.mailbox.model.entries.first?.unified == true }
+        try await waitUntil { h.mailbox.model.entries.contains(where: \.unified) }
         #expect(h.mailbox.model.selected == aIn, "showing it again leaves the selection")
     }
 

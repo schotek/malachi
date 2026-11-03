@@ -154,28 +154,43 @@ public sealed class UnifiedTests
     }
 
     [Fact]
-    public void TheSidebarHasTheItemFirstWithTheBadge()
+    public void TheSidebarHasTheItemFirstInTheFavouritesSection()
     {
+        // unified_test.go TestUnifiedEntryHeadsTheFavouritesSection and
+        // TestUnifiedEntryComesBeforeThePins.
         Account[] accounts = [Acc("a", AccountKind.Imap, true), Acc("b", AccountKind.Graph, true)];
         var folders = new FolderMap { ["a"] = [Inbox("a", "a-in", 2, 10)], ["b"] = [Inbox("b", "b-in", 3, 5)] };
         var on = FolderTree.SortFolders(accounts, folders, new CollapseState(), new FavouriteState(), unifiedInbox: true);
-        Assert.True(on[0].IsUnified);
-        Assert.Equal(5, on[0].Badge);
-        Assert.Equal(Unified.Key, on[0].Key);
-        Assert.False(on[0].Header);
-        Assert.Equal(["#a", "a-in@0", "#b", "b-in@0"], FolderTreeTests.Ids(on.Skip(1)));
+        // The section exists for the item alone: its heading, then the item.
+        Assert.Equal(["#favourites", "*@unified:inbox@0", "#a", "a-in@0", "#b", "b-in@0"], FolderTreeTests.Ids(on));
+        Assert.True(on[0].Header && on[0].Favourite && on[0].HasChildren && !on[0].Collapsed);
+        Assert.True(on[1].IsUnified && on[1].Favourite);
+        Assert.Equal(5, on[1].Badge);
+        Assert.Equal(0, on[1].Depth);
+        Assert.Equal(Unified.Key, on[1].Key);
+        Assert.False(on[1].Header);
         Assert.Equal(on.Count, on.Select(SidebarKey.Of).Distinct().Count());
         var off = FolderTree.SortFolders(accounts, folders, new CollapseState(), new FavouriteState());
         Assert.DoesNotContain(off, e => e.IsUnified);
+        Assert.DoesNotContain(off, e => e.Header && e.Favourite);
         // One mail account: no item, whatever the setting.
         var one = FolderTree.SortFolders([accounts[0]], folders, new CollapseState(), new FavouriteState(), unifiedInbox: true);
         Assert.DoesNotContain(one, e => e.IsUnified);
-        // The item sits above the Favourites heading.
+        // The pins follow the item.
         var fav = new FavouriteState();
-        fav.Toggle(new FolderKey("a", "a-in"));
+        fav.Toggle(new FolderKey("b", "b-in"));
         var withFavourites = FolderTree.SortFolders(accounts, folders, new CollapseState(), fav, unifiedInbox: true);
-        Assert.True(withFavourites[0].IsUnified);
-        Assert.True(withFavourites[1].Header && withFavourites[1].Favourite);
+        Assert.Equal(["#favourites", "*@unified:inbox@0", "*b-in@0"], FolderTreeTests.Ids(withFavourites.Take(3)));
+        // Folded, the section is its heading alone; the pinned folder is
+        // still in the tree and the item stays listed.
+        var collapsed = new CollapseState();
+        collapsed.SetFavourites(true);
+        var folded = FolderTree.SortFolders(accounts, folders, collapsed, fav, unifiedInbox: true);
+        Assert.Equal(["#favourites", "#a", "a-in@0", "#b", "b-in@0"], FolderTreeTests.Ids(folded));
+        Assert.True(folded[0].Collapsed && folded[0].HasChildren);
+        var foldedModel = new MailModel(accounts, folders, collapsed: collapsed) { UnifiedInbox = true };
+        foldedModel.RebuildEntries();
+        Assert.True(foldedModel.FolderListed(Unified.Key));
         // It is never the initial folder.
         var model = new MailModel(accounts, folders) { UnifiedInbox = true };
         model.RebuildEntries();
@@ -186,7 +201,7 @@ public sealed class UnifiedTests
     public void TheRowShowsTitleIconAndBadgeAndCannotBePinned()
     {
         var row = new SidebarRow(SidebarKey.ForFolder(Unified.Key, false));
-        row.Update(new FolderEntry { IsUnified = true, Badge = 5 }, several: true);
+        row.Update(new FolderEntry { IsUnified = true, Favourite = true, Badge = 5 }, several: true);
         Assert.Equal(SidebarRowKind.Unified, row.Kind);
         Assert.False(row.IsHeading);
         Assert.Equal("All Inboxes", row.Title);
@@ -196,8 +211,12 @@ public sealed class UnifiedTests
         Assert.False(row.TwistyShown);
         Assert.Equal(Unified.Key, row.Folder);
         Assert.Equal(FolderTree.RoleIcon(FolderRole.Inbox), row.Icon);
-        row.Update(new FolderEntry { IsUnified = true, Badge = 0 }, several: true);
+        // The blank line keeps the row as tall as the pinned folders' rows.
+        Assert.Equal(" ", row.Subtitle);
+        Assert.Equal("All Inboxes, 5", row.ToString());
+        row.Update(new FolderEntry { IsUnified = true, Favourite = true, Badge = 0 }, several: false);
         Assert.Equal("", row.Badge);
+        Assert.Equal("", row.Subtitle);
     }
 
     [Fact]

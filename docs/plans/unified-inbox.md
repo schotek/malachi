@@ -16,6 +16,10 @@ Rozhodnutí vlastníka (AskUserQuestion 2026-11-02):
   (jinak vypnuté).
 - **U3** položka nahoře nad Oblíbenými, jen při ≥ 2 povolených poštovních účtech,
   přepínač v Předvolbách pro skrytí (gschema `unified-inbox`, bool, výchozí zapnuto).
+  **Změna 2026-11-03** (rozhodnutí vlastníka po vizuální revizi panelu, varianta B):
+  položka je **první řádek sekce Oblíbené**, ne řádek nad ní — sekce tak existuje
+  i bez připnuté složky, a hlavička Oblíbené má šipku a skládá se jako hlavička účtu
+  (viz „Sekce Oblíbené“ níže).
 - **U4** jen Doručená; API obecně přes roli složky, aby šlo později přidat Odeslané/Koncepty
   bez změny kontraktu (dnes přijímá jen `inbox`, jinak `invalidArgument`).
 
@@ -288,3 +292,38 @@ Opraveno:
 - `UnifiedTests` se nepřeložily: vzorky nenastavovaly povinné členy
   `AccountConfig.Name`/`Email` a `MessageSummary.HasAttachments`/`Size`
   a podmínka s `null` potřebovala `(AccountKind?)` (commit `57efd704`).
+
+## Sekce Oblíbené (2026-11-03, změna U3)
+
+Po vizuální revizi postranního panelu ve všech třech klientech (hlavička Oblíbené
+bez šipky mezi hlavičkami účtů se šipkou; „Všechny doručené“ v žádném sloupci
+mřížky stromu) vlastník zvolil variantu B: panel má jednu mřížku šipka · ikona ·
+text a úroveň 0 jsou jen skládací hlavičky, úroveň 1 jen položky s ikonou.
+
+- „Všechny doručené“ je první řádek sekce Oblíbené (`folderEntry.Unified` a
+  `Favourite` zároveň, hloubka 0, bez hvězdičky a podtitulku účtu); sekce existuje,
+  když je položka zobrazená (`unified.Shown`) **nebo** je něco připnuté. Jeden účet
+  s položkou se nestane: položka chce ≥ 2 účty, a pak jsou hlavičky účtů tak jako tak.
+- Hlavička Oblíbené se skládá jako hlavička účtu: šipka, Levá/Pravá (Windows),
+  kontextové menu jen s Rozbalit/Sbalit (`contextmenu.FavouritesItems`). Sbalená
+  sekce je jen hlavička; položka i připnuté složky zůstávají „vypsané“
+  (`folderListed`), takže výběr se drží jako pod sbaleným účtem, a připnuté složky
+  jsou dál ve stromu.
+- Stav se ukládá bez nového klíče: záznam `@favourites` v `collapsed-accounts`
+  (`collapseState.favouritesCollapsed`, Swift `CollapseState.favouritesEntry`,
+  C# `CollapseState.FavouritesEntry`); `save` ho nikdy neprořeže jako zmizelý účet
+  (id účtu je `acc_` + hex, kolize nehrozí).
+- Démon, API a msgidy beze změny. Reference Go `sidebarEntries` (`sortFolders` je
+  varianta bez položky pro testy), `favouriteSection(…, collapsed, unified)`,
+  `unifiedEntryOf`; macOS `sortFolders(…, unified:)`, `favouriteSection(…,
+  collapsed:, unified:)`, `FavouritesNode` s `entry` a dětmi včetně `UnifiedNode`,
+  `MailboxController.toggleFavourites`/`setFavouritesCollapsed`; Windows
+  `FolderTree.UnifiedEntry`, `FavouriteSection(…, collapsed, unified)`,
+  `SidebarRow` s aktivní šipkou hlavičky, `SidebarPane.ToggleFold`.
+- Řádek položky je v sekci dvouřádkový jako řádky připnutých složek (macOS výška
+  řádku s podtitulkem, GTK a Windows prázdný podtitulek), aby sekce měla jeden rytmus.
+- Ověřeno: Go testy čistých balíčků, `swift build` a filtrované `swift test`,
+  vlastník schválil macOS na obrazovce; GTK v kontejneru `gtk.sh make build`,
+  `go test ./internal/window/...`, `make po` (jen odkazy), `make lint` a vlastník
+  prošel v XQuartz (`gtk.sh x11 dev`). Windows jen napsané (bez `dotnet`): čeká
+  `build.ps1 app`/`test`/`lint` a průchod vlastníka.

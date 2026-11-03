@@ -266,6 +266,13 @@ func AccountItems(foldable bool) [][]Item {
 	return groups([]Item{{CheckMail, true}}, fold)
 }
 
+// FavouritesItems is the menu of the Favourites heading: its folding, the
+// one thing the heading does (the section has no account to check, and its
+// rows have menus of their own).
+func FavouritesItems() [][]Item {
+	return groups([]Item{{Fold, true}})
+}
+
 // groups keeps the non-empty groups.
 func groups(gs ...[]Item) [][]Item {
 	out := make([][]Item, 0, len(gs))

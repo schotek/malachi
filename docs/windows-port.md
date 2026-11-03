@@ -2046,7 +2046,8 @@ folders and account headings have the context menus of all three clients
 In the code (`Malachi.App/Main`, the view models in
 `Malachi.Core/Presentation` with their tests): the sidebar's rows are
 `SidebarRow`s (the rows of folders.go: headings 3 px lower with the fold
-arrow, which the Favourites heading keeps as an invisible place; folders
+arrow, the Favourites heading's folding its section like an account's;
+folders
 12 in from their heading, which GTK's rows get from `Adw.ActionRow`'s
 start padding (`SidebarRow.FolderInset`; the first port left it out and
 drew an account's folders flush with its name), and 12 more per level,
@@ -2146,7 +2147,7 @@ stay there); Add to or Remove from Favourites, Expand or Collapse. They read the
 brings the folder and the list up to date, and a failure is a toast in the
 menu's words (`ContextMenu.MarkingReadText`, `EmptyingText`,
 `MovingText`). An account heading has Check for New Mail and its folding,
-the Favourites heading no menu.
+the Favourites heading its folding alone.
 
 Several messages can be selected (2026-10-14, the same in GTK and macOS:
 `ui/internal/selection`, `ui/internal/window/selection.go`). The list's

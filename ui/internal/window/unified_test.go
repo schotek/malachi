@@ -33,19 +33,64 @@ func unifiedModel() *mailModel {
 	return m
 }
 
-func TestUnifiedEntryIsFirstWithTheSummedBadge(t *testing.T) {
+func TestUnifiedEntryHeadsTheFavouritesSection(t *testing.T) {
 	m := unifiedModel()
-	e := m.entries[0]
-	if !e.Unified || e.Header || e.Favourite || e.Badge != 5 || e.Folder.Total != 15 {
-		t.Fatalf("first entry %+v", e)
+	// The item is the first row of the Favourites section, which exists
+	// for it alone: the heading, then the item, then the account headers
+	// (the section gives even one account a header; here there are two).
+	if got := ids(m.entries); !equalIDs(got, []string{"#favourites", "*@unified:inbox@0", "#a", "ain@0", "asent@0", "#b", "bin@0", "bsent@0"}) {
+		t.Fatalf("entries = %v", got)
+	}
+	h := m.entries[0]
+	if !h.Header || !h.Favourite || !h.HasChildren || h.Collapsed {
+		t.Errorf("heading %+v: want a foldable, open Favourites heading", h)
+	}
+	e := m.entries[1]
+	if !e.Unified || e.Header || !e.Favourite || e.Depth != 0 || e.Badge != 5 || e.Folder.Total != 15 {
+		t.Fatalf("item %+v", e)
 	}
 	if folderTitle(e.Folder) != "All Inboxes" || e.Folder.Role != api.RoleInbox {
 		t.Errorf("title %q role %q", folderTitle(e.Folder), e.Folder.Role)
 	}
 	// A count that moves moves the item's badge too.
 	m.adjustCounts(folderKey{Account: "b", Folder: "bin"}, -1, 0)
-	if m.entries[0].Badge != 4 {
-		t.Errorf("badge after a read: %d", m.entries[0].Badge)
+	if m.entries[1].Badge != 4 {
+		t.Errorf("badge after a read: %d", m.entries[1].Badge)
+	}
+}
+
+func TestUnifiedEntryComesBeforeThePins(t *testing.T) {
+	m := unifiedModel()
+	m.favourites = pinned(folderKey{Account: "b", Folder: "bin"}, folderKey{Account: "a", Folder: "asent"})
+	m.rebuildEntries()
+	if got := ids(m.entries[:4]); !equalIDs(got, []string{"#favourites", "*@unified:inbox@0", "*asent@0", "*bin@0"}) {
+		t.Fatalf("section = %v", got)
+	}
+	// Folded, the section is its heading alone; the item stays listed
+	// (a selection of it is kept, as under a folded account) and the
+	// pinned folders are still in the tree.
+	m.collapsed = newCollapseState()
+	m.collapsed.setFavourites(true)
+	m.rebuildEntries()
+	if got := ids(m.entries); !equalIDs(got, []string{"#favourites", "#a", "ain@0", "asent@0", "#b", "bin@0", "bsent@0"}) {
+		t.Fatalf("folded = %v", got)
+	}
+	if !m.entries[0].Collapsed || !m.entries[0].HasChildren {
+		t.Errorf("folded heading = %+v", m.entries[0])
+	}
+	k := folderKey{Account: unified.Key.Account, Folder: unified.Key.Folder}
+	if !m.folderListed(k) {
+		t.Error("the item is not listed while its section is folded")
+	}
+	if got, ok := m.initialFolder(); !ok || got != (folderKey{Account: "a", Folder: "ain"}) {
+		t.Errorf("initial folder %+v %v", got, ok)
+	}
+	// Without the item and without pins there is no section to fold.
+	m.unifiedOn = false
+	m.favourites = newFavouriteState()
+	m.rebuildEntries()
+	if got := ids(m.entries); !equalIDs(got, []string{"#a", "ain@0", "asent@0", "#b", "bin@0", "bsent@0"}) {
+		t.Fatalf("plain = %v", got)
 	}
 }
 

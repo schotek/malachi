@@ -202,6 +202,7 @@ public sealed class ContextMenuTests
     {
         Assert.Equal("checkMail | fold", Show(AccountItems(true)));
         Assert.Equal("checkMail", Show(AccountItems(false)));
+        Assert.Equal("fold", Show(FavouritesItems()));
     }
 
     private static Folder F(string id, FolderRole role, bool selectable) =>

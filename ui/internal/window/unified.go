@@ -14,16 +14,19 @@ import (
 	"github.com/schotek/malachi/ui/internal/unified"
 )
 
-// The All Inboxes item (docs/plans/unified-inbox.md, decisions U1–U4): a
-// row at the very top of the sidebar whose list is the inboxes of every
-// enabled mail account in one (message.list / thread.list "unified"). The
-// rules are ui/internal/unified's; this file is the window's side of them.
+// The All Inboxes item (docs/plans/unified-inbox.md, decisions U1–U4, U3
+// as amended 2026-11-03): the first row of the Favourites section at the
+// top of the sidebar, whose list is the inboxes of every enabled mail
+// account in one (message.list / thread.list "unified"). The rules are
+// ui/internal/unified's; this file is the window's side of them.
 //
-// The item is a folderEntry with Unified set and a synthetic Folder (role
-// inbox, key unified.KeyFolder, the counts of the covered inboxes), which
-// mailModel.folder returns for the key too, so the title, the counts, the
-// date groups and the idle actions follow without a case of their own. The
-// key is never stored in favourite-folders or collapsed-folders.
+// The item is a folderEntry with Unified and Favourite set and a synthetic
+// Folder (role inbox, key unified.KeyFolder, the counts of the covered
+// inboxes), which mailModel.folder returns for the key too, so the title,
+// the counts, the date groups and the idle actions follow without a case
+// of their own. The key is never stored in favourite-folders or
+// collapsed-folders; the section it sits in folds as one
+// (collapseState.favouritesCollapsed).
 
 // starSlot is the All Inboxes row's stand-in for a folder row's star: the
 // star of a folder row keeps its place while it is transparent, so without
@@ -50,8 +53,11 @@ func (m *mailModel) unifiedInboxes() []api.Folder { return unified.Inboxes(m.acc
 
 // unifiedFolder is the item's pseudo folder: the sum of the covered
 // inboxes' counts under the item's key.
-func (m *mailModel) unifiedFolder() api.Folder {
-	in := m.unifiedInboxes()
+func (m *mailModel) unifiedFolder() api.Folder { return unifiedFolderOf(m.accounts, m.folders) }
+
+// unifiedFolderOf is unifiedFolder over the given accounts and folders.
+func unifiedFolderOf(accounts []api.Account, folders map[api.AccountID][]api.Folder) api.Folder {
+	in := unified.Inboxes(accounts, folders)
 	return api.Folder{
 		ID: unified.KeyFolder, Name: unified.Title(i18n.Tr),
 		Role: api.RoleInbox, Selectable: true, Synced: true,
@@ -60,9 +66,13 @@ func (m *mailModel) unifiedFolder() api.Folder {
 }
 
 // unifiedEntry is the item's sidebar row.
-func (m *mailModel) unifiedEntry() folderEntry {
-	f := m.unifiedFolder()
-	return folderEntry{Unified: true, Folder: f, Badge: f.Unread}
+func (m *mailModel) unifiedEntry() folderEntry { return unifiedEntryOf(m.accounts, m.folders) }
+
+// unifiedEntryOf is the item's sidebar row over the given accounts and
+// folders: a row of the Favourites section (Favourite set) at depth 0.
+func unifiedEntryOf(accounts []api.Account, folders map[api.AccountID][]api.Folder) folderEntry {
+	f := unifiedFolderOf(accounts, folders)
+	return folderEntry{Unified: true, Favourite: true, Folder: f, Badge: f.Unread}
 }
 
 // selectedUnified says whether the item is the selected sidebar row.

@@ -251,6 +251,31 @@ func TestCollapseStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestFavouritesFoldIsStoredAmongTheAccountsAndNeverPruned(t *testing.T) {
+	s := settings.NewMemory()
+	c := newCollapseState()
+	if c.favouritesCollapsed() {
+		t.Fatal("a fresh state folds the section")
+	}
+	c.setFavourites(true)
+	c.setAccount("acc_1", true)
+	// Pruning against a loaded account list keeps the sentinel: it is no
+	// account that is gone.
+	c.save(s, []api.Account{{ID: "acc_1"}})
+	if got := s.CollapsedAccounts(); len(got) != 2 || got[0] != "@favourites" || got[1] != "acc_1" {
+		t.Fatalf("stored accounts = %v", got)
+	}
+	got := loadCollapse(s)
+	if !got.favouritesCollapsed() || !got.accountCollapsed("acc_1") {
+		t.Errorf("loaded: favourites %v, acc_1 %v", got.favouritesCollapsed(), got.accountCollapsed("acc_1"))
+	}
+	got.setFavourites(false)
+	got.save(s, []api.Account{{ID: "acc_1"}})
+	if stored := s.CollapsedAccounts(); len(stored) != 1 || stored[0] != "acc_1" {
+		t.Errorf("after unfolding: %v", stored)
+	}
+}
+
 func TestCollapseStatePrunesRemovedAccounts(t *testing.T) {
 	s := settings.NewMemory()
 	c := newCollapseState()

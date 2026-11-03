@@ -34,7 +34,8 @@ type folderKey struct {
 
 // folderEntry is one row of the sidebar: an account header (Header set,
 // Folder zero), the Favourites heading (Header and Favourite set, Account
-// zero too) or a folder at the given tree depth.
+// zero too), the All Inboxes item (Unified and Favourite set, a pseudo
+// folder, no account) or a folder at the given tree depth.
 type folderEntry struct {
 	Header  bool
 	Account api.Account
@@ -42,16 +43,18 @@ type folderEntry struct {
 	Depth   int
 
 	// Favourite is set on the rows of the Favourites section at the top of
-	// the sidebar: its heading and one row per pinned folder, each at depth
-	// 0 without children. The same folder has a second row in its account's
-	// tree, so a folder key alone does not name a row (rowKey does).
+	// the sidebar: its heading, the All Inboxes item and one row per pinned
+	// folder, each at depth 0 without children. The same folder has a
+	// second row in its account's tree, so a folder key alone does not name
+	// a row (rowKey does).
 	Favourite bool
 	// Starred means the folder is pinned: its star is filled, on the row in
 	// the section and on the one in the tree alike.
 	Starred bool
 
-	// HasChildren means the row can be folded; Collapsed means it currently
-	// is, and its descendants are left out of the list entirely.
+	// HasChildren means the row can be folded (a folder with children, an
+	// account heading, the Favourites heading); Collapsed means it
+	// currently is, and its descendants are left out of the list entirely.
 	HasChildren bool
 	Collapsed   bool
 	// Nested is set on every row of an account whose tree has at least one
@@ -62,8 +65,9 @@ type folderEntry struct {
 	// that plus every hidden descendant's while it is collapsed. Unread mail
 	// folded away is still visible on the ancestor.
 	Badge int
-	// Unified marks the All Inboxes item (unified.go): a row above
-	// everything else with a pseudo folder, no account, never pinned.
+	// Unified marks the All Inboxes item (unified.go): the first row of
+	// the Favourites section, with a pseudo folder, no account, never
+	// pinned (its Favourite is set: it is a row of the section).
 	Unified bool
 }
 
@@ -159,10 +163,7 @@ const maxFolderDepth = 32
 
 // rebuildEntries recomputes the sidebar rows from accounts and folders.
 func (m *mailModel) rebuildEntries() {
-	m.entries = sortFolders(m.accounts, m.folders, m.collapsed, m.favourites)
-	if m.unifiedShown() {
-		m.entries = append([]folderEntry{m.unifiedEntry()}, m.entries...)
-	}
+	m.entries = sidebarEntries(m.accounts, m.folders, m.collapsed, m.favourites, m.unifiedShown())
 }
 
 // refreshBadges recomputes the number every visible row shows, after an
@@ -652,9 +653,17 @@ func hasMailAccount(accounts []api.Account) bool {
 	return false
 }
 
-// sortFolders lays the sidebar out: the Favourites section when anything is
-// pinned (favouriteSection), then the enabled accounts in list order
-// (mailSidebarAccounts: no calendar-only CalDAV account), each
+// sortFolders lays the sidebar out without the All Inboxes item
+// (sidebarEntries with unified false): the layout of a single-account
+// window, and the one the package's tests describe.
+func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder, collapsed collapseState, favourites favouriteState) []folderEntry {
+	return sidebarEntries(accounts, folders, collapsed, favourites, false)
+}
+
+// sidebarEntries lays the sidebar out: the Favourites section when the All
+// Inboxes item is shown (unified, decided by the caller: unifiedShown) or
+// anything is pinned (favouriteSection), then the enabled accounts in list
+// order (mailSidebarAccounts: no calendar-only CalDAV account), each
 // preceded by a header row when there are at least two of them or a
 // Favourites section above them, then the account's folders as a tree.
 // Roots are ordered by (roleRank, path); the children of a folder follow
@@ -662,9 +671,14 @@ func hasMailAccount(accounts []api.Account) bool {
 // chain is cyclic or deeper than maxFolderDepth are appended after the tree
 // with a depth counted from their display path. Non-selectable containers
 // are kept so their children have somewhere to hang.
-func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder, collapsed collapseState, favourites favouriteState) []folderEntry {
+func sidebarEntries(accounts []api.Account, folders map[api.AccountID][]api.Folder, collapsed collapseState, favourites favouriteState, unified bool) []folderEntry {
 	enabled := mailSidebarAccounts(accounts)
-	out := favouriteSection(enabled, folders, favourites)
+	var item *folderEntry
+	if unified {
+		e := unifiedEntryOf(accounts, folders)
+		item = &e
+	}
+	out := favouriteSection(enabled, folders, favourites, collapsed, item)
 	// A single account needs no heading of its own, unless a Favourites
 	// section sits above its folders and the two would run into each other.
 	headers := len(enabled) >= 2 || len(out) > 0
@@ -686,16 +700,23 @@ func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder,
 	return out
 }
 
-// favouriteSection is the block at the top of the sidebar: a heading and
-// one row per pinned folder, in tree order (accounts in list order, then
-// roles, then names), each at depth 0 and without its children. A pin that
-// does not resolve — the folder gone or renamed on the server, its account
-// switched off, a container that cannot be opened, an outbox with nothing
-// in it — is left out silently; when none resolves there is no section at
-// all. Account folds do not apply here: the section is what stays in view
-// while the tree is folded away.
-func favouriteSection(enabled []api.Account, folders map[api.AccountID][]api.Folder, favourites favouriteState) []folderEntry {
+// favouriteSection is the block at the top of the sidebar: a heading, the
+// All Inboxes item when it is shown (unified, its row: the first of the
+// section) and one row per pinned folder, in tree order (accounts in list
+// order, then roles, then names), each at depth 0 and without its
+// children. A pin that does not resolve — the folder gone or renamed on the
+// server, its account switched off, a container that cannot be opened, an
+// outbox with nothing in it — is left out silently; when none resolves and
+// there is no item there is no section at all. The heading folds like an
+// account's (collapseState.favouritesCollapsed): folded, the section is
+// its heading alone, the item and the pins out of sight while their
+// folders stay listed in the tree. Account folds do not apply here: the
+// section is what stays in view while the tree is folded away.
+func favouriteSection(enabled []api.Account, folders map[api.AccountID][]api.Folder, favourites favouriteState, collapsed collapseState, unified *folderEntry) []folderEntry {
 	var rows []folderEntry
+	if unified != nil {
+		rows = append(rows, *unified)
+	}
 	for _, a := range enabled {
 		var pinned []api.Folder
 		for _, f := range visibleFolders(folders[a.ID]) {
@@ -711,7 +732,12 @@ func favouriteSection(enabled []api.Account, folders map[api.AccountID][]api.Fol
 	if len(rows) == 0 {
 		return nil
 	}
-	return append([]folderEntry{{Header: true, Favourite: true}}, rows...)
+	folded := collapsed.favouritesCollapsed()
+	heading := folderEntry{Header: true, Favourite: true, HasChildren: true, Collapsed: folded}
+	if folded {
+		return []folderEntry{heading}
+	}
+	return append([]folderEntry{heading}, rows...)
 }
 
 // folderTree orders one account's folders (see sortFolders), leaving out

@@ -1099,7 +1099,9 @@ public sealed class MailboxControllerFoldersTests
             wire: x => Wire(x, log),
             prepare: settings => settings.UnifiedInbox = true);
         await h.IdleAsync();
-        var first = h.Mailbox.Model.Entries[0];
+        // The item is the first row of the Favourites section.
+        Assert.True(h.Mailbox.Model.Entries[0].Header && h.Mailbox.Model.Entries[0].Favourite);
+        var first = h.Mailbox.Model.Entries[1];
         Assert.True(first.IsUnified);
         Assert.Equal(Unified.Unread(h.Mailbox.Model.UnifiedInboxes), first.Badge);
         Assert.Equal(Inbox1, h.Mailbox.Model.Selected);

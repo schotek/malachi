@@ -122,6 +122,7 @@ struct ContextMenuTests {
         }
         #expect(show(ContextMenu.accountItems(foldable: true)) == "checkMail | fold")
         #expect(show(ContextMenu.accountItems(foldable: false)) == "checkMail")
+        #expect(show(ContextMenu.favouritesItems()) == "fold")
     }
 
     private func folder(_ id: String, _ role: FolderRole, _ selectable: Bool) -> Folder {

@@ -817,6 +817,31 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     }
 
     /// <summary>
+    /// Folds the Favourites section away, or brings it back (collapse.go
+    /// <c>toggleFavourites</c>); a selection among its rows stays, as under
+    /// a folded account.
+    /// </summary>
+    public void ToggleFavourites()
+    {
+        Scope.VerifyAccess();
+        Model.Collapsed.ToggleFavourites();
+        SaveCollapse();
+        RebuildFolderList();
+    }
+
+    /// <summary><see cref="ToggleFavourites"/> for a view that knows the target state; false when the model already agrees.</summary>
+    public bool SetFavouritesCollapsed(bool collapsed)
+    {
+        Scope.VerifyAccess();
+        if (Model.Collapsed.FavouritesCollapsed() == collapsed)
+        {
+            return false;
+        }
+        ToggleFavourites();
+        return true;
+    }
+
+    /// <summary>
     /// Pins a folder or unpins it, persists the change and redraws the
     /// sidebar at once (favourites.go <c>toggleFavourite</c>). The selection
     /// and the message list are left alone: pinning is a way of arranging

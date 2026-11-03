@@ -254,6 +254,13 @@ public enum ContextMenu {
         [[Item(.checkMail, true)], foldable ? [Item(.fold, true)] : []].filter { !$0.isEmpty }
     }
 
+    /// contextmenu.FavouritesItems: the Favourites heading's menu: its
+    /// folding, the one thing the heading does (the section has no account
+    /// to check, and its rows have menus of their own).
+    public static func favouritesItems() -> [[Item]] {
+        [[Item(.fold, true)]]
+    }
+
     /// contextmenu.Entry: a folder of the account in the sidebar's order.
     public struct Entry: Sendable, Equatable {
         public var folder: Folder

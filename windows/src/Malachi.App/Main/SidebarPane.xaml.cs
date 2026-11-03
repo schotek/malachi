@@ -21,12 +21,13 @@
 // on the row clicked and leaves the selection alone: Check for New Mail;
 // Mark All as Read and Empty Trash or Empty Junk (always asked); Add to or
 // Remove from Favourites and Expand or Collapse. An account heading's has
-// Check for New Mail and its folding, the Favourites heading none; the All
-// Inboxes row's has Check for New Mail, for every account. A
+// Check for New Mail and its folding, the Favourites heading its folding
+// alone; the All Inboxes row's has Check for New Mail, for every account. A
 // right click, Shift+F10 or the Menu key opens it.
 //
 // Windows addition (windows/README.md): Left and Right fold an account
-// heading too (its arrow is not a tab stop in a ListView's row). A row
+// heading and the Favourites heading too (their arrows are not tab stops
+// in a ListView's row). A row
 // chosen by click or Enter is FolderChosen, which closes the folded
 // sidebar's overlay (window.go: outerSplit.SetShowContent).
 
@@ -141,14 +142,18 @@ public sealed partial class SidebarPane : UserControl
         }
     }
 
-    /// <summary>A heading's or a folder's fold arrow (collapse.go toggleAccount, toggleFolder).</summary>
+    /// <summary>A heading's or a folder's fold arrow (collapse.go toggleAccount, toggleFavourites, toggleFolder).</summary>
     internal void ToggleFold(SidebarRow row)
     {
         if (mailbox is null || !row.TwistyActive)
         {
             return;
         }
-        if (row.Kind == SidebarRowKind.AccountHeading && row.Account is { } acc)
+        if (row.Kind == SidebarRowKind.FavouritesHeading)
+        {
+            mailbox.ToggleFavourites();
+        }
+        else if (row.Kind == SidebarRowKind.AccountHeading && row.Account is { } acc)
         {
             mailbox.ToggleAccount(acc);
         }
@@ -281,7 +286,11 @@ public sealed partial class SidebarPane : UserControl
             return;
         }
         var collapse = e.Key == WinKey.Left;
-        if (row.Kind == SidebarRowKind.AccountHeading && row.Account is { } acc)
+        if (row.Kind == SidebarRowKind.FavouritesHeading)
+        {
+            e.Handled = m.SetFavouritesCollapsed(collapse);
+        }
+        else if (row.Kind == SidebarRowKind.AccountHeading && row.Account is { } acc)
         {
             e.Handled = m.SetAccountCollapsed(acc, collapse);
         }
@@ -322,6 +331,13 @@ public sealed partial class SidebarPane : UserControl
         var run = new Dictionary<ContextMenu.ItemId, Action>();
         switch (row.Kind)
         {
+            case SidebarRowKind.FavouritesHeading:
+                // The Favourites heading folds like an account's, and that
+                // is all it offers (ContextMenu.FavouritesItems).
+                groups = ContextMenu.FavouritesItems();
+                labels = new ContextMenu.Labels { Collapsed = row.Collapsed };
+                run[ContextMenu.ItemId.Fold] = () => ToggleFold(row);
+                break;
             case SidebarRowKind.AccountHeading when row.Account is { } acc:
                 groups = ContextMenu.AccountItems(row.TwistyActive);
                 labels = new ContextMenu.Labels { Collapsed = row.Collapsed };

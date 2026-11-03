@@ -527,6 +527,21 @@ public final class MailboxController {
         toggleAccount(id)
     }
 
+    /// Folds the Favourites section away, or brings it back (collapse.go
+    /// `toggleFavourites`); a selection among its rows stays, as under a
+    /// folded account.
+    public func toggleFavourites() {
+        model.collapsed.toggleFavourites()
+        saveCollapse()
+        rebuildFolderList()
+    }
+
+    /// `toggleFavourites` for a view that knows the target state.
+    public func setFavouritesCollapsed(_ collapsed: Bool) {
+        guard model.collapsed.favouritesCollapsed() != collapsed else { return }
+        toggleFavourites()
+    }
+
     /// Pins a folder or unpins it, persists the change and redraws the
     /// sidebar at once (favourites.go `toggleFavourite`). The selection and
     /// the message list are left alone: pinning is a way of arranging the

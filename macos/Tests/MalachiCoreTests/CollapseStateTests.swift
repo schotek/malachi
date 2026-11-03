@@ -200,6 +200,23 @@ final class ScratchSettings {
         #expect(s.collapsedFolders.count == 1)
     }
 
+    @Test func favouritesFoldIsStoredAmongTheAccountsAndNeverPruned() {
+        let s = ScratchSettings().settings
+        var c = CollapseState()
+        #expect(!c.favouritesCollapsed(), "a fresh state folds the section")
+        c.setFavourites(true)
+        c.setAccount("acc_1", true)
+        // Pruning against a loaded account list keeps the sentinel: it is
+        // no account that is gone.
+        c.save(to: s, accounts: [testAccount("acc_1")])
+        #expect(s.collapsedAccounts == ["@favourites", "acc_1"])
+        var got = CollapseState.load(from: s)
+        #expect(got.favouritesCollapsed() && got.accountCollapsed("acc_1"))
+        got.toggleFavourites()
+        got.save(to: s, accounts: [testAccount("acc_1")])
+        #expect(s.collapsedAccounts == ["acc_1"])
+    }
+
     @Test func collapseStatePrunesRemovedAccounts() {
         let s = ScratchSettings().settings
         var c = CollapseState()
