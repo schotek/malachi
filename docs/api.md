@@ -3337,7 +3337,8 @@ BoardCommitment { "id": "k_1", "caseId": "c_…", "accountId": "acc_1",
                   "closedReason": "replied" | "done" (opt),   // with "closed"
                   "at": Time }
 BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time,
-               "mine": false, "text": "…", "trimmed": true (opt) }
+               "mine": false, "text": "…", "trimmed": true (opt),
+               "signature": SignatureSummary (opt) }
 ```
 
 - `person`: the sender of the newest inbound member that counts, else the
@@ -3417,6 +3418,11 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
 - `version` changes whenever anything of the case changes, the members
   `board.get` returns included; a client caches `board.get` by `(id,
   version)`.
+- `BoardMessage.signature`: the member's signature verdict exactly as
+  `Message.signature` of `message.get` (§4.21: kind, status, signer,
+  notes, partId), absent when it has none (no signature, not verified
+  yet, a Jira item); the clients show it as the badge of the board's
+  conversation card, and its details come from `message.signature`.
 - `BoardMessage.text`: the message's own text — its quoted history cut
   off as `message.body` with `trimQuoted` cuts it: the stored plain text
   cut by the plain-text rules when they find the quote in it, else, when
@@ -5786,3 +5792,6 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `MaxProtectedHeaders`, `MaxPGP*`, `MaxRevocationResponseBytes`,
   `RevocationTimeout`, `RevocationCheckInterval`. `ProtocolVersion`
   stays 2.
+- **2** (2026-11-03, compatible addition): `BoardMessage.signature`
+  (`SignatureSummary`, §4.13) in `board.get`, so the board's conversation
+  cards show the signature badge. `ProtocolVersion` stays 2.

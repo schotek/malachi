@@ -307,6 +307,10 @@ type BoardMessage struct {
 	// Trimmed: something was cut off Text (quoted history, signature or
 	// the length cap).
 	Trimmed bool `json:"trimmed,omitempty"`
+	// Signature is the member's signature verdict, as Message.Signature
+	// (signer and notes included), so the board's conversation card shows
+	// the same badge as a card in Mail; absent without a verdict.
+	Signature *SignatureSummary `json:"signature,omitempty"`
 }
 
 // BoardTrigger says what started a triage run.
