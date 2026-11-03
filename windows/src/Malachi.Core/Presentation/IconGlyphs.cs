@@ -146,6 +146,10 @@ public static class IconGlyphs
         // The quick-reply bar's Open in a Window (docs/plans/chat-view.md
         // Q2; macOS arrow.up.forward.square): OpenInNewWindow.
         ["window-new"] = G(0xE8A7),
+        // The mail rules' page of the Preferences (docs/plans/rules.md R14;
+        // GTK's funnel-symbolic, the Windows page has folder-saved-search):
+        // Filter.
+        ["funnel"] = G(0xE71C),
         // The Contacts window (docs/plans/address-book.md §5; GTK
         // contacts_detail.go): Copy of the detail, and a website row's
         // link that opens in the browser (Link).
