@@ -25,16 +25,16 @@ internal sealed class FakeRulesCaller : IRulesCaller
 
     public static Rule Sample(
         string id, string name = "Rule", bool enabled = true, AccountId? account = null, params RuleAction[] actions) => new()
-    {
-        Id = id,
-        Name = name,
-        Enabled = enabled,
-        AccountId = account,
-        Match = RuleMatch.All,
-        Conditions = [new RuleCondition { Field = RuleField.From, Op = RuleOperator.Contains, Value = "acme" }],
-        Actions = actions.Length > 0 ? actions : [new RuleAction { Kind = RuleActionKind.MarkRead }],
-        Outgoing = actions.Any(a => a.Kind.IsOutgoing),
-    };
+        {
+            Id = id,
+            Name = name,
+            Enabled = enabled,
+            AccountId = account,
+            Match = RuleMatch.All,
+            Conditions = [new RuleCondition { Field = RuleField.From, Op = RuleOperator.Contains, Value = "acme" }],
+            Actions = actions.Length > 0 ? actions : [new RuleAction { Kind = RuleActionKind.MarkRead }],
+            Outgoing = actions.Any(a => a.Kind.IsOutgoing),
+        };
 
     public static RpcError Error(int code, object? data = null) => new()
     {
