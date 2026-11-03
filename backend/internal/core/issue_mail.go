@@ -161,6 +161,8 @@ func (b *Backend) afterMailStored(ctx context.Context, accountID, messageID stri
 	b.noteIssueMail(ctx, accountID, messageID)
 	b.noteInvitation(ctx, accountID, messageID)
 	b.noteCrmFollow(ctx, accountID, messageID)
+	// Last: the rules may move the message (docs/api.md §4.21).
+	b.noteRules(ctx, accountID, messageID)
 }
 
 // afterIssueStored is the Stored hook of the issue-tracker syncer: the

@@ -117,4 +117,16 @@ public static class RpcTimeouts
     /// GitHub asset within 70 s (core's updateCheckLimit) before it answers.
     /// </summary>
     public static readonly TimeSpan UpdateCheck = TimeSpan.FromSeconds(75);
+
+    /// <summary>
+    /// <c>rules.test</c>: the daemon matches the rule against the folder's
+    /// stored messages, reading their bodies for a body condition.
+    /// </summary>
+    public static readonly TimeSpan RulesTest = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// <c>rules.apply</c>: the daemon runs the rules over a folder's stored
+    /// messages in batches and sends the changes to the server.
+    /// </summary>
+    public static readonly TimeSpan RulesApply = TimeSpan.FromMinutes(5);
 }

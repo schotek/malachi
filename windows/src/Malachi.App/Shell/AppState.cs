@@ -90,6 +90,7 @@ public sealed partial class AppState : IDisposable
         InitializeProfile();
         InitializeCalendar();
         InitializeContacts();
+        InitializeRules();
         InitializeUpdates();
         alerts.UpdateLine = () => UpdateLine;
     }
@@ -309,6 +310,7 @@ public sealed partial class AppState : IDisposable
         CloseBoard();
         CloseCalendar();
         CloseContacts();
+        CloseRules();
         CloseUpdates();
         Windows.Dispose();
         Notifications.Dispose();

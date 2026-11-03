@@ -1565,6 +1565,59 @@ on its own that is not to a server of one of the user's accounts.
   bodies are capped at 256 KiB, a request at 30 s; the log carries the
   failure class and the rule a manifest broke, never a body.
 
+### 7.5 Outgoing actions of the mail rules
+
+A mail rule (docs/api.md §4.21) may **forward** a message to one address
+or **answer it automatically** with a fixed text. Such a rule sends mail
+to other people by itself, on input an attacker controls (anyone can
+send mail to the inbox), without the user looking at each message. The
+threats are a mail loop (two automatic responders answering each other),
+backscatter (answering forged senders, mailing lists, bounces), flooding
+a third party through the user's account, and leaking mail to an
+address someone talked the user, or an agent, into adding.
+
+- **Only on the user's word.** A rule that is enabled with an outgoing
+  action is saved only with `confirmOutgoing` (the client asked the user;
+  again when the address or the text changes). The MCP bridge writes one
+  only with `-allow-modify` *and* `-allow-send`, and its instructions say
+  the user must have asked for that rule in the conversation; it can
+  neither run rules on stored mail nor delete them.
+- **Never automatically on old mail, never twice.** The automatic run
+  sees a Message-ID once (`rule_seen`) and leaves mail that arrived more
+  than a day before the rule was enabled or before the account was added
+  (a rule for every account and a new account's first sync); `rules.apply` never runs
+  outgoing actions. So enabling a rule cannot answer a mailbox's history,
+  and moving a message back into the inbox does not answer it again.
+- **Not to automatic or untrusted senders.** Nothing is sent for a
+  message that is bulk (any `internal/bulk` kind, classified again from
+  the headers when the row is not yet), carries `Auto-Submitted` other
+  than `no` or any `X-Loop` field, comes from one of the user's own
+  addresses (every account's), from `mailer-daemon`, `postmaster` or a
+  `noreply`/`no-reply`/`do-not-reply` address (checked on `From` and, for
+  a reply, on `Reply-To`, which is where it goes), or is in junk or sent
+  there by the same rules.
+- **Bounded.** A rule sends at most `RuleOutgoingPerHour` (20) messages an
+  hour, and an automatic reply goes to one sender at most once in
+  `RuleReplyInterval` (4 days, RFC 3834 §2). Both are reserved in one
+  store transaction per message, so concurrent syncers cannot exceed
+  them. Every refusal counts in the rule's `skipped`; nothing about the
+  message is logged but the class.
+- **Marked.** Every such message carries `Auto-Submitted: auto-forwarded`
+  or `auto-replied` and `X-Loop: <the account's address>`, so other
+  responders (and Malachi Mail itself on another account) recognise it.
+  The extra header fields go through `smtp.BuildInput.Headers`, which
+  accepts only plain field names the builder does not write itself and
+  printable ASCII values without line breaks: no field can be folded
+  into another.
+- **Contained.** The forward attaches the original as it came from the
+  server, as an attachment the receiver's client opens; a reply is plain
+  text the user wrote. Both go through the outbox like any message of the
+  user's (Sent copy, retries). A message that cannot be queued disables
+  the rule (`sendFailed`) rather than retrying it forever.
+- Recipients are fixed when the rule is saved (forward) or are the
+  message's own sender (reply): nothing in a message decides where mail
+  goes beyond who wrote it.
+
 ## 8. Local storage
 
 - One daemon per store: before it touches the store or the socket, the

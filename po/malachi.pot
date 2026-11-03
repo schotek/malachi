@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-02 21:03+0000\n"
+"POT-Creation-Date: 2026-11-03 08:37+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -44,7 +44,8 @@ msgstr ""
 
 #: ui/internal/accountwizard/jira_flow.go:257
 #: ui/internal/accountwizard/wizard.go:252 ui/internal/crm/text.go:129
-#: ui/internal/crm/text.go:435 ui/data/ui/jira_account.ui:31
+#: ui/internal/crm/text.go:435 ui/internal/window/rules_editor.go:149
+#: ui/data/ui/jira_account.ui:31
 msgid "_Save"
 msgstr ""
 
@@ -1332,7 +1333,8 @@ msgstr ""
 #: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1048
 #: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:460
 #: ui/internal/window/assistant_panel.go:204
-#: ui/internal/window/event_editor_popovers.go:36
+#: ui/internal/window/event_editor_popovers.go:36 ui/internal/rules/text.go:180
+#: ui/internal/rules/text.go:269
 msgid "Remove"
 msgstr ""
 
@@ -1363,7 +1365,9 @@ msgstr ""
 #: ui/internal/window/calendar_detail.go:899
 #: ui/internal/window/preferences_calendar.go:488
 #: ui/internal/window/preferences_calendar.go:1016
-#: ui/internal/window/contacts_detail.go:254 ui/data/ui/account_wizard.ui:401
+#: ui/internal/window/contacts_detail.go:254
+#: ui/internal/window/rules_editor.go:148
+#: ui/internal/window/rules_editor.go:722 ui/data/ui/account_wizard.ui:401
 #: ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr ""
@@ -1655,7 +1659,7 @@ msgid "Move to Trash"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:95 ui/internal/window/status.go:269
-#: ui/data/ui/preferences.ui:236 ui/data/ui/window.ui:254
+#: ui/data/ui/preferences.ui:257 ui/data/ui/window.ui:254
 msgid "Check for New Mail"
 msgstr ""
 
@@ -1830,7 +1834,7 @@ msgstr ""
 
 #. TRANSLATORS: a field of a Jira issue.
 #: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1075
-#: ui/data/ui/preferences.ui:702
+#: ui/data/ui/preferences.ui:716
 msgid "Status"
 msgstr ""
 
@@ -2048,22 +2052,22 @@ msgid_plural "Select at most %d spaces"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:271
-#: ui/data/ui/preferences.ui:291
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:292
+#: ui/data/ui/preferences.ui:312
 msgid "1 week"
 msgstr ""
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:272
-#: ui/data/ui/preferences.ui:292
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:293
+#: ui/data/ui/preferences.ui:313
 msgid "1 month"
 msgstr ""
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:273
-#: ui/data/ui/preferences.ui:293
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:294
+#: ui/data/ui/preferences.ui:314
 msgid "3 months"
 msgstr ""
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:274
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:295
 msgid "1 year"
 msgstr ""
 
@@ -2534,7 +2538,7 @@ msgstr ""
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
 #: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:618
-#: ui/internal/window/notify.go:140
+#: ui/internal/window/notify.go:144
 msgid "(No subject)"
 msgstr ""
 
@@ -2681,12 +2685,12 @@ msgid "Back to the timeline: the messages as cards, newest first"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, a message in the chat layout of a conversation shows its formatting (HTML) instead of plain text.
-#: ui/internal/conversation/chat.go:212 ui/data/ui/preferences.ui:509
+#: ui/internal/conversation/chat.go:212 ui/data/ui/preferences.ui:523
 msgid "Render HTML in Chat"
 msgstr ""
 
 #. TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
-#: ui/internal/conversation/chat.go:219 ui/data/ui/preferences.ui:510
+#: ui/internal/conversation/chat.go:219 ui/data/ui/preferences.ui:524
 msgid ""
 "Messages in the chat layout as they were sent, in a locked web view, instead "
 "of their plain text"
@@ -2698,23 +2702,23 @@ msgid "Show More"
 msgstr ""
 
 #. TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
-#: ui/internal/conversation/chat.go:300 ui/data/ui/preferences.ui:500
+#: ui/internal/conversation/chat.go:300 ui/data/ui/preferences.ui:514
 msgid "Conversations"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:308 ui/data/ui/preferences.ui:515
+#: ui/internal/conversation/chat.go:308 ui/data/ui/preferences.ui:529
 msgid "Shorten My Messages in Chat"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:315 ui/data/ui/preferences.ui:521
+#: ui/internal/conversation/chat.go:315 ui/data/ui/preferences.ui:535
 msgid "Shorten Others' Messages in Chat"
 msgstr ""
 
 #. TRANSLATORS: the subtitle of the "Shorten My Messages in Chat" and "Shorten Others' Messages in Chat" switches in Preferences → Message list.
-#: ui/internal/conversation/chat.go:323 ui/data/ui/preferences.ui:516
-#: ui/data/ui/preferences.ui:522
+#: ui/internal/conversation/chat.go:323 ui/data/ui/preferences.ui:530
+#: ui/data/ui/preferences.ui:536
 msgid ""
 "About three lines of each message in its bubble; a click shows the whole "
 "message"
@@ -2810,14 +2814,14 @@ msgstr ""
 msgid "Forward…"
 msgstr ""
 
-#: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:232
+#: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:253
 msgid "Mail"
 msgstr ""
 
 #. TRANSLATORS: the window's second mode beside Mail: the conversations
 #. that need something, sorted into four states.
-#: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:104
-#: ui/data/ui/preferences.ui:668
+#: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:125
+#: ui/data/ui/preferences.ui:682
 msgid "Board"
 msgstr ""
 
@@ -4859,7 +4863,7 @@ msgid "Custom…"
 msgstr ""
 
 #. TRANSLATORS: the editor's Repeat popup: the event does not repeat.
-#: ui/internal/calendar/recurrence.go:336 ui/data/ui/preferences.ui:256
+#: ui/internal/calendar/recurrence.go:336 ui/data/ui/preferences.ui:277
 msgid "Never"
 msgstr ""
 
@@ -6386,7 +6390,7 @@ msgid "Address Book"
 msgstr ""
 
 #. TRANSLATORS: the label of a new contact's name in Add to Contacts.
-#: ui/internal/contacts/form.go:539
+#: ui/internal/contacts/form.go:539 ui/internal/rules/text.go:229
 msgid "Name"
 msgstr ""
 
@@ -6728,6 +6732,7 @@ msgid "Loading accounts"
 msgstr ""
 
 #: ui/internal/window/accounts_page.go:192
+#: ui/internal/window/preferences_rules.go:240
 msgid "Drag to reorder, or press Ctrl+Up and Ctrl+Down"
 msgstr ""
 
@@ -7267,7 +7272,7 @@ msgstr ""
 msgid "This folder is empty."
 msgstr ""
 
-#: ui/internal/window/notify.go:127
+#: ui/internal/window/notify.go:131
 msgid "New message"
 msgstr ""
 
@@ -7313,76 +7318,76 @@ msgstr ""
 msgid "Cancelling the send"
 msgstr ""
 
-#: ui/internal/window/preferences.go:377
+#: ui/internal/window/preferences.go:372
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:406
+#: ui/internal/window/preferences.go:401
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:469
+#: ui/internal/window/preferences.go:464
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:505
+#: ui/internal/window/preferences.go:500
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:507
+#: ui/internal/window/preferences.go:502
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:511
+#: ui/internal/window/preferences.go:506
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:515
+#: ui/internal/window/preferences.go:510
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:653
+#: ui/internal/window/preferences.go:648
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:656
+#: ui/internal/window/preferences.go:651
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:659
+#: ui/internal/window/preferences.go:654
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:694
+#: ui/internal/window/preferences.go:689
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:700
+#: ui/internal/window/preferences.go:695
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:747
+#: ui/internal/window/preferences.go:742
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:792
+#: ui/internal/window/preferences.go:787
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:795
+#: ui/internal/window/preferences.go:790
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:798
+#: ui/internal/window/preferences.go:793
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
@@ -7732,15 +7737,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1046
+#: ui/internal/window/window.go:1051
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1118 ui/data/ui/window.ui:261
+#: ui/internal/window/window.go:1124 ui/data/ui/window.ui:261
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:1124 ui/data/ui/window.ui:231
+#: ui/internal/window/window.go:1130 ui/data/ui/window.ui:231
 msgid "Messages"
 msgstr ""
 
@@ -7944,6 +7949,612 @@ msgstr ""
 msgid ""
 "Malachi Mail checks once a day whether a new version exists and sends only "
 "its version number. You can turn this off in Preferences."
+msgstr ""
+
+#. TRANSLATORS: the Preferences page of the mail rules (filters that
+#. move, mark, forward or answer new mail).
+#: ui/internal/rules/text.go:42
+msgid "Rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:47
+msgid ""
+"Rules act on new mail in the inbox as it arrives, in the order of this list. "
+"Malachi Mail runs them on this computer, only while it is running."
+msgstr ""
+
+#: ui/internal/rules/text.go:52
+msgid "No Rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:57
+msgid ""
+"Move, mark or forward new messages automatically. You can also create a rule "
+"from a message in its context menu."
+msgstr ""
+
+#: ui/internal/rules/text.go:62
+msgid "Add Rule…"
+msgstr ""
+
+#: ui/internal/rules/text.go:67
+msgid "Edit Rule…"
+msgstr ""
+
+#: ui/internal/rules/text.go:72
+msgid "Remove Rule"
+msgstr ""
+
+#: ui/internal/rules/text.go:77
+msgid "Turn the rule on or off"
+msgstr ""
+
+#: ui/internal/rules/text.go:127
+msgid "Removed account"
+msgstr ""
+
+#: ui/internal/rules/text.go:132
+msgid "All Mail Accounts"
+msgstr ""
+
+#: ui/internal/rules/text.go:141
+msgid "Not used yet"
+msgstr ""
+
+#: ui/internal/rules/text.go:143
+#, c-format
+msgid "Used on %d message, last %s"
+msgid_plural "Used on %d messages, last %s"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:145
+#, c-format
+msgid "Used on %d message"
+msgid_plural "Used on %d messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: after the status line of a rule: messages it would
+#. have forwarded or answered and did not (bulk mail, an automatic
+#. message, the user's own address, a limit).
+#: ui/internal/rules/text.go:151
+#, c-format
+msgid "%s · %d outgoing message held back"
+msgid_plural "%s · %d outgoing messages held back"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:160
+msgid ""
+"The folder this rule moves messages to no longer exists, so the rule was "
+"turned off."
+msgstr ""
+
+#: ui/internal/rules/text.go:162
+msgid "This rule could not send a message, so it was turned off."
+msgstr ""
+
+#: ui/internal/rules/text.go:178
+#, c-format
+msgid "Remove the Rule “%s”?"
+msgstr ""
+
+#: ui/internal/rules/text.go:179
+msgid "Messages it already moved or marked stay as they are."
+msgstr ""
+
+#: ui/internal/rules/text.go:190
+msgid "Send Mail Automatically?"
+msgstr ""
+
+#: ui/internal/rules/text.go:191
+msgid "Turn On"
+msgstr ""
+
+#: ui/internal/rules/text.go:205
+#, c-format
+msgid ""
+"This rule forwards every matching message to %s and answers its sender, "
+"without asking you. Bulk mail, automatic messages and your own messages are "
+"never forwarded or answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:207
+#, c-format
+msgid ""
+"This rule forwards every matching message to %s without asking you. Bulk "
+"mail, automatic messages and your own messages are never forwarded."
+msgstr ""
+
+#: ui/internal/rules/text.go:209
+msgid ""
+"This rule answers the sender of every matching message without asking you, "
+"at most once in four days per sender. Bulk mail, automatic messages and your "
+"own messages are never answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:221
+msgid "New Rule"
+msgstr ""
+
+#. TRANSLATORS: the title of the editor of a stored mail rule.
+#: ui/internal/rules/text.go:224
+msgid "Edit Rule"
+msgstr ""
+
+#. TRANSLATORS: the label of the account choice of the rule editor.
+#: ui/internal/rules/text.go:236
+msgid "Apply to"
+msgstr ""
+
+#: ui/internal/rules/text.go:241
+msgid "When a new message arrives"
+msgstr ""
+
+#: ui/internal/rules/text.go:247
+msgid "and any of these conditions is met"
+msgstr ""
+
+#: ui/internal/rules/text.go:249
+msgid "and all of these conditions are met"
+msgstr ""
+
+#: ui/internal/rules/text.go:254
+msgid "Do the following"
+msgstr ""
+
+#: ui/internal/rules/text.go:259
+msgid "Add Condition"
+msgstr ""
+
+#: ui/internal/rules/text.go:264
+msgid "Add Action"
+msgstr ""
+
+#: ui/internal/rules/text.go:274
+msgid "Rule is on"
+msgstr ""
+
+#: ui/internal/rules/text.go:279
+msgid "Stop processing more rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:284
+msgid "Rules below this one do not run on a message this rule matched."
+msgstr ""
+
+#: ui/internal/rules/text.go:291
+msgctxt "rule field"
+msgid "From"
+msgstr ""
+
+#: ui/internal/rules/text.go:293
+msgctxt "rule field"
+msgid "To"
+msgstr ""
+
+#: ui/internal/rules/text.go:295
+msgctxt "rule field"
+msgid "Cc"
+msgstr ""
+
+#: ui/internal/rules/text.go:297
+msgctxt "rule field"
+msgid "To or Cc"
+msgstr ""
+
+#: ui/internal/rules/text.go:299
+msgctxt "rule field"
+msgid "Subject"
+msgstr ""
+
+#: ui/internal/rules/text.go:301
+msgctxt "rule field"
+msgid "Message text"
+msgstr ""
+
+#. TRANSLATORS: the List-Id of mailing-list mail.
+#: ui/internal/rules/text.go:304
+msgctxt "rule field"
+msgid "Mailing list ID"
+msgstr ""
+
+#: ui/internal/rules/text.go:306
+msgctxt "rule field"
+msgid "Bulk mail"
+msgstr ""
+
+#: ui/internal/rules/text.go:308
+msgctxt "rule field"
+msgid "Attachments"
+msgstr ""
+
+#. TRANSLATORS: Attachments [are] yes/no in the rule editor.
+#: ui/internal/rules/text.go:318
+msgctxt "rule operator"
+msgid "are"
+msgstr ""
+
+#: ui/internal/rules/text.go:322
+msgctxt "rule operator"
+msgid "contains"
+msgstr ""
+
+#: ui/internal/rules/text.go:324
+msgctxt "rule operator"
+msgid "does not contain"
+msgstr ""
+
+#: ui/internal/rules/text.go:326
+msgctxt "rule operator"
+msgid "is"
+msgstr ""
+
+#: ui/internal/rules/text.go:328
+msgctxt "rule operator"
+msgid "is not"
+msgstr ""
+
+#: ui/internal/rules/text.go:330
+msgctxt "rule operator"
+msgid "begins with"
+msgstr ""
+
+#: ui/internal/rules/text.go:332
+msgctxt "rule operator"
+msgid "ends with"
+msgstr ""
+
+#: ui/internal/rules/text.go:334
+msgctxt "rule operator"
+msgid "is from domain"
+msgstr ""
+
+#: ui/internal/rules/text.go:346
+msgctxt "bulk kind"
+msgid "any kind"
+msgstr ""
+
+#: ui/internal/rules/text.go:348
+msgctxt "bulk kind"
+msgid "newsletter"
+msgstr ""
+
+#: ui/internal/rules/text.go:350
+msgctxt "bulk kind"
+msgid "mailing list"
+msgstr ""
+
+#: ui/internal/rules/text.go:352
+msgctxt "bulk kind"
+msgid "automated message"
+msgstr ""
+
+#: ui/internal/rules/text.go:356
+msgctxt "attachments"
+msgid "none"
+msgstr ""
+
+#: ui/internal/rules/text.go:358
+msgctxt "attachments"
+msgid "present"
+msgstr ""
+
+#: ui/internal/rules/text.go:367
+msgid "example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:369
+msgid "Name or address"
+msgstr ""
+
+#: ui/internal/rules/text.go:371
+msgid "list.example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:373
+msgid "Text"
+msgstr ""
+
+#: ui/internal/rules/text.go:380
+msgctxt "rule action"
+msgid "Move to folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:382
+msgctxt "rule action"
+msgid "Mark as read"
+msgstr ""
+
+#: ui/internal/rules/text.go:384
+msgctxt "rule action"
+msgid "Star"
+msgstr ""
+
+#: ui/internal/rules/text.go:386
+msgctxt "rule action"
+msgid "Move to Trash"
+msgstr ""
+
+#: ui/internal/rules/text.go:388
+msgctxt "rule action"
+msgid "Move to Junk"
+msgstr ""
+
+#: ui/internal/rules/text.go:390
+msgctxt "rule action"
+msgid "Forward to"
+msgstr ""
+
+#: ui/internal/rules/text.go:392
+msgctxt "rule action"
+msgid "Reply automatically"
+msgstr ""
+
+#: ui/internal/rules/text.go:400
+msgid "Choose a Folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:405
+msgid "name@example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:411
+msgid "Subject (Re: and the original subject if empty)"
+msgstr ""
+
+#: ui/internal/rules/text.go:416
+msgid "Reply text"
+msgstr ""
+
+#: ui/internal/rules/text.go:422
+msgid ""
+"Each sender gets at most one automatic reply in four days. Bulk mail, "
+"automatic messages and your own messages are never answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:424
+msgid ""
+"The message is sent whole as an attachment. Bulk mail, automatic messages "
+"and your own messages are never forwarded."
+msgstr ""
+
+#: ui/internal/rules/text.go:432 ui/internal/rules/text.go:470
+msgid "Enter a name for the rule."
+msgstr ""
+
+#: ui/internal/rules/text.go:434
+msgid "This is too long."
+msgstr ""
+
+#: ui/internal/rules/text.go:436
+msgid "This contains characters that cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:438
+msgid "Add at least one condition."
+msgstr ""
+
+#: ui/internal/rules/text.go:440
+#, c-format
+msgid "A rule can have at most %d condition."
+msgid_plural "A rule can have at most %d conditions."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:442
+msgid "Enter a value."
+msgstr ""
+
+#: ui/internal/rules/text.go:444
+msgid "Choose how to compare."
+msgstr ""
+
+#: ui/internal/rules/text.go:446
+msgid "Add at least one action."
+msgstr ""
+
+#: ui/internal/rules/text.go:448
+#, c-format
+msgid "A rule can have at most %d action."
+msgid_plural "A rule can have at most %d actions."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:450
+msgid "This action is already in the rule."
+msgstr ""
+
+#: ui/internal/rules/text.go:452
+msgid "A rule can move a message to only one place."
+msgstr ""
+
+#: ui/internal/rules/text.go:454
+msgid "Choose an account to move messages to one of its folders."
+msgstr ""
+
+#: ui/internal/rules/text.go:456
+msgid "Choose a folder."
+msgstr ""
+
+#: ui/internal/rules/text.go:458
+msgid "Enter one valid email address."
+msgstr ""
+
+#: ui/internal/rules/text.go:460
+msgid "Enter the text of the reply."
+msgstr ""
+
+#: ui/internal/rules/text.go:472
+msgid "The account of this rule no longer exists."
+msgstr ""
+
+#: ui/internal/rules/text.go:474
+msgid "Rules that send mail need your confirmation."
+msgstr ""
+
+#: ui/internal/rules/text.go:476
+msgid "A condition of this rule cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:478
+msgid "An action of this rule cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:480
+msgid "This rule cannot be saved."
+msgstr ""
+
+#: ui/internal/rules/text.go:485
+msgid "This rule no longer exists."
+msgstr ""
+
+#: ui/internal/rules/text.go:491
+msgid "The rule could not be saved."
+msgstr ""
+
+#. TRANSLATORS: a button of the rule editor: shows which stored
+#. messages of a folder the rule would match.
+#: ui/internal/rules/text.go:498
+msgid "Try It"
+msgstr ""
+
+#: ui/internal/rules/text.go:504
+msgid "Try in"
+msgstr ""
+
+#: ui/internal/rules/text.go:510
+msgid "No message in this folder matches."
+msgstr ""
+
+#: ui/internal/rules/text.go:512
+#, c-format
+msgid "%d message in this folder matches."
+msgid_plural "%d messages in this folder match."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: a condition of a rule in its summary: field,
+#. comparison, quoted value ("From contains “acme”").
+#: ui/internal/rules/text.go:525
+#, c-format
+msgctxt "rule condition"
+msgid "%s %s “%s”"
+msgstr ""
+
+#. TRANSLATORS: a condition with a chosen value ("Bulk mail is newsletter").
+#: ui/internal/rules/text.go:528
+#, c-format
+msgctxt "rule condition"
+msgid "%s %s %s"
+msgstr ""
+
+#. TRANSLATORS: joins the conditions of a rule that all have to hold
+#. (with spaces around it).
+#: ui/internal/rules/text.go:540
+msgctxt "all conditions"
+msgid " and "
+msgstr ""
+
+#. TRANSLATORS: joins the conditions of a rule of which one has
+#. to hold (with spaces around it).
+#: ui/internal/rules/text.go:544
+msgctxt "any condition"
+msgid " or "
+msgstr ""
+
+#: ui/internal/rules/text.go:558
+msgid "move to a missing folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:560
+#, c-format
+msgid "move to “%s”"
+msgstr ""
+
+#: ui/internal/rules/text.go:562
+msgid "mark as read"
+msgstr ""
+
+#: ui/internal/rules/text.go:564
+msgid "star"
+msgstr ""
+
+#: ui/internal/rules/text.go:566
+msgid "move to Trash"
+msgstr ""
+
+#: ui/internal/rules/text.go:568
+msgid "move to Junk"
+msgstr ""
+
+#: ui/internal/rules/text.go:570
+#, c-format
+msgid "forward to %s"
+msgstr ""
+
+#: ui/internal/rules/text.go:572
+msgid "reply automatically"
+msgstr ""
+
+#: ui/internal/rules/text.go:589
+msgid "stop processing more rules"
+msgstr ""
+
+#. TRANSLATORS: joins the actions of a rule in its summary.
+#: ui/internal/rules/text.go:592
+msgctxt "rule actions"
+msgid ", "
+msgstr ""
+
+#. TRANSLATORS: the name of a rule made from a message; %s is the
+#. sender's name or address.
+#: ui/internal/rules/text.go:600
+#, c-format
+msgid "Messages from %s"
+msgstr ""
+
+#: ui/internal/rules/text.go:609
+msgid "Create Rule from Message…"
+msgstr ""
+
+#: ui/internal/rules/text.go:614
+msgid "Apply Rules…"
+msgstr ""
+
+#: ui/internal/rules/text.go:621
+#, c-format
+msgid "Apply Rules to “%s”?"
+msgstr ""
+
+#: ui/internal/rules/text.go:622
+msgid ""
+"The rules that are on run on the messages of this folder kept on this "
+"computer. Rules do not forward or reply to these messages."
+msgstr ""
+
+#: ui/internal/rules/text.go:623
+msgid "Apply"
+msgstr ""
+
+#: ui/internal/rules/text.go:629
+msgid "Applying rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:635
+msgid "The rules changed no message."
+msgstr ""
+
+#: ui/internal/rules/text.go:637
+#, c-format
+msgid "The rules changed %d message."
+msgid_plural "The rules changed %d messages."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:642
+msgid "The rules could not be applied."
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21
@@ -8211,250 +8822,250 @@ msgstr ""
 msgid "Use the + button to add one"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:64
+#: ui/data/ui/preferences.ui:85
 msgid "General"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:68
+#: ui/data/ui/preferences.ui:89
 msgid "Startup"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:71
+#: ui/data/ui/preferences.ui:92
 msgid "Launch at Login"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:72
+#: ui/data/ui/preferences.ui:93
 msgid "Start hidden in the background when you log in"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:77
+#: ui/data/ui/preferences.ui:98
 msgid "Run in Background"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:78
+#: ui/data/ui/preferences.ui:99
 msgid "Closing the window keeps Malachi Mail running for notifications"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:184
+#: ui/data/ui/preferences.ui:205
 msgid "Reading"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:187
+#: ui/data/ui/preferences.ui:208
 msgid "Mark as Read After"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:188
+#: ui/data/ui/preferences.ui:209
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 marks it "
 "immediately"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:203
+#: ui/data/ui/preferences.ui:224
 msgid "Deleting"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:206
+#: ui/data/ui/preferences.ui:227
 msgid "Confirm Before Deleting"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:207 data/io.github.schotek.Malachi.gschema.xml:135
+#: ui/data/ui/preferences.ui:228 data/io.github.schotek.Malachi.gschema.xml:130
 msgid "Ask before moving a message to Trash"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:215
+#: ui/data/ui/preferences.ui:236
 msgid "Notifications"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:218
+#: ui/data/ui/preferences.ui:239
 msgid "Show Desktop Notifications"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:224
+#: ui/data/ui/preferences.ui:245
 msgid "Play Sound"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:225 data/io.github.schotek.Malachi.gschema.xml:143
+#: ui/data/ui/preferences.ui:246 data/io.github.schotek.Malachi.gschema.xml:138
 msgid "Play the system new-mail sound"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:233
+#: ui/data/ui/preferences.ui:254
 msgid "Stored by the mail daemon."
 msgstr ""
 
-#: ui/data/ui/preferences.ui:241
+#: ui/data/ui/preferences.ui:262
 msgid "Manually"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:242
+#: ui/data/ui/preferences.ui:263
 msgid "Every 5 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:243
+#: ui/data/ui/preferences.ui:264
 msgid "Every 15 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:244
+#: ui/data/ui/preferences.ui:265
 msgid "Every 30 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:252
+#: ui/data/ui/preferences.ui:273
 msgid "Load Remote Images"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:257
+#: ui/data/ui/preferences.ui:278
 msgid "From Known Senders"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:258
+#: ui/data/ui/preferences.ui:279
 msgid "Always"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:266
+#: ui/data/ui/preferences.ui:287
 msgid "Keep Mail Offline For"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:267
+#: ui/data/ui/preferences.ui:288
 msgid "Older messages stay on the server and are not shown"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:275 ui/data/ui/preferences.ui:294
+#: ui/data/ui/preferences.ui:296 ui/data/ui/preferences.ui:315
 msgid "Everything"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:283
+#: ui/data/ui/preferences.ui:304
 msgid "Keep Attachments Offline For"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:284
+#: ui/data/ui/preferences.ui:305
 msgid ""
 "Large attachments of older messages stay on the server and are downloaded "
 "when you open them"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:290
+#: ui/data/ui/preferences.ui:311
 msgid "Small Attachments Only"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:302
+#: ui/data/ui/preferences.ui:323
 msgid "Never Store Attachments"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:303
+#: ui/data/ui/preferences.ui:324
 msgid ""
 "Attachments are downloaded whenever you open them and are gone when you quit"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:309
+#: ui/data/ui/preferences.ui:330
 msgid "Compress Stored Mail"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:310
+#: ui/data/ui/preferences.ui:331
 msgid "Uses less disk space; stored mail is converted in the background"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:316
+#: ui/data/ui/preferences.ui:337
 msgid "Disk Space Used"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:434
+#: ui/data/ui/preferences.ui:455
 msgid "Appearance"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:438
+#: ui/data/ui/preferences.ui:459
 msgid "Theme"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:441
+#: ui/data/ui/preferences.ui:462
 msgid "Color Scheme"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:445
+#: ui/data/ui/preferences.ui:466
 msgid "Follow System"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:446
+#: ui/data/ui/preferences.ui:467
 msgid "Light"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:447
+#: ui/data/ui/preferences.ui:468
 msgid "Dark"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:457
+#: ui/data/ui/preferences.ui:478
 msgid "Message List"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:460
+#: ui/data/ui/preferences.ui:481
 msgid "Density"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:464
+#: ui/data/ui/preferences.ui:485
 msgid "Comfortable"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:465
+#: ui/data/ui/preferences.ui:486
 msgid "Compact"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:473
+#: ui/data/ui/preferences.ui:494
 msgid "Show Preview Line"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:479
+#: ui/data/ui/preferences.ui:500
 msgid "Show Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:485
+#: ui/data/ui/preferences.ui:506
 msgid "Monochrome Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:486
+#: ui/data/ui/preferences.ui:507
 msgid "Neutral grey instead of a colour per sender"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:503
+#: ui/data/ui/preferences.ui:517
 msgid "Group by Conversation"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:504
+#: ui/data/ui/preferences.ui:518
 msgid "One row per conversation; expand it to see its messages"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:529
+#: ui/data/ui/preferences.ui:543
 msgid "Message View"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:532
+#: ui/data/ui/preferences.ui:546
 msgid "Use Monospace Font for Plain Text"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:537
+#: ui/data/ui/preferences.ui:551
 msgid "Text Zoom"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:538
+#: ui/data/ui/preferences.ui:552
 msgid "Percent"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:556
+#: ui/data/ui/preferences.ui:570
 msgid "AI"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:568
+#: ui/data/ui/preferences.ui:582
 msgid "MCP"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:569
+#: ui/data/ui/preferences.ui:583
 msgid ""
 "Lets AI assistants read your mail and prepare drafts through the Model "
 "Context Protocol."
 msgstr ""
 
-#: ui/data/ui/preferences.ui:572
+#: ui/data/ui/preferences.ui:586
 msgid "Register with Claude"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:573
+#: ui/data/ui/preferences.ui:587
 msgid ""
 "Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
 "computer"

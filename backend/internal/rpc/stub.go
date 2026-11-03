@@ -50,6 +50,32 @@ func (b *StubBackend) AddressBooks() api.AddressBookService {
 
 func (b *StubBackend) Update() api.UpdateService { return stubUpdate{} }
 
+func (b *StubBackend) Rules() api.RulesService { return stubRules{} }
+
+type stubRules struct{}
+
+func (stubRules) List(context.Context, api.RulesListParams) (*api.RulesListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Create(context.Context, api.RulesCreateParams) (*api.RulesCreateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Update(context.Context, api.RulesUpdateParams) (*api.RulesUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Delete(context.Context, api.RulesDeleteParams) (*api.RulesDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Reorder(context.Context, api.RulesReorderParams) (*api.RulesReorderResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Test(context.Context, api.RulesTestParams) (*api.RulesTestResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Apply(context.Context, api.RulesApplyParams) (*api.RulesApplyResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
 type stubUpdate struct{}
 
 func (stubUpdate) Status(context.Context, api.UpdateStatusParams) (*api.UpdateStatus, error) {

@@ -117,3 +117,6 @@ ui/internal/window/contacts_consent.go
 ui/internal/window/contacts_detail.go
 ui/internal/undo/text.go
 ui/internal/updates/updates.go
+ui/internal/rules/text.go
+ui/internal/window/rules_editor.go
+ui/internal/window/preferences_rules.go

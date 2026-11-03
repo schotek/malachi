@@ -11,18 +11,18 @@ import (
 )
 
 // updateMethods end AllMethods, after the address books'; notify.updateChanged
-// ends AllNotifications.
+// is just before notify.rulesChanged.
 var updateMethods = []string{"update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice"}
 
 func TestUpdateMethodsOrder(t *testing.T) {
-	n := len(AllMethods)
-	if !reflect.DeepEqual(AllMethods[n-len(updateMethods):], updateMethods) {
-		t.Fatalf("AllMethods does not end with the update methods: %v", AllMethods[n-len(updateMethods):])
+	n := len(AllMethods) - len(rulesMethods)
+	if !reflect.DeepEqual(AllMethods[n-len(updateMethods):n], updateMethods) {
+		t.Fatalf("AllMethods does not end with the update methods: %v", AllMethods[n-len(updateMethods):n])
 	}
 	if AllMethods[n-len(updateMethods)-1] != MethodContactPhoto {
 		t.Fatal("the update methods do not follow the address books'")
 	}
-	if AllNotifications[len(AllNotifications)-1] != NotifyUpdateChanged {
+	if AllNotifications[len(AllNotifications)-2] != NotifyUpdateChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

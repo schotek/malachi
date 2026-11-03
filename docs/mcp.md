@@ -101,8 +101,8 @@ registered at all, so it never appears in the client's tool list.
 
 | Tier | Flag | Tools |
 |---|---|---|
-| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, `get_user_profile`, the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` and the contacts tools `search_contacts`, `get_contact` (neither under `-reply-only` or `-triage-run`) |
-| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` (attendees also need `-allow-send`), `create_contact`, `update_contact` |
+| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, `get_user_profile`, the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` and the contacts tools `search_contacts`, `get_contact` and `list_rules` (none of these under `-reply-only` or `-triage-run`) |
+| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` (attendees also need `-allow-send`), `create_contact`, `update_contact`, `create_rule`, `update_rule` (forward and autoReply also need `-allow-send`) |
 | send | `-allow-send` | `send_message` |
 | triage | `-allow-triage` | `list_triage_queue`, `annotate_case`, `add_commitment` (and the prompt `triage_board`) |
 | profile proposals | the user shares the profile, or `-in-app` | `propose_profile_note` (never under `-reply-only` or `-triage-run`; see [The user's profile](#the-users-profile-get_user_profile-propose_profile_note)) |
@@ -574,6 +574,44 @@ revisions, kinds and counts stay outside, matched by row number or id.
   the card stays as the server has it (the daemon patches). The bridge
   reads the contact and sends its revision: a change made elsewhere since
   is `contactConflict` and nothing is written.
+
+### Mail rules (`list_rules`, `create_rule`, `update_rule`)
+
+The rules tools read and write the user's mail rules through `rules.list`,
+`rules.create` and `rules.update` ([api.md §4.21](api.md#421-rules)).
+The daemon runs the rules itself on new mail of the inbox; the bridge
+never runs them on mail already stored (`rules.apply`) and **never
+deletes** a rule (the user does both in Malachi Mail). `list_rules` is
+registered as the calendar's (never under `-reply-only` or
+`-triage-run`); `create_rule` and `update_rule` need `-allow-modify`.
+A rule's name, values, forwarding address and reply text may have been
+taken from mail (Create Rule from Message…): they are cleaned and sit
+inside the fence, ids, flags and counts outside, matched by the rule id.
+
+- `list_rules`: no arguments. A trusted line per rule (id, enabled, the
+  account or every mail account, `match`, `stop`, `sendsMail` for an
+  outgoing action, `applied`, `refused` = `skipped`, the last application
+  and `disabledBecause` = `problem`), then the names, conditions and
+  actions inside the fence (a reply text cut at 1 KiB).
+- `create_rule` (`-allow-modify`): `name`, optional `accountId` (default
+  every mail account), `match` (`all` default, `any`), `conditions`
+  (`field`, `op`, `value`), `actions` (`kind`, `folderId`, `to`,
+  `subject`, `text`), `stop`, `enabled` (default true). The rule is added
+  at the end and runs on new mail from then on.
+- `update_rule` (`-allow-modify`): `id` and the fields to change; the
+  others stay as `rules.list` has them (`conditions` and `actions` given
+  replace the lists). `enabled: false` switches a rule off.
+- **Outgoing actions.** A rule with `forward` or `autoReply` sends mail
+  to other people by itself on every matching message, without anyone
+  looking ([security.md §7.5](security.md#75-outgoing-actions-of-the-mail-rules)).
+  Without `-allow-send` the bridge refuses, with one fixed text and
+  before the daemon is asked, `create_rule` with such an action and
+  `update_rule` whose result is enabled with one (switching such a rule
+  off is allowed). With `-allow-send` it sends `confirmOutgoing`: the
+  model's instructions and the tool description say that the user must
+  have asked for exactly that rule in the conversation.
+- A rule the daemon refuses comes back as `invalidArgument` with the
+  field it names (`conditions[1]`, `actions[0]`, `name`, …).
 
 ### The user's profile (`get_user_profile`, `propose_profile_note`)
 

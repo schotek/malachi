@@ -655,6 +655,36 @@ public static class API
     public static readonly RpcMethod<UpdateDismissNoticeParams, UpdateStatus> UpdateDismissNotice =
         new("update.dismissNotice", RpcTimeouts.Default, Wire.UpdateDismissNoticeParams, Wire.UpdateStatus);
 
+    // Mail rules (docs/api.md §4.21; Rules.cs)
+
+    /// <summary><c>rules.list</c>: every rule in its order.</summary>
+    public static readonly RpcMethod<EmptyParams, RulesListResult> RulesList =
+        new("rules.list", RpcTimeouts.Default, Wire.EmptyParams, Wire.RulesListResult);
+
+    /// <summary><c>rules.create</c>: adds a rule at the end; confirmOutgoing when it is enabled with an outgoing action.</summary>
+    public static readonly RpcMethod<RulesCreateParams, RulesCreateResult> RulesCreate =
+        new("rules.create", RpcTimeouts.Default, Wire.RulesCreateParams, Wire.RulesCreateResult);
+
+    /// <summary><c>rules.update</c>: replaces a rule's input.</summary>
+    public static readonly RpcMethod<RulesUpdateParams, RulesUpdateResult> RulesUpdate =
+        new("rules.update", RpcTimeouts.Default, Wire.RulesUpdateParams, Wire.RulesUpdateResult);
+
+    /// <summary><c>rules.delete</c>: ruleNotFound for an unknown id.</summary>
+    public static readonly RpcMethod<RulesDeleteParams, EmptyResult> RulesDelete =
+        new("rules.delete", RpcTimeouts.Default, Wire.RulesDeleteParams, Wire.EmptyResult);
+
+    /// <summary><c>rules.reorder</c>: every rule's id once, in the new order.</summary>
+    public static readonly RpcMethod<RulesReorderParams, RulesReorderResult> RulesReorder =
+        new("rules.reorder", RpcTimeouts.Default, Wire.RulesReorderParams, Wire.RulesReorderResult);
+
+    /// <summary><c>rules.test</c>: which stored messages of a folder a rule, as edited, matches.</summary>
+    public static readonly RpcMethod<RulesTestParams, RulesTestResult> RulesTest =
+        new("rules.test", RpcTimeouts.RulesTest, Wire.RulesTestParams, Wire.RulesTestResult);
+
+    /// <summary><c>rules.apply</c>: runs rules by hand on stored mail, local actions only.</summary>
+    public static readonly RpcMethod<RulesApplyParams, RulesApplyResult> RulesApply =
+        new("rules.apply", RpcTimeouts.RulesApply, Wire.RulesApplyParams, Wire.RulesApplyResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -698,6 +728,7 @@ public static class API
         ContactCreate, ContactUpdate, ContactDelete,
         ContactPhoto,
         UpdateStatus, UpdateCheck, UpdateSetPrefs, UpdateDismiss, UpdateDismissNotice,
+        RulesList, RulesCreate, RulesUpdate, RulesDelete, RulesReorder, RulesTest, RulesApply,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -751,6 +782,9 @@ public static class API
 
         /// <summary>api.NotifyUpdateChanged: the update status changed; no params, clients call <c>update.status</c>.</summary>
         public const string UpdateChanged = "notify.updateChanged";
+
+        /// <summary>api.NotifyRulesChanged: a rule was added, changed, reordered, deleted or disabled by the daemon, or its counts moved; no params, clients call <c>rules.list</c>.</summary>
+        public const string RulesChanged = "notify.rulesChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
@@ -762,6 +796,7 @@ public static class API
         Notify.AssistantProfileChanged,
         Notify.ContactsChanged,
         Notify.UpdateChanged,
+        Notify.RulesChanged,
     ];
 
     /// <summary>

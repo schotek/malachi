@@ -536,6 +536,10 @@ Pořadí prací:
     `claude/exciting-ritchie-dy3qqt` 2026-11-02, démon, GTK, macOS i Windows
     sestavené, otestované a ověřené vlastníkem na obrazovce; viz odstavec níže
     a `docs/plans/unified-inbox.md`
+19. Pravidla pošty (filtry) — větev `claude/sleepy-hawking-7gu54a`
+    2026-11-02, démon i všechny tři klienty napsané, macOS (B1), GTK (B2)
+    a Windows (B3) schválené vlastníkem 2026-11-03;
+    viz odstavec Pravidla pošty níže a `docs/plans/rules.md`
 
 Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
 U1–U4 v `docs/plans/unified-inbox.md`). Položka nahoře v postranním panelu
@@ -554,6 +558,33 @@ Ověřeno 2026-11-02: GTK v kontejneru (build, celé `test-ui`, smoke, `make po`
 Windows ARM64 (`build.ps1 app`/`lint`, `test` 9100 se čtyřmi selháními
 prostředí jako na `main`), vlastník prošel všechny tři nad dvěma účty
 z `malachi-devmail`; podrobnosti v „As built“ plánu.
+
+Pravidla pošty (2026-11-02, všechny tři klienty, v PR do `main`;
+plán, rozhodnutí R1–R14 a stav ověření v `docs/plans/rules.md`, API
+`docs/api.md` §4.21, bezpečnost `docs/security.md` §7.5). Démon vyhodnocuje
+pravidla lokálně v hooku `afterMailStored` jen pro Doručenou poštovních
+účtů, každé Message-ID nejvýš jednou (`rule_seen`), nikdy na poštu starší
+než den před zapnutím pravidla (`internal/rules` čistý matcher, migrace
+0025, `core/rules_engine.go`); lokální akce synchronně před
+`notify.newMessage`, přeposlání a automatická odpověď přes frontu na účet
+(`core/rules_outgoing.go`) s ochranami (hromadná a automatická pošta,
+vlastní adresy, noreply, `X-Loop`, 20 za hodinu, odpověď odesílateli
+jednou za 4 dny, hlavičky `Auto-Submitted`), zapnutí odchozího pravidla
+jen s `confirmOutgoing`; `rules.apply` jen lokální akce. MCP `list_rules`,
+za `--allow-modify` `create_rule`/`update_rule`, odchozí akce navíc jen
+s `--allow-send`. Reference `ui/internal/rules` (model, validace, texty)
+a `ui/internal/rulesctl` (GTK kontrolery), porty `MalachiCore/Rules`
+a `Malachi.Core/Rules`; Předvolby → Pravidla za Integracemi, editor,
+*Vytvořit pravidlo ze zprávy…* a *Použít pravidla…* v kontextových
+menu, vzorová data `MALACHI_RULES_SAMPLES=1`. Brány: B1 macOS (2026-11-03,
+`swift build`/`swift test` zelené, vlastník schválil nad kopií dat), B2
+GTK (`gtk.sh make build`, `test-ui`, `TestRulesGTKSmoke`, `make po`,
+`make lint`, vlastník schválil v XQuartz) a B3 Windows (`build.ps1
+app`/`test`/`lint`, UI smoke `RulesSmokeTests` a `RulesDevmailTests`,
+vlastník schválil na obrazovce; oprava přepínače, který přesun řádku
+přepínal u jiného pravidla) prošly; čeká rozhodnutí vlastníka, zda
+nechat potlačení `notify.newMessage` pro každou zprávu přečtenou už při
+stažení, nebo ho zúžit na zprávy změněné pravidlem.
 
 Přílohy jako dlaždice (2026-11-02, všechny tři klienty, rozhodnutí
 vlastníka podle srovnání s Outlookem). Příloha je dlaždice pevné šířky

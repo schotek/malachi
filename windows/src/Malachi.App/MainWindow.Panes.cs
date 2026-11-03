@@ -103,6 +103,7 @@ public sealed partial class MainWindow
         SidebarPane.Attach(integration.Mailbox, integration.Actions, Commands);
         ListPane.Attach(integration.List, integration.Sync, integration.Actions, Commands);
         MessageCommands.Attach(Commands);
+        AttachRules();
         StatusLine.Attach(integration.Sync, integration.Mailbox);
 
         var repair = new AccountRepair(state, integration.Mailbox, integration.Sync, text => Toasts.Show(text));

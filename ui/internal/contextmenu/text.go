@@ -114,7 +114,7 @@ func Label(tr Translator, id ItemID, l Labels) string {
 		}
 		return tr.T("Collapse")
 	}
-	return ""
+	return rulesLabel(tr, id)
 }
 
 // Question is a confirmation: its heading, its text and the label of the

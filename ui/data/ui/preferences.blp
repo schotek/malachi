@@ -73,6 +73,26 @@ Adw.PreferencesDialog preferences_dialog {
     Adw.PreferencesGroup integrations_available_group {}
   }
 
+  // Preferences → Rules (docs/plans/rules.md R14, window/preferences_rules.go
+  // bindRules over rulesctl.Controller): the mail rules in the order they
+  // run. Every text is ui/internal/rules', set in Go, so this page has no
+  // translatable strings; the rows are built there.
+  Adw.PreferencesPage rules_page {
+    name: "rules";
+    icon-name: "funnel-symbolic";
+
+    Adw.PreferencesGroup rules_group {
+      header-suffix: Button rules_add_button {
+        valign: center;
+      };
+
+      Adw.ActionRow rules_empty_row {
+        use-markup: false;
+        sensitive: false;
+      }
+    }
+  }
+
   Adw.PreferencesPage general_page {
     name: "general";
     title: _("General");

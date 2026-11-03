@@ -71,6 +71,8 @@ const (
 	CodeContactNotFound ErrorCode = 1110
 	// CodeAddressBookNotFound: no address book with that id.
 	CodeAddressBookNotFound ErrorCode = 1111
+	// CodeRuleNotFound: no mail rule with that id (docs/api.md §4.21).
+	CodeRuleNotFound ErrorCode = 1112
 
 	// 1200–1299: authentication.
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
@@ -184,6 +186,7 @@ var codeNames = map[ErrorCode]string{
 	CodeCrmItemNotFound:         "crmItemNotFound",
 	CodeContactNotFound:         "contactNotFound",
 	CodeAddressBookNotFound:     "addressBookNotFound",
+	CodeRuleNotFound:            "ruleNotFound",
 	CodeAuthRequired:            "authRequired",
 	CodeAuthFailed:              "authFailed",
 	CodeKeyringError:            "keyringError",
