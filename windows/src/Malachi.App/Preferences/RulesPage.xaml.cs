@@ -224,9 +224,25 @@ public sealed partial class RulesPage : UserControl
 
     // The switch: the controller asks the outgoing question when a rule that
     // sends mail is turned on; a switch it did not flip goes back.
-    private async void OnRowToggled(object sender, RoutedEventArgs e)
+    //
+    // Toggled also comes when the list gives a recycled container another
+    // row (a move, a drag, a rule added or removed): x:Bind sets the switch's
+    // IsOn before the template's DataContext follows, so the flip names the
+    // container's former rule (measured: Ctrl+Down on one rule turned a
+    // disabled one on). The flip is judged once the container has settled,
+    // and only one that disagrees with its row's rule is the user's.
+    private void OnRowToggled(object sender, RoutedEventArgs e)
     {
-        if (reverting || sender is not ToggleSwitch toggle || toggle.DataContext is not RuleRowView row || row.Applying)
+        if (reverting || closed || sender is not ToggleSwitch toggle)
+        {
+            return;
+        }
+        DispatcherQueue.TryEnqueue(() => _ = ToggledAsync(toggle));
+    }
+
+    private async Task ToggledAsync(ToggleSwitch toggle)
+    {
+        if (reverting || closed || toggle.DataContext is not RuleRowView row || row.Applying || toggle.IsOn == row.IsOn)
         {
             return;
         }
