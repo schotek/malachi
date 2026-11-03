@@ -181,6 +181,11 @@ extension MainWindowController {
             hub.addAccountsChanged { [weak self] in
                 self?.startedBoardSource?.accountsChanged()
             },
+            // Trust changed: the verdicts on the cards may have (the
+            // conversations the source holds are asked for again).
+            hub.addSignaturesChanged { [weak self] in
+                self?.startedBoardSource?.signaturesChanged()
+            },
             hub.addConnectionState { [weak self] s in
                 let connected: Bool
                 switch s {

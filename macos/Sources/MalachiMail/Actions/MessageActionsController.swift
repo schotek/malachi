@@ -314,7 +314,10 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
     /// The badge's popover: the verdict of message `s` in detail. The
     /// confirmation of a key is asked on the badge's window.
     func showSignature(of s: MessageSummary, relativeTo anchor: NSView) {
-        let summary = cache.loaded(s.id)?.msg?.signature
+        showSignature(of: s, summary: cache.loaded(s.id)?.msg?.signature, relativeTo: anchor)
+    }
+
+    func showSignature(of s: MessageSummary, summary: SignatureSummary?, relativeTo anchor: NSView) {
         SignatureDetailsPopover.show(s, summary: summary, relativeTo: anchor, state: state, window: anchor.window)
     }
 

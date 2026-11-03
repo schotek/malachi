@@ -194,6 +194,10 @@ protocol MessageActionDelegate: AnyObject {
     /// popover (ui/internal/signature `DetailsFor`) of message `s` under
     /// `anchor`, which shows what message.get carried meanwhile.
     func showSignature(of s: MessageSummary, relativeTo anchor: NSView)
+    /// The same with the verdict the caller holds (`summary`: a board
+    /// card's, which the message cache does not have) shown until the
+    /// daemon's details arrive.
+    func showSignature(of s: MessageSummary, summary: SignatureSummary?, relativeTo anchor: NSView)
     /// remote.go `openLink`: allow-list, mailto → compose, masked-link
     /// alert on `window`, then the browser.
     func openLink(_ href: String, links: [Link], from window: NSWindow?)

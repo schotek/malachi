@@ -179,6 +179,20 @@ public final class DaemonBoardSource: BoardSource {
         }
     }
 
+    /// notify.signaturesChanged: trust changed (a key confirmed or removed,
+    /// a revocation checked), so the verdicts `board.get` carried may have.
+    /// Each conversation held (a handful, `conversationsKept`) is asked for
+    /// again and replaced in place when the answer comes: the cards stay
+    /// meanwhile, no loading state, and an unchanged answer publishes
+    /// nothing. A verdict that only appears later (after board.get) is not
+    /// this notification's: the case's next version brings it.
+    public func signaturesChanged() {
+        guard started, !stopped else { return }
+        for id in Array(messages.keys) {
+            reloadMessages(of: id)
+        }
+    }
+
     /// notify.accountsChanged: the accounts' names and the board again.
     public func accountsChanged() {
         guard started else { return }
@@ -402,6 +416,24 @@ public final class DaemonBoardSource: BoardSource {
     }
 
     // MARK: Conversations
+
+    /// board.get of `id` again for the conversation held, replacing it when
+    /// the answer comes; a failure keeps what is held.
+    private func reloadMessages(of id: Board.CaseID) {
+        let client = client
+        Task { [weak self] in
+            guard let r = try? await client.call(
+                API.BoardGet.self, BoardGetParams(caseId: BoardCaseID(rawValue: id.rawValue)))
+            else { return }
+            guard let self, !self.stopped, self.messages[id] != nil,
+                  self.base.cases.contains(where: { $0.id == id })
+            else { return }
+            let c = Self.convert(r.case)
+            self.messages[id] = (c.version, r.messages.map(Self.convert))
+            self.store(c)
+            self.publish()
+        }
+    }
 
     public func loadMessages(of id: Board.CaseID) {
         guard !stopped, let c = base.cases.first(where: { $0.id == id }) else { return }
@@ -764,7 +796,8 @@ extension DaemonBoardSource {
     static func convert(_ m: BoardMessage) -> Board.CaseMessage {
         Board.CaseMessage(
             id: m.id, folder: m.folderId, from: displayName(m.from), date: m.date, text: m.text, mine: m.mine,
-            trimmed: m.trimmed ?? false, address: m.from.address)
+            trimmed: m.trimmed ?? false, address: m.from.address,
+            signature: m.signature)
     }
 
     static func convert(_ r: BoardRun) -> Board.Run {

@@ -56,16 +56,24 @@ extension Board {
         public struct Key: Sendable, Equatable {
             public var caseID: CaseID
             public var members: [Member]
+            /// The signature verdict of each member, same indices as
+            /// `members`. Not part of a member's identity (its body, its
+            /// fold stay), but a change of one counts as a change of the
+            /// cards: `apply` answers `.members` so the badge turns.
+            public var signatures: [SignatureSummary?]
 
-            public init(caseID: CaseID, members: [Member]) {
+            public init(caseID: CaseID, members: [Member], signatures: [SignatureSummary?]? = nil) {
                 self.caseID = caseID
                 self.members = members
+                self.signatures = signatures ?? Array(repeating: nil, count: members.count)
             }
         }
 
         /// The key of `d`'s conversation.
         public static func key(_ d: Detail) -> Key {
-            Key(caseID: d.id, members: d.messages.map { Member(id: $0.id, text: $0.text) })
+            Key(
+                caseID: d.id, members: d.messages.map { Member(id: $0.id, text: $0.text) },
+                signatures: d.messages.map(\.signature))
         }
 
         /// What message.body gave for a member.
@@ -112,6 +120,8 @@ extension Board {
         public private(set) var caseID: CaseID?
         public private(set) var members: [Member] = []
         /// Same indices as `members`.
+        public private(set) var signatures: [SignatureSummary?] = []
+        /// Same indices as `members`.
         private var folds: [Bool] = []
         private var bodies: [Member: Body] = [:]
         /// The members in the order they were opened, the latest last.
@@ -137,12 +147,21 @@ extension Board {
             guard key.caseID == caseID else {
                 caseID = key.caseID
                 members = key.members
+                signatures = key.signatures
                 folds = members.indices.map { $0 != newest }
                 bodies = [:]
                 opened = members.last.map { [$0] } ?? []
                 return .reset
             }
-            guard key.members != members else { return .none }
+            guard key.members != members else {
+                // The same cards with another verdict on one: every card
+                // stays as it is (fold, body, web view) and learns the new
+                // verdict, nothing else is asked for.
+                guard key.signatures != signatures else { return .none }
+                signatures = key.signatures
+                return .members(kept: Dictionary(uniqueKeysWithValues: members.indices.map { ($0, $0) }), reload: [])
+            }
+            signatures = key.signatures
             var free: [Member: [Int]] = [:]
             for (i, m) in members.enumerated() {
                 free[m, default: []].append(i)

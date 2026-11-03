@@ -259,6 +259,10 @@ extension Board {
         /// The sender's address (never shown): only whose contact photo
         /// the chat bubble's avatar shows (F10); "" none.
         public var address: String = ""
+        /// The verdict of the message's signature (`board.get`): the badge
+        /// of the open and the folded card, none in the chat bubble; nil
+        /// when the message has none.
+        public var signature: SignatureSummary?
     }
 
     /// The selected case in full. An empty string hides its block.
@@ -885,7 +889,8 @@ extension Board {
                 return MessageCard(
                     id: m.id, from: m.mine ? Text.you : sender, sender: sender,
                     when: formatDate(m.date, now: now, locale: locale, calendar: calendar), date: m.date,
-                    text: cleanBlock(m.text, max: Cap.message), mine: m.mine, address: m.address)
+                    text: cleanBlock(m.text, max: Cap.message), mine: m.mine, address: m.address,
+                    signature: m.signature)
             }
             let messagesNote: String
             if c.messages != nil {
