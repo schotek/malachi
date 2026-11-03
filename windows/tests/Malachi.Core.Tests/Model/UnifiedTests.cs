@@ -211,12 +211,13 @@ public sealed class UnifiedTests
         Assert.False(row.TwistyShown);
         Assert.Equal(Unified.Key, row.Folder);
         Assert.Equal(FolderTree.RoleIcon(FolderRole.Inbox), row.Icon);
-        // The blank line keeps the row as tall as the pinned folders' rows.
-        Assert.Equal(" ", row.Subtitle);
+        // No subtitle, but the row is as tall as the pinned folders' rows.
+        Assert.Equal("", row.Subtitle);
+        Assert.True(row.TwoLines);
         Assert.Equal("All Inboxes, 5", row.ToString());
         row.Update(new FolderEntry { IsUnified = true, Favourite = true, Badge = 0 }, several: false);
         Assert.Equal("", row.Badge);
-        Assert.Equal("", row.Subtitle);
+        Assert.False(row.TwoLines);
     }
 
     [Fact]

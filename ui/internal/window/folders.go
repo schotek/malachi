@@ -231,8 +231,8 @@ func (w *Window) rebuildFolderList() {
 		if e.Favourite && several {
 			// The All Inboxes item names no account, but keeps the line
 			// (a blank subtitle) so every row of the section is two lines
-			// tall and the section has one rhythm; macOS gives its row the
-			// subtitle row's height, Windows the same blank line.
+			// tall and the section has one rhythm; macOS and Windows give
+			// its row the subtitle row's height instead.
 			subtitle = " "
 			if !e.Unified {
 				subtitle = accountLabel(e.Account)

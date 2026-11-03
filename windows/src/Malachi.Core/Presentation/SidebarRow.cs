@@ -84,9 +84,19 @@ public sealed partial class SidebarRow : ObservableObject
     [ObservableProperty]
     public partial string Title { get; private set; }
 
-    /// <summary>Under a pinned folder's name while two or more accounts are enabled: whose it is (a blank line on the All Inboxes row); "" otherwise.</summary>
+    /// <summary>Under a pinned folder's name while two or more accounts are enabled: whose it is; "" otherwise.</summary>
     [ObservableProperty]
     public partial string Subtitle { get; private set; }
+
+    /// <summary>
+    /// The row is two lines tall: a pinned folder's row with its account
+    /// under the name, and the All Inboxes row beside such rows (no
+    /// subtitle, the name centred in the same height), so the Favourites
+    /// section has one rhythm; macOS gives the item the subtitle row's
+    /// height the same way.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool TwoLines { get; private set; }
 
     /// <summary>The folder's path on the server (the row's tooltip); "" on a heading.</summary>
     [ObservableProperty]
@@ -186,6 +196,7 @@ public sealed partial class SidebarRow : ObservableObject
             Title = e.Favourite ? L10n.T("Favourites") : e.Account is { } a ? FolderTree.AccountLabel(a) : "";
             Capsule = !e.Favourite && e.Account is { } heading ? FolderTree.AccountHeaderBadge(heading) : "";
             Subtitle = "";
+            TwoLines = false;
             Tooltip = "";
             Indent = 0;
             Icon = "";
@@ -211,10 +222,11 @@ public sealed partial class SidebarRow : ObservableObject
             Kind = SidebarRowKind.Unified;
             Title = Unified.Title;
             Capsule = "";
-            // No account to name, but with several accounts the line stays
-            // (blank) so every row of the section is two lines tall and the
+            // No account to name; with several accounts the row still takes
+            // the height of a pinned folder's two-line row (TwoLines) so the
             // section has one rhythm (folders.go rebuildFolderList).
-            Subtitle = several ? " " : "";
+            Subtitle = "";
+            TwoLines = several;
             Tooltip = "";
             Indent = FolderInset;
             Icon = FolderTree.RoleIcon(FolderRole.Inbox);
@@ -234,6 +246,7 @@ public sealed partial class SidebarRow : ObservableObject
         Title = FolderTree.FolderTitle(f);
         Capsule = "";
         Subtitle = e.Favourite && several && e.Account is { } account ? FolderTree.AccountLabel(account) : "";
+        TwoLines = Subtitle.Length > 0;
         Tooltip = DisplayText.Clean(f.Path);
         Indent = FolderInset + (IndentPerLevel * e.Depth);
         Icon = FolderTree.FolderIcon(f);
@@ -252,7 +265,7 @@ public sealed partial class SidebarRow : ObservableObject
     /// <summary>What a screen reader names the row: its text (a heading's with its capsule), and the unread count when there is one.</summary>
     public override string ToString()
     {
-        var name = Subtitle.Trim().Length > 0 ? Title + ", " + Subtitle : Capsule.Length > 0 ? Title + ", " + Capsule : Title;
+        var name = Subtitle.Length > 0 ? Title + ", " + Subtitle : Capsule.Length > 0 ? Title + ", " + Capsule : Title;
         return Badge.Length > 0 ? name + ", " + Badge : name;
     }
 

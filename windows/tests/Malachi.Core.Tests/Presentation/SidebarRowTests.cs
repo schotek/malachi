@@ -163,7 +163,9 @@ public sealed class SidebarRowTests
         favourites.Toggle(new FolderKey("acc1", "inbox"));
         var pinned = Entries(favourites).First(e => e.Favourite && !e.Header);
         Assert.Equal("one@example.invalid", Row(pinned, several: true).Subtitle);
+        Assert.True(Row(pinned, several: true).TwoLines);
         Assert.Equal("", Row(pinned, several: false).Subtitle);
+        Assert.False(Row(pinned, several: false).TwoLines);
         Assert.Equal("Inbox, one@example.invalid, 2", Row(pinned, several: true).ToString());
     }
 
