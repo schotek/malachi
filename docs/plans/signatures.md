@@ -948,3 +948,107 @@ removed.“) a `KeyRemoveFailedText` („The key could not be removed.“),
 a `windows/README.md` jsou pryč. Ověřeno jen `go test
 ./internal/signature` a `check-strings.py`; GTK, Swift a C# čekají na
 sestavení jako zbytek fáze 1.
+
+## Board card badge (macOS)
+
+Karty konverzace v detailu případu nástěnky mají odznak podpisu jako karty
+Pošty (napsáno bez překladu, čeká `swift build` a `swift test`). Core:
+`BoardMessage.signature` (`SignatureSummary`) → `Board.CaseMessage.signature`
+→ `Board.MessageCard.signature`; `ConversationCards.Key` nese
+`signatures` vedle členů (verdikt není součástí identity karty, tělo a
+sbalení zůstávají) a změna verdiktu vrátí `.members(kept: identita,
+reload: [])`, takže blok karty jen aktualizuje, nic nestahuje znovu.
+`DaemonBoardSource.signaturesChanged()` (z `notify.signaturesChanged`,
+`MainWindowController.wireBoardSource`) zeptá se `board.get` znovu na
+držené konverzace a vymění je na místě. AppKit: `BoardMessageCardView`
+vyrábí `SignatureBadgeView` líně pod záhlavím, otevřená karta ho ukazuje,
+sbalená ne (jako Pošta), v chat bublině není; klik jde přes nové
+`MessageActionDelegate.showSignature(of:summary:relativeTo:)` s id členu
+a verdiktem karty (`showSignature(of:relativeTo:)` ho volá s verdiktem
+z cache). Vzorová data: nejnovější zpráva prvního případu je podepsaná
+(`MALACHI_BOARD_SAMPLES`; klik v nich jen řekne, že náhled to neumí). Bez
+nového msgid. Testy: `APICodingBoardTests` (`getResultCarriesTheSignature…`),
+`BoardConversationCardsTests` (klíč, změna verdiktu, nový člen s verdiktem).
+Neřešeno: verdikt, který se objeví až po `board.get`, přinese další verze
+případu (jako GTK `ReloadConversations` po `notify.messagesChanged` účtu).
+
+## Board card badge (Windows)
+
+Karty konverzace v detailu případu nástěnky mají odznak podpisu jako karty
+Pošty (napsáno bez .NET, čeká `build.ps1 app`/`test`/`lint`). Core:
+`BoardMessage.Signature` → `Board.CaseMessage.Signature` →
+`Board.MessageCard.Signature`; oba záznamy mají vlastní `Equals`, které
+porovnává verdikt hodnotou (`Board.SameSignature`: `Notes` záznamu
+`SignatureSummary` se jinak porovnávají odkazem a každý `board.get` je staví
+znovu). `ConversationCards.Key` nese `Verdicts` (řetězec `VerdictOf` na člena)
+vedle členů; verdikt není součástí identity karty, takže změna verdiktu vrátí
+`Change.Members` s identitou a prázdným `Reload` (sbalení a tělo zůstanou,
+nic se nestahuje znovu) a blok jen zavolá `BoardMessageCardView.Update`.
+`DaemonBoardSource.SignaturesChanged()` (z `notify.signaturesChanged` v
+`Integration.Board.cs`, protože `board.get` se drží podle verze případu a
+důvěra ji nemění) označí držené konverzace za zastaralé: zobrazenou zeptá
+hned a ponechá starou do odpovědi, ostatní zapomene a načtou se při zobrazení.
+App: `BoardMessageCardView` drží `SignatureBadgeButton` pod záhlavím otevřené
+karty (`BoardConversationBlock.AttachBadge` mu dá `ReaderServices` a okno
+detailu), sbalená karta, člen bez aplikace a chat bublina žádný; klik otevře
+tentýž `SignatureDetailsPresenter` s id člena. Vzorová data: nejnovější
+zpráva prvního případu je podepsaná (S/MIME, platný), je bez id, takže odznak
+se ukáže, ale klik detaily nepožádá (`SignatureBadgeButton.Open` bez id nic
+nedělá). Bez nového msgid. Testy: `ApiRoundTripTests` (`BoardMessage`),
+`BoardConversationCardsTests` (`ASignatureChangeCountsAndKeepsTheCards`,
+`CardsAndDetailsCompareTheirVerdictsByValue`), `DaemonBoardSourceTests`
+(`SignaturesChangedAsksTheShownConversationAgain`), `BoardSampleTests`
+(`ASampleMemberIsSigned`). Bez překladu stavěné a hádané: `badge.Margin`
+(`PadH - 8`, tlačítko má vlastní odsazení 8), pořadí `column.Children`
+(záhlaví, odznak, tělo) a výška karty při objevení odznaku (jde přes
+`ChangingHeight` v `Update`/`Apply`). Čeká i UI smoke nad
+`MALACHI_BOARD_SAMPLES=1` (odznak na nejnovější kartě prvního případu).
+
+## Board card badge (GTK)
+
+Karty konverzace v detailu případu nástěnky mají odznak podpisu jako karty
+Pošty (napsáno bez GTK, necommitnuté). Reference Go: `BoardMessage.Signature`
+→ `board.CaseMessage.Signature` (`convertMessage`) → `board.MessageCard.Signature`
+(`view.go`); `board/signature.go`: `SignatureKey`/`SignatureKeyOf` (verdikt
+v porovnatelném tvaru) a `SameCard` (karta s verdiktem porovnaným hodnotou;
+dřívější `==` by kvůli ukazateli viděl změnu po každém `board.get`).
+`ConversationKey.Signatures` vedle členů: verdikt není součástí identity
+karty (`ConversationMember` beze změny), změna samotného verdiktu vrátí
+`ConversationChangeMembers` s identitou v `Kept` a prázdným `Reload`
+(sbalení, tělo i rozběhnutý dotaz na tělo zůstanou), chybějící položka =
+bez verdiktu. `DaemonSource.ReloadConversations(account)` označí držené
+konverzace účtu („“ = všech) za zastaralé (`staleConversation`) a tu, na
+kterou se `LoadMessages` ptal naposled (`lastOpened`, detail), zeptá hned;
+staré zprávy zůstanou do odpovědi. Volá ho `Window.boardVerdictsChanged`
+(`board.go`) z `notify.signaturesChanged` (`signature.go`, „“) i
+z `notify.messagesChanged` účtu (`notify.go`): verdikt, který worker
+spočítá až po `board.get`, verzi případu nemění (macOS a Windows to druhé
+nemají). GTK: `window/board_conversation_signature.go` (`bindSignature`,
+`showSignature`, `openSignature`) — tentýž `signatureBadge` na vlastním
+řádku pod záhlavím karty, viditelný i u sbalené karty (jako karta Pošty
+v GTK; macOS a Windows ho u sbalené nemají), v bublině chatu ne;
+`update` porovnává `board.SameCard`, verdikt se kreslí uvnitř
+`changingHeight`; chat porovnává totéž. Klik: nové
+`Window.openSignatureDetails(parent, id, from, sum)` (z něj je teď
+i `showSignatureDetails`), `from` = `MessageCard.Address`; karta vzorku
+(id „“) ukáže jen verdikt — `load`, `start` a `askConfirm` dialogu se bez
+id nic neptají. Vzorová data: nejnovější zpráva prvního případu (Ada
+Example, „Attached is the final version…“) má S/MIME `valid`, podepisující
+„Ada Example“ <ada@example.invalid>, bez poznámek a `partId` (jako macOS;
+Windows má e-mail `ada@example.org`). Bez nového msgid; posunuté jen
+odkazy `#:` `board/view.go` a `window/board_conversation.go` v `po/`.
+Testy: `board/signature_test.go` (klíč, `SameCard`, klíč detailu, změna
+verdiktu drží karty a těla, `convertMessage`, podepsaný vzorek),
+`TestDaemonReloadConversations`; smoke `smokeBoardSignatureBadge`
+v `TestBoardGTKSmoke` (`window/board_signature_gtk_smoke_test.go`: odznak
+vzorku, sbalená karta, rovný verdikt nic nemění, změněný a odebraný
+verdikt na téže kartě, dialog s id i bez). Ověřeno zde: `gofmt`,
+`go vet` a `go test` (i `-race`) `internal/board`, `boardtriage`,
+`boardreply`, `signature`, `conversation`; typová kontrola `go/types`
+s `FakeImportC` balíčku `window` i s testy (jen dvě známé chyby C
+konstant). Čeká v kontejneru: `gtk.sh make build`, `gtk.sh test-ui`,
+`gtk.sh sh -c 'cd ui && MALACHI_GTK_SMOKE=1 go test ./internal/window
+-run "^TestBoardGTKSmoke$" -count=1 -v'` (i s `MALACHI_GTK_CARDS_SMOKE=1`),
+`make po` (beze změny), `make lint`; ručně odznak na nástěnce nad vzorky
+(`MALACHI_BOARD_SAMPLES=1`) a nad kopií dat s podepsanou poštou (klik,
+Check Revocation, Import Key, Confirm Key…, obnova po importu klíče).

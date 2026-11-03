@@ -168,8 +168,9 @@ func tileAttachments(m *api.Message) []api.Attachment {
 // message that has a verdict is asked for again (message.get) and shown
 // again wherever it is on display (showLoaded: the pane, its windows, the
 // conversation cards); an open details dialog asks message.signature
-// again, Preferences → Security pgp.keyList (it listens itself). The rows
-// whose verdict changed arrive as notify.messagesChanged.
+// again, Preferences → Security pgp.keyList (it listens itself), the
+// board's shown conversation board.get. The rows whose verdict changed
+// arrive as notify.messagesChanged.
 func (w *Window) signaturesChanged() {
 	for id, lm := range w.loaded {
 		if lm.msg == nil || lm.msg.Signature == nil || lm.getting || lm.account == "" {
@@ -180,6 +181,8 @@ func (w *Window) signaturesChanged() {
 	if d := sigDialogs[w]; d != nil {
 		d.load()
 	}
+	// The board's cards carry board.get's verdicts, not the cache's.
+	w.boardVerdictsChanged("")
 }
 
 // signatureListeners hear notify.signaturesChanged: Preferences →

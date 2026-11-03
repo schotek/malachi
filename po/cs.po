@@ -1788,13 +1788,13 @@ msgid "Add to Favourites"
 msgstr "Přidat do oblíbených"
 
 #: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:441
-#: ui/internal/window/board_conversation.go:488
+#: ui/internal/window/board_conversation.go:491
 #: ui/internal/window/conversation_card.go:482 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr "Rozbalit"
 
 #: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:437
-#: ui/internal/window/board_conversation.go:491
+#: ui/internal/window/board_conversation.go:494
 #: ui/internal/window/conversation_card.go:480 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr "Sbalit"
@@ -2653,7 +2653,7 @@ msgstr[2] "%d zpráv se nepodařilo uložit do eWay-CRM."
 msgid "Removed from eWay-CRM"
 msgstr "Odebráno z eWay-CRM"
 
-#: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
+#: ui/internal/crm/text.go:289 ui/internal/board/view.go:863
 #: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:625
 #: ui/internal/window/notify.go:145
 msgid "(No subject)"

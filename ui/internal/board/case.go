@@ -162,6 +162,10 @@ type CaseMessage struct {
 	// Trimmed: the quoted history, the signature or the rest past the cap
 	// was cut off Text.
 	Trimmed bool
+	// Signature is the message's signature verdict (board.get's
+	// BoardMessage.Signature, as message.get's): the card's badge. nil
+	// without one.
+	Signature *api.SignatureSummary
 }
 
 // Annotation is what the assistant made of a case. Text an assistant

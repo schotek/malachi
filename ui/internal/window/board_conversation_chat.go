@@ -353,7 +353,7 @@ func (c *boardChat) render() {
 // the date is formatted as Mail's chat formats it, and the text is the
 // case's own (never a placeholder, never the monospace setting's).
 func (c *boardChat) show(row *chatRow, m board.MessageCard) {
-	if old, ok := c.cards[row]; ok && old == m && row.bubble.compact == c.compact {
+	if old, ok := c.cards[row]; ok && board.SameCard(old, m) && row.bubble.compact == c.compact {
 		return
 	}
 	c.cards[row] = m

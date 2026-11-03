@@ -183,6 +183,8 @@ func issueNotificationLine(issue *api.MessageIssue) string {
 func (w *Window) handleMessagesChanged(n api.MessagesChangedNotification) {
 	// The CRM's records come with the messages asked for again (crm.go).
 	defer w.crmMessagesChanged(n.AccountID)
+	// A signature verdict that came after board.get (board.go).
+	defer w.boardVerdictsChanged(n.AccountID)
 	a, ok := w.model.account(n.AccountID)
 	if !ok || !a.Enabled {
 		return

@@ -81,14 +81,22 @@ type signatureDialog struct {
 // over parent (the badge's window); nothing without a verdict. A dialog
 // the window had open already makes way for it.
 func (w *Window) showSignatureDetails(parent *gtk.Window, s api.MessageSummary, lm *loadedMessage) {
-	sum := shownSignature(s, lm)
+	w.openSignatureDetails(parent, s.ID, fromAddress(s, lm), shownSignature(s, lm))
+}
+
+// openSignatureDetails opens the details of message id, whose From
+// address is from, over parent, showing sum until message.signature
+// answers; nothing for a nil sum. The board's cards open it with
+// board.get's verdict (board_conversation_signature.go). A sample's card
+// (id "") shows only sum: nothing is asked and the buttons do nothing.
+func (w *Window) openSignatureDetails(parent *gtk.Window, id api.MessageID, from string, sum *api.SignatureSummary) {
 	if sum == nil {
 		return
 	}
 	if old := sigDialogs[w]; old != nil {
 		old.dialog.ForceClose()
 	}
-	d := newSignatureDialog(w, s.ID, fromAddress(s, lm), sum)
+	d := newSignatureDialog(w, id, from, sum)
 	sigDialogs[w] = d
 	d.dialog.Present(parent)
 	d.load()
@@ -139,7 +147,7 @@ func newSignatureDialog(w *Window, id api.MessageID, from string, sum *api.Signa
 // (notImplemented) or no verdict any more keeps what the dialog shows;
 // the failure is only logged.
 func (d *signatureDialog) load() {
-	if d.closed || d.w.client == nil {
+	if d.closed || d.w.client == nil || d.id == "" {
 		return
 	}
 	d.gen++
@@ -298,7 +306,7 @@ func removeChildren(box *gtk.Box) {
 // start marks action as running: the buttons wait (their keyboard goes to
 // the scroller, render), the problem line goes.
 func (d *signatureDialog) start(action signature.Action) bool {
-	if d.closed || d.busy != signature.ActionNone || d.w.client == nil {
+	if d.closed || d.busy != signature.ActionNone || d.w.client == nil || d.id == "" {
 		return false
 	}
 	d.busy, d.problem = action, ""
@@ -374,7 +382,7 @@ func (d *signatureDialog) importOffered() {
 // under its text, then pgp.keyVerify {verified: true}.
 func (d *signatureDialog) askConfirm() {
 	params, ok := signature.ConfirmParams(d.details)
-	if !ok || d.closed || d.busy != signature.ActionNone {
+	if !ok || d.closed || d.busy != signature.ActionNone || d.id == "" {
 		return
 	}
 	q := signature.ConfirmKeyQuestion(i18n.Tr)

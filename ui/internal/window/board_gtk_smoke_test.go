@@ -103,6 +103,7 @@ func TestBoardGTKSmoke(t *testing.T) {
 	p.renderTriageButton()
 	p.onTriageClicked()
 	w.assist = nil
+	smokeBoardSignatureBadge(t, p, src, flush)
 	if os.Getenv("MALACHI_GTK_CARDS_SMOKE") == "1" {
 		smokeBoardConversationCards(t, p, flush)
 	}

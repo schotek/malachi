@@ -1684,13 +1684,13 @@ msgid "Add to Favourites"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:441
-#: ui/internal/window/board_conversation.go:488
+#: ui/internal/window/board_conversation.go:491
 #: ui/internal/window/conversation_card.go:482 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:437
-#: ui/internal/window/board_conversation.go:491
+#: ui/internal/window/board_conversation.go:494
 #: ui/internal/window/conversation_card.go:480 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr ""
@@ -2518,7 +2518,7 @@ msgstr[1] ""
 msgid "Removed from eWay-CRM"
 msgstr ""
 
-#: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
+#: ui/internal/crm/text.go:289 ui/internal/board/view.go:863
 #: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:625
 #: ui/internal/window/notify.go:145
 msgid "(No subject)"
