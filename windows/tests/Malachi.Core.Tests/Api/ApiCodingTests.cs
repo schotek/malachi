@@ -1417,8 +1417,8 @@ public sealed partial class ApiCodingTests
         // update.check waits for the daemon's check (70 s inside).
         Assert.Equal(TimeSpan.FromSeconds(75), API.UpdateCheck.Timeout);
         // rules.test reads the stored bodies of a folder, rules.apply changes them and tells the server.
-        Assert.Equal(TimeSpan.FromSeconds(30), API.RulesTest.Timeout);
-        Assert.Equal(TimeSpan.FromSeconds(120), API.RulesApply.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(60), API.RulesTest.Timeout);
+        Assert.Equal(TimeSpan.FromMinutes(5), API.RulesApply.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",
