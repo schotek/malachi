@@ -244,7 +244,7 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// button's height, its icon and text coloured by the verdict's class.
 	b.WriteString("label.issue-pill.key-verified { color: @success_color; background-color: alpha(@success_bg_color, 0.15); }\n")
 	b.WriteString("label.issue-pill.key-state { color: @error_color; background-color: alpha(@error_bg_color, 0.12); }\n")
-	b.WriteString("button.signature-badge { min-height: 0; padding: 2px 6px; margin-start: -6px; font-weight: normal; }\n")
+	b.WriteString("button.signature-badge { min-height: 0; padding: 2px 6px; margin-left: -6px; font-weight: normal; }\n")
 	// The issue card over a Jira message (window/issue_card.go): the
 	// card's own padding, the key as a link without a button's bulk, and
 	// the status pill as a menu button in the pill's shape and colours.
