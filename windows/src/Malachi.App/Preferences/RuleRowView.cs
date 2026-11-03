@@ -54,8 +54,8 @@ public sealed class RuleRowView : INotifyPropertyChanged
     /// <summary>The rule sends mail: the row shows the sending icon.</summary>
     public Visibility OutgoingVisibility => row.Outgoing ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>The sending icon's tooltip and name.</summary>
-    public string OutgoingLabel => RulesText.OutgoingTitle;
+    /// <summary>The sending icon's tooltip and name; "" for a rule that sends nothing (the icon is hidden).</summary>
+    public string OutgoingLabel => row.Outgoing ? RulesText.OutgoingTitle : "";
 
     /// <summary>What the rule's switch shows.</summary>
     public bool IsOn => row.Enabled;
@@ -102,6 +102,7 @@ public sealed class RuleRowView : INotifyPropertyChanged
             if (old.Outgoing != next.Outgoing)
             {
                 Changed(nameof(OutgoingVisibility));
+                Changed(nameof(OutgoingLabel));
             }
             if (old.Enabled != next.Enabled)
             {

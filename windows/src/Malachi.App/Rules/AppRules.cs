@@ -49,14 +49,18 @@ public sealed class AppRules : IDisposable
         {
             samples = new RulesSampleCaller(TimeProvider.System.GetUtcNow());
             Caller = samples;
-            // The samples' writes, as the daemon's notification, on the UI thread.
-            samples.Notified += (_, _) => state.Dispatcher.TryEnqueue(Controller.Refresh);
         }
         else
         {
             Caller = new RpcRulesCaller(state.Client);
         }
-        Controller = new RulesController(Caller);
+        var controller = new RulesController(Caller);
+        Controller = controller;
+        if (samples is not null)
+        {
+            // The samples' writes, as the daemon's notification, on the UI thread.
+            samples.Notified += (_, _) => state.Dispatcher.TryEnqueue(controller.Refresh);
+        }
         tokens.Add(state.Notifications.AddRulesChanged(Controller.Refresh));
         tokens.Add(state.Notifications.AddConnectionState(s =>
         {
@@ -162,7 +166,7 @@ public sealed class AppRules : IDisposable
             return null;
         }
         var shown = integration.Mailbox.Model.ListFolder?.Account;
-        return shown is { } id && MailAccounts.Any(a => a.Id == id) ? id : null;
+        return shown is { } id && MailAccounts.Any(a => a.Id == id) ? id : (AccountId?)null;
     }
 
     // An account's folders in the sidebar's order (its tree, nothing folded, no Favourites).

@@ -68,6 +68,7 @@ plain text.
                     AutomationProperties.AutomationId="PrefsRulesList"
                     CanDragItems="True"
                     CanReorderItems="True"
+                    ContainerContentChanging="OnContainerContentChanging"
                     DragItemsCompleted="OnDragItemsCompleted"
                     DragItemsStarting="OnDragItemsStarting"
                     ItemsSource="{x:Bind Rows}"
@@ -135,6 +136,7 @@ plain text.
                                         TextWrapping="Wrap" />
                                     <InfoBar
                                         Margin="0,4,0,0"
+                                        AutomationProperties.AutomationId="RuleProblem"
                                         IsClosable="False"
                                         IsOpen="True"
                                         Message="{x:Bind Problem, Mode=OneWay}"
@@ -149,10 +151,11 @@ plain text.
                                     <FontIcon
                                         Margin="0,0,6,0"
                                         VerticalAlignment="Center"
-                                        AutomationProperties.Name="{x:Bind OutgoingLabel}"
+                                        AutomationProperties.AutomationId="RuleOutgoing"
+                                        AutomationProperties.Name="{x:Bind OutgoingLabel, Mode=OneWay}"
                                         FontSize="16"
                                         Glyph="{x:Bind res:Icons.Glyph('mail-send')}"
-                                        ToolTipService.ToolTip="{x:Bind OutgoingLabel}"
+                                        ToolTipService.ToolTip="{x:Bind OutgoingLabel, Mode=OneWay}"
                                         Visibility="{x:Bind OutgoingVisibility, Mode=OneWay}" />
                                     <ToggleSwitch
                                         MinWidth="0"

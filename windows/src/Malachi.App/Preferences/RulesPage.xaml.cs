@@ -36,6 +36,7 @@ using Malachi.Core.Rules;
 using Malachi.Core.Text;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -152,6 +153,14 @@ public sealed partial class RulesPage : UserControl
         try
         {
             KeyedListSync.Apply(Rows, rows, r => r.Id, v => v.Id, r => new RuleRowView(r), (v, r) => v.Update(r));
+            // A renamed rule's container keeps its row: its name follows.
+            foreach (var v in Rows)
+            {
+                if (RuleList.ContainerFromItem(v) is ListViewItem container)
+                {
+                    AutomationProperties.SetName(container, v.Title);
+                }
+            }
             // The key is the truth: a moved row may have lost its selection.
             var selected = selectedId is { } id ? Rows.FirstOrDefault(v => v.Id == id) : null;
             if (!ReferenceEquals(RuleList.SelectedItem, selected))
@@ -180,6 +189,16 @@ public sealed partial class RulesPage : UserControl
             return;
         }
         selectedId = (RuleList.SelectedItem as RuleRowView)?.Id;
+    }
+
+    // A row's container is named by its rule (UI Automation, a screen reader), as the contacts' rows are.
+    private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (!closed && args.Item is RuleRowView row)
+        {
+            AutomationProperties.SetAutomationId(args.ItemContainer, "RuleRow:" + row.Id);
+            AutomationProperties.SetName(args.ItemContainer, row.Title);
+        }
     }
 
     private void OnAddClick(object sender, RoutedEventArgs e) => state.Rules.AddRule(window);
