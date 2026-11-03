@@ -63,7 +63,7 @@
   <div class="wrap">
     <div class="eyebrow">Funkce</div>
     <h1>Co dnes funguje</h1>
-    <p class="lead">Verze 0.2.1, na všech třech platformách, pokud není řečeno jinak. Klient GTK na Linuxu je reference; aplikace pro macOS a Windows ho zrcadlí funkci po funkci s prvky své platformy.</p>
+    <p class="lead">Verze 0.3.0, na všech třech platformách, pokud není řečeno jinak. Klient GTK na Linuxu je reference; aplikace pro macOS a Windows ho zrcadlí funkci po funkci s prvky své platformy.</p>
   </div>
 </div>
 
@@ -80,6 +80,7 @@
         <li><a href="#conversations">Konverzace</a></li>
         <li><a href="#search">Hledání</a></li>
         <li><a href="#many">Víc zpráv najednou</a></li>
+        <li><a href="#rules">Pravidla</a></li>
         <li><a href="#newsletters">Newslettery</a></li>
         <li><a href="#jira">Jira</a></li>
         <li><a href="#calendar">Kalendář</a></li>
@@ -100,11 +101,12 @@
     <p>Hesla a tokeny leží v systémové klíčence: Secret Service na Linuxu, přihlašovací klíčenka na macOS, Správce pověření na Windows. Serveru s vlastním certifikátem jde dát důvěru výslovně, podle otisku, až když ho uvidíte; obecné <em>ignorovat certifikát</em> neexistuje.</p>
 
     <h2 id="reading"><svg class="icon"><use href="#i-cloud-off"/></svg>Čtení offline</h2>
-    <p>Složky a zprávy se synchronizují do místního úložiště v nastavitelném okně retence a nová pošta přichází, jakmile ji server ohlásí (IMAP IDLE, dotazování Graphu). Příznaky, přesuny a mazání se řadí do fronty a odesílají zpět, takže klient funguje i ve vlaku.</p>
+    <p>Složky a zprávy se synchronizují do místního úložiště v nastavitelném okně retence a nová pošta přichází, jakmile ji server ohlásí (IMAP IDLE, dotazování Graphu). Příznaky, přesuny a mazání se řadí do fronty a odesílají zpět, takže klient funguje i ve vlaku. Se dvěma a více poštovními účty ukážou <em>Všechny doručené</em> nahoře v postranním panelu Doručenou poštu každého z nich v jednom seznamu, i seskupenou podle konverzací; v Předvolbách je jde skrýt.</p>
     <p>Kvůli místu na disku se uložená pošta drží komprimovaná a velké přílohy starších zpráv mohou zůstat na serveru, dokud je neotevřete. S volbou <em>Nikdy neukládat přílohy</em> se neukládá nic kromě obrázků, které zpráva ukazuje: otevřená příloha se stáhne do paměti a s ukončením aplikace zmizí. Koncepty a podepsaná či šifrovaná pošta zůstávají vždy celé.</p>
 
     <h2 id="html"><svg class="icon"><use href="#i-shield"/></svg>HTML pošta bezpečně</h2>
-    <p>Těla zpráv projdou sanitizací v jádru dřív, než je jakékoli okno uvidí; surové HTML hranici jádra nikdy nepřekročí. Vzdálené obrázky zůstávají blokované, dokud je jednou nenačtete nebo odesílateli nedáte důvěru; vykreslování běží bez JavaScriptu, s přísnou politikou obsahu a úplně bez sítě. Přiložené zprávy se otevírají jen pro čtení ve vlastním okně. Ostatní přílohy se otevřou v náhledu (GNOME Sushi, Quick Look, vlastní prohlížeč na Windows) a při uložení nesou systémovou značku karantény.</p>
+    <p>Těla zpráv projdou sanitizací v jádru dřív, než je jakékoli okno uvidí; surové HTML hranici jádra nikdy nepřekročí. Vzdálené obrázky zůstávají blokované, dokud je jednou nenačtete nebo odesílateli nedáte důvěru; vykreslování běží bez JavaScriptu, s přísnou politikou obsahu a úplně bez sítě. Přiložené zprávy se otevírají jen pro čtení ve vlastním okně. Ostatní přílohy se otevřou v náhledu (GNOME Sushi, Quick Look, vlastní prohlížeč na Windows) a při uložení nesou systémovou značku karantény. Přílohy jsou dlaždice s typem, názvem a velikostí, ve zprávě, kterou čtete, i v té, kterou píšete, kde je klikem uvidíte v náhledu.</p>
+    <p>Podpisy příchozí pošty ověřuje jádro, S/MIME i OpenPGP: odznak u odesílatele, také v seznamu zpráv a na Nástěnce, řekne, jestli je podpis platný a kdo zprávu podepsal, a klik vysvětlí proč: jestli podpis patří odesílateli, jestli se certifikátu nebo klíči dá věřit a jestli nevypršel nebo nebyl odvolán. Nic se zatím nedešifruje ani nepodepisuje.</p>
 
     <h2 id="writing"><svg class="icon"><use href="#i-feather"/></svg>Psaní</h2>
     <p>Formátovaný text, přílohy a vložené obrázky. Příjemci se doplňují z lidí, kterým jste už psali, a z vašich kontaktů, na GNOME i ze systémových adresářů, a mění se v odstranitelné kapsle. Prostý text, který vypadá jako Markdown, se vloží jako formátovaný. Zpráva, která nejde odeslat hned, počká v místní odchozí poště a zkouší se znovu; kopie se založí do Odeslaných. Koncepty leží ve složce Koncepty účtu, takže je vidí i jiný klient.</p>
@@ -116,10 +118,13 @@
     <p>Jádro skládá vlákna z hlaviček hned při příjmu; <em>Seskupovat podle konverzací</em> udělá ze seznamu zpráv jeden řádek na konverzaci. Konverzace se ukáže jako karty na časové ose nebo jako chat z bublin, s vašimi odpověďmi z Odeslaných a neodeslanými koncepty na jejich místě a se sbalenou citovanou historií. Řádek rychlé odpovědi pod zprávou nebo chatem odpoví bez otevírání okna; <em>Otevřít v okně</em> si napsaný text vezme s sebou.</p>
 
     <h2 id="search"><svg class="icon"><use href="#i-search"/></svg>Hledání</h2>
-    <p><kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘F</kbd>) prohledává poštu uloženou v tomto počítači ve složce, v jejím účtu nebo ve všech účtech, už při psaní: každé slovo jako začátek, bez ohledu na velikost písmen a diakritiku („priloh“ najde „Přílohy“), plus <code>from:</code>, <code>to:</code>, <code>subject:</code>, <code>is:unread</code>, <code>has:attachment</code>, data a <code>in:</code> složka. S asistentem udělá <em>Hledat vlastními slovy</em> z „faktury od Jany v březnu“ přesně takový dotaz.</p>
+    <p><kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘F</kbd>) prohledává poštu uloženou v tomto počítači ve složce, v jejím účtu nebo ve všech účtech, už při psaní: každé slovo jako začátek, bez ohledu na velikost písmen a diakritiku („priloh“ najde „Přílohy“), plus <code>from:</code>, <code>to:</code>, <code>subject:</code>, <code>is:unread</code>, <code>has:attachment</code>, data a <code>in:</code> složka. S asistentem udělá <em>Hledat vlastními slovy</em> z „faktury od Jany v březnu“ přesně takový dotaz. Hledání ve složce najde i vaše vlastní odpovědi do jejích konverzací v Odeslaných.</p>
 
     <h2 id="many"><svg class="icon"><use href="#i-layers"/></svg>Víc zpráv najednou</h2>
     <p>Víc zpráv jde vybrat a společně archivovat, přesunout, smazat, označit nebo přeposlat (každou jako přiložený <code>.eml</code>). Zprávy, složky a účty mají kontextová menu: Přesunout do, Označit vše jako přečtené, Vysypat koš. Přesun do Koše, archivu, nevyžádané nebo jiné složky jde vrátit klávesou <kbd>Ctrl</kbd>+<kbd>Z</kbd> (<kbd>⌘Z</kbd>). Doručená pošta má sbalitelné sekce podle data a zprávy s hvězdičkou první.</p>
+
+    <h2 id="rules"><svg class="icon"><use href="#i-list"/></svg>Pravidla</h2>
+    <p>Pravidla v duchu Outlooku a Apple Mailu, která vyhodnocuje jádro na vašem počítači: podmínky na odesílatele, příjemce, předmět, text, konferenci, hromadnou poštu, přílohy nebo účet a akce, které zprávu přesunou, označí jako přečtenou, dají jí hvězdičku, pošlou ji do Koše nebo Nevyžádané, přepošlou ji nebo na ni samy odpoví. Běží na novou poštu v Doručené, na každou zprávu jednou, a jdou ručně použít i nad složkou. Vytvoříte je v Předvolbách → Pravidla nebo přes <em>Vytvořit pravidlo ze zprávy…</em> v nabídce zprávy. Pravidlo, které přeposílá nebo odpovídá, se zapne až po vašem potvrzení, nikdy neodpoví na hromadnou, automatickou ani vlastní poštu a pošle nejvýš pár zpráv za hodinu.</p>
 
     <h2 id="newsletters"><svg class="icon"><use href="#i-list"/></svg>Newslettery</h2>
     <p>Konference a newslettery se poznají z hlaviček a v seznamu dostanou štítek. Kde odesílatel podporuje odhlášení jedním klikem, stačí jeden klik, přes jádro a až po ověření podpisu DKIM odesílatele, nikdy otevřením odkazu; jinak se odhlašovací mail pošle za vás.</p>
@@ -174,8 +179,7 @@
 
     <h2 id="not-yet"><svg class="icon"><use href="#i-list"/></svg>Zatím ne</h2>
     <ul>
-      <li>PGP a S/MIME.</li>
-      <li>Filtry a pravidla zpráv; společná doručená pošta.</li>
+      <li>Čtení šifrované pošty; podepisování a šifrování toho, co odešlete.</li>
       <li>Google Kalendář; další poskytovatelé pošty s OAuth2.</li>
       <li>Podepsaný instalátor pro Windows.</li>
       <li>Mobilní aplikace, a ani se neplánuje.</li>

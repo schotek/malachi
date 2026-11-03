@@ -63,7 +63,7 @@
   <div class="wrap">
     <div class="eyebrow">Features</div>
     <h1>What works today</h1>
-    <p class="lead">Version 0.2.1, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
+    <p class="lead">Version 0.3.0, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
   </div>
 </div>
 
@@ -80,6 +80,7 @@
         <li><a href="#conversations">Conversations</a></li>
         <li><a href="#search">Search</a></li>
         <li><a href="#many">Many at once</a></li>
+        <li><a href="#rules">Rules</a></li>
         <li><a href="#newsletters">Newsletters</a></li>
         <li><a href="#jira">Jira</a></li>
         <li><a href="#calendar">Calendar</a></li>
@@ -100,11 +101,12 @@
     <p>Passwords and tokens live in the system keyring: Secret Service on Linux, the login keychain on macOS, Credential Manager on Windows. A server with a certificate of its own can be trusted explicitly, by its fingerprint, after you have seen it; there is no general <em>ignore certificate</em>.</p>
 
     <h2 id="reading"><svg class="icon"><use href="#i-cloud-off"/></svg>Reading, offline</h2>
-    <p>Folders and messages are synchronised into a local store within a configurable retention window, and new mail arrives as the server announces it (IMAP IDLE, Graph polling). Flags, moves and deletions are queued locally and pushed back, so the client works on a train.</p>
+    <p>Folders and messages are synchronised into a local store within a configurable retention window, and new mail arrives as the server announces it (IMAP IDLE, Graph polling). Flags, moves and deletions are queued locally and pushed back, so the client works on a train. With two or more mail accounts, <em>All Inboxes</em> at the top of the sidebar shows the inbox of every one of them in one list, grouped by conversation too; it can be hidden in Preferences.</p>
     <p>To save disk space the stored mail is kept compressed, and the large attachments of older messages can stay on the server until you open them. With <em>Never Store Attachments</em> none is stored but the pictures a message shows: an attachment you open is downloaded into memory and is gone when you quit. Drafts and signed or encrypted mail always stay whole.</p>
 
     <h2 id="html"><svg class="icon"><use href="#i-shield"/></svg>HTML mail, safely</h2>
-    <p>Message bodies are sanitised in the engine before any window sees them; raw HTML never crosses the engine's boundary. Remote images stay blocked until you load them once or trust the sender; the renderer runs with JavaScript off, a strict content security policy and no network at all. Attached messages open read-only in their own window. Other attachments open in a preview (GNOME Sushi, Quick Look, a viewer of the app's own on Windows) and carry the system's quarantine mark when saved.</p>
+    <p>Message bodies are sanitised in the engine before any window sees them; raw HTML never crosses the engine's boundary. Remote images stay blocked until you load them once or trust the sender; the renderer runs with JavaScript off, a strict content security policy and no network at all. Attached messages open read-only in their own window. Other attachments open in a preview (GNOME Sushi, Quick Look, a viewer of the app's own on Windows) and carry the system's quarantine mark when saved. Attachments are tiles with their type, name and size, in a message you read as well as in one you write, where a click previews them.</p>
+    <p>Signatures of incoming mail are verified in the engine, S/MIME and OpenPGP alike: a badge beside the sender, also in the message list and on the Board, says whether the signature is valid and who signed the message, and a click explains why: whether the signature belongs to the sender, whether the certificate or key can be trusted, and whether it has expired or been revoked. Nothing is decrypted or signed yet.</p>
 
     <h2 id="writing"><svg class="icon"><use href="#i-feather"/></svg>Writing</h2>
     <p>Formatted text, attachments and inline images. Recipients are completed from the people you have written to and from your contacts, and on GNOME from the system address books too, and become removable badges. Plain text that looks like Markdown is pasted as formatted text. A message that cannot go out right away waits in a local Outbox and is retried; a copy is filed in Sent. Drafts rest in the account's Drafts folder, so another client sees them as well.</p>
@@ -116,10 +118,13 @@
     <p>The engine threads mail by its headers as it arrives; <em>Group by Conversation</em> turns the message list into one row per conversation. A conversation is shown as cards on a timeline or as a chat of bubbles, your own replies from Sent and your unsent drafts in place, the quoted history folded away. A quick-reply bar under a message or a chat answers without opening a window; <em>Open in a Window</em> takes what you typed with it.</p>
 
     <h2 id="search"><svg class="icon"><use href="#i-search"/></svg>Search</h2>
-    <p><kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘F</kbd>) searches the mail stored on this computer in the folder, its account or every account, while you type: every word as a prefix, case and diacritics ignored ("priloh" finds "Přílohy"), plus <code>from:</code>, <code>to:</code>, <code>subject:</code>, <code>is:unread</code>, <code>has:attachment</code>, dates and <code>in:</code> a folder. With the assistant, <em>Search in your own words</em> turns "invoices from Jana in March" into that query.</p>
+    <p><kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘F</kbd>) searches the mail stored on this computer in the folder, its account or every account, while you type: every word as a prefix, case and diacritics ignored ("priloh" finds "Přílohy"), plus <code>from:</code>, <code>to:</code>, <code>subject:</code>, <code>is:unread</code>, <code>has:attachment</code>, dates and <code>in:</code> a folder. With the assistant, <em>Search in your own words</em> turns "invoices from Jana in March" into that query. A search in a folder also finds your own replies to its conversations in Sent.</p>
 
     <h2 id="many"><svg class="icon"><use href="#i-layers"/></svg>Many messages at once</h2>
     <p>Several messages can be selected and archived, moved, deleted, marked or forwarded together (each as an attached <code>.eml</code>). Messages, folders and accounts have context menus: Move To, Mark All as Read, Empty Trash. A move to the Trash, the archive, Junk or another folder can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd> (<kbd>⌘Z</kbd>). The Inbox has collapsible date sections with flagged messages first.</p>
+
+    <h2 id="rules"><svg class="icon"><use href="#i-list"/></svg>Rules</h2>
+    <p>Rules in the spirit of Outlook and Apple Mail, run by the engine on your computer: conditions on the sender, recipients, subject, body, mailing list, bulk mail, attachments or account, and actions that move, mark as read, star, send to Trash or Junk, forward or answer automatically. They run on new mail in the inbox, once per message, and can be applied to a folder by hand. They are made in Preferences → Rules or with <em>Create Rule from Message…</em> in a message's menu. A rule that forwards or answers is switched on only after you confirm it, never answers bulk or automated mail or your own, and sends at most a few messages an hour.</p>
 
     <h2 id="newsletters"><svg class="icon"><use href="#i-list"/></svg>Newsletters</h2>
     <p>Mailing lists and newsletters are recognised from their headers and labelled in the list. Where the sender supports one-click unsubscribing, one click does it, through the engine and only after the sender's DKIM signature has been verified, never by opening a link; otherwise the unsubscribe mail is sent for you.</p>
@@ -174,8 +179,7 @@
 
     <h2 id="not-yet"><svg class="icon"><use href="#i-list"/></svg>Not yet</h2>
     <ul>
-      <li>PGP and S/MIME.</li>
-      <li>Message filters and rules; a unified inbox.</li>
+      <li>Reading encrypted mail; signing and encrypting what you send.</li>
       <li>Google Calendar; other OAuth2 mail providers.</li>
       <li>A signed Windows installer.</li>
       <li>A mobile app, and there are no plans for one.</li>
