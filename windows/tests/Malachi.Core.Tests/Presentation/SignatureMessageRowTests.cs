@@ -46,7 +46,11 @@ public sealed class SignatureMessageRowTests
         var row = new MessageRow(new ListKey(s.ThreadId, s.Id));
         row.Update(new ListRow { Key = new ListKey(s.ThreadId, s.Id), Message = s }, MailModel.SummaryMessage(s), Look, s.Date);
         Assert.Equal((icon, style, tooltip), (row.SignatureIcon, row.SignatureStyle, row.SignatureTooltip));
-        Assert.Equal(tooltip.Length > 0, row.ToString().Contains(tooltip, StringComparison.Ordinal));
+        // The row's name says the verdict it shows ("" is in every string, so only a shown one is looked for).
+        if (tooltip.Length > 0)
+        {
+            Assert.Contains(tooltip, row.ToString(), StringComparison.Ordinal);
+        }
     }
 
     [Fact]

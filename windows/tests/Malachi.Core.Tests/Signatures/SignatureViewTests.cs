@@ -110,7 +110,7 @@ public sealed class SignatureViewTests
         var got = SignatureView.Clean(longText);
         Assert.Equal(256, Encoding.UTF8.GetByteCount(got));
         Assert.StartsWith(got, longText, StringComparison.Ordinal);
-        Assert.Equal("a b", SignatureView.Clean(" a b"));
+        Assert.Equal("a b", SignatureView.Clean("\u2028a\u2029b\uE000"));
         Assert.Equal("a", SignatureView.Clean("a\ud800")); // a lone surrogate is dropped
     }
 
