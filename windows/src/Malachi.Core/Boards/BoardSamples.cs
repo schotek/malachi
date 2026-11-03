@@ -93,7 +93,7 @@ public static partial class Board
                         {
                             Kind = SignatureKind.Smime,
                             Status = SignatureStatus.Valid,
-                            Signer = new SignatureSigner { Name = "Ada Example", Email = "ada@example.org" },
+                            Signer = new SignatureSigner { Name = "Ada Example", Email = "ada@example.invalid" },
                         }),
                 ],
             },

@@ -971,6 +971,7 @@ nového msgid. Testy: `APICodingBoardTests` (`getResultCarriesTheSignature…`),
 `BoardConversationCardsTests` (klíč, změna verdiktu, nový člen s verdiktem).
 Neřešeno: verdikt, který se objeví až po `board.get`, přinese další verze
 případu (jako GTK `ReloadConversations` po `notify.messagesChanged` účtu).
+Doplněno: `DaemonBoardSource.messagesChanged` (z `notify.messagesChanged` v `wireBoardSource`) a `signaturesChanged` volají `reloadConversations(of:)` jako GTK (držené konverzace účtu zastaralé, znovu se ptá jen zobrazená; test `messagesChangedAsksTheShownConversationOfTheAccountAgain`).
 
 ## Board card badge (Windows)
 
@@ -1003,6 +1004,7 @@ nedělá). Bez nového msgid. Testy: `ApiRoundTripTests` (`BoardMessage`),
 (záhlaví, odznak, tělo) a výška karty při objevení odznaku (jde přes
 `ChangingHeight` v `Update`/`Apply`). Čeká i UI smoke nad
 `MALACHI_BOARD_SAMPLES=1` (odznak na nejnovější kartě prvního případu).
+Doplněno: `DaemonBoardSource.MessagesChanged` (z `notify.messagesChanged` v `Integration.Board.cs`) a `SignaturesChanged` volají `ReloadConversations(account)` jako GTK (držené konverzace účtu zastaralé, znovu se ptá jen zobrazená; test `MessagesChangedAsksTheShownConversationOfTheAccountAgain`).
 
 ## Board card badge (GTK)
 

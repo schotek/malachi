@@ -90,6 +90,8 @@ public final class DaemonBoardSource: BoardSource {
     private var messages: [Board.CaseID: (version: Int64, list: [Board.CaseMessage])] = [:]
     /// The cases of `messages`, the least recently used first.
     private var messageOrder: [Board.CaseID] = []
+    /// The case `loadMessages` was asked for last: the detail's.
+    private var lastOpened: Board.CaseID?
     /// The version of a case whose conversation is being loaded, or whose
     /// load failed.
     private var loading: [Board.CaseID: Int64] = [:]
@@ -180,18 +182,44 @@ public final class DaemonBoardSource: BoardSource {
     }
 
     /// notify.signaturesChanged: trust changed (a key confirmed or removed,
-    /// a revocation checked), so the verdicts `board.get` carried may have.
-    /// Each conversation held (a handful, `conversationsKept`) is asked for
-    /// again and replaced in place when the answer comes: the cards stay
-    /// meanwhile, no loading state, and an unchanged answer publishes
-    /// nothing. A verdict that only appears later (after board.get) is not
-    /// this notification's: the case's next version brings it.
+    /// a revocation checked), so the verdicts `board.get` carried may have,
+    /// in any account (`reloadConversations`).
     public func signaturesChanged() {
+        reloadConversations(of: AccountID(rawValue: ""))
+    }
+
+    /// notify.messagesChanged of `account`: a signature verdict the daemon's
+    /// worker computed after board.get answered. It does not bump the
+    /// case's version, so `board.get` is cached under the same one
+    /// (`reloadConversations`).
+    public func messagesChanged(_ n: MessagesChangedNotification) {
+        reloadConversations(of: n.accountId)
+    }
+
+    /// A change the case's version does not show. Every conversation held
+    /// of `account` ("" = any) is marked stale (a version no case has), so
+    /// the next `loadMessages` asks board.get again, and the one asked for
+    /// last (`lastOpened`, the detail's) is asked for now. The cards stay
+    /// meanwhile, no loading state, and an unchanged answer publishes
+    /// nothing.
+    func reloadConversations(of account: AccountID) {
         guard started, !stopped else { return }
-        for id in Array(messages.keys) {
-            reloadMessages(of: id)
+        var reload = false
+        for id in messageOrder {
+            guard let m = messages[id], let c = base.cases.first(where: { $0.id == id }),
+                  account.rawValue.isEmpty || c.account == account
+            else { continue }
+            messages[id] = (Self.staleConversation, m.list)
+            reload = reload || id == lastOpened
+        }
+        if reload, let id = lastOpened {
+            loadMessages(of: id)
         }
     }
+
+    /// The version of a conversation that must be asked for again although
+    /// the case's did not change: no case has it.
+    private static let staleConversation: Int64 = -1
 
     /// notify.accountsChanged: the accounts' names and the board again.
     public func accountsChanged() {
@@ -417,26 +445,9 @@ public final class DaemonBoardSource: BoardSource {
 
     // MARK: Conversations
 
-    /// board.get of `id` again for the conversation held, replacing it when
-    /// the answer comes; a failure keeps what is held.
-    private func reloadMessages(of id: Board.CaseID) {
-        let client = client
-        Task { [weak self] in
-            guard let r = try? await client.call(
-                API.BoardGet.self, BoardGetParams(caseId: BoardCaseID(rawValue: id.rawValue)))
-            else { return }
-            guard let self, !self.stopped, self.messages[id] != nil,
-                  self.base.cases.contains(where: { $0.id == id })
-            else { return }
-            let c = Self.convert(r.case)
-            self.messages[id] = (c.version, r.messages.map(Self.convert))
-            self.store(c)
-            self.publish()
-        }
-    }
-
     public func loadMessages(of id: Board.CaseID) {
         guard !stopped, let c = base.cases.first(where: { $0.id == id }) else { return }
+        lastOpened = id
         if messages[id]?.version == c.version {
             touch(id)
             return

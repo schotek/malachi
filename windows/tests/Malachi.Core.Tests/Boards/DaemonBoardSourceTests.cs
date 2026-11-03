@@ -780,17 +780,63 @@ public sealed class DaemonBoardSourceTests
         };
         await h.Ui.RunAsync(h.Source.SignaturesChanged);
         await h.IdleAsync();
-        // The one on show was asked for again and carries the verdict; the other is forgotten.
+        // The one on show was asked for again and carries the verdict; the other is only marked stale.
         Assert.Equal(3, h.Script.Count(API.BoardGet.Name));
         var shown = (await h.CAsync("2"))?.Messages?[0].Signature;
         Assert.True(shown is { Status.Value: SignatureStatus.Valid, Kind.Value: SignatureKind.Pgp });
         Assert.Equal([new SignatureNote(SignatureNote.KeyChanged)], shown!.Notes);
-        Assert.Null((await h.CAsync("1"))?.Messages);
+        Assert.NotNull((await h.CAsync("1"))?.Messages);
         // The same verdict again changes nothing a view would redraw.
         var before = await h.SnapshotAsync();
         await h.Ui.RunAsync(h.Source.SignaturesChanged);
         await h.IdleAsync();
         Assert.Equal(before.Cases.First(x => x.Id == Id("2")), (await h.SnapshotAsync()).Cases.First(x => x.Id == Id("2")));
+    }
+
+    /// <summary>
+    /// notify.messagesChanged of an account: a verdict the worker computed after board.get answered does
+    /// not bump the case's version, so the conversations of that account are marked stale and only the
+    /// one on show is asked for again.
+    /// </summary>
+    [Fact]
+    public async Task MessagesChangedAsksTheShownConversationOfTheAccountAgain()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Script.SetCases([WireCase("1"), WireCase("2", BoardState.Hot), WireCase("3") with { AccountId = "acc_other" }]);
+        await h.StartedAsync();
+        await h.LoadAsync("1");
+        await h.LoadAsync("2");
+        await h.LoadAsync("3");
+        Assert.Equal(3, h.Script.Count(API.BoardGet.Name));
+        // Another account: nothing is asked.
+        await h.Ui.RunAsync(() => h.Source.MessagesChanged(new MessagesChangedNotification { AccountId = "acc_unrelated" }));
+        await h.IdleAsync();
+        Assert.Equal(3, h.Script.Count(API.BoardGet.Name));
+        // The case on show is of acc_other: asked for again, the changed answer replaces the old in place.
+        h.Script.GetText = "signed";
+        await h.Ui.RunAsync(() => h.Source.MessagesChanged(new MessagesChangedNotification { AccountId = "acc_other" }));
+        await h.IdleAsync();
+        Assert.Equal(4, h.Script.Count(API.BoardGet.Name));
+        Assert.Equal("signed", (await h.CAsync("3"))?.Messages?[0].Text);
+        // The others are not touched.
+        Assert.Equal("version 1", (await h.CAsync("1"))?.Messages?[0].Text);
+        // The same answer again changes nothing a view would redraw.
+        var before = await h.SnapshotAsync();
+        await h.Ui.RunAsync(() => h.Source.MessagesChanged(new MessagesChangedNotification { AccountId = "acc_other" }));
+        await h.IdleAsync();
+        Assert.Equal(5, h.Script.Count(API.BoardGet.Name));
+        Assert.Equal(before.Cases.First(x => x.Id == Id("3")), (await h.SnapshotAsync()).Cases.First(x => x.Id == Id("3")));
+        // acc_1 while case 3 is on show: nothing is asked now, 1 and 2 are stale and asked for when opened.
+        await h.Ui.RunAsync(() => h.Source.MessagesChanged(new MessagesChangedNotification { AccountId = "acc_1" }));
+        await h.IdleAsync();
+        Assert.Equal(5, h.Script.Count(API.BoardGet.Name));
+        await h.LoadAsync("1");
+        Assert.Equal(6, h.Script.Count(API.BoardGet.Name));
+        Assert.Equal("signed", (await h.CAsync("1"))?.Messages?[0].Text);
+        // notify.signaturesChanged is every account.
+        await h.Ui.RunAsync(h.Source.SignaturesChanged);
+        await h.IdleAsync();
+        Assert.Equal(7, h.Script.Count(API.BoardGet.Name));
     }
 
     /// <summary>The source keeps the conversations of the most recently opened cases only.</summary>
@@ -1051,6 +1097,9 @@ public sealed class DaemonBoardSourceTests
         /// <summary>The verdict board.get gives the member (BoardMessage.signature).</summary>
         public SignatureSummary? Signature { get; set; }
 
+        /// <summary>The text board.get's one message carries instead of "version N".</summary>
+        public string? GetText { get; set; }
+
         public RpcException? MoveFailure { get; set; }
 
         /// <summary>board.archive answers without moved (an archive folder the daemon does not sync).</summary>
@@ -1265,11 +1314,13 @@ public sealed class DaemonBoardSourceTests
             RpcException? failure;
             var q = JsonCoding.Decode<BoardGetParams>(p);
             SignatureSummary? signature;
+            string? getText;
             lock (gate)
             {
                 calls.Add(API.BoardGet.Name);
                 failure = GetFailure;
                 signature = Signature;
+                getText = GetText;
                 c = cases.FirstOrDefault(x => x.Id == q.CaseId);
             }
             await Gets.PassAsync();
@@ -1288,7 +1339,7 @@ public sealed class DaemonBoardSourceTests
                 From = new Address { Name = "Ann", Email = "ann@example.invalid" },
                 Date = T0,
                 Mine = false,
-                Text = $"version {c.Version}",
+                Text = getText ?? $"version {c.Version}",
                 Signature = signature,
             };
             return JsonCoding.EncodeToString(new BoardGetResult { Case = c, Messages = [m] });
