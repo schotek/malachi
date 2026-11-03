@@ -26,6 +26,7 @@ using Malachi.Core.Controllers;
 using Malachi.Core.IssueTrackers;
 using Malachi.Core.Signatures;
 using Malachi.Core.Text;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -34,6 +35,7 @@ using Microsoft.UI.Xaml.Media;
 namespace Malachi.App.Preferences;
 
 /// <summary>Preferences → Security.</summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The keys' controller ends with the window: PreferencesWindow calls Close, which disposes of it.")]
 public sealed partial class SecurityPage : UserControl
 {
     private readonly AppState state;

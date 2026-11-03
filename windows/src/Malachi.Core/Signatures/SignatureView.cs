@@ -487,7 +487,7 @@ public static class SignatureView
         {
             return null;
         }
-        return string.IsNullOrEmpty(d.Reason.Value) ? null : d.Reason;
+        return string.IsNullOrEmpty(d.Reason.Value) ? (RevocationFailure?)null : d.Reason;
     }
 
     /// <summary>
@@ -504,7 +504,7 @@ public static class SignatureView
         {
             return null;
         }
-        return string.IsNullOrEmpty(d.Reason.Value) ? null : d.Reason;
+        return string.IsNullOrEmpty(d.Reason.Value) ? (PgpImportFailure?)null : d.Reason;
     }
 
     // An error's data as T; null without data or with data of another shape.
@@ -682,7 +682,7 @@ public static class SignatureView
     /// client's own guard. A lone surrogate reads as U+FFFD and is dropped,
     /// as Go drops utf8.RuneError.
     /// </summary>
-    internal static string Clean(string? s)
+    public static string Clean(string? s)
     {
         var b = new StringBuilder((s ?? "").Length);
         foreach (var r in (s ?? "").EnumerateRunes())
