@@ -51,6 +51,10 @@ public sealed partial class RuleEditorWindow : Window
     /// <summary>Its content height.</summary>
     public const int ContentHeight = 720;
 
+    // The widths of a condition row's field and operator columns.
+    private const double FieldColumnWidth = 172;
+    private const double OperatorColumnWidth = 160;
+
     private readonly AppState state;
     private readonly RuleEditorController controller;
     private readonly Action<Rule>? saved;
@@ -275,13 +279,17 @@ public sealed partial class RuleEditorWindow : Window
     // problem under them.
     private StackPanel ConditionRow(int index, RuleCondition c)
     {
+        // The field and the operator in columns of their own width, so that
+        // the rows line up whatever each one's choice is (measured: Auto
+        // columns let a longer field push its row's operator and value out
+        // of line with the rows above).
         var grid = new Grid { ColumnSpacing = 8 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(FieldColumnWidth) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(OperatorColumnWidth) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var field = new ComboBox { MinWidth = 150, VerticalAlignment = VerticalAlignment.Top };
+        var field = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top };
         foreach (var f in RuleBook.Fields)
         {
             field.Items.Add(RulesText.FieldText(f));
@@ -299,7 +307,7 @@ public sealed partial class RuleEditorWindow : Window
         grid.Children.Add(field);
 
         var operators = RuleBook.OperatorsFor(c.Field);
-        var op = new ComboBox { MinWidth = 160, VerticalAlignment = VerticalAlignment.Top };
+        var op = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top };
         foreach (var o in operators)
         {
             op.Items.Add(RulesText.OperatorText(c.Field, o));
@@ -368,7 +376,7 @@ public sealed partial class RuleEditorWindow : Window
 
     private ComboBox Choice(string id, int index, IReadOnlyList<string> values, RuleCondition c, Func<string, string> text)
     {
-        var box = new ComboBox { MinWidth = 160, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top };
+        var box = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Top };
         foreach (var v in values)
         {
             box.Items.Add(text(v));
