@@ -510,6 +510,10 @@ final class RuleEditorWindowController: NSWindowController, NSTextFieldDelegate,
                 p.target = self
                 p.action = #selector(folderChosen(_:))
                 line.append(p)
+                // The remove button at the row's end, as in every other row.
+                let spacer = NSView()
+                spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                line.append(spacer)
             case .forward:
                 let t = NSTextField()
                 t.stringValue = a.to
