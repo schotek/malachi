@@ -84,6 +84,15 @@ final class BoardMessageCardView: NSView {
     typealias Shows = Board.ConversationCards.Shows
 
     private var mine: Bool
+    /// The verdict of the message's signature (`board.get`).
+    private var signature: SignatureSummary?
+    /// The badge of a signed message (docs/plans/signatures.md §6), made
+    /// when first needed and not at all for an unsigned message; under the
+    /// header, shown while the card is open and hidden while it is folded,
+    /// as Mail's card keeps it in the part a fold hides.
+    private var signatureBadge: SignatureBadgeView?
+    /// The badge was clicked; `anchor` is its button (the popover's).
+    var onSignature: ((_ anchor: NSView) -> Void)?
     private(set) var foldable = false
     /// The arrow shows whatever the text's length (the card can show its
     /// message formatted).
@@ -140,6 +149,7 @@ final class BoardMessageCardView: NSView {
 
     init(_ message: Board.MessageCard) {
         mine = message.mine
+        signature = message.signature
         text = message.text
         preview = message.text.split(whereSeparator: \.isNewline).joined(separator: " ")
         body = PrefsWrappingLabel.board(message.text)
@@ -193,6 +203,7 @@ final class BoardMessageCardView: NSView {
         bottomToColumn = column.bottomAnchor.constraint(equalTo: bottomAnchor)
         bottomToColumn.isActive = true
         showFold()
+        renderSignature()
         // A group named after the sender; the text is read once, from the
         // labels inside it.
         setAccessibilityElement(true)
@@ -205,10 +216,12 @@ final class BoardMessageCardView: NSView {
     /// view. The height change goes through `onHeightChanging`.
     func update(_ message: Board.MessageCard) {
         guard message.text != text || message.from != fromLabel.stringValue || message.when != whenLabel.stringValue
-            || message.mine != mine
+            || message.mine != mine || message.signature != signature
         else { return }
         changingHeight {
             mine = message.mine
+            signature = message.signature
+            renderSignature()
             text = message.text
             preview = message.text.split(whereSeparator: \.isNewline).joined(separator: " ")
             fromLabel.stringValue = message.from
@@ -234,6 +247,27 @@ final class BoardMessageCardView: NSView {
         fatalError("not used")
     }
 
+    // MARK: Signature
+
+    /// The badge for the verdict `board.get` carried: under the header
+    /// while the card is open, not at all while it is folded or the message
+    /// has no verdict. Plain text in a button (`SignatureBadgeView`).
+    private func renderSignature() {
+        let shown = folded ? nil : signature
+        guard shown != nil || signatureBadge != nil else { return }
+        let b = signatureBadge ?? makeSignatureBadge()
+        b.show(shown)
+    }
+
+    private func makeSignatureBadge() -> SignatureBadgeView {
+        let b = SignatureBadgeView()
+        b.onClick = { [weak self] anchor in self?.onSignature?(anchor) }
+        // After the header, before the text or the web view's paper.
+        column.insertArrangedSubview(b, at: 1)
+        signatureBadge = b
+        return b
+    }
+
     // MARK: Fold
 
     /// Makes the card one that folds (an older message) or not; with
@@ -245,6 +279,7 @@ final class BoardMessageCardView: NSView {
         self.arrowAlways = arrowAlways
         if !foldable {
             folded = false
+            renderSignature()
         }
         if shows != .web {
             showFold()
@@ -358,6 +393,7 @@ final class BoardMessageCardView: NSView {
         guard target != self.shows || foldChanged else { return }
         changingHeight {
             self.folded = foldable && folded
+            renderSignature()
             self.shows = target
             if target == .web {
                 showWeb()

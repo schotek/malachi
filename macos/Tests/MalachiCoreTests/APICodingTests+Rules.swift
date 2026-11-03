@@ -106,7 +106,7 @@ import Testing
         #expect(API.rulesMethods.map { $0.name } == [
             "rules.list", "rules.create", "rules.update", "rules.delete", "rules.reorder", "rules.test", "rules.apply",
         ])
-        #expect(Array(API.allMethods.suffix(7)) == API.rulesMethods.map { $0.name })
+        #expect(Array(API.allMethods.dropLast(API.signatureMethods.count).suffix(7)) == API.rulesMethods.map { $0.name })
         #expect(API.RulesList.timeout == RPCTimeouts.default && API.RulesTest.timeout == RPCTimeouts.rulesTest)
         #expect(API.RulesApply.timeout == RPCTimeouts.rulesApply)
         #expect(API.Notify.rulesChanged == "notify.rulesChanged")

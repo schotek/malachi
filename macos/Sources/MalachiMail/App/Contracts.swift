@@ -67,6 +67,14 @@ protocol Alerts: AnyObject {
     func confirmTrustCertificate(
         on window: NSWindow?, heading: String, body: String, details: [CertificateDetail], confirmLabel: String
     ) async -> Bool
+
+    /// "Confirm This Key?" (signature.ConfirmKeyQuestion): a question
+    /// whose two answers are both safe, with the key's formatted
+    /// `fingerprint` under the text as selectable, monospaced plain text.
+    /// True for `confirmLabel`.
+    func confirmKey(
+        on window: NSWindow?, heading: String, body: String, fingerprint: String, confirmLabel: String, declineLabel: String
+    ) async -> Bool
 }
 
 /// The per-message actions of the main window, acting on the current
@@ -182,6 +190,14 @@ protocol MessageActionDelegate: AnyObject {
     /// sender's page in the browser for a web-page offer, otherwise
     /// `message.unsubscribe`.
     func unsubscribe(_ id: MessageID, from window: NSWindow?)
+    /// The badge of a signed message (`SignatureBadgeView`): the details
+    /// popover (ui/internal/signature `DetailsFor`) of message `s` under
+    /// `anchor`, which shows what message.get carried meanwhile.
+    func showSignature(of s: MessageSummary, relativeTo anchor: NSView)
+    /// The same with the verdict the caller holds (`summary`: a board
+    /// card's, which the message cache does not have) shown until the
+    /// daemon's details arrive.
+    func showSignature(of s: MessageSummary, summary: SignatureSummary?, relativeTo anchor: NSView)
     /// remote.go `openLink`: allow-list, mailto → compose, masked-link
     /// alert on `window`, then the browser.
     func openLink(_ href: String, links: [Link], from window: NSWindow?)

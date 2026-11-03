@@ -16,6 +16,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/crm"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/signature"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -563,6 +564,9 @@ func summaryMessage(s api.MessageSummary) widget.Message {
 	}
 	if p, ok := crm.PillFor(s, i18n.Tr); ok {
 		m.Crm = p
+	}
+	if icon, ok := signature.ListIconFor(s.Signature, i18n.Tr); ok {
+		m.Signature = icon
 	}
 	if m.Issue != nil {
 		m.Unread = m.Issue.Unread

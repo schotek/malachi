@@ -17,6 +17,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/crm"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/signature"
 )
 
 // Message is what a MessageRow displays; a projection of api.MessageSummary.
@@ -53,6 +54,10 @@ type Message struct {
 	// Crm is the pill of a message saved in eWay-CRM (crm.PillFor): its
 	// label and tooltip; empty when the message is not saved.
 	Crm crm.Pill
+
+	// Signature is the icon of the message's signature verdict
+	// (signature.ListIconFor); an empty Icon shows none.
+	Signature signature.ListIcon
 }
 
 // Thread is what a conversation row displays; a projection of
@@ -85,6 +90,10 @@ type Thread struct {
 	// Invitation is the pill of the newest member
 	// (calendar.InvitationPillOf over api.ThreadSummary.Latest).
 	Invitation calendar.InvitationPill
+
+	// Signature is the icon of the newest member's verdict
+	// (signature.ListIconFor over api.ThreadSummary.Latest.Signature).
+	Signature signature.ListIcon
 }
 
 // Start margins of the row content: the plain one (message_row.blp), the
@@ -126,10 +135,13 @@ type MessageRow struct {
 	preview    *gtk.Label
 	unreadDot  *gtk.Box
 	attachment *gtk.Image
-	star       *gtk.Image
-	expander   *gtk.Button
-	spinner    *adw.Spinner
-	badge      *gtk.Label
+	signature  *gtk.Image
+	// sigStyle is the style class the signature icon carries now.
+	sigStyle string
+	star     *gtk.Image
+	expander *gtk.Button
+	spinner  *adw.Spinner
+	badge    *gtk.Label
 
 	// The issue's parts of a row of a Jira account: the subject line with
 	// the key and the pills, and the change of an event row.
@@ -180,6 +192,7 @@ func NewMessageRow() *MessageRow {
 		preview:    b.GetObject("preview_label").Cast().(*gtk.Label),
 		unreadDot:  b.GetObject("unread_dot").Cast().(*gtk.Box),
 		attachment: b.GetObject("attachment_icon").Cast().(*gtk.Image),
+		signature:  b.GetObject("signature_icon").Cast().(*gtk.Image),
 		star:       b.GetObject("star_icon").Cast().(*gtk.Image),
 		expander:   b.GetObject("expander").Cast().(*gtk.Button),
 		spinner:    b.GetObject("expander_spinner").Cast().(*adw.Spinner),
@@ -227,6 +240,7 @@ func (r *MessageRow) SetMessage(m Message) {
 	r.tag = m.Tag
 	r.invitation = m.Invitation
 	r.crm = m.Crm
+	r.setSignature(m.Signature)
 	r.applyLead()
 	r.applyIssue()
 	r.applyInvitation()
@@ -262,6 +276,7 @@ func (r *MessageRow) SetThread(t Thread) {
 	r.tag = t.Tag
 	r.invitation = t.Invitation
 	r.crm = crm.Pill{}
+	r.setSignature(t.Signature)
 	r.applyLead()
 	r.applyIssue()
 	r.applyInvitation()
@@ -353,6 +368,37 @@ func (r *MessageRow) InvitationPill() (text string, struck bool) {
 		struck = len(a.Attributes()) > 0
 	}
 	return text, struck
+}
+
+// setSignature shows the icon of a signature verdict next to the
+// paperclip, coloured by its style class, with the verdict's title as the
+// tooltip (plain text); an empty icon hides it.
+func (r *MessageRow) setSignature(icon signature.ListIcon) {
+	if r.sigStyle != "" && r.sigStyle != icon.Style {
+		r.signature.RemoveCSSClass(r.sigStyle)
+	}
+	r.sigStyle = ""
+	if icon.Icon == "" {
+		r.signature.SetVisible(false)
+		r.signature.SetTooltipText("")
+		return
+	}
+	r.signature.SetFromIconName(icon.Icon)
+	if icon.Style != "" {
+		r.signature.AddCSSClass(icon.Style)
+		r.sigStyle = icon.Style
+	}
+	r.signature.SetTooltipText(icon.Tooltip)
+	r.signature.SetVisible(true)
+}
+
+// SignatureIcon is the icon the row shows for its signature and its
+// tooltip ("" when hidden; tests).
+func (r *MessageRow) SignatureIcon() (icon, tooltip string) {
+	if !r.signature.Visible() {
+		return "", ""
+	}
+	return r.signature.IconName(), r.signature.TooltipText()
 }
 
 // SetReserveExpander makes a plain row keep the fold arrow's place, so its

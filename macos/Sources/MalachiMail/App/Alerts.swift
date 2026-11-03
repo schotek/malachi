@@ -99,6 +99,30 @@ final class AppAlerts: Alerts {
         return await run(alert, on: window, escape: cancel) == .alertSecondButtonReturn
     }
 
+    func confirmKey(
+        on window: NSWindow?, heading: String, body: String, fingerprint: String, confirmLabel: String, declineLabel: String
+    ) async -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = heading
+        alert.informativeText = body
+        if !fingerprint.isEmpty {
+            // The key's own text: plain, selectable, wrapped in two lines.
+            let label = NSTextField(wrappingLabelWithString: fingerprint)
+            label.isSelectable = true
+            label.allowsEditingTextAttributes = false
+            label.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            label.preferredMaxLayoutWidth = Self.detailValueWidth + 60
+            label.setFrameSize(label.fittingSize)
+            alert.accessoryView = label
+        }
+        let confirm = alert.addButton(withTitle: mn(confirmLabel))
+        confirm.keyEquivalent = "\r"
+        let decline = alert.addButton(withTitle: mn(declineLabel))
+        decline.keyEquivalent = "\u{1b}"
+        return await run(alert, on: window) == .alertFirstButtonReturn
+    }
+
     // MARK: Internals
 
     /// The width of a value in the details under an alert's text, where

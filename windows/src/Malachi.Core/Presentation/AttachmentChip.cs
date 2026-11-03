@@ -146,7 +146,8 @@ public sealed record AttachmentChip(
         {
             return ([], []);
         }
-        var atts = AttachmentChips.ChipAttachments(m.Attachments, lm.Body, nestedView ? null : InvitationReading.Read(m, cardOn));
+        var atts = AttachmentChips.ChipAttachments(
+            m.Attachments, lm.Body, nestedView ? null : InvitationReading.Read(m, cardOn), nestedView ? null : m.Signature);
         if (atts.Count == 0)
         {
             return ([], []);

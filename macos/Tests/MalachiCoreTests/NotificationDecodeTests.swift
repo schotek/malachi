@@ -121,9 +121,13 @@ import Testing
         // notify.rulesChanged has no payload either; the hub reads it by
         // name (`RulesController` lists again).
         let rulesSamples: [(String, String)] = [(API.Notify.rulesChanged, "{}")]
-        #expect((samples + calendarSamples + profileSamples + contactsSamples + updateSamples + rulesSamples).map(\.0)
+        // notify.signaturesChanged has no payload either; the hub reads it by
+        // name (the messages on display, the details popover and the key
+        // list ask again).
+        let signatureSamples: [(String, String)] = [(API.Notify.signaturesChanged, "{}")]
+        #expect((samples + calendarSamples + profileSamples + contactsSamples + updateSamples + rulesSamples + signatureSamples).map(\.0)
             == API.allNotifications)
-        for (method, params) in profileSamples + updateSamples + rulesSamples {
+        for (method, params) in profileSamples + updateSamples + rulesSamples + signatureSamples {
             #expect(try CalendarNotification(raw(method, params)) == nil)
             #expect(try ContactsChangedNotification.decode(raw(method, params)) == nil)
             #expect(try DaemonNotification(raw(method, params)) == .unknown(method: method))

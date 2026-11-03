@@ -6,8 +6,8 @@ import MalachiCore
 
 /// The headers above the body (window.blp lines 465–539): the issue card
 /// of a Jira message (`IssueCardView`, hidden for mail), subject, the
-/// sender and recipient chips (`AddressHeaderView`), date, the attachment
-/// chips, the hint that only the plain text is shown, and a separator.
+/// sender and recipient chips (`AddressHeaderView`), date, the signature
+/// badge of a signed message (`SignatureBadgeView`), the attachment chips, the hint that only the plain text is shown, and a separator.
 /// Everything is server data shown as plain text; the labels are
 /// selectable but never take the focus by themselves (a focused selectable
 /// label selects all of its text, see message_window.blp), and they select
@@ -39,6 +39,11 @@ final class MessageHeaderView: NSView {
         get { !hintLabel.isHidden }
         set { hintLabel.isHidden = !newValue }
     }
+
+    /// The badge of a signed message (docs/plans/signatures.md §6), under
+    /// the date; hidden while the message has no verdict and for an
+    /// attached message.
+    let signature = SignatureBadgeView()
 
     /// The attachment chips (`message_attachments`); hidden when empty.
     let chips = FlowView(spacing: 6, lineSpacing: 6)
@@ -82,7 +87,7 @@ final class MessageHeaderView: NSView {
         separator.boxType = .separator
         separator.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = FillStackView(fillingViews: [issueCard, subjectLabel, addresses, dateLabel, chips, hintLabel, separator])
+        let stack = FillStackView(fillingViews: [issueCard, subjectLabel, addresses, dateLabel, signature, chips, hintLabel, separator])
         stack.spacing = Self.spacing
         // GTK keeps 24 above the subject (window.blp `margin-top: 24`) and
         // the row spacing below the date; here the top matches the bottom

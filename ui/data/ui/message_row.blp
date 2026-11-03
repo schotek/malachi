@@ -103,6 +103,13 @@ ListBoxRow message_row {
           ]
         }
 
+        // The verdict of a signed message (widget/message_row.go,
+        // signature.ListIconFor): only valid, validSeen, invalid, revoked
+        // and mismatch get one; its colour is a style class set from Go.
+        Image signature_icon {
+          visible: false;
+        }
+
         Image star_icon {
           icon-name: "starred-symbolic";
           visible: false;

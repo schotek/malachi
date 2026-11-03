@@ -433,7 +433,7 @@ func (s *boardService) Get(ctx context.Context, p api.BoardGetParams) (*api.Boar
 		text, cut := excerpts[i].text, excerpts[i].cut
 		ex := board.BoardMessageExcerpt(text)
 		bm := api.BoardMessage{ID: api.MessageID(m.ID), FolderID: api.FolderID(m.FolderID), Date: boardMessageDate(m, now),
-			Mine: m.Mine, Text: ex.Text, Trimmed: ex.Trimmed || cut || m.TextCut}
+			Mine: m.Mine, Text: ex.Text, Trimmed: ex.Trimmed || cut || m.TextCut, Signature: m.Signature}
 		if len(m.From) > 0 {
 			bm.From = board.CleanAddress(m.From[0])
 		}

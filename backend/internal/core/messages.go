@@ -476,7 +476,16 @@ func toAPISummary(m store.Message) api.MessageSummary {
 		Size:           m.Size,
 		Invitation:     m.Invitation,
 		CrmSaved:       m.CrmSaved,
+		Signature:      listSignature(m.Signature),
 	}
+}
+
+// listSignature is the list's part of a verdict (kind and status).
+func listSignature(s *api.SignatureSummary) *api.MessageSignature {
+	if s == nil {
+		return nil
+	}
+	return &api.MessageSignature{Kind: s.Kind, Status: s.Status}
 }
 
 func toAPIMessage(m store.Message) api.Message {
@@ -489,6 +498,7 @@ func toAPIMessage(m store.Message) api.Message {
 		InReplyTo:      m.InReplyTo,
 		References:     m.References,
 		Attachments:    m.Attachments,
+		Signature:      m.Signature,
 	}
 	if out.References == nil {
 		out.References = []string{}

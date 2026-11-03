@@ -129,4 +129,10 @@ public static class RpcTimeouts
     /// messages in batches and sends the changes to the server.
     /// </summary>
     public static readonly TimeSpan RulesApply = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// <c>message.signatureRevocation</c>: the daemon gives the check 15 s
+    /// (api.RevocationTimeout); the client waits 20 s (docs/api.md §4.22).
+    /// </summary>
+    public static readonly TimeSpan SignatureRevocation = TimeSpan.FromSeconds(20);
 }

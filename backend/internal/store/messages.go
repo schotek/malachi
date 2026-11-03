@@ -94,6 +94,12 @@ type Message struct {
 	// (crm_links, migration 0021), filled by the listings with Invitation
 	// for api.MessageSummary.CrmSaved. Read only.
 	CrmSaved bool
+
+	// Signature is the message's verdict (message_signatures, migration
+	// 0026), filled by the listings with Invitation for
+	// api.MessageSummary.Signature and api.Message.Signature; nil without
+	// one. Read only.
+	Signature *api.SignatureSummary
 }
 
 // MessageRef identifies a message whose body is still to be fetched, by

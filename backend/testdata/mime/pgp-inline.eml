@@ -1,0 +1,21 @@
+From: Alice Example <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Inline signed
+Date: Thu, 01 Oct 2026 10:00:00 +0000
+Message-ID: <pgp-inline@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA256
+
+Hello Bob,
+this is signed inline.
+
+-----BEGIN PGP SIGNATURE-----
+
+wqcEARsIAF0Fgmro8BwJEIDbZSsRLUJLNRQAAAAAABwAEHNhbHRAbm90YXRpb25z
+Lm9wZW5wZ3Bqcy5vcmeQn3CycbQymzItBjwlCG17FiEEaoJ03fy8FdS5xHPogNtl
+KxEtQksAAEJPJcb99KNugNgxJvA3tbW7jni4UB3DOSnULSHJVjgJLfiDJD9XCda5
+gX4qYE6LDYjb4He6aCuHrp8QbEMuKXTADg==
+-----END PGP SIGNATURE-----

@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/API/ErrorCode.swift; Go:
 // backend/pkg/api/errors.go (ErrorCode, codeNames; the address books'
-// 1110, 1111, 1206, 1308 and 1509 of docs/api.md §4.19). RPCError.attachmentTooBig,
+// 1110, 1111, 1206, 1308 and 1509 of docs/api.md §4.19; the signatures'
+// 1510 of §4.22). RPCError.attachmentTooBig,
 // which the Swift file adds as an extension, is RpcError.AttachmentTooBig.
 
 using System;
@@ -267,6 +268,14 @@ public readonly record struct ErrorCode(int Value)
     /// </summary>
     public const int AddressBookReadOnly = 1509;
 
+    /// <summary>
+    /// <c>message.signatureRevocation</c> got no answer it trusts from the
+    /// certificate's OCSP responder or CRL (docs/api.md §4.22); <c>data</c> is a
+    /// <see cref="RevocationFailedData"/> with the class, the message is not for
+    /// display.
+    /// </summary>
+    public const int RevocationFailed = 1510;
+
     private static readonly Dictionary<int, string> Names = new()
     {
         [ParseError] = "parseError",
@@ -323,6 +332,7 @@ public readonly record struct ErrorCode(int Value)
         [MalformedCalendar] = "malformedCalendar",
         [RecurrenceUnsupported] = "recurrenceUnsupported",
         [AddressBookReadOnly] = "addressBookReadOnly",
+        [RevocationFailed] = "revocationFailed",
     };
 
     /// <summary>
@@ -344,6 +354,7 @@ public readonly record struct ErrorCode(int Value)
         StorageError, MigrationFailed,
         MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
         UnsubscribeFailed, QuoteNotFound, MalformedCalendar, RecurrenceUnsupported, AddressBookReadOnly,
+        RevocationFailed,
     ];
 
     /// <summary>

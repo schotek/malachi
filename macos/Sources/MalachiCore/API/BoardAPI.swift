@@ -455,10 +455,13 @@ public struct BoardMessage: Codable, Sendable, Equatable {
     public var text: String
     /// Something was cut off `text`. nil means false.
     public var trimmed: Bool?
+    /// The member's signature verdict, as `Message.signature` (docs/api.md
+    /// §4.22); nil without a signed message or from an older daemon.
+    public var signature: SignatureSummary?
 
     public init(
         id: MessageID, folderId: FolderID, from: Address, date: Date, mine: Bool = false, text: String,
-        trimmed: Bool? = nil
+        trimmed: Bool? = nil, signature: SignatureSummary? = nil
     ) {
         self.id = id
         self.folderId = folderId
@@ -467,6 +470,7 @@ public struct BoardMessage: Codable, Sendable, Equatable {
         self.mine = mine
         self.text = text
         self.trimmed = trimmed
+        self.signature = signature
     }
 }
 

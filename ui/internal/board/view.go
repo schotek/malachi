@@ -234,6 +234,10 @@ type MessageCard struct {
 	Date          time.Time
 	Text, Address string // Address: the sender's (the chat avatar's photo, F10); "" for the samples
 	Mine          bool
+	// Signature is the message's signature verdict (CaseMessage.Signature):
+	// the card shows its badge (never a chat bubble). nil without one.
+	// Compare cards with SameCard, which compares it by value.
+	Signature *api.SignatureSummary
 }
 
 // Detail is the selected case in full. An empty string hides its block.
@@ -1035,7 +1039,7 @@ func (ctx viewContext) detail(c Case) Detail {
 		}
 		messages = append(messages, MessageCard{
 			ID: m.ID, From: from, Sender: sender, When: ctx.dates.Date(m.Date, ctx.now), Date: m.Date,
-			Text: CleanBlock(m.Text, capMessage), Mine: m.Mine, Address: m.Address,
+			Text: CleanBlock(m.Text, capMessage), Mine: m.Mine, Address: m.Address, Signature: m.Signature,
 		})
 	}
 	messagesNote := ""

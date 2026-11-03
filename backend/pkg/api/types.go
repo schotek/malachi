@@ -903,6 +903,11 @@ type MessageSummary struct {
 	// same Message-ID) is saved in an enabled CRM account (§4.17); a
 	// display cache, the CRM is the truth. Absent otherwise.
 	CrmSaved bool `json:"crmSaved,omitempty"`
+	// Signature is the verdict of the message's signature (§4.22): kind
+	// and status, for the list's icon. Absent for a message without a
+	// signature of the whole message and while the verdict is pending.
+	// Message.Signature shadows it with the summary in message.get.
+	Signature *MessageSignature `json:"signature,omitempty"`
 }
 
 // BulkKind is what kind of bulk mail a message is.
@@ -1008,6 +1013,10 @@ type Message struct {
 	// Crm is the message's record in each CRM account where it is saved
 	// (message.get, §4.17); absent when it is saved nowhere.
 	Crm []CrmRecord `json:"crm,omitempty"`
+	// Signature is the summary of the signature's verdict (message.get,
+	// message.download, §4.22); it takes the place of
+	// MessageSummary.Signature on the wire.
+	Signature *SignatureSummary `json:"signature,omitempty"`
 }
 
 // UnsubscribeMethod is how message.unsubscribe would act.

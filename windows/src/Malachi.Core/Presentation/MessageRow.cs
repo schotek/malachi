@@ -90,6 +90,9 @@ public sealed partial class MessageRow : ObservableObject
         DraftText = "";
         CrmPillText = "";
         CrmPillTooltip = "";
+        SignatureIcon = "";
+        SignatureStyle = "";
+        SignatureTooltip = "";
         InvitationText = "";
         EventText = "";
         EventTooltip = "";
@@ -296,6 +299,24 @@ public sealed partial class MessageRow : ObservableObject
     public partial string CrmPillTooltip { get; private set; }
 
     /// <summary>
+    /// The icon of a signed message's verdict, next to the paper clip
+    /// (<see cref="Signatures.SignatureView.ListIconFor"/>: only a valid,
+    /// key-only-seen, invalid, revoked or mismatching signature; a
+    /// conversation's is its newest folder member's; docs/plans/signatures.md
+    /// §6): the GTK icon name, "" hides it.
+    /// </summary>
+    [ObservableProperty]
+    public partial string SignatureIcon { get; private set; }
+
+    /// <summary>The style class of the signature icon's colour (<c>success</c>, <c>warning</c>, <c>error</c>, <c>dim-label</c>); "" without the icon.</summary>
+    [ObservableProperty]
+    public partial string SignatureStyle { get; private set; }
+
+    /// <summary>The signature icon's tooltip, the verdict's short name; "" without the icon.</summary>
+    [ObservableProperty]
+    public partial string SignatureTooltip { get; private set; }
+
+    /// <summary>
     /// The pill of a message with a calendar part after the subject
     /// (<see cref="InvitationReading.Pill(ListRow)"/>: on a conversation row
     /// its newest member's): Invitation, Update, Cancelled or Reply; None
@@ -407,6 +428,11 @@ public sealed partial class MessageRow : ObservableObject
         var crm = Crm.CrmText.PillFor(row.Message);
         CrmPillText = crm?.Label ?? "";
         CrmPillTooltip = crm?.Tooltip ?? "";
+        // The verdict's icon (message_row.go, ui/internal/signature ListIconFor).
+        var signature = Signatures.SignatureView.ListIconFor(row.Message.Signature);
+        SignatureIcon = signature?.Icon ?? "";
+        SignatureStyle = signature?.Style ?? "";
+        SignatureTooltip = signature?.Tooltip ?? "";
         IsThread = thread;
         Loading = thread && loading;
         IsMember = row.Member;
@@ -455,6 +481,7 @@ public sealed partial class MessageRow : ObservableObject
         {
             parts.Add(L10n.T("Attachment"));
         }
+        parts.Add(SignatureTooltip);
         if (Origin.Length > 0)
         {
             parts.Add(Origin);

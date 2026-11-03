@@ -56,16 +56,15 @@ func ExtractPart(r io.Reader, wanted string, limits Limits, maxBytes int64) (*Pa
 	var found *Part
 	var tooBig bool
 	parts := 0
-	visit := func(path []int, e *message.Entity, _ error) error {
+	visit := func(id string, depth int, e *message.Entity, _ error) error {
 		parts++
-		if parts > limits.MaxParts || len(path) > limits.MaxDepth {
+		if parts > limits.MaxParts || depth > limits.MaxDepth {
 			return errStop
 		}
 		mediaType, params, _ := e.Header.ContentType()
 		if strings.HasPrefix(mediaType, "multipart/") {
 			return nil
 		}
-		id := partID(path)
 		if id != wanted {
 			// Every leaf body must be consumed for the multipart reader to
 			// reach the next boundary.
@@ -94,7 +93,7 @@ func ExtractPart(r io.Reader, wanted string, limits Limits, maxBytes int64) (*Pa
 		}
 		return errStop
 	}
-	if werr := root.Walk(visit); werr != nil && !errors.Is(werr, errStop) {
+	if werr := walk(root, limits, nil, visit); werr != nil && !errors.Is(werr, errStop) {
 		return nil, fmt.Errorf("mime: %w", werr)
 	}
 	switch {

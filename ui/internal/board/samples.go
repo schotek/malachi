@@ -43,6 +43,11 @@ func SampleSnapshot(now time.Time, loc *time.Location) Snapshot {
 	msg := func(from string, date time.Time, text string) CaseMessage {
 		return CaseMessage{From: from, Date: date, Text: text}
 	}
+	// signed is msg with an invented verdict, so the card shows the badge.
+	signed := func(m CaseMessage, sig api.SignatureSummary) CaseMessage {
+		m.Signature = &sig
+		return m
+	}
 	mine := func(date time.Time, text string) CaseMessage {
 		return CaseMessage{From: "You", Date: date, Text: text, Mine: true}
 	}
@@ -77,13 +82,17 @@ func SampleSnapshot(now time.Time, loc *time.Location) Snapshot {
 					"If anything in the draft does not work for you, mark it in the document and I will take it to "+
 					"our side this week.\n\nBest regards,\nAda"),
 			mine(s.agoDays(2, 15), "Thanks, Ada. The start date of 1 January works for us."),
-			msg("Ada Example", s.agoMinutes(35),
+			signed(msg("Ada Example", s.agoMinutes(35),
 				"Attached is the final version. Legal has approved it.\n\nWe need the signed copy back by 5 pm today.\n\n"+
 					"The start date is 1 January, as you confirmed. Page 4 needs your signature and the appendix your "+
 					"initials on each page. A scan is enough for now; the original can follow by post.\n\n"+
 					"If the copy is not back today, the old terms run on for another year and the new service levels "+
 					"would only start in 2028. I am at my desk until six if anything is unclear.\n\n"+
 					"Thank you, and best regards,\nAda"),
+				api.SignatureSummary{
+					Kind: api.SignatureSMIME, Status: api.SignatureValid,
+					Signer: &api.SignatureSigner{Name: "Ada Example", Email: "ada@example.invalid"},
+				}),
 		},
 		MessagesLoaded: true,
 	})

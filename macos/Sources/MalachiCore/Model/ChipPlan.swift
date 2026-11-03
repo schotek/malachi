@@ -43,7 +43,11 @@ public struct ChipPlan: Sendable, Equatable {
     /// of the card shown gets no chip (`chipAttachments`).
     public init(_ m: Message?, _ body: MessageBodyResult?, embedded: Bool = false, cardOn: Bool = false) {
         guard let m else { return }
-        let atts = chipAttachments(m.attachments, body, card: embedded ? nil : invitationReading(m, cardOn: cardOn))
+        // The detached signature part of a message with a verdict gets no
+        // chip either: it is in the signature's details (plan S15).
+        let atts = chipAttachments(
+            SignatureView.tileAttachments(m.attachments, m.signature), body,
+            card: embedded ? nil : invitationReading(m, cardOn: cardOn))
         var allOK = true
         for a in atts {
             var (state, why) = partState(a, body)

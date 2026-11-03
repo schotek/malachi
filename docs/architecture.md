@@ -1761,6 +1761,31 @@ nor written.
 - By hand (`rules.apply`): a folder or a selection, in batches of
   `MaxMessageIDsPerCall`, local actions only.
 
+### 3.12 Signatures of incoming mail (phase 1)
+
+Design: [plans/signatures.md](plans/signatures.md); API §4.22 of
+[api.md](api.md); threats [security.md](security.md) §5. Pure packages:
+`internal/smime` (own CMS SignedData parser and verifier over
+`cryptobyte`, BER normalised to DER), `internal/pgpsig` (OpenPGP/MIME over
+`github.com/ProtonMail/go-crypto`, key reading, Autocrypt),
+`internal/signature` (which signature is the message's verdict, exact
+slicing of the signed bytes, protected headers, the verdict's order,
+`VerifierVersion`), `internal/revocation` (OCSP then CRL on request,
+the network rules of `internal/oneclick`; fake `revocationtest`). The
+MIME parser unwraps opaque `signed-data` (`mime.Parsed.Opaque`, inner
+parts numbered under the wrapper's number). Migration 0026:
+`message_signatures` (one verdict per message, cascading, a cache with
+`verifier_version`, `trust_key`, `stale`), `smime_revocation`,
+`pgp_keys`. Core: the Stored hook queues, `core/signature_worker.go`
+verifies after the store (and takes Autocrypt keys), recomputes stale
+verdicts after a change of trust, rereads the system roots at start and
+daily; `core.Maintain` parses stored opaque messages again (meta
+`mime.opaqueUnwrapped`) and verifies stored signed mail (meta
+`signature.verified`); `core/signature_service.go` has the methods.
+Listings carry the verdict like the CRM flag (`store.attachSignaturesTo`
+with the invitations). Board `RulesVersion` 9: the own text of opaque
+mail is the unwrapped content's.
+
 ## 4. Security boundary: HTML
 
 HTML in mail is hostile input. It is sanitised **in the backend**
@@ -3109,3 +3134,15 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   shares one predicate (`sentMember`) between `thread.list`, `thread.get`
   and the search, so the three cannot disagree; no migration, the indexes
   of 0011 serve. The MCP bridge does not ask for it.
+- Signatures of incoming mail (2026-11-02): **decided** (owner, Q1–Q8 of
+  [plans/signatures.md](plans/signatures.md)), phase 1 verifies only: S/MIME
+  and OpenPGP/MIME in the daemon, verdict stored after the message, system
+  roots for S/MIME, OpenPGP keys only from the user's mail (Autocrypt,
+  attachments, import; no key servers, no WKD, no web of trust; TOFU
+  `seen` / confirmed `verified`), revocation only on request, opaque
+  S/MIME unwrapped by the parser everywhere. CMS is our own minimal parser
+  (`internal/smime`) because Go's PKCS #7 libraries are abandoned or far
+  wider than verification needs; OpenPGP is `ProtonMail/go-crypto`
+  (BSD-3-Clause, with `cloudflare/circl`, BSD-3-Clause), never GnuPG or
+  gpgme (the core's licence). Addresses are compared case-insensitively,
+  the local part too; a message with two `From` addresses never matches.

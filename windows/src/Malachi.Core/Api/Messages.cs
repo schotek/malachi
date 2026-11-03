@@ -158,6 +158,17 @@ public sealed record MessageSummary
     /// <summary>Whether <see cref="CrmSaved"/> is set.</summary>
     [JsonIgnore]
     public bool IsCrmSaved => CrmSaved == true;
+
+    /// <summary>
+    /// The verdict of the message's signature (docs/api.md §4.22): kind and
+    /// status, what the list's icon needs. Absent for a message without a
+    /// signature that is the verdict of the whole message, and while the
+    /// verdict is pending. <see cref="Message.Signature"/> takes its place
+    /// with the summary in <c>message.get</c>; <see cref="Message.Summary"/>
+    /// leaves this null.
+    /// </summary>
+    [JsonPropertyName("signature")]
+    public MessageSignature? Signature { get; init; }
 }
 
 /// <summary>
@@ -319,6 +330,15 @@ public sealed record Message
     /// nowhere.
     /// </summary>
     public IReadOnlyList<CrmRecord>? Crm { get; init; }
+
+    /// <summary>
+    /// The summary of the signature's verdict (<c>message.get</c>,
+    /// <c>message.download</c>, docs/api.md §4.22). Go's Message shadows the
+    /// summary's <c>signature</c> with it: on the wire the one key
+    /// <c>signature</c> holds this, so <see cref="MessageSummary.Signature"/>
+    /// of <see cref="Summary"/> is null.
+    /// </summary>
+    public SignatureSummary? Signature { get; init; }
 }
 
 /// <summary>
@@ -339,6 +359,7 @@ public sealed class MessageConverter : JsonConverter<Message>
     private const string UnsubscribeKey = "unsubscribe";
     private const string InvitationKey = "invitation";
     private const string CrmKey = "crm";
+    private const string SignatureKey = "signature";
 
     /// <inheritdoc/>
     public override Message Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -354,7 +375,8 @@ public sealed class MessageConverter : JsonConverter<Message>
         {
             // Go decodes "invitation" into Message.Invitation only, the key
             // it shadows in the summary.
-            Summary = summary with { Invitation = null },
+            // The same for "signature": the summary's reduced reading is dropped.
+            Summary = summary with { Invitation = null, Signature = null },
             Cc = Member<IReadOnlyList<Address>>(root, CcKey, options),
             Bcc = Member<IReadOnlyList<Address>>(root, BccKey, options),
             ReplyTo = Member<IReadOnlyList<Address>>(root, ReplyToKey, options),
@@ -366,6 +388,7 @@ public sealed class MessageConverter : JsonConverter<Message>
             Unsubscribe = Member<UnsubscribeOffer>(root, UnsubscribeKey, options),
             Invitation = Member<InvitationCard>(root, InvitationKey, options),
             Crm = Member<IReadOnlyList<CrmRecord>>(root, CrmKey, options),
+            Signature = Member<SignatureSummary>(root, SignatureKey, options),
         };
     }
 
@@ -382,6 +405,11 @@ public sealed class MessageConverter : JsonConverter<Message>
             {
                 continue;
             }
+            // And one "signature" key, the summary's with the notes.
+            if (value.Signature is not null && string.Equals(member.Name, SignatureKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
             member.WriteTo(writer);
         }
         WriteMember(writer, CcKey, value.Cc, options);
@@ -395,6 +423,7 @@ public sealed class MessageConverter : JsonConverter<Message>
         WriteMember(writer, UnsubscribeKey, value.Unsubscribe, options);
         WriteMember(writer, InvitationKey, value.Invitation, options);
         WriteMember(writer, CrmKey, value.Crm, options);
+        WriteMember(writer, SignatureKey, value.Signature, options);
         writer.WriteEndObject();
     }
 

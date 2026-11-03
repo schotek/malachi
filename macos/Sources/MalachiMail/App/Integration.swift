@@ -126,6 +126,7 @@ final class Integration {
         wireCRM()
         wireContacts()
         wireUpdates()
+        wireSignatures()
     }
 
     /// window.go 337-360 and 411-433: the toolbar and menu act on the
@@ -540,6 +541,7 @@ final class Integration {
         c.contactsPane.configure(state.contacts)
         c.rulesPane.configure(state.rules)
         c.generalPane.configureUpdates(state.updates)
+        c.securityPane.configure(state: state)
         return c
     }
 

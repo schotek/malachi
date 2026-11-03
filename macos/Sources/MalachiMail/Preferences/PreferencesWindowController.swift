@@ -6,14 +6,14 @@ import MalachiCore
 
 /// The settings window (preferences.blp `preferences_dialog`): a
 /// toolbar-style tab view with the Accounts, Integrations, Rules, General,
-/// Calendar (docs/calendar.md §5.8), Contacts, Appearance and AI pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
+/// Calendar (docs/calendar.md §5.8), Contacts, Appearance, AI and Security pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
 /// at a time; `show` brings it to the front. There is no search (deviation
 /// D9).
 @MainActor
 final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     /// The pages, in the order of the tabs.
     enum Page: Int {
-        case accounts, integrations, rules, general, calendar, contacts, appearance, ai
+        case accounts, integrations, rules, general, calendar, contacts, appearance, ai, security
     }
 
     private static var shared: PreferencesWindowController?
@@ -34,6 +34,9 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     let contactsPane = ContactsPaneViewController()
     let appearancePane = AppearancePaneViewController()
     let aiPane = AIPaneViewController()
+    /// Settings → Security (docs/plans/signatures.md §6): the OpenPGP keys,
+    /// bound to the application by `Integration.showPreferences`.
+    let securityPane = SecurityPaneViewController()
     let settings: Settings
     private let tabs = PrefsTabViewController()
     private let toasts = WizardToastPresenter()
@@ -124,6 +127,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
             confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage, client: client
         ) { text in toasts.show(text) }
         _ = generalPane.view
+        securityPane.toast = { text in toasts.show(text) }
 
         tabs.tabStyle = .toolbar
         tabs.transitionOptions = []
@@ -136,6 +140,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
             (contactsPane, ContactBook.windowTitle, "person.text.rectangle"),
             (appearancePane, L10n.T("Appearance"), "paintpalette"),
             (aiPane, L10n.T("AI"), "sparkles"),
+            (securityPane, SignatureView.securityPageTexts().title, SignatureView.symbolName(SignatureView.iconPage)),
         ]
         for (controller, label, symbol) in pages {
             let item = NSTabViewItem(viewController: controller)
@@ -207,6 +212,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         contactsPane.closed = true
         appearancePane.closed = true
         aiPane.closed = true
+        securityPane.closed = true
         if PreferencesWindowController.shared === self {
             PreferencesWindowController.shared = nil
         }

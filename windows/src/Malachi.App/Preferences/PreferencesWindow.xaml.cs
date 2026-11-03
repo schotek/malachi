@@ -14,7 +14,8 @@
 // Calendar page (after General, as on macOS) binds this window's calendar
 // source at once, as macOS attaches it, and draws it again whenever it
 // comes up; the Contacts page (after Calendar) lists the accounts and the
-// books whenever it comes up. On the
+// books whenever it comes up, the Security page (after Contacts) the stored
+// OpenPGP keys. On the
 // General page Windows decides some things (the Run value and the
 // default mail app): the page reads them again whenever it comes up and
 // whenever the window is activated (after a visit to Settings). The
@@ -70,6 +71,7 @@ public sealed partial class PreferencesWindow : Window
     private readonly GeneralPage general;
     private readonly CalendarPreferencesPage calendar;
     private readonly ContactsPreferencesPage contactsPage;
+    private readonly SecurityPage security;
     private readonly AppearancePage appearance;
     private readonly AiPage ai;
 
@@ -98,6 +100,7 @@ public sealed partial class PreferencesWindow : Window
         general = new GeneralPage(state, bindings, ToastsHost);
         calendar = new CalendarPreferencesPage(state, this, ToastsHost);
         contactsPage = new ContactsPreferencesPage(state, this, ToastsHost);
+        security = new SecurityPage(state, this, ToastsHost);
         appearance = new AppearancePage(state, bindings);
         ai = new AiPage(state, bindings, ToastsHost, () => this);
 
@@ -127,6 +130,7 @@ public sealed partial class PreferencesWindow : Window
             general.Close();
             calendar.Close();
             contactsPage.Close();
+            security.Close();
             ai.Close();
         };
         // The calendar page works over this window's calendar source from
@@ -165,6 +169,9 @@ public sealed partial class PreferencesWindow : Window
 
     /// <summary>Shows the Contacts page (the Contacts window's No Address Books, Open Preferences…).</summary>
     public void ShowContacts() => Navigation.SelectedItem = ContactsItem;
+
+    /// <summary>Shows the Security page (the OpenPGP keys of signed mail).</summary>
+    public void ShowSecurity() => Navigation.SelectedItem = SecurityItem;
 
     /// <summary>
     /// Opens the Preferences, or brings the open window to the front
@@ -263,6 +270,7 @@ public sealed partial class PreferencesWindow : Window
             "general" => general,
             "calendar" => calendar,
             "contacts" => contactsPage,
+            "security" => security,
             "appearance" => appearance,
             "ai" => ai,
             _ => accounts,
@@ -288,6 +296,11 @@ public sealed partial class PreferencesWindow : Window
         else if (ReferenceEquals(page, contactsPage))
         {
             contactsPage.Refresh();
+        }
+        else if (ReferenceEquals(page, security))
+        {
+            // The keys are read whenever the page comes up.
+            security.Refresh();
         }
         else if (ReferenceEquals(page, ai))
         {

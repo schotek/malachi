@@ -161,8 +161,10 @@ type fakeDaemon struct {
 	moves        []api.MessageMoveParams
 	moveFailure  error
 	noMoved      bool
-	holding      map[held]bool
-	gates        map[held][]chan error
+	// signature is the verdict board.get gives its message.
+	signature *api.SignatureSummary
+	holding   map[held]bool
+	gates     map[held][]chan error
 }
 
 func newFakeDaemon(connected bool) *fakeDaemon {
@@ -318,7 +320,7 @@ func (f *fakeDaemon) serve(method string, params any) (any, error) {
 		}
 		m := api.BoardMessage{
 			ID: "m_a", FolderID: "f_inbox", From: api.Address{Name: "Ann", Address: "ann@example.invalid"}, Date: t0,
-			Text: fmt.Sprintf("version %d", c.Version),
+			Text: fmt.Sprintf("version %d", c.Version), Signature: f.signature,
 		}
 		return api.BoardGetResult{Case: c, Messages: []api.BoardMessage{m}}, nil
 	case api.MethodBoardSetState:
@@ -1265,4 +1267,47 @@ func TestDaemonAccountInfo(t *testing.T) {
 	eq(t, "graph", accountBadge(graph), "M365")
 	jiraAccount := api.Account{ID: "j", Config: api.AccountConfig{Kind: api.AccountJira, Name: "Issues"}}
 	eq(t, "jira", accountBadge(jiraAccount), "JIRA")
+}
+
+// TestDaemonReloadConversations: a verdict changes without the case's
+// version (notify.signaturesChanged, notify.messagesChanged); the
+// conversation opened last is asked for again at once, the others are
+// stale until opened again, another account's stay.
+func TestDaemonReloadConversations(t *testing.T) {
+	h := newHarness(t, true).started()
+	h.source.LoadMessages(caseID("2"))
+	h.idle()
+	h.source.LoadMessages(caseID("1"))
+	h.idle()
+	eq(t, "gets", h.fake.count(api.MethodBoardGet), 2)
+	check(t, h.c("1").Messages[0].Signature == nil, "a verdict before one")
+	h.fake.set(func(f *fakeDaemon) {
+		f.signature = &api.SignatureSummary{Kind: api.SignatureSMIME, Status: api.SignatureValid}
+	})
+	// Another account's change touches nothing.
+	h.source.ReloadConversations("acc_other")
+	h.idle()
+	eq(t, "gets after another account", h.fake.count(api.MethodBoardGet), 2)
+	h.source.ReloadConversations("acc_1")
+	check(t, h.c("1").MessagesLoaded, "the cached messages went while reloading")
+	h.idle()
+	eq(t, "gets after the change", h.fake.count(api.MethodBoardGet), 3)
+	sig := h.c("1").Messages[0].Signature
+	check(t, sig != nil && sig.Status == api.SignatureValid, "the verdict did not arrive: %+v", sig)
+	check(t, h.c("2").Messages[0].Signature == nil, "a stale conversation was asked for unopened")
+	// Opened again, the stale one is asked for; the fresh one is not.
+	h.source.LoadMessages(caseID("2"))
+	h.idle()
+	eq(t, "gets after opening the stale one", h.fake.count(api.MethodBoardGet), 4)
+	check(t, h.c("2").Messages[0].Signature != nil, "the stale conversation kept its old verdict")
+	h.source.LoadMessages(caseID("1"))
+	h.idle()
+	eq(t, "gets after opening the fresh one", h.fake.count(api.MethodBoardGet), 4)
+	// "" is every account; a stopped source asks nothing.
+	h.source.ReloadConversations("")
+	h.idle()
+	eq(t, "gets after any account", h.fake.count(api.MethodBoardGet), 5)
+	h.source.Stop()
+	h.source.ReloadConversations("")
+	eq(t, "gets after stop", h.fake.count(api.MethodBoardGet), 5)
 }

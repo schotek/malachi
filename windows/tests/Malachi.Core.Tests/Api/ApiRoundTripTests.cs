@@ -52,7 +52,7 @@ public sealed class ApiRoundTripTests
     private const string Outbox = """{"state":"failed","attempts":3,"nextAttemptAt":"2026-09-02T12:00:00.5Z","error":@error@}""";
 
     private const string Summary =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"bulk":@bulk@,"invitation":@calinvitationsummary@,"crmSaved":true}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"bulk":@bulk@,"invitation":@calinvitationsummary@,"crmSaved":true,"signature":{"kind":"smime","status":"valid"}}""";
 
     private const string UpdateInfoJson =
         """{"version":"0.1.3","publishedAt":"2026-11-01T19:00:00Z","security":false,"notes":"Fixes.\nMore fixes.","infoUrl":"https://malachimail.app/download.html","url":"https://github.com/schotek/malachi/releases/download/v0.1.3/Malachi-Mail-0.1.3-windows-x64-setup.exe","size":81234567,"skipped":false,"remindAfter":"2026-11-04T19:00:00Z","prompt":false}""";
@@ -65,7 +65,7 @@ public sealed class ApiRoundTripTests
         """{"partId":"2.1","filename":"image001.png","contentType":"image/png","size":100,"inline":true,"contentId":"image001@example.org","remote":true}""";
 
     private const string Message =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"},"bulk":@bulk@,"unsubscribe":@unsubscribe@,"invitation":@calinvitationcard@,"crm":[@crmrecord@],"crmSaved":true}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"},"bulk":@bulk@,"unsubscribe":@unsubscribe@,"invitation":@calinvitationcard@,"crm":[@crmrecord@],"crmSaved":true,"signature":@sigsummary@}""";
 
     private const string Blocked =
         """{"remoteImages":3,"remoteStyles":1,"remoteFonts":0,"scripts":1,"forms":0,"eventHandlers":2,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":1}""";
@@ -115,7 +115,7 @@ public sealed class ApiRoundTripTests
         """{"id":"k_1","caseId":"@caseid@","accountId":"acc_1","messageId":"m_3","text":"Send the report","quote":"I will send the report on Monday.","due":"2026-10-05T09:00:00Z","state":"closed","closedReason":"replied","at":"2026-09-30T08:31:00Z"}""";
 
     private const string BoardMessage =
-        """{"id":"m_1","folderId":"f_inbox","from":@address@,"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign the contract?","trimmed":true}""";
+        """{"id":"m_1","folderId":"f_inbox","from":@address@,"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign the contract?","trimmed":true,"signature":@sigsummary@}""";
 
     private const string BoardRun =
         """{"at":"2026-09-30T08:00:00Z","endedAt":"2026-09-30T08:02:00Z","trigger":"auto","source":"claude-opus","annotated":3,"error":"timeout"}""";
@@ -269,6 +269,36 @@ public sealed class ApiRoundTripTests
 
     private const string CrmRecord =
         """{"accountId":"acc_e","itemGuid":"00000000-0000-4000-8000-000000000100","savedAt":"2026-10-17T10:00:00Z","checkedAt":"2026-10-17T11:00:00Z","private":true,"auto":true,"items":[@crmitem@],"url":"https://open.eway-crm.com/?l=e"}""";
+
+    // The signatures (Signature.cs): every member named, optional ones present; a
+    // Message's "signature" is the summary with the signer, the notes and the part.
+    private const string SigFp40 = "0123456789abcdef0123456789abcdef01234567";
+
+    private const string SigSigner = """{"name":"Jan Novák","email":"jan@example.org","fingerprint":"@pin@"}""";
+
+    private const string SigSummary =
+        """{"kind":"smime","status":"valid","signer":@sigsigner@,"notes":["opaque","partialFooter"],"partId":"2"}""";
+
+    private const string SigHeader = """{"name":"subject","value":"Real subject"}""";
+
+    private const string SigCertificate =
+        """{"sha256":"@pin@","subject":"CN=Jan","issuer":"CN=CA","emails":["jan@example.org"],"notBefore":"2025-01-02T03:04:05Z","notAfter":"2027-01-02T03:04:05Z","systemRoot":true,"selfSigned":false}""";
+
+    private const string SigRevocation =
+        """{"state":"good","checkedAt":"2026-11-02T09:00:00Z","revokedAt":"2026-11-01T09:00:00Z","source":"ocsp","checkable":true}""";
+
+    private const string SigSmime = """{"chain":[@sigcertificate@],"revocation":@sigrevocation@}""";
+
+    private const string SigOffer = """{"fingerprint":"0123456789abcdef0123456789abcdef01234567","partId":"3","autocrypt":false}""";
+
+    private const string SigPgp =
+        """{"keyTrust":"seen","keyId":"89abcdef01234567","primaryFingerprint":"0123456789abcdef0123456789abcdef01234567","userIds":["Jan <jan@example.org>"],"keySource":"autocrypt","firstSeen":"2026-10-30T08:00:00Z","previousFingerprint":"ef01234567890123456789abcdef0123456789ab","importable":@sigoffer@}""";
+
+    private const string SigDetails =
+        """{"kind":"smime","status":"untrusted","signer":@sigsigner@,"notes":["expiredSince"],"partId":"2","messageId":"m_1","reason":"unknownIssuer","signedAt":"2026-11-02T07:00:00Z","arrivedAt":"2026-11-02T08:00:00Z","algorithm":"RSA 2048 / SHA-256","expiredAt":"2026-12-01T00:00:00Z","revokedAt":"2026-12-02T00:00:00Z","protectedHeaders":[@sigheader@],"smime":@sigsmime@,"pgp":@sigpgp@}""";
+
+    private const string SigKey =
+        """{"fingerprint":"0123456789abcdef0123456789abcdef01234567","userIds":["Jan <jan@example.org>"],"emails":["jan@example.org"],"trust":"verified","source":"import","firstSeen":"2026-10-30T08:00:00Z","createdAt":"2025-01-02T03:04:05Z","expiresAt":"2030-01-02T03:04:05Z","revokedAt":"2031-01-02T03:04:05Z","algorithm":"Ed25519"}""";
 
     // Every record: a JSON document and, when the encoding adds members, what it encodes to.
     private static readonly Dictionary<string, Sample> Samples = new(StringComparer.Ordinal)
@@ -682,6 +712,30 @@ public sealed class ApiRoundTripTests
         [nameof(RulesTestResult)] = Case<RulesTestResult>("""{"count":3,"messages":[@summary@]}"""),
         [nameof(RulesApplyParams)] = Case<RulesApplyParams>("""{"accountId":"acc_1","folderId":"f_inbox","messageIds":["m_1"],"ruleIds":["r_1"]}"""),
         [nameof(RulesApplyResult)] = Case<RulesApplyResult>("""{"examined":120,"matched":14,"changed":12,"skippedOutgoing":2}"""),
+        // Signature.cs
+        [nameof(MessageSignature)] = Case<MessageSignature>("""{"kind":"pgp","status":"validSeen"}"""),
+        [nameof(SignatureSigner)] = Case<SignatureSigner>(SigSigner),
+        [nameof(SignatureSummary)] = Case<SignatureSummary>(SigSummary),
+        [nameof(ProtectedHeader)] = Case<ProtectedHeader>(SigHeader),
+        [nameof(SignatureDetails)] = Case<SignatureDetails>(SigDetails),
+        [nameof(SignatureCertificate)] = Case<SignatureCertificate>(SigCertificate),
+        [nameof(SmimeRevocation)] = Case<SmimeRevocation>(SigRevocation),
+        [nameof(SmimeDetails)] = Case<SmimeDetails>(SigSmime),
+        [nameof(PgpKeyOffer)] = Case<PgpKeyOffer>(SigOffer),
+        [nameof(PgpDetails)] = Case<PgpDetails>(SigPgp),
+        [nameof(PgpKey)] = Case<PgpKey>(SigKey),
+        [nameof(MessageSignatureParams)] = Case<MessageSignatureParams>("""{"messageId":"m_1"}"""),
+        [nameof(MessageSignatureResult)] = Case<MessageSignatureResult>("""{"signature":@sigdetails@}"""),
+        [nameof(MessageSignatureRevocationParams)] = Case<MessageSignatureRevocationParams>("""{"messageId":"m_1"}"""),
+        [nameof(RevocationFailedData)] = Case<RevocationFailedData>("""{"reason":"timeout"}"""),
+        [nameof(PgpKeyImportParams)] = Case<PgpKeyImportParams>(
+            """{"messageId":"m_1","partId":"3","autocrypt":true,"armored":"-----BEGIN PGP PUBLIC KEY BLOCK-----","data":"mQE="}"""),
+        [nameof(PgpKeyImportResult)] = Case<PgpKeyImportResult>("""{"keys":[@sigkey@],"added":1,"updated":0}"""),
+        [nameof(PgpImportErrorData)] = Case<PgpImportErrorData>("""{"reason":"secretKey"}"""),
+        [nameof(PgpKeyVerifyParams)] = Case<PgpKeyVerifyParams>("""{"fingerprint":"0123456789abcdef0123456789abcdef01234567","verified":true}"""),
+        [nameof(PgpKeyVerifyResult)] = Case<PgpKeyVerifyResult>("""{"key":@sigkey@}"""),
+        [nameof(PgpKeyListResult)] = Case<PgpKeyListResult>("""{"keys":[@sigkey@]}"""),
+        [nameof(PgpKeyRemoveParams)] = Case<PgpKeyRemoveParams>("""{"fingerprint":"0123456789abcdef0123456789abcdef01234567"}"""),
     };
 
     // Minimal documents: what the encoding adds to them.
@@ -755,6 +809,15 @@ public sealed class ApiRoundTripTests
         ["MessageSummary not saved in a CRM"] = Case<MessageSummary>(
             """{"id":"m","accountId":"a","folderId":"f","from":[],"subject":"","date":"2026-09-02T10:00:00Z","snippet":"","flags":[],"hasAttachments":false,"size":0,"crmSaved":false}""",
             """{"id":"m","accountId":"a","folderId":"f","from":[],"subject":"","date":"2026-09-02T10:00:00Z","snippet":"","flags":[],"hasAttachments":false,"size":0}"""),
+        // The signatures: a daemon without a verdict sends no signature; a null
+        // details is a message without one; a summary without a signer, notes or part.
+        ["MessageSignatureResult without a verdict"] = Case<MessageSignatureResult>("""{"signature":null}""", "{}"),
+        ["SignatureSummary of an unknown key"] = Case<SignatureSummary>(
+            """{"kind":"pgp","status":"unknownKey"}""",
+            """{"kind":"pgp","status":"unknownKey","notes":[]}"""),
+        ["PgpKeyImportParams of a pasted key"] = Case<PgpKeyImportParams>(
+            """{"armored":"-----BEGIN PGP PUBLIC KEY BLOCK-----","autocrypt":false}""",
+            """{"armored":"-----BEGIN PGP PUBLIC KEY BLOCK-----"}"""),
         ["SyncState without failedOutbox"] = Case<SyncState>(
             """{"accountId":"a","status":"idle","progress":-1,"pendingOutbox":0}""",
             """{"accountId":"a","status":"idle","progress":-1,"pendingOutbox":0,"failedOutbox":0}"""),
@@ -1076,7 +1139,10 @@ public sealed class ApiRoundTripTests
             ("@pageinfo@", PageInfo), ("@page@", Page), ("@pin@", Pin),
             ("@jira@", Jira), ("@itemissue@", ItemIssue), ("@issue@", Issue),
             ("@bulk@", Bulk), ("@unsubscribe@", Unsubscribe),
-            ("@ewayconfig@", EwayConfig), ("@crmrecord@", CrmRecord), ("@crmitemref@", CrmItemRef), ("@crmitem@", CrmItem),
+            ("@ewayconfig@", EwayConfig), ("@sigsigner@", SigSigner), ("@sigsummary@", SigSummary), ("@sigheader@", SigHeader), ("@sigcertificate@", SigCertificate),
+            ("@sigrevocation@", SigRevocation), ("@sigsmime@", SigSmime), ("@sigoffer@", SigOffer), ("@sigpgp@", SigPgp),
+            ("@sigdetails@", SigDetails), ("@sigkey@", SigKey),
+            ("@crmrecord@", CrmRecord), ("@crmitemref@", CrmItemRef), ("@crmitem@", CrmItem),
             ("@caseid@", CaseId), ("@boardissue@", BoardIssue), ("@boarddue@", BoardDue), ("@boardannotation@", BoardAnnotation),
             ("@boardcase@", BoardCase), ("@boardcommitment@", BoardCommitment), ("@boardmessage@", BoardMessage),
             ("@boardrun@", BoardRun), ("@boardtriage@", BoardTriage), ("@boardwindows@", BoardWindows),

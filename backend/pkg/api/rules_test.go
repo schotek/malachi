@@ -10,20 +10,21 @@ import (
 	"time"
 )
 
-// rulesMethods end AllMethods, after the update check's;
-// notify.rulesChanged ends AllNotifications.
+// rulesMethods follow the update check's in AllMethods; only the
+// signatures' (signature_test.go) come after them. notify.rulesChanged is
+// followed by notify.signaturesChanged.
 var rulesMethods = []string{"rules.list", "rules.create", "rules.update", "rules.delete",
 	"rules.reorder", "rules.test", "rules.apply"}
 
 func TestRulesMethodsOrder(t *testing.T) {
-	n := len(AllMethods)
-	if !reflect.DeepEqual(AllMethods[n-len(rulesMethods):], rulesMethods) {
-		t.Fatalf("AllMethods does not end with the rules methods: %v", AllMethods[n-len(rulesMethods):])
+	n := len(AllMethods) - len(signatureMethods)
+	if !reflect.DeepEqual(AllMethods[n-len(rulesMethods):n], rulesMethods) {
+		t.Fatalf("AllMethods does not have the rules methods before the signatures': %v", AllMethods[n-len(rulesMethods):n])
 	}
 	if AllMethods[n-len(rulesMethods)-1] != MethodUpdateDismissNotice {
 		t.Fatal("the rules methods do not follow the update check's")
 	}
-	if AllNotifications[len(AllNotifications)-1] != NotifyRulesChanged {
+	if AllNotifications[len(AllNotifications)-2] != NotifyRulesChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

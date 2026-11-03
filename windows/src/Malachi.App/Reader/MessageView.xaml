@@ -39,6 +39,7 @@ gets the sanitiser's output only.
     xmlns:l="using:Malachi.App.Localization"
     xmlns:local="using:Malachi.App.Reader"
     xmlns:res="using:Malachi.App.Resources"
+    xmlns:signatures="using:Malachi.App.Signatures"
     IsTabStop="False">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -637,6 +638,13 @@ gets the sanitiser's output only.
                                 Style="{StaticResource DimCaptionLabelStyle}"
                                 Text="{x:Bind Reader.DateText, Mode=OneWay}"
                                 Visibility="{x:Bind local:ReaderBind.VisibleIfText(Reader.DateText), Mode=OneWay}" />
+
+                            <!-- The badge of a signed message (docs/plans/signatures.md §6,
+                                 ui/internal/signature BadgeFor): the verdict's shield and
+                                 sentence, a click opens the details; set in code
+                                 (RenderSignature), hidden without a verdict and in an
+                                 attached message's window. -->
+                            <signatures:SignatureBadgeButton x:Name="SignatureBadge" />
 
                             <!-- message_attachments (window/attachments.go). -->
                             <local:WrapBox

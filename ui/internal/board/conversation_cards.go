@@ -22,16 +22,23 @@ type ConversationMember struct {
 }
 
 // ConversationKey excludes unrelated detail changes such as draft autosaves.
+// Signatures are the members' verdicts, index for index: a verdict is not
+// part of a card's identity (its body and fold stay when it changes), but
+// a change of one alone is still a change the cards follow (Apply).
 type ConversationKey struct {
-	CaseID  CaseID
-	Members []ConversationMember
+	CaseID     CaseID
+	Members    []ConversationMember
+	Signatures []SignatureKey
 }
 
 // ConversationKeyOf is the part of a detail that changes its cards.
 func ConversationKeyOf(d Detail) ConversationKey {
-	k := ConversationKey{CaseID: d.ID, Members: make([]ConversationMember, len(d.Messages))}
+	k := ConversationKey{
+		CaseID: d.ID, Members: make([]ConversationMember, len(d.Messages)), Signatures: make([]SignatureKey, len(d.Messages)),
+	}
 	for i, m := range d.Messages {
 		k.Members[i] = ConversationMember{ID: m.ID, Text: m.Text}
+		k.Signatures[i] = SignatureKeyOf(m.Signature)
 	}
 	return k
 }
@@ -68,6 +75,8 @@ const (
 // ConversationChange preserves views by matching new indices to old ones.
 // Reload contains open kept cards whose excerpt changed: keep their old
 // body visible while asking for a fresh one. Unnamed previous cards go.
+// A change of verdicts alone keeps every card where it is (Kept is the
+// identity, Reload empty): the caller only updates the cards.
 type ConversationChange struct {
 	Kind   ConversationChangeKind
 	Kept   map[int]int
@@ -79,13 +88,14 @@ type ConversationChange struct {
 // Thus a deliberately tiny cap may be exceeded while both are protected.
 // The zero value works with the default cap.
 type ConversationCards struct {
-	maxLive int
-	caseID  CaseID
-	hasCase bool
-	members []ConversationMember
-	folds   []bool
-	bodies  map[ConversationMember]ConversationBody
-	opened  []ConversationMember
+	maxLive    int
+	caseID     CaseID
+	hasCase    bool
+	members    []ConversationMember
+	signatures []SignatureKey
+	folds      []bool
+	bodies     map[ConversationMember]ConversationBody
+	opened     []ConversationMember
 }
 
 // NewConversationCards selects the HTML view cap. Zero uses the default;
@@ -116,6 +126,7 @@ func (c *ConversationCards) Apply(key ConversationKey) ConversationChange {
 	if !c.hasCase || c.caseID != key.CaseID {
 		c.caseID, c.hasCase = key.CaseID, true
 		c.members = slices.Clone(key.Members)
+		c.signatures = slices.Clone(key.Signatures)
 		c.folds = make([]bool, len(c.members))
 		for i := range c.folds {
 			c.folds[i] = i != c.Newest()
@@ -128,8 +139,17 @@ func (c *ConversationCards) Apply(key ConversationKey) ConversationChange {
 		return ConversationChange{Kind: ConversationChangeReset}
 	}
 	if slices.Equal(key.Members, c.members) {
-		return ConversationChange{Kind: ConversationChangeNone}
+		if sameSignatures(key.Signatures, c.signatures, len(c.members)) {
+			return ConversationChange{Kind: ConversationChangeNone}
+		}
+		c.signatures = slices.Clone(key.Signatures)
+		kept := make(map[int]int, len(c.members))
+		for i := range c.members {
+			kept[i] = i
+		}
+		return ConversationChange{Kind: ConversationChangeMembers, Kept: kept}
 	}
+	c.signatures = slices.Clone(key.Signatures)
 	free := make(map[ConversationMember][]int)
 	for i, m := range c.members {
 		free[m] = append(free[m], i)
@@ -214,6 +234,23 @@ func (c *ConversationCards) Apply(key ConversationKey) ConversationChange {
 		c.enforce(c.Newest())
 	}
 	return ConversationChange{Kind: ConversationChangeMembers, Kept: kept, Reload: reload}
+}
+
+// sameSignatures compares the verdicts of n members; a missing entry is
+// no verdict.
+func sameSignatures(a, b []SignatureKey, n int) bool {
+	at := func(s []SignatureKey, i int) SignatureKey {
+		if i < len(s) {
+			return s[i]
+		}
+		return SignatureKey{}
+	}
+	for i := 0; i < n; i++ {
+		if at(a, i) != at(b, i) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *ConversationCards) IsFolded(i int) bool { return c.valid(i) && c.folds[i] }

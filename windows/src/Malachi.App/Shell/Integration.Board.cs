@@ -164,6 +164,11 @@ public sealed partial class Integration
         var hub = state.Notifications;
         tokens.Add(hub.AddBoardChanged(n => StartedBoardSource?.BoardChanged(n)));
         tokens.Add(hub.AddAccountsChanged(() => StartedBoardSource?.AccountsChanged()));
+        // The verdict of a member may change with the trust, not with the case.
+        tokens.Add(hub.AddSignaturesChanged(() => StartedBoardSource?.SignaturesChanged()));
+        // A verdict the daemon's worker computed after board.get answered does not bump the
+        // case's version: notify.messagesChanged of the account asks for the conversation on show again.
+        tokens.Add(hub.AddMessagesChanged(n => StartedBoardSource?.MessagesChanged(n)));
         tokens.Add(hub.AddConnectionState(s =>
             StartedBoardSource?.ConnectionChanged(s is ConnectionState.Connected or ConnectionState.InfoFailed)));
     }

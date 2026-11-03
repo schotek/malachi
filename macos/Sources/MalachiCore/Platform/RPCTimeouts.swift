@@ -67,4 +67,8 @@ public enum RPCTimeouts {
     /// `rules.apply`: a whole folder's stored mail in batches, every change
     /// queued for the server, before it answers (rulesctl `ApplyTimeout`).
     public static let rulesApply: Duration = .seconds(300)
+    /// `message.signatureRevocation`: the daemon's whole check (OCSP, then
+    /// the CRL) is allowed 15 s (api.RevocationTimeout); the client waits
+    /// 20 (docs/api.md §4.22).
+    public static let revocation: Duration = .seconds(20)
 }

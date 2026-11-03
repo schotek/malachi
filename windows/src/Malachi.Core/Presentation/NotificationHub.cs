@@ -60,6 +60,7 @@ public sealed partial class NotificationHub : IDisposable
     private readonly HandlerList<ContactsChangedNotification> contactsChanged;
     private readonly HandlerList<DaemonNotification> updateChanged;
     private readonly HandlerList<DaemonNotification> rulesChanged;
+    private readonly HandlerList<DaemonNotification> signaturesChanged;
     private readonly HandlerList<ConnectionState> connection;
     private ConnectionController? attached;
 
@@ -82,6 +83,7 @@ public sealed partial class NotificationHub : IDisposable
         contactsChanged = new HandlerList<ContactsChangedNotification>(Pending);
         updateChanged = new HandlerList<DaemonNotification>(Pending);
         rulesChanged = new HandlerList<DaemonNotification>(Pending);
+        signaturesChanged = new HandlerList<DaemonNotification>(Pending);
         connection = new HandlerList<ConnectionState>(Pending);
     }
 
@@ -192,6 +194,18 @@ public sealed partial class NotificationHub : IDisposable
     }
 
     /// <summary>
+    /// Fires on every <c>notify.signaturesChanged</c> (docs/api.md §4.22): trust
+    /// changed, so the windows read the messages they show
+    /// (<c>message.get</c>), an open details dialog (<c>message.signature</c>)
+    /// and the key list (<c>pgp.keyList</c>) again.
+    /// </summary>
+    public IDisposable AddSignaturesChanged(Action handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        return signaturesChanged.Add(_ => handler());
+    }
+
+    /// <summary>
     /// Fires on every connection state change, after
     /// <see cref="ConnectionState"/> was updated. A handler added later does
     /// not get the current state; read <see cref="ConnectionState"/> for that.
@@ -254,6 +268,9 @@ public sealed partial class NotificationHub : IDisposable
                 break;
             case DaemonNotification.RulesChanged:
                 rulesChanged.Fire(n);
+                break;
+            case DaemonNotification.SignaturesChanged:
+                signaturesChanged.Fire(n);
                 break;
             case DaemonNotification.Unknown u:
                 LogUnknown(logger, u.Method);

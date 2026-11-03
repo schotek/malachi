@@ -260,6 +260,7 @@ can read the key file.
 | 1507 | malformedCalendar | an iCalendar object or a server's calendar answer could not be read even leniently; the data is withheld |
 | 1508 | recurrenceUnsupported | the event's recurrence rule is outside what the daemon expands or edits; the event shows its first instance only and may be edited with scope `all` only |
 | 1509 | addressBookReadOnly | the address book or contact cannot be changed by the user: the recent book, a server's read-only collection or folder (§4.19) |
+| 1510 | revocationFailed | `message.signatureRevocation` got no answer it trusts from the certificate's OCSP responder or CRL; `data` = `{ "reason": "network" \| "timeout" \| "server" \| "response" \| "address" }` (§4.22); `message` is not for display |
 
 `offline`, `networkError`, `serverError`, `serverTimeout`, `tlsError` (with
 `TLSErrorData` for CalDAV endpoints too), `authRequired`, `authFailed` and
@@ -330,9 +331,20 @@ Time      RFC 3339 string, UTC
   "issue": MessageIssue (opt),
   "bulk": BulkInfo (opt),
   "invitation": InvitationSummary (opt),
-  "crmSaved": true (opt)
+  "crmSaved": true (opt),
+  "signature": MessageSignature (opt)
 }
 ```
+
+`signature` is present when the message has a signature of the whole
+message and the daemon has its verdict (§4.22): `{ "kind": "smime|pgp",
+"status": … }`, what the list's icon needs. It is absent for a message
+without such a signature and while the verdict is pending (it is computed
+after the message is stored; `notify.messagesChanged` follows).
+Listings, `thread.get`, `search.query` and `thread.list`'s `latest` carry
+it; `notify.newMessage` carries it only when the verdict was already
+there. `thread.list` has no aggregate of its own: a collapsed thread row
+shows `latest.signature`.
 
 `crmSaved` is present (true) when the daemon's record says the message is
 saved in an enabled CRM account (§4.17): any copy with the same
@@ -451,7 +463,12 @@ BulkInfo { "kind": "newsletter|list|automated",
 `MessageSummary` plus `cc`, `bcc`, `replyTo`, `rfcMessageId`, `inReplyTo`,
 `references`, `attachments: [Attachment]`, `headers`, a curated
 map of a few interesting headers (`List-Unsubscribe`, `Auto-Submitted`, …),
-`unsubscribe` (below), `invitation` and `crm`. The raw header block is never returned.
+`unsubscribe` (below), `invitation`, `crm` and `signature`. The raw header block is never returned.
+
+`signature` of `message.get` and `message.download` is the
+`SignatureSummary` (§4.22: kind, status, signer, notes, the signature's
+part), which takes the place of the summary's `MessageSignature` under
+the same key; the header's badge is built from it.
 
 `crm` (`message.get` only) is the message's `CrmRecord` (§4.17) in each
 enabled CRM account where the daemon's record says it is saved; absent
@@ -3369,7 +3386,8 @@ BoardCommitment { "id": "k_1", "caseId": "c_…", "accountId": "acc_1",
                   "closedReason": "replied" | "done" (opt),   // with "closed"
                   "at": Time }
 BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time,
-               "mine": false, "text": "…", "trimmed": true (opt) }
+               "mine": false, "text": "…", "trimmed": true (opt),
+               "signature": SignatureSummary (opt) }
 ```
 
 - `person`: the sender of the newest inbound member that counts, else the
@@ -3449,6 +3467,11 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
 - `version` changes whenever anything of the case changes, the members
   `board.get` returns included; a client caches `board.get` by `(id,
   version)`.
+- `BoardMessage.signature`: the member's signature verdict exactly as
+  `Message.signature` of `message.get` (§4.22: kind, status, signer,
+  notes, partId), absent when it has none (no signature, not verified
+  yet, a Jira item); the clients show it as the badge of the board's
+  conversation card, and its details come from `message.signature`.
 - `BoardMessage.text`: the message's own text — its quoted history cut
   off as `message.body` with `trimQuoted` cuts it: the stored plain text
   cut by the plain-text rules when they find the quote in it, else, when
@@ -5171,6 +5194,212 @@ once-per-Message-ID record nor the age limit of the automatic run
 applies. The changes go to the server as the user's own (§4.4) and
 `notify.messagesChanged` follows.
 
+### 4.22 signature
+
+Signatures of incoming mail, phase 1 of `docs/plans/signatures.md`: the
+daemon verifies S/MIME (CMS SignedData, `multipart/signed` and opaque
+`signed-data`) and OpenPGP/MIME (RFC 3156) signatures; it signs, decrypts
+and encrypts nothing and holds no secret key. A verdict is computed after
+the message is stored (outside the write transaction; a verifier failure
+is the verdict `error`, never a lost message), kept, and recomputed only
+when trust changes (a key imported, confirmed or removed, a revocation
+check, another set of system roots). A verdict is never an error.
+
+Only a signature that covers the whole message is its verdict: the
+topmost `multipart/signed`, or opaque `signed-data` as the root, or one of
+them under a single `multipart/mixed` whose only other part is a
+`text/plain` after it (a mailing list's footer: note `partialFooter`). A
+signature deeper down (a forwarded message, an attachment) is no verdict,
+and its part stays an ordinary attachment.
+
+```jsonc
+MessageSignature { "kind": "smime|pgp",
+                   "status": "invalid|revoked|mismatch|untrusted|unknownKey|weak|unsupported|error|valid|validSeen" }
+SignatureSigner  { "name": "Jan Novák" (opt), "email": "jan@example.org" (opt),
+                   "fingerprint": "64 or 40 lowercase hex digits" (opt) }
+SignatureSummary = MessageSignature + { "signer": SignatureSigner (opt),
+                   "notes": ["expiredSince|revocationUnchecked|revocationGood|revokedAfter|partialFooter|protectedHeadersDiffer|inlinePGP|keyChanged|opaque"] (opt),
+                   "partId": "2" (opt) }
+SignatureDetails = SignatureSummary + {
+                   "messageId": "m_1",
+                   "reason": SignatureReason (opt),
+                   "signedAt": Time (opt),          // declared by the signer
+                   "arrivedAt": Time,               // validity is judged at this time
+                   "algorithm": "RSA 2048 / SHA-256" (opt),
+                   "expiredAt": Time (opt), "revokedAt": Time (opt),
+                   "protectedHeaders": [ { "name": "subject|from|to|cc|replyTo|date", "value": "…" } ] (opt),
+                   "smime": SMIMEDetails (opt), "pgp": PGPDetails (opt) }
+SignatureReason  "digestMismatch|badSignature|malformed|md5|keyUsage"      // invalid
+               | "unknownIssuer|selfSigned|notYetValid|expired"            // untrusted
+               | "sha1|shortKey"                                           // weak
+               | "algorithm|multipleSigners|rebuilt|format"                // unsupported
+               | "limit|internal"                                          // error
+SMIMEDetails     { "chain": [SignatureCertificate], "revocation": SMIMERevocation }
+SignatureCertificate { "sha256": "64 lowercase hex", "subject": "…" (opt), "issuer": "…" (opt),
+                   "emails": ["jan@example.org"] (opt), "notBefore": Time, "notAfter": Time,
+                   "systemRoot": true (opt), "selfSigned": true (opt) }
+SMIMERevocation  { "state": "unchecked|good|revoked|unknown", "checkedAt": Time (opt),
+                   "revokedAt": Time (opt), "source": "ocsp|crl" (opt), "checkable": bool }
+PGPDetails       { "keyTrust": "unknown|seen|verified", "keyId": "16 lowercase hex" (opt),
+                   "primaryFingerprint": "…" (opt), "userIds": ["Jan Novák <jan@example.org>"] (opt),
+                   "keySource": "autocrypt|attached|import" (opt), "firstSeen": Time (opt),
+                   "previousFingerprint": "…" (opt), "importable": PGPKeyOffer (opt) }
+PGPKeyOffer      { "fingerprint": "…", "partId": "3" (opt), "autocrypt": true (opt) }
+PGPKey           { "fingerprint": "…", "userIds": ["…"], "emails": ["…"],
+                   "trust": "seen|verified", "source": "autocrypt|attached|import",
+                   "firstSeen": Time, "createdAt": Time, "expiresAt": Time (opt),
+                   "revokedAt": Time (opt), "algorithm": "Ed25519" (opt) }
+```
+
+- `status`, the first of this order that applies: `invalid` (the
+  signature does not match the content, its structure is broken, MD5, a
+  certificate not for e-mail signing), `revoked` (S/MIME: a revocation
+  check found the certificate revoked before the message arrived;
+  OpenPGP: the key was revoked before it arrived), `mismatch` (the
+  signature matches, but the certificate's or key's address is not the
+  `From` address), `untrusted` (S/MIME: the chain leads to no root of the
+  system's trust store, or the certificate was not valid when the message
+  arrived; OpenPGP: the key had expired when it arrived), `unknownKey`
+  (OpenPGP: the key is not stored), `weak` (matches and trusted, but SHA-1
+  or an RSA key shorter than 2048 bits), `unsupported` (DSA, several
+  signers, inline OpenPGP, a message the server rebuilt), `error` (the
+  verifier failed: a limit, damaged data), `valid` (matches, trusted — a
+  system root, or an OpenPGP key the user confirmed — and the identity is
+  `From`), `validSeen` (OpenPGP: as `valid`, but the key was only found
+  automatically). A client treats an unknown `status` as `error` and
+  ignores unknown `notes`, `reason`, `state` and `keySource` values.
+- The identity is the certificate's address (`subjectAltName`
+  `rfc822Name`, else `emailAddress` of the subject) or the address of a
+  user ID of the key, compared with `From` (NFC, case-insensitively: the
+  domain and, as no mail system in use tells them apart, the local part;
+  a message with more than one `From` address never matches).
+  `signer` is always from the certificate or key, never from the headers;
+  it is present for `valid`, `validSeen`, `mismatch`, `untrusted`, `weak`
+  and `revoked`, and may be for the others. `signer.fingerprint` is the
+  SHA-256 of the signer's certificate (S/MIME) or the primary
+  fingerprint of the signing key (OpenPGP); absent for an unknown key,
+  whose `pgp.keyId` names it.
+- Validity is judged at `arrivedAt` (the message's internal date), never
+  at `signedAt`, which the signer writes. A certificate or key that
+  expired since is still a valid signature with the note `expiredSince`
+  (`expiredAt`); one revoked after arrival keeps its verdict with
+  `revokedAfter` (`revokedAt`). S/MIME trusts the system's roots only;
+  intermediate certificates come from the message, nothing is fetched.
+- `notes`: `revocationUnchecked` (S/MIME, no check made), `revocationGood`
+  (S/MIME, the last check found it not revoked, `smime.revocation.checkedAt`),
+  `partialFooter` (a footer outside the signature), `protectedHeadersDiffer`
+  (the signed part carries protected headers, RFC 9788, that differ from
+  the outer ones; `protectedHeaders` lists the signed values, the client
+  still shows the outer ones), `inlinePGP` (an inline OpenPGP signature,
+  status `unsupported`, nothing verified), `keyChanged` (OpenPGP: another
+  key was seen for the address before, `pgp.previousFingerprint`; the
+  daemon never replaces it by itself), `opaque` (S/MIME `signed-data`: the
+  daemon unwrapped the content, which listings, bodies, parts, search and
+  the board see like any message; part ids are those of the inner
+  message).
+- `partId` is the detached signature part (`application/pkcs7-signature`,
+  `application/pgp-signature`) of a `multipart/signed` message. Clients do
+  not show it among the attachments while the message has a verdict, and
+  `hasAttachments` does not count it. A message without a verdict lists
+  its signature parts like any part.
+- `pgp.keyTrust`: `verified` (the user confirmed the fingerprint),
+  `seen` (found or imported, not confirmed), `unknown` (not stored). Keys
+  come only from what the user's mail carries: an `Autocrypt` header
+  whose `addr` is `From` of mail that is neither bulk nor junk, for a key
+  whose user IDs name that address only (stored as `seen`), a key attached to a message (`importable`), or an import in
+  Preferences. There is no web of trust and no key server. `importable`
+  is a key of the message that is not stored (an attached key, or an
+  Autocrypt key for an address that already has another one); a client
+  passes it to `pgp.keyImport` as it is.
+- Every string from a certificate or key (`signer`, `subject`, `issuer`,
+  `emails`, `userIds`, `protectedHeaders[].value`) is untrusted text:
+  control, format, bidi and invisible characters removed, at most 256
+  bytes (`api.MaxSignatureTextBytes`), lists capped (`chain` 16, `emails`
+  16, `userIds` 32, `protectedHeaders` 6). `algorithm` is a
+  language-neutral technical description, public key then digest. Nothing
+  of a certificate or key is logged.
+- The bridge for AI agents returns only `kind` and `status` with a listed
+  or found message, and `kind`, `status`, the signer's e-mail and `notes`
+  with a message read (`docs/mcp.md`).
+
+#### `message.signature`
+The details for the dialog of the header's badge.
+
+- params: `{ "messageId" }`
+- result: `{ "signature": SignatureDetails | null }` — null for a message
+  without a verdict (no signature of the whole message, or not verified
+  yet)
+- errors: messageNotFound
+
+#### `message.signatureRevocation`
+Checks whether the signer's S/MIME certificate was revoked, for *Check
+Revocation* in the details: OCSP from the certificate's Authority
+Information Access, then the CRL of its distribution points; `http` and
+`https` on public addresses only (no loopback, private, link-local,
+single-label or local-network names, no redirects), at most 1 MiB per
+answer (`api.MaxRevocationResponseBytes`) and 15 s in all
+(`api.RevocationTimeout`; clients give this call a 20 s timeout). An OCSP
+response must be signed by the issuer or its delegated responder. The
+check tells the issuer that the certificate is in use, so it runs only
+when the user asks. The result is stored with the certificate and every
+message it signed is judged again (`notify.messagesChanged`,
+`notify.signaturesChanged`).
+
+- params: `{ "messageId" }`
+- result: `{ "signature": SignatureDetails }` after the check
+- errors: messageNotFound; invalidArgument (no verdict, not S/MIME, no
+  signer certificate, `revocation.checkable` false); offline;
+  revocationFailed (`data.reason`: `network` could not connect, `timeout`,
+  `server` the responder answered an error, `response` an answer that is
+  unsigned, for another certificate, too large or unreadable, `address`
+  a URL the daemon does not contact)
+
+Within a minute of the last check of the same certificate
+(`api.RevocationCheckInterval`) nothing is asked; the stored state is
+returned.
+
+#### `pgp.keyImport`
+Stores OpenPGP public keys as `seen` (a key stored already keeps its
+trust and gains new user IDs, revocations and expiry).
+
+- params: exactly one of `{ "messageId", "partId" }` (a key attached to
+  the message), `{ "messageId", "autocrypt": true }` (the message's
+  Autocrypt key), `{ "armored": "-----BEGIN PGP PUBLIC KEY BLOCK-----…" }`
+  or `{ "data": "base64 of a binary key" }`
+- result: `{ "keys": [PGPKey], "added": 1, "updated": 0 }` — the keys of
+  the data as stored after the import; `added` counts keys that were not
+  stored, `updated` stored ones that gained something
+- errors: messageNotFound, partNotFound, partNotDownloaded (an attached key
+  on the server only; `message.download` first); invalidArgument for a
+  request that names no source or several, and with `data` = `{ "reason":
+  "noKey|malformed|secretKey|tooLarge|tooMany" }` when the data was
+  refused: no public key in it, unreadable, a secret key (nothing is
+  stored, the secret is never kept), over 1 MiB
+  (`api.MaxPGPKeyBytes`) or 20 keys (`api.MaxPGPImportKeys`), or 5000
+  stored keys reached (`api.MaxPGPStoredKeys`)
+
+#### `pgp.keyVerify`
+Confirms a key after the user compared its fingerprint with the owner's,
+or takes the confirmation back.
+
+- params: `{ "fingerprint", "verified": bool }` — `true` confirms
+  (`verified`), `false` makes it `seen` again
+- result: `{ "key": PGPKey }`
+- errors: invalidArgument (no stored key with that fingerprint)
+
+#### `pgp.keyList`
+- params: `{}`
+- result: `{ "keys": [PGPKey] }` — every stored key, sorted by its first
+  e-mail address, then the fingerprint
+
+#### `pgp.keyRemove`
+Removes a stored key; messages it verified become `unknownKey` until it
+is imported again.
+
+- params: `{ "fingerprint" }`
+- result: `{}`
+- errors: invalidArgument (no stored key with that fingerprint)
+
 ## 5. Notifications
 
 | Method | params |
@@ -5190,6 +5419,7 @@ applies. The changes go to the server as the user's own (§4.4) and
 | `notify.contactsChanged` | `{ "accountId" (opt; absent for the recent book), "bookIds": ["b_1"] (opt) }` |
 | `notify.updateChanged` | `{}` |
 | `notify.rulesChanged` | `{}` |
+| `notify.signaturesChanged` | `{}` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -5348,6 +5578,14 @@ keyring refused — kept in memory until the daemon stops when the keyring
 failed this time (the account works now; the next `notify.syncState` may
 follow), or not kept at all under `MALACHI_KEYRING=none` (the account
 stays in `authRequired`).
+
+`notify.signaturesChanged` is sent when trust changed (§4.22): an OpenPGP
+key was imported, confirmed or removed, a revocation check stored its
+result, or the daemon found another set of system roots. Clients call
+`message.get` again for the messages they show and `message.signature`
+for an open details dialog, and `pgp.keyList` for a shown key list; the
+rows whose verdict changed arrive as `notify.messagesChanged`. A client
+that does not know it ignores it.
 
 Notifications are best-effort: a slow client that cannot keep up may miss
 some. Clients must be able to resynchronise their view via `sync.status`,
@@ -5757,3 +5995,18 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   the folder's conversations, by the rule of `thread.get` `withSent`. An
   older daemon ignores it and searches the folder alone. No new error
   codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: signatures of incoming mail,
+  §4.22): `MessageSummary.signature` (`MessageSignature`) and
+  `Message.signature` (`SignatureSummary`); new methods
+  `message.signature`, `message.signatureRevocation`, `pgp.keyImport`,
+  `pgp.keyVerify`, `pgp.keyList`, `pgp.keyRemove` and the notification
+  `notify.signaturesChanged` (implemented by the daemon in the same
+  phase: verdicts after storing, the backfill of stored mail, the
+  revocation check and the key store);
+  error code 1510 `revocationFailed`; limits `MaxSignature*`,
+  `MaxProtectedHeaders`, `MaxPGP*`, `MaxRevocationResponseBytes`,
+  `RevocationTimeout`, `RevocationCheckInterval`. `ProtocolVersion`
+  stays 2.
+- **2** (2026-11-03, compatible addition): `BoardMessage.signature`
+  (`SignatureSummary`, §4.13) in `board.get`, so the board's conversation
+  cards show the signature badge. `ProtocolVersion` stays 2.

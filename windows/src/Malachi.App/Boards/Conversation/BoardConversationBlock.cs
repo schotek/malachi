@@ -92,6 +92,7 @@ using Malachi.App.Controls;
 using Malachi.App.Reader;
 using Malachi.App.Reader.Conversation;
 using Malachi.App.Resources;
+using Malachi.App.Signatures;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
@@ -502,6 +503,21 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     }
 
     // For the cards
+
+    /// <summary>
+    /// Gives a card's signature badge the application and the detail's window
+    /// for its flyout; false without the application (the samples), where the
+    /// badge stays hidden.
+    /// </summary>
+    internal bool AttachBadge(SignatureBadgeButton badge)
+    {
+        if (services is null)
+        {
+            return false;
+        }
+        badge.Attach(services, () => host.HostWindow);
+        return true;
+    }
 
     /// <summary>A card's arrow: the state decides, the limit may fold another.</summary>
     internal void UserFolded(BoardMessageCardView card, bool folded)

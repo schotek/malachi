@@ -92,6 +92,11 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 		if w.assist != nil {
 			w.assist.RefreshProfile()
 		}
+	case api.NotifySignaturesChanged:
+		// Trust changed: the verdicts on display, an open details dialog
+		// (signature.go); Preferences → Security listens itself.
+		w.signaturesChanged()
+		dispatchSignatures()
 	default:
 		w.otherNotification(method, params)
 	}
@@ -182,6 +187,8 @@ func issueNotificationLine(issue *api.MessageIssue) string {
 func (w *Window) handleMessagesChanged(n api.MessagesChangedNotification) {
 	// The CRM's records come with the messages asked for again (crm.go).
 	defer w.crmMessagesChanged(n.AccountID)
+	// A signature verdict that came after board.get (board.go).
+	defer w.boardVerdictsChanged(n.AccountID)
 	a, ok := w.model.account(n.AccountID)
 	if !ok || !a.Enabled {
 		return

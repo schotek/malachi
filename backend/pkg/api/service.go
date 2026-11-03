@@ -211,6 +211,21 @@ type RulesService interface {
 	Apply(ctx context.Context, p RulesApplyParams) (*RulesApplyResult, error)
 }
 
+// SignatureService answers the details of a message's signature and its
+// revocation check (docs/api.md §4.22).
+type SignatureService interface {
+	Signature(ctx context.Context, p MessageSignatureParams) (*MessageSignatureResult, error)
+	Revocation(ctx context.Context, p MessageSignatureRevocationParams) (*MessageSignatureResult, error)
+}
+
+// PGPService manages the stored OpenPGP public keys (docs/api.md §4.22).
+type PGPService interface {
+	KeyImport(ctx context.Context, p PGPKeyImportParams) (*PGPKeyImportResult, error)
+	KeyVerify(ctx context.Context, p PGPKeyVerifyParams) (*PGPKeyVerifyResult, error)
+	KeyList(ctx context.Context, p PGPKeyListParams) (*PGPKeyListResult, error)
+	KeyRemove(ctx context.Context, p PGPKeyRemoveParams) (*PGPKeyRemoveResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -239,6 +254,8 @@ type Backend interface {
 	AddressBooks() AddressBookService
 	Update() UpdateService
 	Rules() RulesService
+	Signatures() SignatureService
+	PGP() PGPService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -299,4 +316,11 @@ type UpdateNotifier interface {
 // notify.rulesChanged (docs/api.md §4.21), asserted like BoardNotifier.
 type RulesNotifier interface {
 	RulesChanged(n RulesChangedNotification)
+}
+
+// SignatureNotifier is the optional extension of Notifier for
+// notify.signaturesChanged (docs/api.md §4.22), asserted like
+// BoardNotifier.
+type SignatureNotifier interface {
+	SignaturesChanged(n SignaturesChangedNotification)
 }

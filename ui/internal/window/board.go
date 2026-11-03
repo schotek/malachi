@@ -414,6 +414,17 @@ func (w *Window) boardChanged(n api.BoardChangedNotification) {
 	}
 }
 
+// boardVerdictsChanged is a change of messages' signature verdicts the
+// case's version does not show (notify.signaturesChanged with account "",
+// notify.messagesChanged of account): the source asks board.get again for
+// the shown case's conversation, so its cards' badges follow
+// (board_conversation.go).
+func (w *Window) boardVerdictsChanged(account api.AccountID) {
+	if w.boardPage != nil && w.boardPage.daemon != nil {
+		w.boardPage.daemon.ReloadConversations(account)
+	}
+}
+
 // boardAccountsChanged is notify.accountsChanged's effect on the board: the
 // source re-lists the accounts (account names, kind badges).
 func (w *Window) boardAccountsChanged() {

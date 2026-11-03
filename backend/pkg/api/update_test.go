@@ -10,19 +10,20 @@ import (
 	"time"
 )
 
-// updateMethods end AllMethods, after the address books'; notify.updateChanged
-// is just before notify.rulesChanged.
+// updateMethods follow the address books' in AllMethods; the rules'
+// (rules_test.go) and the signatures' (signature_test.go) come after them.
+// notify.updateChanged is just before notify.rulesChanged.
 var updateMethods = []string{"update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice"}
 
 func TestUpdateMethodsOrder(t *testing.T) {
-	n := len(AllMethods) - len(rulesMethods)
+	n := len(AllMethods) - len(rulesMethods) - len(signatureMethods)
 	if !reflect.DeepEqual(AllMethods[n-len(updateMethods):n], updateMethods) {
 		t.Fatalf("AllMethods does not end with the update methods: %v", AllMethods[n-len(updateMethods):n])
 	}
 	if AllMethods[n-len(updateMethods)-1] != MethodContactPhoto {
 		t.Fatal("the update methods do not follow the address books'")
 	}
-	if AllNotifications[len(AllNotifications)-2] != NotifyUpdateChanged {
+	if AllNotifications[len(AllNotifications)-3] != NotifyUpdateChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

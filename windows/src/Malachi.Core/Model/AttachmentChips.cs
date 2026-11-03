@@ -25,6 +25,7 @@ using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
 using Malachi.Core.Platform;
+using Malachi.Core.Signatures;
 using Malachi.Core.Text;
 
 namespace Malachi.Core.Model;
@@ -60,14 +61,17 @@ public static class AttachmentChips
     /// listed like any other file. The calendar part of an invitation
     /// <paramref name="card"/> the message shows
     /// (<see cref="InvitationReading.Read"/>) gets no chip either: the card is
-    /// what it says.
+    /// what it says. Nor does the detached signature part of a message with a
+    /// verdict (<paramref name="signature"/>, <see cref="SignatureView.HidesPart"/>,
+    /// docs/plans/signatures.md S15): the signature's details say it.
     /// </summary>
-    public static IReadOnlyList<Attachment> ChipAttachments(IReadOnlyList<Attachment> atts, MessageBodyResult? b, InvitationCard? card = null)
+    public static IReadOnlyList<Attachment> ChipAttachments(
+        IReadOnlyList<Attachment> atts, MessageBodyResult? b, InvitationCard? card = null, SignatureSummary? signature = null)
     {
         ArgumentNullException.ThrowIfNull(atts);
         var html = LoadedMessageText.ShowsHtml(b);
         var cardPart = card?.PartId ?? "";
-        return atts.Where(a =>
+        return SignatureView.TileAttachments(atts, signature).Where(a =>
             !(cardPart.Length > 0 && string.Equals(a.PartId, cardPart, StringComparison.Ordinal))
             && !(html && !string.IsNullOrEmpty(a.ContentId) && a.PartId.Length > 0
               && b!.InlineParts is { } inline && inline.TryGetValue(a.ContentId, out var part)

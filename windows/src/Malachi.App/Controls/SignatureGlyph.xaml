@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Windows-only view of ui/internal/signature (IconOf, StyleOf; GTK colours the
+symbolic icon with a libadwaita style class, macOS with a system colour): the
+shield of a signed message's verdict in the row of the message list, the
+header's badge and the heading of the details flyout. One glyph in the colour
+of the verdict (success, caution, critical, secondary text; Windows 11's
+system fills, which follow the theme), a key found but not confirmed
+(security-medium) fainter, as the half shield of the GTK icons. High contrast
+keeps the text colour. Decorative: the text beside it, or the row's name,
+says what it means.
+-->
+<UserControl
+    x:Class="Malachi.App.Controls.SignatureGlyph"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    VerticalAlignment="Center"
+    IsTabStop="False">
+    <FontIcon x:Name="Shield" AutomationProperties.AccessibilityView="Raw" FontSize="14">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Tones">
+                <VisualState x:Name="Neutral">
+                    <VisualState.Setters>
+                        <Setter Target="Shield.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Success">
+                    <VisualState.Setters>
+                        <Setter Target="Shield.Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Warning">
+                    <VisualState.Setters>
+                        <Setter Target="Shield.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Critical">
+                    <VisualState.Setters>
+                        <Setter Target="Shield.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+    </FontIcon>
+</UserControl>

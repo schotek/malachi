@@ -25,6 +25,7 @@
 using System;
 using System.Collections.Generic;
 using Malachi.App.Resources;
+using Malachi.App.Signatures;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
@@ -62,6 +63,8 @@ public sealed partial class BoardMessageCardView : UserControl
     private readonly TextBlock whenLabel = new();
     private readonly TextBlock body = new();
     private readonly Grid htmlHost = new();
+    private readonly SignatureBadgeButton badge = new();
+    private readonly bool badgeAttached;
 
     private CoreBoard.MessageCard message;
     private bool foldable;
@@ -127,6 +130,12 @@ public sealed partial class BoardMessageCardView : UserControl
         head.Children.Add(fromLabel);
         head.Children.Add(whenLabel);
 
+        // The signature badge of the message (docs/plans/signatures.md §6,
+        // the same button and details flyout as Mail's cards), under the
+        // header while the card is open; hidden without a verdict.
+        badgeAttached = block.AttachBadge(badge);
+        badge.Margin = new Thickness(PadH - 8, 0, PadH, 2);
+
         body.TextWrapping = TextWrapping.Wrap;
         body.Margin = new Thickness(PadH, 0, PadH, PadV);
         body.SizeChanged += (_, e) =>
@@ -145,6 +154,7 @@ public sealed partial class BoardMessageCardView : UserControl
 
         var column = new StackPanel();
         column.Children.Add(head);
+        column.Children.Add(badge);
         column.Children.Add(body);
         column.Children.Add(htmlHost);
         frame.Child = column;
@@ -304,6 +314,22 @@ public sealed partial class BoardMessageCardView : UserControl
         frame.Style = (Style)Application.Current.Resources[m.Mine ? "SecondaryCardBorderStyle" : "CardBorderStyle"];
         // A group named after the sender.
         AutomationProperties.SetName(this, m.From);
+        ShowBadge();
+    }
+
+    // The badge of the message's verdict: a folded card, a message without
+    // an id (the samples without one) and a block without the application
+    // show none.
+    private void ShowBadge()
+    {
+        if (badgeAttached && !Folded && message.Id is { } id)
+        {
+            badge.Show(message.Signature, id, message.Address);
+        }
+        else
+        {
+            badge.Show(null, default, "");
+        }
     }
 
     // The whole excerpt or the preview, as Folded and the measured length say.
@@ -322,6 +348,7 @@ public sealed partial class BoardMessageCardView : UserControl
         body.Visibility = Visibility.Visible;
         htmlHost.Visibility = Visibility.Collapsed;
         ShowArrow();
+        ShowBadge();
     }
 
     private void ShowArrow()
@@ -343,6 +370,7 @@ public sealed partial class BoardMessageCardView : UserControl
         htmlHost.Height = start;
         htmlHost.Visibility = Visibility.Visible;
         ShowArrow();
+        ShowBadge();
         LoadWebView();
     }
 

@@ -1,0 +1,50 @@
+From: Dave Example <dave@example.org>
+To: Bob <bob@example.net>
+Subject: OpenPGP signed
+Date: Thu, 01 Oct 2026 10:00:00 +0000
+Message-ID: <pgp-attached-key@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha256; protocol="application/pgp-signature"; boundary="pgp-b1"
+
+This is an OpenPGP/MIME signed message (RFC 4880 and 3156)
+--pgp-b1
+Content-Type: multipart/mixed; boundary="key-b"
+
+--key-b
+Content-Type: text/plain; charset=utf-8
+
+My key is attached.
+--key-b
+Content-Type: application/pgp-keys; name="dave.asc"
+Content-Disposition: attachment; filename="dave.asc"
+
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+xiYEaVW5ABu8xAgzsLvRevBN6UfSaWBk7bsUD+vsS4kyHmdI3vCiCM0fRGF2ZSBF
+eGFtcGxlIDxkYXZlQGV4YW1wbGUub3JnPsK5BBMbCABvBYJpVbkAAgsHCRBerfgJ
+N9726zUUAAAAAAAcABBzYWx0QG5vdGF0aW9ucy5vcGVucGdwanMub3JnmF47XRUR
+hT6i6H3iixnWpAIVCAIWAAIZAQKbAwIeARYhBD0/RsVzoAYuYVFOW16t+Ak33vbr
+AABfY2L0UdtpGAmyVYpKKrIGJWCHRmr1ypUQLCO5rcJLtyDgGqTVl6pkWWES3T62
+6iUDOGEEVdfKG6TiyB04rGzKvAHOJgRpVbkAGa8+nbzAKugHIlLL2OQPcwdwiLRN
+ZFA0UZbkNqfF1pNtwqoEGBsIAGAFgmlVuQAJEF6t+Ak33vbrNRQAAAAAABwAEHNh
+bHRAbm90YXRpb25zLm9wZW5wZ3Bqcy5vcmcKZ7aIMRyYZxYGjxDSEq1UApsMFiEE
+PT9GxXOgBi5hUU5bXq34CTfe9usAAIPZSWTuHRB33WDeMZvrPVjhYlVGxlYn2gGQ
+RJ7Ihd2fMmMuefS+oeBJy+/n2k6V+vroa02MJjJvpHfZ2UPmuQVeBw==
+=XBOh
+-----END PGP PUBLIC KEY BLOCK-----
+--key-b--
+
+--pgp-b1
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: OpenPGP digital signature
+Content-Disposition: attachment; filename="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+wqcEARsIAF0Fgmq+LuQJEF6t+Ak33vbrNRQAAAAAABwAEHNhbHRAbm90YXRpb25z
+Lm9wZW5wZ3Bqcy5vcmcKz1TyP3D/apbAFhv6Gz8eFiEEPT9GxXOgBi5hUU5bXq34
+CTfe9usAACyp6aVPAQMe5Xsd+oGDB+ONiEJfaSo87A9h7bNoexVF/fUj53qZss1q
+S+QrKio+is9SAFLY87XtSQebbvCxQhwmCQ==
+=JzDs
+-----END PGP SIGNATURE-----
+--pgp-b1--

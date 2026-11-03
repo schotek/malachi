@@ -301,6 +301,10 @@ final class MessageViewController: NSViewController {
         }
         remoteBar.onLoad = { [weak self] in self?.loadImages() }
         picturesBar.onLoad = { [weak self] in self?.downloadPictures() }
+        header.signature.onClick = { [weak self] anchor in
+            guard let self, let s = self.current else { return }
+            self.delegate?.showSignature(of: self.shownLoaded?.msg?.summary ?? s, relativeTo: anchor)
+        }
         header.addresses.onCopy = { [weak self] address in self?.copyAddress(address) }
         header.issueCard.onOpen = { [weak self] url in self?.openIssueLink(url) }
         header.issueCard.statusMenu = IssueTransitionMenu(state: state) { [weak self] in self?.transitionSubject }
@@ -578,6 +582,9 @@ final class MessageViewController: NSViewController {
         refreshIssueBusy()
         header.addresses.show(s.id, account: s.accountId, from: from, to: to, cc: cc)
         header.date = date.isGoZero ? "" : formatDateTime(date)
+        // The verdict of message.get; none for an attached message
+        // (message.embedded has no verdict) or before it answered.
+        header.signature.show(mode == .embedded ? nil : m?.signature)
         return issue
     }
 
@@ -902,7 +909,9 @@ final class MessageViewController: NSViewController {
             return
         }
         let card = mode == .embedded ? nil : invitationReading(m, cardOn: showsInvitationCard(delegate?.account(s.accountId)))
-        let atts = chipAttachments(m.attachments, lm.body, card: card)
+        // No chip for the detached signature part of a message with a
+        // verdict (plan S15; the details have it).
+        let atts = chipAttachments(SignatureView.tileAttachments(m.attachments, m.signature), lm.body, card: card)
         if atts.isEmpty {
             header.chipsVisible = false
             return

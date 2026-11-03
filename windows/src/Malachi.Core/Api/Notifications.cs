@@ -205,6 +205,13 @@ public abstract record DaemonNotification
     /// </summary>
     public sealed record RulesChanged : DaemonNotification;
 
+    /// <summary>
+    /// <c>notify.signaturesChanged</c>: trust changed (Signature.cs, docs/api.md
+    /// §4.22); no params, the windows read the messages they show, an open
+    /// details dialog and the key list again.
+    /// </summary>
+    public sealed record SignaturesChanged : DaemonNotification;
+
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
     public sealed record Unknown(string Method) : DaemonNotification;
@@ -256,6 +263,7 @@ public abstract record DaemonNotification
             API.Notify.ContactsChanged => new ContactsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.ContactsChangedNotification)),
             API.Notify.UpdateChanged => new UpdateChanged(),
             API.Notify.RulesChanged => new RulesChanged(),
+            API.Notify.SignaturesChanged => new SignaturesChanged(),
             _ => new Unknown(method),
         };
     }

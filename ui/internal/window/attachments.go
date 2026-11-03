@@ -87,7 +87,7 @@ func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage)
 	if !v.nested {
 		card = v.win.shownInvitation(lm.msg)
 	}
-	atts := chipAttachments(lm.msg.Attachments, lm.body, card)
+	atts := chipAttachments(tileAttachments(lm.msg), lm.body, card)
 	if len(atts) == 0 {
 		v.attachments.SetVisible(false)
 		return

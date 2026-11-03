@@ -19,6 +19,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/htmlview"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/signature"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -86,8 +87,12 @@ type convCard struct {
 	buttons                  *gtk.Box
 	reply, replyAll, forward *gtk.Button
 	date                     *gtk.Label
-	hovering, focused        bool
-	compact                  bool
+	// sig is the signature badge after the badges (signature.go), shown
+	// once message.get brought the verdict; sigLoaded the entry it shows.
+	sig               *signatureBadge
+	sigLoaded         *loadedMessage
+	hovering, focused bool
+	compact           bool
 
 	// mv is the card's share of a message display: the recipients, the
 	// chips and the bars (made when first needed), with the body stack as
@@ -275,6 +280,10 @@ func (c *convCard) buildHeader() {
 	flow.Append(c.via)
 	flow.Append(c.internal)
 	flow.Append(c.edited)
+	c.sig = newSignatureBadge(func() {
+		c.cv.w.showSignatureDetails(&c.cv.w.ApplicationWindow.Window, c.s, c.sigLoaded)
+	})
+	flow.Append(c.sig.button)
 
 	// The buttons show while the pointer is over the card or one of them
 	// has the focus; hidden, they keep their room (the header's height
@@ -355,7 +364,7 @@ func (c *convCard) onHeader(x, y float64) bool {
 	// graphene.Point wraps a C allocation (accounts_reorder.go onHandle).
 	p := graphene.NewPointAlloc()
 	p.Init(float32(x), float32(y))
-	for _, b := range []gtk.Widgetter{c.fold, c.disclosure, c.buttons} {
+	for _, b := range []gtk.Widgetter{c.fold, c.disclosure, c.buttons, c.sig.button} {
 		w := gtk.BaseWidget(b)
 		if !w.IsVisible() {
 			continue
@@ -582,6 +591,8 @@ func (c *convCard) renderDetails(m *api.Message) {
 // already shown stays when lm has none. A folded card shows none of it
 // (setFolded renders once it opens).
 func (c *convCard) render(lm *loadedMessage) {
+	// The badge is the header's: it shows on a folded card too.
+	c.renderSignature(lm)
 	if c.folded {
 		return
 	}
@@ -595,6 +606,16 @@ func (c *convCard) render(lm *loadedMessage) {
 	c.renderBars(lm)
 	c.renderChips(lm)
 	c.renderQuoted(lm)
+}
+
+// renderSignature shows the signature badge in the header for what lm
+// holds (shownSignature); nil lm (let go by the pane) keeps it as it was.
+func (c *convCard) renderSignature(lm *loadedMessage) {
+	if lm == nil {
+		return
+	}
+	c.sigLoaded = lm
+	c.sig.show(signature.BadgeFor(shownSignature(c.s, lm), i18n.Tr))
 }
 
 // renderInvitation shows the invitation card of m (message.get), made the
@@ -823,7 +844,7 @@ func convBar() (*gtk.Box, *gtk.Label, *adw.Spinner) {
 // pane's renderAttachments); nothing until message.get answered.
 func (c *convCard) renderChips(lm *loadedMessage) {
 	if c.mv.attachments == nil {
-		if lm == nil || lm.msg == nil || len(chipAttachments(lm.msg.Attachments, lm.body, c.mv.win.shownInvitation(lm.msg))) == 0 {
+		if lm == nil || lm.msg == nil || len(chipAttachments(tileAttachments(lm.msg), lm.body, c.mv.win.shownInvitation(lm.msg))) == 0 {
 			return
 		}
 		box := adw.NewWrapBox()

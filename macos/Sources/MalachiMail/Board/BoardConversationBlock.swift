@@ -361,6 +361,10 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             guard let self, let card else { return }
             self.userFolded(card, folded)
         }
+        card.onSignature = { [weak self, weak card] anchor in
+            guard let self, let card, let i = self.cards.firstIndex(where: { $0 === card }) else { return }
+            self.showSignature(of: i, relativeTo: anchor)
+        }
         card.onUnavailable = { [weak self, weak card] in
             guard let self, let card, let i = self.cards.firstIndex(where: { $0 === card }) else { return }
             _ = self.state.answered(i, html: false)
@@ -374,6 +378,23 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             }
         }
         return card
+    }
+
+    /// The badge of card `i`: the details popover of Mail's badge, for the
+    /// member's id, with the verdict `board.get` carried until the daemon's
+    /// details arrive. The samples have no message to ask about.
+    private func showSignature(of i: Int, relativeTo anchor: NSView) {
+        guard messages.indices.contains(i), let id = messages[i].id, let account else {
+            if actions.samples {
+                actions.onToast?(Board.Text.later)
+            }
+            return
+        }
+        let m = messages[i]
+        let s = MessageSummary(
+            id: id, accountId: account, folderId: FolderID(""), from: [Address(address: m.address)], subject: "",
+            date: m.date, snippet: "", flags: [], hasAttachments: false, size: 0)
+        delegate?.showSignature(of: s, summary: m.signature, relativeTo: anchor)
     }
 
     private func removeAllCards() {

@@ -1279,10 +1279,11 @@ import Testing
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
         (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"),
         (1507, "malformedCalendar"), (1508, "recurrenceUnsupported"), (1509, "addressBookReadOnly"),
+        (1510, "revocationFailed"),
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 54 && Set(ErrorCode.all).count == 54)
+        #expect(ErrorCode.all.count == 55 && Set(ErrorCode.all).count == 55)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1392,11 +1393,13 @@ import Testing
         "update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice",
         "rules.list", "rules.create", "rules.update", "rules.delete",
         "rules.reorder", "rules.test", "rules.apply",
+        "message.signature", "message.signatureRevocation",
+        "pgp.keyImport", "pgp.keyVerify", "pgp.keyList", "pgp.keyRemove",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 126)
-        #expect(Set(API.allMethods).count == 126, "no duplicates")
+        #expect(API.allMethods.count == 132)
+        #expect(Set(API.allMethods).count == 132, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1408,6 +1411,7 @@ import Testing
             "notify.contactsChanged",
             "notify.updateChanged",
             "notify.rulesChanged",
+            "notify.signaturesChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")
@@ -1447,6 +1451,9 @@ import Testing
         // As the GTK UI (rulesctl TestTimeout, ApplyTimeout): rules.test reads
         // a folder, rules.apply runs the rules over a whole folder.
         #expect(API.RulesTest.timeout == .seconds(60) && API.RulesApply.timeout == .seconds(300))
+        // The daemon's revocation check is allowed 15 s; a key import may fetch it (remote).
+        #expect(API.MessageSignatureRevocation.timeout == .seconds(20) && RPCTimeouts.revocation == .seconds(20))
+        #expect(API.PGPKeyImport.timeout == RPCTimeouts.remote)
         let special: Set<String> = ["system.info", "system.hello", "system.authenticate", "message.body",
                                     "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
@@ -1458,7 +1465,7 @@ import Testing
                                     "event.respond", "invitation.respond",
                                     "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
                                     "contact.create", "contact.update", "contact.delete", "contact.photo",
-                                    "update.check", "rules.test", "rules.apply"]
+                                    "update.check", "rules.test", "rules.apply", "message.signatureRevocation", "pgp.keyImport"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

@@ -289,6 +289,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		d.bindMCP(), d.bindProfile(b, c),
 		d.bindAssistant(s),
 		d.bindBoardTriage(s, c),
+		d.bindSecurity(c),
 	}
 	d.ConnectClosed(func() {
 		d.closed = true

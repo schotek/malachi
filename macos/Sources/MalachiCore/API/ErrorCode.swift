@@ -139,6 +139,10 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The address book or contact cannot be changed by the user: the
     /// recent book, a server's read-only collection or folder.
     public static let addressBookReadOnly: ErrorCode = 1509
+    /// `message.signatureRevocation` could not get an answer from the
+    /// certificate's issuer; `data` is `RevocationFailedData`
+    /// (`RPCError.revocationFailedData`). `message` is never shown.
+    public static let revocationFailed: ErrorCode = 1510
 
     /// The stable symbolic name (api.ErrorCode.String): `"attachmentTooBig"`,
     /// or `"unknown(1234)"` for a code this client does not know.
@@ -163,7 +167,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .contactConflict,
         .storageError, .migrationFailed,
         .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
-        .unsubscribeFailed, .quoteNotFound, .malformedCalendar, .recurrenceUnsupported, .addressBookReadOnly,
+        .unsubscribeFailed, .quoteNotFound, .malformedCalendar, .recurrenceUnsupported, .addressBookReadOnly, .revocationFailed,
     ]
 
     private static let names: [ErrorCode: String] = [
@@ -221,6 +225,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .malformedCalendar: "malformedCalendar",
         .recurrenceUnsupported: "recurrenceUnsupported",
         .addressBookReadOnly: "addressBookReadOnly",
+        .revocationFailed: "revocationFailed",
     ]
 }
 

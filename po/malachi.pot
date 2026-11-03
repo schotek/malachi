@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-03 08:37+0000\n"
+"POT-Creation-Date: 2026-11-03 12:09+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -235,7 +235,7 @@ msgstr ""
 msgid "_Trust"
 msgstr ""
 
-#: ui/internal/accountwizard/trust.go:167
+#: ui/internal/accountwizard/trust.go:167 ui/internal/signature/text.go:242
 msgctxt "certificate"
 msgid "SHA-256 fingerprint"
 msgstr ""
@@ -247,25 +247,25 @@ msgctxt "certificate"
 msgid "Previously trusted"
 msgstr ""
 
-#: ui/internal/accountwizard/trust.go:171
+#: ui/internal/accountwizard/trust.go:171 ui/internal/signature/text.go:268
 msgctxt "certificate"
 msgid "Issued to"
 msgstr ""
 
-#: ui/internal/accountwizard/trust.go:172
+#: ui/internal/accountwizard/trust.go:172 ui/internal/signature/text.go:270
 msgctxt "certificate"
 msgid "Issued by"
 msgstr ""
 
 #. TRANSLATORS: validity period of a certificate: two dates
-#: ui/internal/accountwizard/trust.go:176
+#: ui/internal/accountwizard/trust.go:176 ui/internal/signature/text.go:282
 #, c-format
 msgctxt "certificate"
 msgid "%s to %s"
 msgstr ""
 
 #. TRANSLATORS: label of a certificate's validity period
-#: ui/internal/accountwizard/trust.go:178
+#: ui/internal/accountwizard/trust.go:178 ui/internal/signature/text.go:272
 msgctxt "certificate"
 msgid "Valid"
 msgstr ""
@@ -1367,8 +1367,9 @@ msgstr ""
 #: ui/internal/window/preferences_calendar.go:1016
 #: ui/internal/window/contacts_detail.go:254
 #: ui/internal/window/rules_editor.go:148
-#: ui/internal/window/rules_editor.go:722 ui/data/ui/account_wizard.ui:401
-#: ui/data/ui/jira_account.ui:25
+#: ui/internal/window/rules_editor.go:722 ui/internal/signature/text.go:418
+#: ui/internal/signature/text.go:429 ui/internal/signature/text.go:504
+#: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr ""
 
@@ -1586,21 +1587,21 @@ msgid "Comment"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
-#: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:293
+#: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:302
 #: ui/internal/window/quick_reply_bar.go:194 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:481
 msgid "Reply"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:59
-#: ui/internal/window/conversation_card.go:294
+#: ui/internal/window/conversation_card.go:303
 #: ui/internal/window/quick_reply_bar.go:192 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:488
 msgid "Reply All"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:61
-#: ui/internal/window/conversation_card.go:295 ui/data/ui/message_window.ui:56
+#: ui/internal/window/conversation_card.go:304 ui/data/ui/message_window.ui:56
 #: ui/data/ui/window.ui:495
 msgid "Forward"
 msgstr ""
@@ -1686,15 +1687,15 @@ msgstr ""
 msgid "Add to Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:395
-#: ui/internal/window/board_conversation.go:488
-#: ui/internal/window/conversation_card.go:473 ui/internal/window/folders.go:66
+#: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:441
+#: ui/internal/window/board_conversation.go:491
+#: ui/internal/window/conversation_card.go:482 ui/internal/window/folders.go:66
 msgid "Expand"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:391
-#: ui/internal/window/board_conversation.go:491
-#: ui/internal/window/conversation_card.go:471 ui/internal/window/folders.go:63
+#: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:437
+#: ui/internal/window/board_conversation.go:494
+#: ui/internal/window/conversation_card.go:480 ui/internal/window/folders.go:63
 msgid "Collapse"
 msgstr ""
 
@@ -2272,7 +2273,7 @@ msgid "Needs fields in Jira"
 msgstr ""
 
 #: ui/internal/jira/transitions.go:98
-#: ui/internal/window/conversation_card.go:173 ui/internal/window/folders.go:90
+#: ui/internal/window/conversation_card.go:178 ui/internal/window/folders.go:90
 #: ui/internal/window/messages.go:255
 msgid "Loading…"
 msgstr ""
@@ -2536,9 +2537,9 @@ msgstr[1] ""
 msgid "Removed from eWay-CRM"
 msgstr ""
 
-#: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
-#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:618
-#: ui/internal/window/notify.go:144
+#: ui/internal/crm/text.go:289 ui/internal/board/view.go:863
+#: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:625
+#: ui/internal/window/notify.go:149
 msgid "(No subject)"
 msgstr ""
 
@@ -2557,6 +2558,7 @@ msgstr ""
 
 #: ui/internal/crm/text.go:296 ui/internal/window/accounts_page.go:339
 #: ui/internal/window/preferences_calendar.go:460
+#: ui/internal/signature/text.go:430
 msgid "_Remove"
 msgstr ""
 
@@ -2882,7 +2884,7 @@ msgstr[1] ""
 #. TRANSLATORS: tooltip of the member count of a conversation row.
 #. TRANSLATORS: subtitle of the message list; %d is the number of
 #. messages in the folder.
-#: ui/internal/board/text.go:150 ui/internal/widget/message_row.go:255
+#: ui/internal/board/text.go:150 ui/internal/widget/message_row.go:269
 #: ui/internal/window/folders.go:357
 #, c-format
 msgid "%d message"
@@ -6963,11 +6965,11 @@ msgstr ""
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:630
+#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:637
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:632
+#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:639
 msgid "This message could not be read."
 msgstr ""
 
@@ -7046,54 +7048,54 @@ msgstr ""
 msgid "Preparing the reply"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:27
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
 #: ui/data/ui/window.ui:880
 msgid "From"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:55
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
 #: ui/data/ui/window.ui:906
 msgid "To"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:101
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
 #: ui/data/ui/window.ui:934
 msgid "Cc"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:737
-#: ui/internal/window/message_view.go:333
+#: ui/internal/window/conversation_card.go:758
+#: ui/internal/window/message_view.go:339
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:776 ui/data/ui/embedded_window.ui:61
+#: ui/internal/window/conversation_card.go:797 ui/data/ui/embedded_window.ui:61
 #: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
 #: ui/data/ui/window.ui:718 ui/data/ui/window.ui:1200
 msgid "Load _Images"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:777 ui/data/ui/message_window.ui:265
+#: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:265
 #: ui/data/ui/window.ui:724
 msgid "Always From This _Sender"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:778 ui/data/ui/message_window.ui:267
+#: ui/internal/window/conversation_card.go:799 ui/data/ui/message_window.ui:267
 #: ui/data/ui/window.ui:726
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:296
+#: ui/internal/window/conversation_card.go:819 ui/data/ui/message_window.ui:296
 #: ui/data/ui/window.ui:755
 msgid "_Download Pictures"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:984
-#: ui/internal/window/message_view.go:537
+#: ui/internal/window/conversation_card.go:1005
+#: ui/internal/window/message_view.go:543
 msgid "Loading the message"
 msgstr ""
 
@@ -7208,12 +7210,12 @@ msgstr ""
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
-#: ui/internal/window/message_view.go:624
-#: ui/internal/window/message_view.go:636
+#: ui/internal/window/message_view.go:631
+#: ui/internal/window/message_view.go:643
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:628
+#: ui/internal/window/message_view.go:635
 msgid "Downloading…"
 msgstr ""
 
@@ -7272,7 +7274,7 @@ msgstr ""
 msgid "This folder is empty."
 msgstr ""
 
-#: ui/internal/window/notify.go:131
+#: ui/internal/window/notify.go:136
 msgid "New message"
 msgstr ""
 
@@ -7318,76 +7320,76 @@ msgstr ""
 msgid "Cancelling the send"
 msgstr ""
 
-#: ui/internal/window/preferences.go:372
+#: ui/internal/window/preferences.go:380
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:401
+#: ui/internal/window/preferences.go:409
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:464
+#: ui/internal/window/preferences.go:472
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:500
+#: ui/internal/window/preferences.go:508
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:502
+#: ui/internal/window/preferences.go:510
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:506
+#: ui/internal/window/preferences.go:514
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:510
+#: ui/internal/window/preferences.go:518
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:648
+#: ui/internal/window/preferences.go:656
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:651
+#: ui/internal/window/preferences.go:659
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:654
+#: ui/internal/window/preferences.go:662
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:689
+#: ui/internal/window/preferences.go:697
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:695
+#: ui/internal/window/preferences.go:703
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:742
+#: ui/internal/window/preferences.go:750
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:787
+#: ui/internal/window/preferences.go:795
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:790
+#: ui/internal/window/preferences.go:798
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:793
+#: ui/internal/window/preferences.go:801
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
@@ -7737,15 +7739,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1051
+#: ui/internal/window/window.go:1055
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1124 ui/data/ui/window.ui:261
+#: ui/internal/window/window.go:1128 ui/data/ui/window.ui:261
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:1130 ui/data/ui/window.ui:231
+#: ui/internal/window/window.go:1134 ui/data/ui/window.ui:231
 msgid "Messages"
 msgstr ""
 
@@ -7866,6 +7868,7 @@ msgid "More Information"
 msgstr ""
 
 #: ui/internal/updates/updates.go:157 ui/internal/updates/updates.go:231
+#: ui/internal/signature/text.go:377
 msgid "Close"
 msgstr ""
 
@@ -8555,6 +8558,738 @@ msgstr[1] ""
 
 #: ui/internal/rules/text.go:642
 msgid "The rules could not be applied."
+msgstr ""
+
+#: ui/internal/signature/text.go:24 ui/internal/signature/text.go:73
+msgid "Valid signature"
+msgstr ""
+
+#. TRANSLATORS: the header's badge of a signed message; %s is the
+#. signer's name and address from the certificate or key.
+#: ui/internal/signature/text.go:28
+#, c-format
+msgid "Signed by %s"
+msgstr ""
+
+#: ui/internal/signature/text.go:31 ui/internal/signature/text.go:79
+msgid "Signed by someone else"
+msgstr ""
+
+#. TRANSLATORS: the signature is valid but belongs to another address
+#. than the sender's; %s is the signer's name and address.
+#: ui/internal/signature/text.go:35
+#, c-format
+msgid "Signed by someone else: %s"
+msgstr ""
+
+#: ui/internal/signature/text.go:38 ui/internal/signature/text.go:81
+msgid "Untrusted signature"
+msgstr ""
+
+#: ui/internal/signature/text.go:41
+#, c-format
+msgid "Signed by %s, but the key had expired"
+msgstr ""
+
+#: ui/internal/signature/text.go:43
+#, c-format
+msgid "Signed by %s, but the certificate is not trusted"
+msgstr ""
+
+#: ui/internal/signature/text.go:46 ui/internal/signature/text.go:83
+msgid "Weak signature"
+msgstr ""
+
+#: ui/internal/signature/text.go:48
+#, c-format
+msgid "Signed by %s with a weak algorithm"
+msgstr ""
+
+#: ui/internal/signature/text.go:51
+msgid "Signed with a revoked key"
+msgstr ""
+
+#: ui/internal/signature/text.go:53
+msgid "Signed with a revoked certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:55 ui/internal/signature/text.go:85
+msgid "Invalid signature"
+msgstr ""
+
+#: ui/internal/signature/text.go:57
+msgid "Signed with an unknown OpenPGP key"
+msgstr ""
+
+#: ui/internal/signature/text.go:60
+msgid "Inline OpenPGP signature, not verified"
+msgstr ""
+
+#: ui/internal/signature/text.go:62 ui/internal/signature/text.go:94
+msgid "Signature not verified"
+msgstr ""
+
+#: ui/internal/signature/text.go:64 ui/internal/signature/text.go:96
+msgid "Signature could not be verified"
+msgstr ""
+
+#. TRANSLATORS: an OpenPGP signature that matches, made with a key
+#. found automatically that the user has not confirmed yet.
+#: ui/internal/signature/text.go:77
+msgid "Valid signature, key not confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:88
+msgid "Revoked key"
+msgstr ""
+
+#: ui/internal/signature/text.go:90
+msgid "Revoked certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:92
+msgid "Unknown key"
+msgstr ""
+
+#: ui/internal/signature/text.go:105
+msgid "The signature matches the message, and you confirmed the key."
+msgstr ""
+
+#: ui/internal/signature/text.go:107
+msgid ""
+"The signature matches the message, and the certificate was issued by an "
+"authority this computer trusts."
+msgstr ""
+
+#: ui/internal/signature/text.go:109
+msgid ""
+"The signature matches the message. The key was found automatically: compare "
+"its fingerprint with the sender to confirm it."
+msgstr ""
+
+#. TRANSLATORS: the first %s is the address of the certificate or
+#. key, the second the sender's address of the message.
+#: ui/internal/signature/text.go:114
+#, c-format
+msgid "The signature is valid, but it belongs to %s, not to the sender %s."
+msgstr ""
+
+#: ui/internal/signature/text.go:116
+msgid "The signature is valid, but it does not belong to the sender's address."
+msgstr ""
+
+#: ui/internal/signature/text.go:119
+msgid ""
+"The signature matches the message, but the key had expired when the message "
+"arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:121
+msgid ""
+"The signature matches the message, but the certificate cannot be trusted."
+msgstr ""
+
+#: ui/internal/signature/text.go:123
+msgid ""
+"The signature matches the message, but it uses an algorithm that is no "
+"longer considered safe."
+msgstr ""
+
+#: ui/internal/signature/text.go:125
+msgid ""
+"The message may have been changed after it was signed. Do not trust its "
+"content."
+msgstr ""
+
+#: ui/internal/signature/text.go:128
+msgid ""
+"The key was revoked before the message arrived. Do not trust its content."
+msgstr ""
+
+#: ui/internal/signature/text.go:130
+msgid ""
+"The certificate was revoked before the message arrived. Do not trust its "
+"content."
+msgstr ""
+
+#: ui/internal/signature/text.go:132
+msgid ""
+"The message is signed with an OpenPGP key that Malachi Mail does not have. "
+"Import the sender's key to verify it."
+msgstr ""
+
+#: ui/internal/signature/text.go:134
+msgid "Malachi Mail cannot verify this kind of signature."
+msgstr ""
+
+#: ui/internal/signature/text.go:136
+msgid "Malachi Mail could not verify the signature."
+msgstr ""
+
+#: ui/internal/signature/text.go:141
+msgid ""
+"A valid signature tells who sent the message, not that its content is true "
+"or safe."
+msgstr ""
+
+#: ui/internal/signature/text.go:151
+msgid "The key has expired since the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:153
+msgid "The certificate has expired since the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:155
+msgid "Whether the certificate was revoked has not been checked."
+msgstr ""
+
+#: ui/internal/signature/text.go:157
+msgid "The certificate was not revoked when last checked."
+msgstr ""
+
+#: ui/internal/signature/text.go:160
+msgid "The key was revoked after the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:162
+msgid "The certificate was revoked after the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:164
+msgid ""
+"A footer added after signing, such as a mailing list's, is not covered by "
+"the signature."
+msgstr ""
+
+#: ui/internal/signature/text.go:166
+msgid "The signed headers differ from the ones shown."
+msgstr ""
+
+#: ui/internal/signature/text.go:168
+msgid ""
+"Inline OpenPGP signatures are not verified: they do not cover attachments or "
+"formatting."
+msgstr ""
+
+#: ui/internal/signature/text.go:170
+msgid "This sender used a different key before."
+msgstr ""
+
+#: ui/internal/signature/text.go:172
+msgid "The signed content was unpacked from the signature."
+msgstr ""
+
+#: ui/internal/signature/text.go:182
+msgid "The message was changed after it was signed."
+msgstr ""
+
+#: ui/internal/signature/text.go:184
+msgid "The signature does not match the signer's certificate or key."
+msgstr ""
+
+#: ui/internal/signature/text.go:186
+msgid "The signature is damaged."
+msgstr ""
+
+#: ui/internal/signature/text.go:188
+msgid "The signature uses MD5, which is broken."
+msgstr ""
+
+#: ui/internal/signature/text.go:190
+msgid "The certificate is not meant for signing e-mail."
+msgstr ""
+
+#: ui/internal/signature/text.go:192
+msgid "The certificate was not issued by an authority this computer trusts."
+msgstr ""
+
+#: ui/internal/signature/text.go:194
+msgid "The certificate is self-signed."
+msgstr ""
+
+#: ui/internal/signature/text.go:196
+msgid "The certificate was not valid yet when the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:199
+msgid "The key had expired when the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:201
+msgid "The certificate had expired when the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:203
+msgid "The signature uses SHA-1, which is no longer considered safe."
+msgstr ""
+
+#: ui/internal/signature/text.go:205
+msgid "The signing key is shorter than 2048 bits."
+msgstr ""
+
+#: ui/internal/signature/text.go:207
+msgid "The signature uses an algorithm Malachi Mail does not support."
+msgstr ""
+
+#: ui/internal/signature/text.go:209
+msgid ""
+"The message has more than one signer, which Malachi Mail does not support."
+msgstr ""
+
+#: ui/internal/signature/text.go:211
+msgid ""
+"The mail server changed the message, so its signature cannot be checked."
+msgstr ""
+
+#: ui/internal/signature/text.go:213
+msgid "Malachi Mail does not support this kind of signed message."
+msgstr ""
+
+#: ui/internal/signature/text.go:215
+msgid "The signature is too large or too complex to check."
+msgstr ""
+
+#. TRANSLATORS: label of the details row with the signer's name and address
+#: ui/internal/signature/text.go:225
+msgctxt "signature"
+msgid "Signed by"
+msgstr ""
+
+#. TRANSLATORS: label of the row that says S/MIME or OpenPGP
+#: ui/internal/signature/text.go:228
+msgctxt "signature"
+msgid "Signature type"
+msgstr ""
+
+#. TRANSLATORS: label of the row that says why the signature is not valid
+#: ui/internal/signature/text.go:231
+msgctxt "signature"
+msgid "Problem"
+msgstr ""
+
+#. TRANSLATORS: label of the signing time; the signer writes it, so
+#. it is only a claim
+#: ui/internal/signature/text.go:235
+msgctxt "signature"
+msgid "Signed, as stated by the signer"
+msgstr ""
+
+#. TRANSLATORS: label of the time the message arrived
+#: ui/internal/signature/text.go:238
+msgctxt "signature"
+msgid "Arrived"
+msgstr ""
+
+#: ui/internal/signature/text.go:240
+msgctxt "signature"
+msgid "Algorithm"
+msgstr ""
+
+#: ui/internal/signature/text.go:244
+msgctxt "signature"
+msgid "Key fingerprint"
+msgstr ""
+
+#: ui/internal/signature/text.go:246
+msgctxt "signature"
+msgid "Key ID"
+msgstr ""
+
+#. TRANSLATORS: label of the row that says whether the OpenPGP key is confirmed
+#: ui/internal/signature/text.go:249
+msgctxt "signature"
+msgid "Key"
+msgstr ""
+
+#: ui/internal/signature/text.go:251
+msgctxt "signature"
+msgid "Key source"
+msgstr ""
+
+#. TRANSLATORS: label of the date the OpenPGP key was first seen
+#: ui/internal/signature/text.go:254
+msgctxt "signature"
+msgid "First seen"
+msgstr ""
+
+#: ui/internal/signature/text.go:256
+msgctxt "signature"
+msgid "User IDs"
+msgstr ""
+
+#. TRANSLATORS: label of the fingerprint of the key the sender used before
+#: ui/internal/signature/text.go:259
+msgctxt "signature"
+msgid "Previous key"
+msgstr ""
+
+#: ui/internal/signature/text.go:261
+msgctxt "signature"
+msgid "Expired"
+msgstr ""
+
+#: ui/internal/signature/text.go:263
+msgctxt "signature"
+msgid "Revoked"
+msgstr ""
+
+#. TRANSLATORS: label of the row with the result of the revocation check
+#: ui/internal/signature/text.go:266
+msgctxt "signature"
+msgid "Revocation"
+msgstr ""
+
+#. TRANSLATORS: label of the e-mail addresses a certificate names
+#: ui/internal/signature/text.go:275
+msgctxt "signature"
+msgid "E-mail addresses"
+msgstr ""
+
+#: ui/internal/signature/text.go:289
+msgid "Confirmed by you"
+msgstr ""
+
+#: ui/internal/signature/text.go:291
+msgid "Found automatically, not confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:293
+msgid "Not in Malachi Mail"
+msgstr ""
+
+#. TRANSLATORS: Autocrypt is a name; the key came in a message's header
+#: ui/internal/signature/text.go:301
+msgid "Autocrypt header of a message"
+msgstr ""
+
+#: ui/internal/signature/text.go:303
+msgid "Attached to a message"
+msgstr ""
+
+#: ui/internal/signature/text.go:305
+msgid "Imported by you"
+msgstr ""
+
+#. TRANSLATORS: %s is the date and time of the check
+#: ui/internal/signature/text.go:316
+#, c-format
+msgid "Not revoked (checked %s)"
+msgstr ""
+
+#. TRANSLATORS: %s is the date the certificate was revoked
+#: ui/internal/signature/text.go:321
+#, c-format
+msgid "Revoked on %s"
+msgstr ""
+
+#: ui/internal/signature/text.go:323
+msgctxt "revocation"
+msgid "Revoked"
+msgstr ""
+
+#. TRANSLATORS: the issuer does not know the certificate; %s is the
+#. date and time of the check
+#: ui/internal/signature/text.go:328
+#, c-format
+msgid "Unknown to the issuer (checked %s)"
+msgstr ""
+
+#: ui/internal/signature/text.go:331
+msgid "Not checked"
+msgstr ""
+
+#: ui/internal/signature/text.go:338
+msgid "Signer's Certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:340
+msgid "Intermediate Certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:342
+msgid "Root Certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:344
+msgid "Signed Headers"
+msgstr ""
+
+#: ui/internal/signature/text.go:353
+msgctxt "signed header"
+msgid "Subject"
+msgstr ""
+
+#: ui/internal/signature/text.go:355
+msgctxt "signed header"
+msgid "From"
+msgstr ""
+
+#: ui/internal/signature/text.go:357
+msgctxt "signed header"
+msgid "To"
+msgstr ""
+
+#: ui/internal/signature/text.go:359
+msgctxt "signed header"
+msgid "Cc"
+msgstr ""
+
+#: ui/internal/signature/text.go:361
+msgctxt "signed header"
+msgid "Reply-To"
+msgstr ""
+
+#: ui/internal/signature/text.go:363
+msgctxt "signed header"
+msgid "Date"
+msgstr ""
+
+#: ui/internal/signature/text.go:369
+msgid "Signature Details"
+msgstr ""
+
+#: ui/internal/signature/text.go:373
+msgid "Show Signature Details"
+msgstr ""
+
+#. TRANSLATORS: the button while the revocation check runs
+#: ui/internal/signature/text.go:386
+msgid "Checking…"
+msgstr ""
+
+#: ui/internal/signature/text.go:388
+msgid "Check Revocation Again"
+msgstr ""
+
+#. TRANSLATORS: button: ask the certificate's issuer whether the
+#. certificate was revoked
+#: ui/internal/signature/text.go:392
+msgid "Check Revocation"
+msgstr ""
+
+#: ui/internal/signature/text.go:394
+msgid "Import Key"
+msgstr ""
+
+#: ui/internal/signature/text.go:396
+msgid "Confirm Key…"
+msgstr ""
+
+#. TRANSLATORS: menu item: the key is no longer marked as confirmed
+#: ui/internal/signature/text.go:399
+msgid "Remove Confirmation"
+msgstr ""
+
+#: ui/internal/signature/text.go:401
+msgid "Remove Key…"
+msgstr ""
+
+#: ui/internal/signature/text.go:408
+msgid "Checking tells the certificate's issuer that the certificate is in use."
+msgstr ""
+
+#: ui/internal/signature/text.go:416
+msgid "Confirm This Key?"
+msgstr ""
+
+#: ui/internal/signature/text.go:417
+msgid ""
+"Compare this fingerprint with the one the sender gives you in person or in "
+"another way you trust."
+msgstr ""
+
+#. TRANSLATORS: the button that marks the OpenPGP key as confirmed
+#: ui/internal/signature/text.go:420
+msgid "_Confirm Key"
+msgstr ""
+
+#: ui/internal/signature/text.go:427
+msgid "Remove This Key?"
+msgstr ""
+
+#: ui/internal/signature/text.go:428
+msgid ""
+"Messages signed with it will show an unknown key until it is imported again."
+msgstr ""
+
+#: ui/internal/signature/text.go:437
+msgid "Key confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:438
+msgid "Confirmation removed"
+msgstr ""
+
+#: ui/internal/signature/text.go:439
+msgid "Key removed"
+msgstr ""
+
+#: ui/internal/signature/text.go:447
+msgid "Could not reach the certificate's issuer."
+msgstr ""
+
+#: ui/internal/signature/text.go:449
+msgid "The certificate's issuer did not answer in time."
+msgstr ""
+
+#: ui/internal/signature/text.go:451
+msgid "The certificate's issuer could not answer."
+msgstr ""
+
+#: ui/internal/signature/text.go:453
+msgid "The issuer's answer could not be verified."
+msgstr ""
+
+#: ui/internal/signature/text.go:455
+msgid "The certificate names an address Malachi Mail does not contact."
+msgstr ""
+
+#: ui/internal/signature/text.go:457
+msgid "Could not check whether the certificate was revoked."
+msgstr ""
+
+#: ui/internal/signature/text.go:465
+msgid "This is not an OpenPGP public key."
+msgstr ""
+
+#: ui/internal/signature/text.go:467
+msgid "The key cannot be read."
+msgstr ""
+
+#: ui/internal/signature/text.go:469
+msgid ""
+"This is a secret key. Import only the public key: Malachi Mail never stores "
+"secret keys."
+msgstr ""
+
+#: ui/internal/signature/text.go:471
+msgid "The key data is too large."
+msgstr ""
+
+#: ui/internal/signature/text.go:473
+msgid "Malachi Mail cannot store more keys. Remove keys you no longer need."
+msgstr ""
+
+#: ui/internal/signature/text.go:475
+msgid "The key could not be imported."
+msgstr ""
+
+#: ui/internal/signature/text.go:482
+#, c-format
+msgid "%d key imported"
+msgid_plural "%d keys imported"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/signature/text.go:484
+#, c-format
+msgid "%d key updated"
+msgid_plural "%d keys updated"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/signature/text.go:486
+msgid "The key was already imported."
+msgstr ""
+
+#: ui/internal/signature/text.go:499
+msgid "Import OpenPGP Key"
+msgstr ""
+
+#: ui/internal/signature/text.go:500
+msgid "Paste a public key, or choose a file with one."
+msgstr ""
+
+#: ui/internal/signature/text.go:501
+msgid "Choose File…"
+msgstr ""
+
+#. TRANSLATORS: name of the file type filter of the file chooser
+#: ui/internal/signature/text.go:503
+msgid "OpenPGP keys"
+msgstr ""
+
+#: ui/internal/signature/text.go:505
+msgid "_Import"
+msgstr ""
+
+#. TRANSLATORS: the Preferences page with the OpenPGP keys
+#: ui/internal/signature/text.go:522
+msgctxt "preferences page"
+msgid "Security"
+msgstr ""
+
+#: ui/internal/signature/text.go:523
+msgid "OpenPGP Keys"
+msgstr ""
+
+#: ui/internal/signature/text.go:524
+msgid ""
+"Keys of people whose signed mail you receive. Malachi Mail finds them in "
+"your mail and never looks them up online."
+msgstr ""
+
+#: ui/internal/signature/text.go:525
+msgid "No OpenPGP Keys"
+msgstr ""
+
+#: ui/internal/signature/text.go:526
+msgid "Import Key…"
+msgstr ""
+
+#: ui/internal/signature/text.go:527
+msgid "Could not load the keys."
+msgstr ""
+
+#: ui/internal/signature/text.go:534
+msgctxt "key trust"
+msgid "Confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:536
+msgctxt "key trust"
+msgid "Not confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:544
+msgctxt "key state"
+msgid "Revoked"
+msgstr ""
+
+#: ui/internal/signature/text.go:546
+msgctxt "key state"
+msgid "Expired"
+msgstr ""
+
+#. TRANSLATORS: %s is a date
+#: ui/internal/signature/text.go:557
+#, c-format
+msgid "Found in a message header on %s"
+msgstr ""
+
+#. TRANSLATORS: %s is a date
+#: ui/internal/signature/text.go:560
+#, c-format
+msgid "Imported from a message on %s"
+msgstr ""
+
+#. TRANSLATORS: %s is a date
+#: ui/internal/signature/text.go:563
+#, c-format
+msgid "Imported on %s"
+msgstr ""
+
+#: ui/internal/signature/text.go:570
+msgid "The key could not be confirmed."
+msgstr ""
+
+#: ui/internal/signature/text.go:572
+msgid "The confirmation could not be removed."
+msgstr ""
+
+#: ui/internal/signature/text.go:577
+msgid "The key could not be removed."
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21
