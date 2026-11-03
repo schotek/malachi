@@ -76,7 +76,7 @@ func TestSignatureRowAndBadgeGTKSmoke(t *testing.T) {
 	if b.icon.HasCSSClass(signature.StyleGood) || !b.icon.HasCSSClass(signature.StyleBad) {
 		t.Error("the colour follows the verdict")
 	}
-	b.button.Activate()
+	b.button.Emit("clicked") // Activate on an unrealized button never clicks
 	if opened != 1 {
 		t.Errorf("a click opens the details: %d", opened)
 	}
