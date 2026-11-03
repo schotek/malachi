@@ -522,8 +522,8 @@ Pořadí prací:
     2026-11-02, všechny tři klienty ověřené vlastníkem na obrazovce; viz
     odstavec Přílohy jako dlaždice níže
 18. Pravidla pošty (filtry) — větev `claude/sleepy-hawking-7gu54a`
-    2026-11-02, démon i všechny tři klienty napsané, macOS (B1) a GTK (B2)
-    schválené vlastníkem 2026-11-03, čeká Windows (B3);
+    2026-11-02, démon i všechny tři klienty napsané, macOS (B1), GTK (B2)
+    a Windows (B3) schválené vlastníkem 2026-11-03;
     viz odstavec Pravidla pošty níže a `docs/plans/rules.md`
 
 Pravidla pošty (2026-11-02, všechny tři klienty, nesloučené do `main`;
@@ -544,10 +544,12 @@ a `ui/internal/rulesctl` (GTK kontrolery), porty `MalachiCore/Rules`
 a `Malachi.Core/Rules`; Předvolby → Pravidla za Integracemi, editor,
 *Vytvořit pravidlo ze zprávy…* a *Použít pravidla…* v kontextových
 menu, vzorová data `MALACHI_RULES_SAMPLES=1`. Brány: B1 macOS (2026-11-03,
-`swift build`/`swift test` zelené, vlastník schválil nad kopií dat) a B2
+`swift build`/`swift test` zelené, vlastník schválil nad kopií dat), B2
 GTK (`gtk.sh make build`, `test-ui`, `TestRulesGTKSmoke`, `make po`,
-`make lint`, vlastník schválil v XQuartz) prošly; čeká B3 Windows
-(`build.ps1 app`/`test`/`lint`, UI smoke) a rozhodnutí vlastníka, zda
+`make lint`, vlastník schválil v XQuartz) a B3 Windows (`build.ps1
+app`/`test`/`lint`, UI smoke `RulesSmokeTests` a `RulesDevmailTests`,
+vlastník schválil na obrazovce; oprava přepínače, který přesun řádku
+přepínal u jiného pravidla) prošly; čeká rozhodnutí vlastníka, zda
 nechat potlačení `notify.newMessage` pro každou zprávu přečtenou už při
 stažení, nebo ho zúžit na zprávy změněné pravidlem.
 

@@ -4423,9 +4423,11 @@ a forward sent through devmail (copies in Sent, marked Automatic), no
 on the socket), the switch, Edit, Remove's question, Create Rule from
 Message… prefilled, Apply Rules… asking and toasting "changed 1 message"
 with no outgoing action, and Apply Rules… disabled with every rule off.
-Not seen: a drag by hand and the context menus on screen (the desktop
-session was disconnected for the second half of the walk; their contents
-were read through UI Automation). The canary's `NoWindowOpened` and
+The agent could not see a drag by hand or the context menus on screen (the
+desktop session was disconnected for the second half of its walk; their
+contents were read through UI Automation); the owner walked those, the
+keys and the editor over an isolated copy with devmail and approved B3
+the same day. The canary's `NoWindowOpened` and
 `ActivatedLinksReachTheReaderAndNothingElse` fail on `9c7d693` as well.
 `DevmailTests` need the seeded mailbox of the devmail the suite was written
 for: the repository's `malachi-devmail` wants the `serve` subcommand, seeds

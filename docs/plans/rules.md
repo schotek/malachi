@@ -1,8 +1,9 @@
 # Pravidla pošty (filtry) — návrh
 
 Stav: implementováno ve všech třech klientech a v démonu na větvi
-`claude/sleepy-hawking-7gu54a` (2026-11-02); čeká na brány B1–B3 na
-skutečných systémech (§Stav ověření).
+`claude/sleepy-hawking-7gu54a` (2026-11-02); brány B1–B3 na skutečných
+systémech prošly 2026-11-03 (§Stav ověření), čeká jedno rozhodnutí
+vlastníka.
 
 ## Kontext
 
@@ -153,9 +154,20 @@ Každý agent dostane: tento plán, cestu ke vzorovým souborům (Kontakty: `ui/
   v obrazu není, jen `go vet`). Vlastník prošel klienta na obrazovce
   a schválil ho.
 
-### Čeká na vlastníka (brány)
+- **B3 Windows (2026-11-03, prošlo):** na Windows 11 x64 `go vet ./...`
+  a testy démona, `build.ps1 app` bez varování, `build.ps1 test` (sady
+  Core, Platform, Credentials a Conventions zelené, nové třídy pravidel
+  v Core všechny), `build.ps1 lint` bez nového řádku v exclusions, nové
+  UI smoke `RulesSmokeTests` (7) a `RulesDevmailTests` (2) zelené.
+  Opravy: překlad `Malachi.App` (`0b9ad68c`), přesun pravidla zapínal
+  jiné vypnuté pravidlo přes recyklovaný přepínač (`9f2a89f8`), glyf
+  ikony `funnel` (`98190d2b`), zarovnané řádky podmínek (`5ca07f84`).
+  Kanárek WebView2 a `DevmailTests` padají stejně i na `9c7d693`
+  (prostředí). Agent prošel klienta nad izolovanou kopií s devmailem,
+  vlastník na obrazovce (kontextová menu, přetažení, klávesy, editor)
+  a schválil ho. Podrobnosti v `docs/windows-port.md` §11.17.
 
-- **B3 Windows:** `build.ps1 app`/`test`/`lint`, UI smoke, ruční průchod
-  podle `docs/windows-port.md` §11.17.
+### Čeká na vlastníka
+
 - Rozhodnutí: ponechat širší potlačení `notify.newMessage` pro zprávy
   přečtené už při stažení, nebo ho zúžit na zprávy změněné pravidlem.
