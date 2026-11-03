@@ -144,11 +144,17 @@ Každý agent dostane: tento plán, cestu ke vzorovým souborům (Kontakty: `ui/
   vypnutí pravidla končí „…“ (celý v tooltipu), a řádek Vyzkoušet
   v editoru je pod okrajem listu, dokud se neposune.
 
+- **B2 GTK (2026-11-03, prošlo):** v kontejneru Fedora 42 na Macu
+  `gtk.sh make build`, celé `gtk.sh test-ui` (46 balíčků, i `window`,
+  `rules`, `rulesctl`), smoke `TestRulesGTKSmoke` (Adwaita jednou
+  zaloguje „Trying to close AdwDialog … that's not presented“, test
+  prochází), `make po` jen s přečíslovanými odkazy a přezalomenými
+  komentáři (`59191dd4`, 1859 přeložených), `make lint` (golangci-lint
+  v obrazu není, jen `go vet`). Vlastník prošel klienta na obrazovce
+  a schválil ho.
+
 ### Čeká na vlastníka (brány)
 
-- **B2 GTK:** `gtk.sh make build`, `test-ui`, `MALACHI_GTK_SMOKE=1 … -run
-  TestRulesGTKSmoke`, `make po` (přerovná ručně zapsané msgid
-  a přečísluje odkazy), `make lint`, totéž ručně v XQuartz.
 - **B3 Windows:** `build.ps1 app`/`test`/`lint`, UI smoke, ruční průchod
   podle `docs/windows-port.md` §11.17.
 - Rozhodnutí: ponechat širší potlačení `notify.newMessage` pro zprávy
