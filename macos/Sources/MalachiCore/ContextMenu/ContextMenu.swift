@@ -112,6 +112,12 @@ public enum ContextMenu {
         /// outside the outbox, drafts and sent mail: `Rules.canCreateFrom`);
         /// it is offered for one row only.
         public var offerRule = false
+        /// contextmenu.MessageState.MixedAccounts: several rows of more
+        /// than one account, which only the All Inboxes list allows
+        /// (`Selection.combineAccounts`, `Unified`). Forward, Move To and
+        /// Save to eWay-CRM, which need one account, stay in the menu but
+        /// are disabled; the other items act per account.
+        public var mixedAccounts = false
 
         public init() {}
 
@@ -147,6 +153,7 @@ public enum ContextMenu {
             trash = f.trash
             self.changeStatus = changeStatus
             self.assistant = assistant
+            mixedAccounts = f.mixedAccounts
         }
     }
 
@@ -156,9 +163,16 @@ public enum ContextMenu {
     /// left out. For several rows Open opens each, Forward forwards them in
     /// one message, Save to eWay-CRM saves them together, and Reply, Reply
     /// All, Change Status and the saved-state eWay-CRM items are not
-    /// offered.
-    public static func messageItems(_ s: MessageState) -> [[Item]] {
+    /// offered. Several rows of several accounts (`mixedAccounts`) have
+    /// Forward, Move To and Save to eWay-CRM disabled.
+    public static func messageItems(_ state: MessageState) -> [[Item]] {
+        var s = state
         let several = s.count > 1
+        if several, s.mixedAccounts {
+            s.forward = false
+            s.move = false
+            s.crm = false
+        }
         let open = Item(s.draft && !several ? .editDraft : .openMessage, !several || s.open)
         var answer: [Item] = []
         if s.offerReply, !several { answer.append(Item(.reply, s.reply)) }

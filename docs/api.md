@@ -1632,12 +1632,14 @@ anything deleted the daemon nudges the syncer and sends
 
 #### `message.list`
 - params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
-  "filter": MessageFilter (opt), "unreadOnly": bool (opt, deprecated) }`
+  "filter": MessageFilter (opt), "unreadOnly": bool (opt, deprecated),
+  "unified": FolderRole (opt) }`
 - result: `{ "messages": [MessageSummary], "page": PageInfo }`
 
 - errors: invalidArgument (missing ids, unknown `sort`, unknown `filter`,
-  bad cursor), accountNotFound, folderNotFound (unknown or another account's
-  folder), storageError
+  bad cursor, `unified` with `accountId` or `folderId`, `unified` not one
+  of `UnifiedRoles`), accountNotFound, folderNotFound (unknown or another
+  account's folder), storageError
 
 `filter` narrows the listing to messages without the `seen` flag (`unread`)
 or with the `flagged` flag (`flagged`). `unreadOnly` is the older spelling of
@@ -1662,6 +1664,27 @@ other accounts a locally computed one; see `docs/architecture.md` §3.4). It is 
 message stored by an older daemon that has not been linked yet, and it
 can change when two partial conversations turn out to be one (the larger
 keeps its id).
+
+**Unified listing.** With `unified` set to a folder role, `accountId` and
+`folderId` stay empty (otherwise invalidArgument) and the page lists the
+folders of that role of every enabled mail account at once: the client's
+"All Inboxes". Mail accounts are those of kind `imap` and `graph`; `jira`,
+`caldav` and `eway` accounts never join, nor do disabled accounts,
+folders that are not `synced` and virtual folders. The only accepted role
+today is `inbox` (`api.UnifiedRoles`); other roles may join later without
+a change of the contract, any other value is invalidArgument. The rows
+are the same `MessageSummary` a listing of their own folder returns
+(`accountId` and `folderId` say where each one is; never `outbox`), merged
+by date and then id, which is unique across accounts; `page.total` counts
+every folder in scope after `filter`. Unified cursors are their own: a
+cursor of a single-folder listing is invalidArgument in a unified one and
+vice versa, and a cursor is bound to `sort` as above. With no mail account
+the page is empty. There is no notification of its own: a client refreshes
+a unified list on `notify.newMessage` and `notify.messagesChanged` of any
+folder in its scope (it knows the roles from `folder.list`) and adds up
+the badge from the folders' `unread`. Actions on its rows go to the
+account of each row as always (a client splits a selection across
+accounts into one call per account).
 
 #### `message.get`
 - params: `{ "accountId", "messageId" }`
@@ -2233,10 +2256,11 @@ member of any thread listing.
 
 #### `thread.list`
 - params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
-  "filter": MessageFilter (opt) }`
+  "filter": MessageFilter (opt), "unified": FolderRole (opt) }`
 - result: `{ "threads": [ThreadSummary], "page": PageInfo }`
 - errors: invalidArgument (missing ids, unknown `sort` or `filter`, bad
-  cursor), accountNotFound, folderNotFound, storageError
+  cursor, `unified` with `accountId` or `folderId`, `unified` not one of
+  `UnifiedRoles`), accountNotFound, folderNotFound, storageError
 
 ```jsonc
 ThreadSummary { "id": "t_9", "accountId": "acc_1",
@@ -2295,6 +2319,16 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
 - Cursors follow §4.3: bound to `sort`, not to `filter`, stable across
   syncs. A cursor from `message.list` is rejected here (invalidArgument)
   and vice versa.
+- **Unified listing**: `unified` lists the conversations of the folders
+  of a role of every enabled mail account, with the scope, the refusals
+  and the separate cursors of `message.list`'s unified listing (§4.3).
+  Each row is one thread in one folder, exactly as `thread.list` of that
+  folder reports it: its aggregates, `sentCount` and `draftCount` are
+  the folder's, `accountId` names the account, `folderIds` and
+  `latest.folderId` the folder (a client passes that folder to
+  `thread.get`). Rows are ordered by the date of the latest member, ties
+  by folder id and then thread id (thread ids are unique only within an
+  account).
 
 #### `thread.get`
 - params: `{ "accountId", "threadId", "folderId" (opt), "withSent": bool (opt),
@@ -2704,7 +2738,8 @@ Nothing is stored.
 ### 4.6 search
 
 #### `search.query`
-- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…", "page": Page }`
+- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…",
+  "withSent": bool (opt), "page": Page }`
 - result: `{ "results": [SearchResult], "page": PageInfo }`
 - errors: invalidArgument (empty or blank `query`, longer than
   `api.MaxSearchQueryBytes` = 1024 bytes, more than `api.MaxSearchTerms` =
@@ -2730,6 +2765,19 @@ views of a `jira` account (§4.2) hold copies of messages of its space
 folders and are searched only when the scope names them (`folderId` or
 `in:`), so a message is found once. A hidden message (§4.1
 `notificationMail`) is never found.
+
+`withSent` (with `folderId`; ignored without it) also finds the user's
+replies to the folder's conversations, by the rule of `thread.get`
+`withSent` (§4.4): the matching visible rows in the account's folders of
+role `sent` whose thread has a visible member in the folder. A sent row
+whose `Message-ID` a visible member of the folder already has (a Bcc to
+oneself, a Gmail label) is left out, the folder's copy is the result; of
+the sent rows sharing a `Message-ID` only the one with the lowest `id` is
+found; a row without a thread id never is. Nothing is added when the
+folder is a sent folder, the outbox or a view of a `jira` account, or when
+the query has an `in:` filter (it names the folders itself). Ordering,
+paging, `page.total` and the excerpt are the same for both kinds of row;
+each result's `message.folderId` says where it lies.
 
 Query syntax (parsed by the backend, compiled to a parameterised FTS5
 expression; nothing typed is ever operator syntax):
@@ -5699,3 +5747,13 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `rules.reorder`, `rules.test`, `rules.apply`, the notification
   `notify.rulesChanged` and the error code 1112 `ruleNotFound`.
   `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the unified inbox, §4.3 and
+  §4.4): `MessageListParams.unified` and `ThreadListParams.unified`
+  (`FolderRole`, only `inbox`, `api.UnifiedRoles`). No new methods,
+  notifications or error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the user's replies in a
+  folder's search): `search.query` gained `withSent` (§4.6), which also
+  finds the matching rows of the account's sent folders that belong to
+  the folder's conversations, by the rule of `thread.get` `withSent`. An
+  older daemon ignores it and searches the folder alone. No new error
+  codes; `ProtocolVersion` stays 2.

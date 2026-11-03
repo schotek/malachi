@@ -25,6 +25,9 @@ type actionState struct {
 	// open them.
 	count int
 	open  bool
+	// mixed: the selected rows are of more than one account (the All
+	// Inboxes list).
+	mixed bool
 	// on: a row is selected; outbox: it is a queued message; flagged: the
 	// star shows it (a conversation row: any member is flagged).
 	on, outbox, flagged bool
@@ -144,6 +147,7 @@ func (s actionState) flags() selection.Flags {
 // (a selection is of one account).
 func (s actionState) with(f selection.Flags) actionState {
 	s.count, s.open, s.on, s.outbox, s.flagged = f.Count, f.Open, f.On, f.Outbox, f.Flagged
+	s.mixed = f.MixedAccounts
 	s.reply, s.replyAll, s.forward = f.Reply, f.ReplyAll, f.Forward
 	s.star, s.toggleFlag = f.Star, f.ToggleFlag
 	s.trash, s.archive, s.junk, s.move = f.Trash, f.Archive, f.Junk, f.Move

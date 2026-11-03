@@ -99,9 +99,10 @@ public func selfAddress(_ a: Account) -> Address {
 /// folders whose parent chain is cyclic or deeper than `maxFolderDepth` are
 /// appended after the tree with a depth counted from their display path.
 /// Non-selectable containers are kept so their children have somewhere to
-/// hang.
+/// hang. With `unified` the All Inboxes item is the first row of all.
 public func sortFolders(
-    _ accounts: [Account], _ folders: [AccountID: [Folder]], _ collapsed: CollapseState, _ favourites: FavouriteState
+    _ accounts: [Account], _ folders: [AccountID: [Folder]], _ collapsed: CollapseState, _ favourites: FavouriteState,
+    unified: Bool = false
 ) -> [FolderEntry] {
     let enabled = mailSidebarAccounts(accounts)
     var out = favouriteSection(enabled, folders, favourites)
@@ -120,7 +121,19 @@ public func sortFolders(
         }
         out.append(contentsOf: folderTree(a, folders[a.id] ?? [], collapsed, favourites))
     }
+    if unified {
+        // The All Inboxes item (`Unified.shown`, decided by the caller) is
+        // the very first row, above the Favourites heading. It does not
+        // count for `headers`: it only exists with two accounts.
+        out.insert(unifiedEntry(accounts, folders), at: 0)
+    }
     return out
+}
+
+/// The sidebar row of the All Inboxes item: its badge is the unread count
+/// of the inboxes it covers (`Unified.unread`).
+public func unifiedEntry(_ accounts: [Account], _ folders: [AccountID: [Folder]]) -> FolderEntry {
+    FolderEntry(badge: Unified.unread(Unified.inboxes(accounts, folders)), unified: true)
 }
 
 /// The block at the top of the sidebar (model.go `favouriteSection`): a
@@ -385,18 +398,24 @@ public func folderTitle(_ f: Folder) -> String {
 /// downloads) has none, and a folder with nothing unread, or the outbox,
 /// only its total.
 public func folderCountsText(_ f: Folder) -> String {
-    if f.total <= 0 {
+    countsText(unread: f.unread, total: f.total, outbox: f.role == .outbox)
+}
+
+/// `folderCountsText` over bare counts: what the All Inboxes item shows for
+/// the sum of its inboxes.
+public func countsText(unread: Int, total: Int, outbox: Bool) -> String {
+    if total <= 0 {
         return ""
     }
-    if f.role == .outbox || f.unread <= 0 {
+    if outbox || unread <= 0 {
         // TRANSLATORS: subtitle of the message list; %d is the number of
         // messages in the folder.
-        return L10n.N("%d message", "%d messages", f.total)
+        return L10n.N("%d message", "%d messages", total)
     }
     // TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
     // the first %d is the number of unread messages (the plural follows
     // it), the second the number of all messages in the folder.
-    return L10n.N("%d unread of %d", "%d unread of %d", f.unread, f.unread, f.total)
+    return L10n.N("%d unread of %d", "%d unread of %d", unread, unread, total)
 }
 
 /// `initialFolder` over the rows of one section (model.go `firstFolder`):

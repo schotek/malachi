@@ -310,7 +310,7 @@ type ThreadRow struct {
 	Participants   []api.Address // distinct senders, newest first, at most api.MaxThreadParticipants; never nil
 	FolderIDs      []string      // every folder of the account with a member; sorted, never nil
 	// SentCount, in a folder's scope, counts the members in the account's
-	// sent folders the folder lacks (sentScope, ThreadSentMessages); 0
+	// sent folders the folder lacks (SentScope, ThreadSentMessages); 0
 	// account-wide.
 	SentCount int
 	// DraftCount, in a folder's scope, counts the drafts that reply to a
@@ -320,6 +320,7 @@ type ThreadRow struct {
 
 // threadGroup is one row of the grouped query.
 type threadGroup struct {
+	folder        string // ListThreadsIn only: the folder the group is of
 	id            string
 	count, unread int
 	flagged, att  int
@@ -410,6 +411,140 @@ func (s *Store) ListThreads(ctx context.Context, accountID, folderID, cursor str
 		return nil, "", 0, err
 	}
 	return items, next, total, nil
+}
+
+// ListThreadsIn pages through the conversations of several folders at
+// once (the unified listing, docs/api.md §4.4). A thread is grouped per
+// folder (folder_id, thread_id): a thread id is unique only within its
+// account, and each row aggregates the members in that one folder exactly
+// as ListThreads would, SentCount and DraftCount included. Rows are
+// ordered by the date of the newest member, ties by folder id and then
+// thread id, so the order is total across accounts. The cursor has
+// prefixes of its own ("v" newest first, "V" oldest first): a ListThreads
+// or message cursor is ErrBadCursor here. A ref whose folder the account
+// does not have is skipped; no folder at all is an empty page. Filter,
+// limit and hidden rows as ListThreads; total counts the rows of every
+// folder under the filter.
+func (s *Store) ListThreadsIn(ctx context.Context, folders []FolderRef, cursor string, limit int, sortOrder api.SortOrder, listFilter api.MessageFilter) (items []ThreadRow, next string, total int, err error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	prefix, cmp, err := messageCursorPrefix(sortOrder, "v", "V")
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list threads: unsupported sort %q", sortOrder)
+	}
+	order := "DESC"
+	if cmp == ">" {
+		order = "ASC"
+	}
+	var cursorStamp, cursorFolder, cursorThread string
+	if cursor != "" {
+		var key string
+		if cursorStamp, key, err = decodeSortCursor(cursor, prefix); err != nil {
+			return nil, "", 0, err
+		}
+		var ok bool
+		if cursorFolder, cursorThread, ok = strings.Cut(key, "\x00"); !ok || cursorFolder == "" || cursorThread == "" {
+			return nil, "", 0, ErrBadCursor
+		}
+	}
+	refs, err := s.existingFolders(ctx, folders)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list threads: %w", err)
+	}
+	having := ""
+	switch listFilter {
+	case "", api.FilterAll:
+	case api.FilterUnread:
+		having = ` HAVING SUM(unread) > 0`
+	case api.FilterFlagged:
+		having = ` HAVING MAX(flagged) = 1`
+	default:
+		return nil, "", 0, fmt.Errorf("list threads: unsupported filter %q", listFilter)
+	}
+	if len(refs) == 0 {
+		return []ThreadRow{}, "", 0, nil
+	}
+	ids := refFolderIDs(refs)
+	grouped := threadGroupInQuery(len(ids), having)
+	groupArgs := append(toAny(ids), toAny(ids)...)
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+grouped+`)`, groupArgs...).Scan(&total); err != nil {
+		return nil, "", 0, fmt.Errorf("count threads: %w", err)
+	}
+
+	query := `WITH t AS (` + grouped + `) SELECT folder_id, thread_id, n, unread, flagged, att, latest FROM t`
+	args := append([]any(nil), groupArgs...)
+	if cursor != "" {
+		query += ` WHERE (latest ` + cmp + ` ? OR (latest = ? AND (folder_id ` + cmp + ` ? OR (folder_id = ? AND thread_id ` + cmp + ` ?))))`
+		args = append(args, cursorStamp, cursorStamp, cursorFolder, cursorFolder, cursorThread)
+	}
+	query += ` ORDER BY latest ` + order + `, folder_id ` + order + `, thread_id ` + order + ` LIMIT ?`
+	args = append(args, limit+1)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list threads: %w", err)
+	}
+	var groups []threadGroup
+	for rows.Next() {
+		var g threadGroup
+		if err := rows.Scan(&g.folder, &g.id, &g.count, &g.unread, &g.flagged, &g.att, &g.latest); err != nil {
+			rows.Close()
+			return nil, "", 0, fmt.Errorf("scan thread: %w", err)
+		}
+		groups = append(groups, g)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, "", 0, fmt.Errorf("list threads: %w", err)
+	}
+	if len(groups) > limit {
+		groups = groups[:limit]
+		last := groups[limit-1]
+		next = encodeSortCursor(prefix, last.latest, last.folder+"\x00"+last.id)
+	}
+
+	// The rows of each folder as ListThreads makes them, then back in the
+	// page's order.
+	accountOf := make(map[string]string, len(refs))
+	for _, r := range refs {
+		accountOf[r.FolderID] = r.AccountID
+	}
+	byFolder := map[string][]threadGroup{}
+	var folderOrder []string
+	for _, g := range groups {
+		if _, ok := byFolder[g.folder]; !ok {
+			folderOrder = append(folderOrder, g.folder)
+		}
+		byFolder[g.folder] = append(byFolder[g.folder], g)
+	}
+	made := map[[2]string]ThreadRow{}
+	for _, fid := range folderOrder {
+		list, err := s.threadRows(ctx, accountOf[fid], fid, byFolder[fid])
+		if err != nil {
+			return nil, "", 0, err
+		}
+		for _, r := range list {
+			made[[2]string{fid, r.ID}] = r
+		}
+	}
+	items = make([]ThreadRow, 0, len(groups))
+	for _, g := range groups {
+		if r, ok := made[[2]string{g.folder, g.id}]; ok {
+			items = append(items, r)
+		}
+	}
+	return items, next, total, nil
+}
+
+// threadGroupInQuery is threadGroupQuery over n folders (their ids are the
+// parameters, given twice) grouped by folder and thread.
+func threadGroupInQuery(n int, having string) string {
+	in := inPlaceholders(n)
+	return `SELECT folder_id, thread_id, COUNT(*) AS n, SUM(unread) AS unread, MAX(flagged) AS flagged,
+			MAX(has_attachments) AS att, MAX(date) AS latest
+		FROM messages WHERE folder_id IN (` + in + `) AND thread_id != ''
+			AND id NOT IN (SELECT id FROM messages WHERE folder_id IN (` + in + `) AND hidden = 1)
+		GROUP BY folder_id, thread_id` + having
 }
 
 // threadGroupQuery aggregates one folder's messages (the parameter, given
@@ -552,19 +687,30 @@ func threadScope(accountID, threadID, folderID string) (string, []any) {
 // outbox holds the user's queued mail itself), nor does an issue-tracker
 // account (no folder of role sent).
 
+// sentMember is the condition that the row aliased a is a sent member of
+// the folder's threads, but for the thread condition (a.thread_id is one
+// of the folder's threads), which the caller adds: a visible row in a
+// folder of role sent of the account whose Message-ID no visible member of
+// the folder in its thread has. Its parameters are the account id and the
+// folder id. sentMembers, the search (searchScope) and through them
+// thread.get, thread.list and search.query share it.
+func sentMember(a string) string {
+	return a + `.hidden = 0
+		AND ` + a + `.folder_id IN (SELECT id FROM folders WHERE account_id = ? AND role = '` + string(api.RoleSent) + `')
+		AND (` + a + `.rfc_message_id = '' OR NOT EXISTS (SELECT 1 FROM messages fm
+			WHERE fm.folder_id = ? AND fm.thread_id = ` + a + `.thread_id AND fm.rfc_message_id = ` + a + `.rfc_message_id AND fm.hidden = 0))`
+}
+
 // sentMembers is the FROM and WHERE of the sent members of the threads of
 // the account; its parameters are the account id twice and the folder id,
 // and the caller appends its thread condition on s.thread_id.
-const sentMembers = ` FROM messages s
-	WHERE s.account_id = ? AND s.hidden = 0
-		AND s.folder_id IN (SELECT id FROM folders WHERE account_id = ? AND role = '` + string(api.RoleSent) + `')
-		AND (s.rfc_message_id = '' OR NOT EXISTS (SELECT 1 FROM messages f
-			WHERE f.folder_id = ? AND f.thread_id = s.thread_id AND f.rfc_message_id = s.rfc_message_id AND f.hidden = 0))`
+var sentMembers = ` FROM messages s
+	WHERE s.account_id = ? AND ` + sentMember("s")
 
-// sentScope reports whether the folder's threads can have sent members:
+// SentScope reports whether the folder's threads can have sent members:
 // it is not a sent folder, the outbox or a virtual folder. ErrNotFound when
 // the account has no such folder.
-func (s *Store) sentScope(ctx context.Context, accountID, folderID string) (bool, error) {
+func (s *Store) SentScope(ctx context.Context, accountID, folderID string) (bool, error) {
 	var role, virtual string
 	err := s.db.QueryRowContext(ctx, `SELECT role, virtual FROM folders WHERE id = ? AND account_id = ?`, folderID, accountID).Scan(&role, &virtual)
 	switch {
@@ -573,8 +719,14 @@ func (s *Store) sentScope(ctx context.Context, accountID, folderID string) (bool
 	case err != nil:
 		return false, fmt.Errorf("folder role: %w", err)
 	}
-	r := api.FolderRole(role)
-	return r != api.RoleSent && r != api.RoleOutbox && virtual == "", nil
+	return HasSentMembers(api.FolderRole(role), api.VirtualFolder(virtual)), nil
+}
+
+// HasSentMembers is the rule of SentScope for a folder at hand: its
+// threads can have sent members unless it is a sent folder, the outbox or
+// a virtual folder.
+func HasSentMembers(role api.FolderRole, virtual api.VirtualFolder) bool {
+	return role != api.RoleSent && role != api.RoleOutbox && virtual == ""
 }
 
 // ThreadSentMessages lists the sent members of a thread read in folderID
@@ -582,13 +734,13 @@ func (s *Store) sentScope(ctx context.Context, accountID, folderID string) (bool
 // limit are returned, still oldest first. Of the rows sharing a Message-ID
 // the one with the lowest id stands for them. limit <= 0 means
 // api.MaxThreadMessages. Empty (never ErrNotFound) when there is none or
-// the folder has none (sentScope); ErrNotFound when the account has no
+// the folder has none (SentScope); ErrNotFound when the account has no
 // such folder.
 func (s *Store) ThreadSentMessages(ctx context.Context, accountID, threadID, folderID string, limit int) ([]Message, error) {
 	if limit <= 0 {
 		limit = api.MaxThreadMessages
 	}
-	ok, err := s.sentScope(ctx, accountID, folderID)
+	ok, err := s.SentScope(ctx, accountID, folderID)
 	if err != nil || !ok || threadID == "" {
 		return nil, err
 	}
@@ -625,7 +777,7 @@ func (s *Store) ThreadSentMessages(ctx context.Context, accountID, threadID, fol
 // thread.list is within one chunk).
 func (s *Store) sentCounts(ctx context.Context, accountID, folderID string, ids []string) (map[string]int, error) {
 	out := map[string]int{}
-	ok, err := s.sentScope(ctx, accountID, folderID)
+	ok, err := s.SentScope(ctx, accountID, folderID)
 	if err != nil || !ok {
 		return out, err
 	}

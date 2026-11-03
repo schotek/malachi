@@ -9,6 +9,17 @@ import MalachiCore
 // key across rebuilds so the outline keeps their identity: `reloadData()`
 // then preserves the selection and the expansion of what did not change.
 
+/// The All Inboxes item (`FolderEntry.unified`), the first row of the
+/// sidebar: no children, no star, no fold.
+@MainActor
+final class UnifiedNode: NSObject {
+    var entry: FolderEntry
+
+    init(entry: FolderEntry) {
+        self.entry = entry
+    }
+}
+
 /// The Favourites heading (`FolderEntry.header && favourite`).
 @MainActor
 final class FavouritesNode: NSObject {
@@ -61,6 +72,8 @@ final class FolderOutlineDataSource: NSObject, NSOutlineViewDataSource {
     /// The top-level items in order.
     private(set) var roots: [NSObject] = []
     private var favouritesNode: FavouritesNode?
+    /// The All Inboxes row, when the entries have one.
+    private(set) var unifiedNode: UnifiedNode?
     private var accountNodes: [AccountID: AccountNode] = [:]
     private var folderNodes: [RowKey: FolderNode] = [:]
 
@@ -72,6 +85,7 @@ final class FolderOutlineDataSource: NSObject, NSOutlineViewDataSource {
         var folders: [RowKey: FolderNode] = [:]
         var accounts: [AccountID: AccountNode] = [:]
         var favourites: FavouritesNode?
+        var unified: UnifiedNode?
         // The section the rows go under (nil without headings) and the
         // ancestors of the current row by depth.
         var section: NSObject?
@@ -91,6 +105,13 @@ final class FolderOutlineDataSource: NSObject, NSOutlineViewDataSource {
         }
 
         for e in entries {
+            if e.unified {
+                let node = unifiedNode ?? UnifiedNode(entry: e)
+                node.entry = e
+                unified = node
+                roots.append(node)
+                continue
+            }
             if e.header, e.favourite {
                 let node = favouritesNode ?? FavouritesNode()
                 node.children = []
@@ -130,6 +151,7 @@ final class FolderOutlineDataSource: NSObject, NSOutlineViewDataSource {
 
         self.roots = roots
         favouritesNode = favourites
+        unifiedNode = unified
         accountNodes = accounts
         folderNodes = folders
     }

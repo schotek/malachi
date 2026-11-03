@@ -84,12 +84,14 @@ extension MailModel {
     public func searchRequest(_ text: String, scope: Settings.SearchScope) -> (params: SearchQueryParams, effective: Settings.SearchScope) {
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let page = Page(limit: API.Limits.defaultPageLimit)
-        guard let k = selected else {
+        // The All Inboxes item is no folder to narrow to, so it searches
+        // every account like no selection at all.
+        guard let k = selected, !k.isUnified else {
             return (SearchQueryParams(query: query, page: page), .all)
         }
         switch scope {
         case .folder:
-            return (SearchQueryParams(accountId: k.account, folderId: k.folder, query: query, page: page), .folder)
+            return (SearchQueryParams(accountId: k.account, folderId: k.folder, query: query, page: page, withSent: true), .folder)
         case .account:
             return (SearchQueryParams(accountId: k.account, query: query, page: page), .account)
         case .all:
@@ -130,7 +132,15 @@ extension MailModel {
     /// (search_model.go `rowMessage`).
     public func rowMessage(_ s: MessageSummary) -> RowMessage {
         var m = summaryMessage(s)
-        guard search.active else { return m }
+        guard search.active else {
+            // The All Inboxes list: the row says whose inbox it is (the
+            // account's name, as a search result's origin does).
+            if listIsUnified, let a = account(s.accountId) {
+                m.origin = accountLabel(a)
+                m.originTooltip = m.origin
+            }
+            return m
+        }
         if let hit = search.hits[s.id] {
             m.snippet = hit.snippet
             m.highlights = hit.ranges
@@ -141,12 +151,18 @@ extension MailModel {
         return m
     }
 
-    /// Where a result lies when the search spans more than one folder: the
+    /// Where a result lies when the search spans more than one folder (in
+    /// Folder scope only a result from another folder, i.e. sent mail): the
     /// folder, and its account as well when every account is searched and
     /// there is more than one. The tooltip has the folder's path and the
     /// account (search_model.go `searchOrigin`).
     public func searchOrigin(_ s: MessageSummary) -> (label: String, tooltip: String) {
-        guard search.effective != .folder, let f = folder(FolderKey(account: s.accountId, folder: s.folderId)) else {
+        let key = FolderKey(account: s.accountId, folder: s.folderId)
+        if search.effective == .folder,
+           search.params.accountId == s.accountId, search.params.folderId == s.folderId {
+            return ("", "")
+        }
+        guard let f = folder(key) else {
             return ("", "")
         }
         var label = folderTitle(f)

@@ -94,7 +94,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     private var flaggedRows = 0..<0
     private var collapsedDates: Set<MailDateGroup> = []
     private var dateFolder: FolderKey?
-    private var usesDateGroups: Bool { !list.searchActive && list.folderRole == .inbox }
+    private var usesDateGroups: Bool { !list.searchActive && (list.folderRole == .inbox || mailbox.model.listIsUnified) }
     private var rowsByKey: [ListKey: ListRow] = [:]
     /// A programmatic selection change must not re-enter `select(key:)`
     /// (window.go `reselecting`).
@@ -830,7 +830,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         row >= 0 && row < keys.count && keys[row].messageKey != nil
     }
 
-    /// No date heading, and one account (selection.go `restrictSelection`):
+    /// No date heading, and one account unless the list is All Inboxes (selection.go `restrictSelection`):
     /// the row the user adds decides whose, the clicked one or else one
     /// not selected before.
     func tableView(_ tableView: NSTableView, selectionIndexesForProposedSelection proposed: IndexSet) -> IndexSet {

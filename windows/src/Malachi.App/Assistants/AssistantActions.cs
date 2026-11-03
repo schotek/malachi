@@ -147,10 +147,11 @@ internal sealed partial class AssistantActions
     /// <summary>
     /// Whether Summarize Unread in This Folder can run: a folder is selected
     /// in the sidebar, it is not an Outbox (whose messages are not on the
-    /// server), and no search replaces it.
+    /// server) nor the All Inboxes item (no one account's folder), and no
+    /// search replaces it.
     /// </summary>
     public bool CanSummarizeUnread =>
-        Model.Selected is { } k && !list.SearchActive && Model.FolderRole(k) != FolderRole.Outbox;
+        Model.Selected is { IsUnified: false } k && !list.SearchActive && Model.FolderRole(k) != FolderRole.Outbox;
 
     /// <summary>
     /// The panel's quick action Summarize Unread in This Folder, for the

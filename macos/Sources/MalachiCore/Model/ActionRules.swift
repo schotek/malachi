@@ -69,6 +69,12 @@ public struct ActionFlags: Sendable, Equatable {
     /// several). Filled by `ActionsController` from its `crm` state.
     public var crm = false
     public var crmSaved = false
+    /// selection.Flags MixedAccounts: the rows belong to more than one
+    /// account, which only the All Inboxes list allows (`Unified`; decision
+    /// U2). Its actions run one call per account; Forward, Move To and Save
+    /// to eWay-CRM need one account and are off
+    /// (`Selection.combineAccounts`). Never for one row.
+    public var mixedAccounts = false
 
     public init(
         count: Int = 0, open: Bool = false, on: Bool = false, outbox: Bool = false, flagged: Bool = false, reply: Bool = false, replyAll: Bool = false,

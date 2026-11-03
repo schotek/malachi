@@ -1688,13 +1688,13 @@ msgstr ""
 
 #: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:395
 #: ui/internal/window/board_conversation.go:488
-#: ui/internal/window/conversation_card.go:473 ui/internal/window/folders.go:65
+#: ui/internal/window/conversation_card.go:473 ui/internal/window/folders.go:66
 msgid "Expand"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:391
 #: ui/internal/window/board_conversation.go:491
-#: ui/internal/window/conversation_card.go:471 ui/internal/window/folders.go:62
+#: ui/internal/window/conversation_card.go:471 ui/internal/window/folders.go:63
 msgid "Collapse"
 msgstr ""
 
@@ -1768,6 +1768,21 @@ msgid "Cancel sending %d message?"
 msgid_plural "Cancel sending %d messages?"
 msgstr[0] ""
 msgstr[1] ""
+
+#. TRANSLATORS: The sidebar item and the list of the inboxes of every mail account together.
+#: ui/internal/unified/text.go:19
+msgid "All Inboxes"
+msgstr ""
+
+#. TRANSLATORS: A switch in Preferences; "All Inboxes" is the sidebar item's name.
+#: ui/internal/unified/text.go:25
+msgid "Show All Inboxes"
+msgstr ""
+
+#. TRANSLATORS: The subtitle of the "Show All Inboxes" switch in Preferences.
+#: ui/internal/unified/text.go:31
+msgid "In the sidebar when you have more than one mail account"
+msgstr ""
 
 #. TRANSLATORS: a comment on a service-desk request that the customer reads too.
 #: ui/internal/jira/compose.go:74
@@ -2257,8 +2272,8 @@ msgid "Needs fields in Jira"
 msgstr ""
 
 #: ui/internal/jira/transitions.go:98
-#: ui/internal/window/conversation_card.go:173 ui/internal/window/folders.go:89
-#: ui/internal/window/messages.go:267
+#: ui/internal/window/conversation_card.go:173 ui/internal/window/folders.go:90
+#: ui/internal/window/messages.go:255
 msgid "Loading…"
 msgstr ""
 
@@ -2868,7 +2883,7 @@ msgstr[1] ""
 #. TRANSLATORS: subtitle of the message list; %d is the number of
 #. messages in the folder.
 #: ui/internal/board/text.go:150 ui/internal/widget/message_row.go:255
-#: ui/internal/window/folders.go:353
+#: ui/internal/window/folders.go:357
 #, c-format
 msgid "%d message"
 msgid_plural "%d messages"
@@ -3548,7 +3563,7 @@ msgstr ""
 msgid "Changing the promise"
 msgstr ""
 
-#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:271
+#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:277
 msgid "Removing the star"
 msgstr ""
 
@@ -6803,97 +6818,97 @@ msgid_plural "Move %d messages to Trash?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:209
+#: ui/internal/window/actions.go:212
 msgid "Marking the message as read"
 msgstr ""
 
-#: ui/internal/window/actions.go:211
+#: ui/internal/window/actions.go:214
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:213
+#: ui/internal/window/actions.go:216
 msgid "Marking the message as unread"
 msgstr ""
 
-#: ui/internal/window/actions.go:215
+#: ui/internal/window/actions.go:218
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:267
+#: ui/internal/window/actions.go:273
 msgid "Starring the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:269
+#: ui/internal/window/actions.go:275
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:273
+#: ui/internal/window/actions.go:279
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:346
+#: ui/internal/window/actions.go:355
 msgid "Moving the message to Trash"
 msgstr ""
 
-#: ui/internal/window/actions.go:348
+#: ui/internal/window/actions.go:357
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:413
+#: ui/internal/window/actions.go:429
 msgid "Archiving the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:415
+#: ui/internal/window/actions.go:431
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:416
+#: ui/internal/window/actions.go:432
 msgid "This account has no archive folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:443 ui/internal/window/actions.go:457
+#: ui/internal/window/actions.go:465 ui/internal/window/actions.go:479
 msgid "This account has no junk folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:446
+#: ui/internal/window/actions.go:468
 msgid "Mark as junk?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:449
+#: ui/internal/window/actions.go:471
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:451
+#: ui/internal/window/actions.go:473
 msgid "Mark as _Junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:454
+#: ui/internal/window/actions.go:476
 msgid "Marking the message as junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:456
+#: ui/internal/window/actions.go:478
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
@@ -7107,54 +7122,54 @@ msgstr ""
 msgid "Loading the images"
 msgstr ""
 
-#: ui/internal/window/folders.go:103 ui/internal/window/folders.go:435
+#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:441
 msgid "Folders Unavailable"
 msgstr ""
 
-#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:436
+#: ui/internal/window/folders.go:105 ui/internal/window/folders.go:442
 msgid "Loading folders"
 msgstr ""
 
-#: ui/internal/window/folders.go:214
+#: ui/internal/window/folders.go:215
 msgid "Favourites"
-msgstr ""
-
-#: ui/internal/window/folders.go:320
-msgctxt "folder"
-msgid "Inbox"
-msgstr ""
-
-#: ui/internal/window/folders.go:322
-msgctxt "folder"
-msgid "Drafts"
 msgstr ""
 
 #: ui/internal/window/folders.go:324
 msgctxt "folder"
-msgid "Sent"
+msgid "Inbox"
 msgstr ""
 
 #: ui/internal/window/folders.go:326
 msgctxt "folder"
-msgid "Trash"
+msgid "Drafts"
 msgstr ""
 
 #: ui/internal/window/folders.go:328
 msgctxt "folder"
-msgid "Junk"
+msgid "Sent"
 msgstr ""
 
 #: ui/internal/window/folders.go:330
 msgctxt "folder"
-msgid "Archive"
+msgid "Trash"
 msgstr ""
 
 #: ui/internal/window/folders.go:332
 msgctxt "folder"
-msgid "All Mail"
+msgid "Junk"
 msgstr ""
 
 #: ui/internal/window/folders.go:334
+msgctxt "folder"
+msgid "Archive"
+msgstr ""
+
+#: ui/internal/window/folders.go:336
+msgctxt "folder"
+msgid "All Mail"
+msgstr ""
+
+#: ui/internal/window/folders.go:338
 msgctxt "folder"
 msgid "Outbox"
 msgstr ""
@@ -7162,34 +7177,34 @@ msgstr ""
 #. TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
 #. the first %d is the number of unread messages (the plural follows
 #. it), the second the number of all messages in the folder.
-#: ui/internal/window/folders.go:358
+#: ui/internal/window/folders.go:362
 #, c-format
 msgid "%d unread of %d"
 msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:427 ui/data/ui/window.ui:788
+#: ui/internal/window/folders.go:433 ui/data/ui/window.ui:788
 msgid "No Accounts"
 msgstr ""
 
-#: ui/internal/window/folders.go:428
+#: ui/internal/window/folders.go:434
 msgid "Add a mail account in Preferences to see its folders here."
 msgstr ""
 
-#: ui/internal/window/folders.go:430
+#: ui/internal/window/folders.go:436
 msgid "No Enabled Accounts"
 msgstr ""
 
-#: ui/internal/window/folders.go:431
+#: ui/internal/window/folders.go:437
 msgid "Enable an account in Preferences to see its folders here."
 msgstr ""
 
-#: ui/internal/window/folders.go:440
+#: ui/internal/window/folders.go:446
 msgid "No Folders Yet"
 msgstr ""
 
-#: ui/internal/window/folders.go:441
+#: ui/internal/window/folders.go:447
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
@@ -7202,58 +7217,58 @@ msgstr ""
 msgid "Downloading…"
 msgstr ""
 
-#: ui/internal/window/messages.go:88 ui/internal/window/messages.go:265
-#: ui/internal/window/threads.go:46
+#: ui/internal/window/messages.go:82 ui/internal/window/messages.go:253
+#: ui/internal/window/threads.go:40
 msgid "Loading messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:178 ui/internal/window/threads.go:83
+#: ui/internal/window/messages.go:166 ui/internal/window/threads.go:71
 msgid "Loading more messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:257
+#: ui/internal/window/messages.go:245
 msgid "Select a folder"
 msgstr ""
 
-#: ui/internal/window/messages.go:258
+#: ui/internal/window/messages.go:246
 msgid "Choose a folder in the sidebar to see its messages."
 msgstr ""
 
-#: ui/internal/window/messages.go:260
+#: ui/internal/window/messages.go:248
 msgid "Not Synchronised"
 msgstr ""
 
-#: ui/internal/window/messages.go:261
+#: ui/internal/window/messages.go:249
 msgid ""
 "Messages moved here are archived on the server; the folder itself is not "
 "downloaded."
 msgstr ""
 
-#: ui/internal/window/messages.go:264
+#: ui/internal/window/messages.go:252
 msgid "Messages Unavailable"
 msgstr ""
 
-#: ui/internal/window/messages.go:269
+#: ui/internal/window/messages.go:257
 msgid "No Unread Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:270
+#: ui/internal/window/messages.go:258
 msgid "Everything in this folder has been read."
 msgstr ""
 
-#: ui/internal/window/messages.go:272
+#: ui/internal/window/messages.go:260
 msgid "No Flagged Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:273
+#: ui/internal/window/messages.go:261
 msgid "No message in this folder carries a flag."
 msgstr ""
 
-#: ui/internal/window/messages.go:275
+#: ui/internal/window/messages.go:263
 msgid "No Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:276
+#: ui/internal/window/messages.go:264
 msgid "This folder is empty."
 msgstr ""
 
@@ -7295,11 +7310,11 @@ msgstr ""
 msgid "Cancel sending this message?"
 msgstr ""
 
-#: ui/internal/window/outbox.go:205 ui/internal/window/selection.go:410
+#: ui/internal/window/outbox.go:205 ui/internal/window/selection.go:414
 msgid "Do Not _Send"
 msgstr ""
 
-#: ui/internal/window/outbox.go:217 ui/internal/window/selection.go:423
+#: ui/internal/window/outbox.go:217 ui/internal/window/selection.go:427
 msgid "Cancelling the send"
 msgstr ""
 
@@ -7466,71 +7481,71 @@ msgid "No Results"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Folder search scope; %s is a folder.
-#: ui/internal/window/search.go:352
+#: ui/internal/window/search.go:353
 #, c-format
 msgid "Search in %s"
 msgstr ""
 
-#: ui/internal/window/search.go:354
+#: ui/internal/window/search.go:355
 msgid "Select a folder to search in it"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Account search scope; %s is an account.
-#: ui/internal/window/search.go:358
+#: ui/internal/window/search.go:359
 #, c-format
 msgid "Search every folder of %s except Trash and Junk"
 msgstr ""
 
-#: ui/internal/window/search.go:362
+#: ui/internal/window/search.go:363
 msgid "Search every account except Trash and Junk"
 msgstr ""
 
 #. TRANSLATORS: where a search result lies, shown in its row:
 #. the folder, then the account.
-#: ui/internal/window/search_model.go:150
+#: ui/internal/window/search_model.go:152
 #, c-format
 msgctxt "search result origin"
 msgid "%s · %s"
 msgstr ""
 
-#: ui/internal/window/search_model.go:162
+#: ui/internal/window/search_model.go:164
 msgid "Searches the mail stored on this computer."
 msgstr ""
 
-#: ui/internal/window/search_model.go:164
+#: ui/internal/window/search_model.go:166
 msgid "Searches all mail stored on this computer."
 msgstr ""
 
-#: ui/internal/window/search_model.go:166
+#: ui/internal/window/search_model.go:168
 #, c-format
 msgid "Searches the mail of the last %d day stored on this computer."
 msgid_plural "Searches the mail of the last %d days stored on this computer."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search_model.go:178
+#: ui/internal/window/search_model.go:180
 #, c-format
 msgid "More than %d results"
 msgstr ""
 
-#: ui/internal/window/search_model.go:180
+#: ui/internal/window/search_model.go:182
 #, c-format
 msgid "%d result"
 msgid_plural "%d results"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search_model.go:188
+#: ui/internal/window/search_model.go:190
 msgid "Nothing in this folder matches."
 msgstr ""
 
-#: ui/internal/window/search_model.go:190
+#: ui/internal/window/search_model.go:192
 msgid ""
 "Nothing in this account matches. Trash and Junk are searched only when "
 "chosen as the folder."
 msgstr ""
 
-#: ui/internal/window/search_model.go:192
+#: ui/internal/window/search_model.go:194
 msgid ""
 "Nothing in any account matches. Trash and Junk are searched only when chosen "
 "as the folder."
@@ -7718,7 +7733,7 @@ msgstr ""
 msgid "%s needs attention"
 msgstr ""
 
-#: ui/internal/window/threads.go:185
+#: ui/internal/window/threads.go:173
 msgid "Loading the conversation"
 msgstr ""
 
@@ -9167,295 +9182,305 @@ msgstr ""
 msgid "Folders pinned to the Favourites section of the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:117
+#: data/io.github.schotek.Malachi.gschema.xml:114
+msgid "Show All Inboxes in the sidebar"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:115
+msgid ""
+"With two or more mail accounts, an item at the top of the sidebar lists the "
+"inboxes of all of them together."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:122
 msgid ""
 "Start hidden in the background at login (mirrors the Background portal's "
 "autostart decision)"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:121
+#: data/io.github.schotek.Malachi.gschema.xml:126
 msgid "Closing the main window keeps the application running"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:126
+#: data/io.github.schotek.Malachi.gschema.xml:131
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 = immediately"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:134
+#: data/io.github.schotek.Malachi.gschema.xml:139
 msgid "Show a desktop notification for new mail"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:144
+#: data/io.github.schotek.Malachi.gschema.xml:149
 msgid "Color scheme"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:145
+#: data/io.github.schotek.Malachi.gschema.xml:150
 msgid "Follow the system preference, or force a light or dark appearance."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:149
+#: data/io.github.schotek.Malachi.gschema.xml:154
 msgid "Message list density"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:153
+#: data/io.github.schotek.Malachi.gschema.xml:158
 msgid "Show a one-line preview under each message in the list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:157
+#: data/io.github.schotek.Malachi.gschema.xml:162
 msgid "Group the message list by conversation"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:158
+#: data/io.github.schotek.Malachi.gschema.xml:163
 msgid ""
 "Show one row per conversation in the selected folder; expanding it lists the "
 "messages the folder holds."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:162
+#: data/io.github.schotek.Malachi.gschema.xml:167
 msgid "Show conversations as a chat"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:163
+#: data/io.github.schotek.Malachi.gschema.xml:168
 msgid ""
 "Others' messages on the left, yours on the right, oldest first; off shows "
 "the timeline."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:167
+#: data/io.github.schotek.Malachi.gschema.xml:172
 msgid "Render HTML in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:168
+#: data/io.github.schotek.Malachi.gschema.xml:173
 msgid ""
 "In the chat layout of a conversation, show a message's HTML in a locked web "
 "view instead of its plain text; off shows the text."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:172
+#: data/io.github.schotek.Malachi.gschema.xml:177
 msgid "Shorten my messages in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:173
+#: data/io.github.schotek.Malachi.gschema.xml:178
 msgid ""
 "In the chat layout of a conversation, show about three lines of each of the "
 "user's own messages in its bubble; a click shows the whole message."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:177
+#: data/io.github.schotek.Malachi.gschema.xml:182
 msgid "Shorten others' messages in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:178
+#: data/io.github.schotek.Malachi.gschema.xml:183
 msgid ""
 "In the chat layout of a conversation, show about three lines of each message "
 "of the other party in its bubble; a click shows the whole message."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:182
+#: data/io.github.schotek.Malachi.gschema.xml:187
 msgid "Where a search looks"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:183
+#: data/io.github.schotek.Malachi.gschema.xml:188
 msgid ""
 "The selected folder, every folder of its account, or every account; the last "
 "choice made in the search bar."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:187
+#: data/io.github.schotek.Malachi.gschema.xml:192
 msgid "Show sender avatars in the message list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:191
+#: data/io.github.schotek.Malachi.gschema.xml:196
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:195
+#: data/io.github.schotek.Malachi.gschema.xml:200
 msgid "Use a monospace font for plain-text message bodies"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:200
+#: data/io.github.schotek.Malachi.gschema.xml:205
 msgid "Message body text zoom in percent"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:206
+#: data/io.github.schotek.Malachi.gschema.xml:211
 msgid "Show the Assistant menu that hands mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:207
+#: data/io.github.schotek.Malachi.gschema.xml:212
 msgid ""
 "The menu opens Claude Desktop or Claude Code on this computer with a "
 "prepared question about the selected mail."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:211
+#: data/io.github.schotek.Malachi.gschema.xml:216
 msgid "Where the Assistant menu opens Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:212
+#: data/io.github.schotek.Malachi.gschema.xml:217
 msgid ""
 "Claude Desktop, Claude Code in a terminal, or the panel in the app; the last "
 "choice made in the Assistant menu or in the settings."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:216
+#: data/io.github.schotek.Malachi.gschema.xml:221
 msgid "The model the assistant panel uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:217
+#: data/io.github.schotek.Malachi.gschema.xml:222
 msgid "Sonnet, Haiku or Opus, passed to Claude Code."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:221
+#: data/io.github.schotek.Malachi.gschema.xml:226
 msgid "Where Claude Code is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:222
+#: data/io.github.schotek.Malachi.gschema.xml:227
 msgid ""
 "The claude executable the assistant panel runs; empty looks in the usual "
 "places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:226
+#: data/io.github.schotek.Malachi.gschema.xml:231
 msgid "The assistant panel may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:227
+#: data/io.github.schotek.Malachi.gschema.xml:232
 msgid "Set when the user allowed it the first time."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:232
+#: data/io.github.schotek.Malachi.gschema.xml:237
 msgid "The provider of the assistant in the app"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:233
+#: data/io.github.schotek.Malachi.gschema.xml:238
 msgid "The in-app provider; external Claude hand-off is independent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:237
+#: data/io.github.schotek.Malachi.gschema.xml:242
 msgid "Where Codex is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:238
+#: data/io.github.schotek.Malachi.gschema.xml:243
 msgid "The native Codex executable; empty looks in the usual places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:242
+#: data/io.github.schotek.Malachi.gschema.xml:247
 msgid "The model the ChatGPT provider uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:243
-#: data/io.github.schotek.Malachi.gschema.xml:254
+#: data/io.github.schotek.Malachi.gschema.xml:248
+#: data/io.github.schotek.Malachi.gschema.xml:259
 msgid "Empty uses the provider's model default."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:248
+#: data/io.github.schotek.Malachi.gschema.xml:253
 msgid "The accepted ChatGPT mail consent version"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:249
+#: data/io.github.schotek.Malachi.gschema.xml:254
 msgid "Zero means no permission to send mail to OpenAI."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:253
+#: data/io.github.schotek.Malachi.gschema.xml:258
 msgid "The model ChatGPT uses for the board"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:259
+#: data/io.github.schotek.Malachi.gschema.xml:264
 msgid "The accepted OpenAI board consent version"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:260
+#: data/io.github.schotek.Malachi.gschema.xml:265
 msgid "Zero means no permission to send board mail to OpenAI."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:267
+#: data/io.github.schotek.Malachi.gschema.xml:272
 msgid "The style the Board opens in"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:268
+#: data/io.github.schotek.Malachi.gschema.xml:273
 msgid ""
 "Last Used (the style in board-last-style), List, Columns or Today; a changed "
 "choice applies the next time the Board is shown, unless a style was already "
 "picked in this run, which then stays until the app quits."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:272
+#: data/io.github.schotek.Malachi.gschema.xml:277
 msgid "The style the Board was shown in last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:273
+#: data/io.github.schotek.Malachi.gschema.xml:278
 msgid ""
 "Written whenever the user changes the Board's style; read when board-default-"
 "style is Last Used."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:277
+#: data/io.github.schotek.Malachi.gschema.xml:282
 msgid "What the main window shows at launch"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:278
+#: data/io.github.schotek.Malachi.gschema.xml:283
 msgid ""
 "Mail, the Board, the Calendar, or the mode shown last (board-last-mode). The "
 "Board is replaced by Mail while it is turned off."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:282
+#: data/io.github.schotek.Malachi.gschema.xml:287
 msgid "The mode the main window showed last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:283
+#: data/io.github.schotek.Malachi.gschema.xml:288
 msgid ""
 "\"mail\", \"board\" or \"calendar\", written whenever the mode switches; "
 "read when board-start-mode is Last."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:287
+#: data/io.github.schotek.Malachi.gschema.xml:292
 msgid "The account the Board is filtered to"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:288
+#: data/io.github.schotek.Malachi.gschema.xml:293
 msgid ""
 "The daemon's account id, written whenever the Board's account filter "
 "changes; empty means every account. Applied when the Board shows while that "
 "account still exists."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:292
+#: data/io.github.schotek.Malachi.gschema.xml:297
 msgid "The Board's triage may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:293
+#: data/io.github.schotek.Malachi.gschema.xml:298
 msgid ""
 "Set when the user allowed it the first time, apart from the assistant "
 "panel's consent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:297
+#: data/io.github.schotek.Malachi.gschema.xml:302
 msgid "The model the Board's triage uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:298
+#: data/io.github.schotek.Malachi.gschema.xml:303
 msgid ""
 "Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant "
 "panel's model."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:302
+#: data/io.github.schotek.Malachi.gschema.xml:307
 msgid "The view the Calendar was shown in last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:303
+#: data/io.github.schotek.Malachi.gschema.xml:308
 msgid ""
 "Day, Week, Month or Agenda, written whenever the user changes the Calendar's "
 "view; applied when the Calendar shows."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:307
+#: data/io.github.schotek.Malachi.gschema.xml:312
 msgid "Which address books complete recipients"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:308
+#: data/io.github.schotek.Malachi.gschema.xml:313
 msgid ""
 "The address books of the account the message is written from (with the "
 "recently used addresses), or every address book; the scope of contact.search."

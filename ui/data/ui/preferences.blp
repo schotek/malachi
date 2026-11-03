@@ -491,6 +491,11 @@ Adw.PreferencesDialog preferences_dialog {
     }
 
     Adw.PreferencesGroup {
+      // Title and subtitle are set from Go (unified.PreferenceTitle).
+      Adw.SwitchRow unified_inbox {}
+    }
+
+    Adw.PreferencesGroup {
       title: _("Conversations");
 
       Adw.SwitchRow group_by_conversation {

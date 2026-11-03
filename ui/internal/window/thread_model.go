@@ -90,6 +90,7 @@ type removal struct {
 // fetched members, so a reload (sync finished) does not blink an expanded
 // conversation through the spinner. Duplicate ids keep the first.
 func (m *mailModel) setThreads(list []api.ThreadSummary, page api.PageInfo) {
+	list = m.keyThreads(list)
 	prevSummary := make(map[api.ThreadID]api.ThreadSummary, len(m.threads))
 	for _, t := range m.threads {
 		prevSummary[t.ID] = t
@@ -157,6 +158,7 @@ func (m *mailModel) forgetMembers(tid api.ThreadID) {
 
 // appendThreads adds a further page and returns how many rows it added.
 func (m *mailModel) appendThreads(list []api.ThreadSummary, page api.PageInfo) (added int) {
+	list = m.keyThreads(list)
 	if m.tindex == nil {
 		m.tindex = make(map[api.ThreadID]int, len(list))
 		m.members = make(map[api.ThreadID]*threadMembers, len(list))
@@ -227,6 +229,7 @@ func (m *mailModel) setMembers(tid api.ThreadID, t api.ThreadSummary, list, sent
 		m.rebuildRows()
 		return
 	}
+	t.ID = tid // the model's key (unified.go threadKey)
 	m.threads[i] = t
 	m.members[tid] = &threadMembers{list: append([]api.MessageSummary(nil), list...),
 		sent: append([]api.MessageSummary(nil), sent...), drafts: append([]api.Draft(nil), drafts...), complete: true}
@@ -287,13 +290,14 @@ func (m *mailModel) applyNewMessage(s api.MessageSummary, f api.MessageFilter, s
 	if _, known := m.memberOf[s.ID]; known {
 		return true
 	}
-	i, listed := m.tindex[s.ThreadID]
+	tk := m.threadKey(s.AccountID, s.ThreadID)
+	i, listed := m.tindex[tk]
 	if !listed {
 		if !matchesFilter(s, f) {
 			return true
 		}
 		t := api.ThreadSummary{
-			ID: s.ThreadID, AccountID: s.AccountID, Subject: s.Subject,
+			ID: tk, AccountID: s.AccountID, Subject: s.Subject,
 			Participants: append([]api.Address(nil), s.From...), MessageCount: 1,
 			LatestDate: s.Date, Latest: s, Snippet: s.Snippet,
 			Flags: append([]api.Flag(nil), s.Flags...), HasAttachments: s.HasAttachments,

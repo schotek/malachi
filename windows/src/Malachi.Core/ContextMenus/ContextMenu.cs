@@ -269,6 +269,13 @@ public static partial class ContextMenu
         /// it is offered for one row only.
         /// </summary>
         public bool OfferRule { get; init; }
+        /// Several rows of more than one account, which only the All Inboxes
+        /// list allows (<see cref="ActionFlags.MixedAccounts"/>, Go
+        /// <c>MixedAccounts</c>). Forward, Move To and Save to eWay-CRM, which
+        /// need one account, stay in the menu but are disabled; the other
+        /// items act per account.
+        /// </summary>
+        public bool MixedAccounts { get; init; }
 
         /// <summary>contextmenu.MessageState.SetCrm: this state with the eWay-CRM members of <paramref name="o"/> (CrmRules.OfferFor of the selected rows).</summary>
         public MessageState WithCrm(CrmOffer o) => this with { OfferCrm = o.Shown, Crm = o.Enabled, CrmSaved = o.Saved };
@@ -307,6 +314,7 @@ public static partial class ContextMenu
                 Junk = f.Junk,
                 Trash = f.Trash,
                 ChangeStatus = f.ChangeStatus,
+                MixedAccounts = f.MixedAccounts,
                 Assistant = assistant,
             };
         }
@@ -319,11 +327,17 @@ public static partial class ContextMenu
     /// each (<see cref="Labels.Count"/>), Forward forwards them in one
     /// message, Save to eWay-CRM saves them together, and Reply, Reply All,
     /// Change Status and the saved-state eWay-CRM items, which are for one
-    /// message, are not offered.
+    /// message, are not offered. Several rows of several accounts
+    /// (<see cref="MessageState.MixedAccounts"/>) have Forward, Move To and
+    /// Save to eWay-CRM disabled.
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<Item>> MessageItems(MessageState s)
     {
         var several = s.Count > 1;
+        if (several && s.MixedAccounts)
+        {
+            s = s with { Forward = false, Move = false, Crm = false };
+        }
         var open = new Item(s.Draft && !several ? ItemId.EditDraft : ItemId.OpenMessage, !several || s.Open);
         var answer = new List<Item>();
         if (s.OfferReply && !several)

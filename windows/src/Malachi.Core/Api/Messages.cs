@@ -435,6 +435,15 @@ public sealed record MessageListParams
     [JsonPropertyName("folderId")]
     public required FolderId FolderId { get; init; }
 
+    /// <summary>
+    /// Instead of <see cref="AccountId"/> and <see cref="FolderId"/> (both
+    /// empty), the role whose folders of every enabled mail account are
+    /// listed in one page: the unified listing (docs/api.md §4.3 and §4.4;
+    /// the All Inboxes item). Only <c>inbox</c> is accepted.
+    /// </summary>
+    [JsonPropertyName("unified")]
+    public FolderRole? Unified { get; init; }
+
     /// <summary>Which page.</summary>
     [JsonPropertyName("page")]
     [JsonRequired]

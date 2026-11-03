@@ -471,8 +471,9 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         h.mailbox.toggleFavourite(in2)
         #expect(h.scratch.settings.favouriteFolders == ["acc2/in2"])
         let entries = h.mailbox.model.entries
-        #expect(entries[0].header && entries[0].favourite)
-        #expect(entries[1].favourite && entries[1].key == in2)
+        #expect(entries[0].unified, "two accounts: All Inboxes stays the first row")
+        #expect(entries[1].header && entries[1].favourite)
+        #expect(entries[2].favourite && entries[2].key == in2)
         #expect(entries.last?.starred == true, "the tree row is starred too")
         #expect(h.log.rebuilds == 2)
 
@@ -491,7 +492,7 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         h.scratch.settings.favouriteFolders = ["acc1/inbox", "garbage"]
         #expect(h.mailbox.model.favourites.has(inbox1))
         #expect(!h.mailbox.model.favourites.has(in2))
-        #expect(h.mailbox.model.entries[1].key == inbox1)
+        #expect(h.mailbox.model.entries[2].key == inbox1)
         #expect(h.mailbox.model.selected == in2, "unpinning is not navigating")
         #expect(h.log.rebuilds == 3)
     }

@@ -67,6 +67,12 @@ public sealed partial class FolderRowView : UserControl
     /// <summary>A folder's indent; a heading 3 lower (folderHeadingGap).</summary>
     public static Thickness RowMargin(double indent, bool heading) => new(indent, heading ? SidebarRow.HeadingGap : 0, 0, 0);
 
+    /// <summary>
+    /// The All Inboxes row keeps the star's column (unified.go starSlot),
+    /// so its badge lines up with the folders' badges; it cannot be pinned.
+    /// </summary>
+    public static Visibility StarSlot(SidebarRowKind kind) => kind == SidebarRowKind.Unified ? Visibility.Visible : Visibility.Collapsed;
+
     /// <summary>dim-label on a container that cannot be opened.</summary>
     public static double DimOpacity(bool dimmed) => dimmed ? 0.55 : 1;
 

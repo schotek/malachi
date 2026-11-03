@@ -3069,3 +3069,43 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   also stops announcing mail read on another device before it was
   downloaded. Regex conditions and server-side rules are not in this
   version.
+- Unified inbox (2026-11-02): **decided** with the owner (U1–U4,
+  [plans/unified-inbox.md](plans/unified-inbox.md)). An "All Inboxes" item
+  at the top of the sidebar, above the favourites, lists the inboxes of
+  every enabled mail account (`imap`, `graph`; never `jira`, `caldav`,
+  `eway`) in one list, flat or grouped by conversation as
+  `group-by-conversation` says (U1). It is shown only with two or more
+  such accounts, and the preference `unified-inbox` (default on) hides it
+  (U3). The daemon lists it: `message.list` and `thread.list` take
+  `unified: <role>` instead of `accountId` and `folderId`, so a page is
+  merged by date across accounts with one keyset cursor of its own (a
+  client merging several folders' pages would need a cursor per folder
+  and could not count). The parameter is a folder role, not a flag, so
+  Sent or Drafts can join later without a change of the contract; today
+  only `inbox` is accepted (`api.UnifiedRoles`, U4). No new notification,
+  error code or migration: the rows are the same summaries with
+  `accountId` and `folderId`, a client recognises its notifications by
+  the folders in scope and adds the badge from `folder.list`. A
+  conversation row is one thread in one folder (thread ids are unique
+  only within an account), aggregated exactly as that folder's listing.
+  Selection crosses accounts (U2): actions are split into one call per
+  account; Move To (the folder picker) and forwarding several messages
+  need a single account and are disabled for a mixed selection. The
+  rules, texts and the sentinel sidebar key are the Go reference
+  `ui/internal/unified` (with `selection` and `contextmenu`); the item is
+  never a favourite and cannot be pinned.
+- The user's replies in a folder's search (2026-11-02): **decided**, a
+  search in one folder (`search.query` with `folderId` and `withSent`, the
+  clients' default Folder scope) also finds the user's replies to the
+  folder's conversations, by the rule of `thread.get` `withSent`: matching
+  visible rows of the account's sent folders whose thread has a visible
+  member in the folder, without the copies the folder already has and each
+  `Message-ID` once. Searching Inbox otherwise never showed what one wrote
+  back. A sent folder, the outbox, the views of a `jira` account and a
+  query with `in:` add nothing; the Account and All Accounts scopes are
+  unchanged (they search the sent folders anyway). Results are told apart
+  only by the folder name the clients already show for a row of another
+  folder; ordering, paging and `total` are those of the search. The store
+  shares one predicate (`sentMember`) between `thread.list`, `thread.get`
+  and the search, so the three cannot disagree; no migration, the indexes
+  of 0011 serve. The MCP bridge does not ask for it.

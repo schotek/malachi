@@ -61,12 +61,13 @@ func searchReady(text string) bool {
 func (m *mailModel) searchRequest(text string, scope settings.SearchScope) (api.SearchQueryParams, settings.SearchScope) {
 	p := api.SearchQueryParams{Query: strings.TrimSpace(text), Page: api.Page{Limit: api.DefaultPageLimit}}
 	k := m.selected
-	if k == (folderKey{}) {
+	// The All Inboxes item is no folder to narrow to either: every account.
+	if k == (folderKey{}) || isUnifiedKey(k) {
 		scope = settings.SearchAll
 	}
 	switch scope {
 	case settings.SearchFolder:
-		p.AccountID, p.FolderID = k.Account, k.Folder
+		p.AccountID, p.FolderID, p.WithSent = k.Account, k.Folder, true // with the user's replies in Sent
 	case settings.SearchAccount:
 		p.AccountID = k.Account
 	default:
@@ -117,6 +118,7 @@ func (m *mailModel) clearSearchResults() {
 func (m *mailModel) rowMessage(s api.MessageSummary) widget.Message {
 	msg := summaryMessage(s)
 	if !m.search.active {
+		msg.Origin, msg.OriginTooltip = m.unifiedOrigin(s)
 		return msg
 	}
 	if h, ok := m.search.hits[s.ID]; ok {
@@ -126,12 +128,12 @@ func (m *mailModel) rowMessage(s api.MessageSummary) widget.Message {
 	return msg
 }
 
-// searchOrigin names where a result lies when the search spans more than
-// one folder: the folder, and its account as well when every account is
-// searched and there is more than one. The tooltip has the folder's path
-// and the account.
+// searchOrigin names where a result lies when it may be outside the folder
+// (searchOutside): the folder, and its account as well when every account
+// is searched and there is more than one. The tooltip has the folder's
+// path and the account.
 func (m *mailModel) searchOrigin(s api.MessageSummary) (label, tooltip string) {
-	if m.search.effective == settings.SearchFolder {
+	if !m.searchOutside(s) {
 		return "", ""
 	}
 	f, ok := m.folder(folderKey{Account: s.AccountID, Folder: s.FolderID})
@@ -190,4 +192,16 @@ func searchEmptyText(scope settings.SearchScope) string {
 		return i18n.T("Nothing in this account matches. Trash and Junk are searched only when chosen as the folder.")
 	}
 	return i18n.T("Nothing in any account matches. Trash and Junk are searched only when chosen as the folder.")
+}
+
+// searchOutside reports whether a result may lie outside the searched
+// folder, so its row names where it lies: always in the Account and All
+// scopes, and in the Folder scope only for a row of another folder (the
+// user's reply in Sent that withSent adds).
+func (m *mailModel) searchOutside(s api.MessageSummary) bool {
+	if m.search.effective != settings.SearchFolder {
+		return true
+	}
+	p := m.search.params
+	return s.AccountID != p.AccountID || s.FolderID != p.FolderID
 }

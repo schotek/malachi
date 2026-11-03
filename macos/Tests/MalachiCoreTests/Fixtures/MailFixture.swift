@@ -405,7 +405,25 @@ actor MailFixture {
         return (slice, PageInfo(nextCursor: next, total: list.count))
     }
 
+    /// The inboxes of the unified listing (`unified`): the daemon's scope,
+    /// which `Unified.inboxes` mirrors.
+    private func unifiedKeys(_ role: FolderRole?, _ account: AccountID, _ folder: FolderID) throws -> [FolderKey] {
+        guard role == Unified.role, account.rawValue.isEmpty, folder.rawValue.isEmpty else {
+            throw RPCError(code: .invalidArgument, message: "bad unified listing")
+        }
+        return Unified.accounts(accounts).flatMap { a in
+            (folders[a] ?? []).filter(Unified.isInbox).map { FolderKey(account: a, folder: $0.id) }
+        }
+    }
+
     private func listMessages(_ p: MessageListParams) throws -> MessageListResult {
+        if p.unified != nil {
+            let keys = try unifiedKeys(p.unified, p.accountId, p.folderId)
+            let filter = p.filter ?? .all
+            let pool = keys.flatMap { messages[$0] ?? [] }
+            let (slice, info) = try page(sorted(pool.filter { matchesFilter($0, filter) }, p.sort), p.page)
+            return MessageListResult(messages: slice, page: info)
+        }
         try requireAccount(p.accountId)
         let key = FolderKey(account: p.accountId, folder: p.folderId)
         _ = try requireFolder(key)
@@ -591,11 +609,17 @@ actor MailFixture {
     }
 
     private func listThreads(_ p: ThreadListParams) throws -> ThreadListResult {
-        try requireAccount(p.accountId)
-        let key = FolderKey(account: p.accountId, folder: p.folderId)
-        _ = try requireFolder(key)
+        var pool: [(summary: ThreadSummary, members: [MessageSummary])]
+        if p.unified != nil {
+            pool = try unifiedKeys(p.unified, p.accountId, p.folderId).flatMap { threads(in: $0) }
+        } else {
+            try requireAccount(p.accountId)
+            let key = FolderKey(account: p.accountId, folder: p.folderId)
+            _ = try requireFolder(key)
+            pool = threads(in: key)
+        }
         let filter = p.filter ?? .all
-        var list = threads(in: key).map(\.summary).filter { t in
+        var list = pool.map(\.summary).filter { t in
             switch filter {
             case .unread: return t.unreadCount > 0
             case .flagged: return hasFlag(t.flags, .flagged)

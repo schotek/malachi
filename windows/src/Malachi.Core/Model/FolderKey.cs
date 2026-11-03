@@ -24,6 +24,13 @@ public readonly record struct FolderKey(AccountId Account, FolderId Folder)
     /// <summary>The separator of the stored form (collapse.go <c>collapseSep</c>).</summary>
     public const string Separator = "/";
 
+    /// <summary>
+    /// Whether this is the All Inboxes item's key (<see cref="Unified.Key"/>,
+    /// go <c>FolderKey.IsUnified</c>): a sentinel that names no real folder,
+    /// never stored in the favourite or collapsed lists.
+    /// </summary>
+    public bool IsUnified => Unified.IsKey(Account, Folder);
+
     /// <summary>The key as one stored entry (collapse.go <c>encodeFolderKey</c>).</summary>
     public string Encoded => Account.ToString() + Separator + Folder.ToString();
 

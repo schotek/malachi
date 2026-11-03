@@ -295,6 +295,7 @@ type Window struct {
 	// undoToast the toast of the newest, undoReselect what the next list
 	// of the folder on display selects after an Undo.
 	undo         undo.Stack
+	undoGroup    int // last group id of an action across accounts (nextUndoGroup)
 	undoToast    *adw.Toast
 	undoReselect []undo.Moved
 
@@ -519,6 +520,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}
 	w.model.favourites = loadFavourites(s)
 	s.OnChanged(settings.KeyFavouriteFolders, w.onFavouritesChanged)
+	// The All Inboxes item follows its preference (unified.go).
+	w.model.unifiedOn = s.UnifiedInbox()
+	s.OnChanged(settings.KeyUnifiedInbox, w.unifiedSettingChanged)
 	// The filter is deliberately not persisted: a window that came back
 	// still hiding most of the mailbox would be read as lost mail.
 	w.model.listFilter = api.FilterAll

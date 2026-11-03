@@ -188,6 +188,9 @@ func (w *Window) handleMessagesChanged(n api.MessagesChangedNotification) {
 	}
 	w.loadFolders(n.AccountID, w.model.foldersGen)
 	evictAccount(w.loaded, n.AccountID)
+	if w.unifiedMessagesChanged(n) {
+		return
+	}
 	sel := w.model.selected
 	if sel.Account != n.AccountID {
 		return
@@ -263,6 +266,10 @@ func (w *Window) withdraw(ids []api.MessageID) {
 // read, moved or deleted.
 func (w *Window) withdrawViewedNotifications() {
 	if !board.ViewsMail(w.mode, w.IsActive()) || w.model.selected.Folder == "" {
+		return
+	}
+	if w.model.selectedUnified() {
+		w.withdrawUnifiedNotifications()
 		return
 	}
 	w.withdraw(w.notified.removeFolder(w.model.selected))

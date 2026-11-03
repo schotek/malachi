@@ -62,7 +62,7 @@ public sealed class MessageActionRouter
     /// <summary>
     /// What the main window's per-message commands allow now (actions.go
     /// <c>setMessageActionsSensitive</c>); several rows combine their flags
-    /// (<see cref="Selection.Combine"/>).
+    /// (<see cref="Selection.CombineAccounts"/>).
     /// </summary>
     public ActionFlags Flags
     {
@@ -70,7 +70,7 @@ public sealed class MessageActionRouter
         {
             var rows = list.SelectedRows;
             return rows.Count > 1
-                ? Selection.Combine([.. rows.Select(actions.ActionFlagsFor)])
+                ? Selection.CombineAccounts([.. rows.Select(actions.ActionFlagsFor)], [.. rows.Select(r => r.Message.AccountId)])
                 : actions.ActionFlagsFor(rows.Count == 1 ? rows[0] : null);
         }
     }
