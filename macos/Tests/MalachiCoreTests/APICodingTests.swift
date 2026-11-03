@@ -1445,6 +1445,9 @@ import Testing
         // A contact is written to the server first (contactsctl WriteTimeout).
         #expect(API.ContactCreate.timeout == .seconds(60) && API.ContactUpdate.timeout == .seconds(60))
         #expect(API.ContactDelete.timeout == .seconds(60))
+        // The daemon's revocation check is allowed 15 s; a key import may fetch it (remote).
+        #expect(API.MessageSignatureRevocation.timeout == .seconds(20) && RPCTimeouts.revocation == .seconds(20))
+        #expect(API.PGPKeyImport.timeout == RPCTimeouts.remote)
         let special: Set<String> = ["system.info", "system.hello", "system.authenticate", "message.body",
                                     "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
@@ -1456,7 +1459,7 @@ import Testing
                                     "event.respond", "invitation.respond",
                                     "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
                                     "contact.create", "contact.update", "contact.delete", "contact.photo",
-                                    "update.check"]
+                                    "update.check", "message.signatureRevocation", "pgp.keyImport"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

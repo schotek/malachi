@@ -44,7 +44,7 @@ private let smimeJSON = #"""
  "messageId":"m_1","arrivedAt":"2026-11-02T08:00:00Z","algorithm":"RSA 2048 / SHA-256",
  "smime":{"chain":[{"sha256":"\#(sha)","subject":"CN=Jan","notBefore":"2026-01-01T00:00:00Z","notAfter":"2027-01-01T00:00:00Z"}],
           "revocation":{"state":"unchecked","checkable":true}}}}
-"""#
+"""#.replacingOccurrences(of: "\n", with: "") // one line: the fake daemon frames by newline
 
 private let checkedJSON = smimeJSON.replacingOccurrences(
     of: #""revocation":{"state":"unchecked","checkable":true}"#,
@@ -54,7 +54,7 @@ private let pgpJSON = #"""
 {"signature":{"kind":"pgp","status":"validSeen","signer":{"name":"Jan","email":"jan@example.org","fingerprint":"\#(fp)"},
  "messageId":"m_1","arrivedAt":"2026-11-02T08:00:00Z",
  "pgp":{"keyTrust":"seen","primaryFingerprint":"\#(fp)","importable":{"fingerprint":"\#(fp)","partId":"3"}}}}
-"""#
+"""#.replacingOccurrences(of: "\n", with: "")
 
 private let keyJSON = #"{"fingerprint":"\#(fp)","userIds":["Jan <jan@example.org>"],"emails":["jan@example.org"],"trust":"seen","source":"autocrypt","firstSeen":"2026-11-01T00:00:00Z","createdAt":"2025-01-01T00:00:00Z"}"#
 
