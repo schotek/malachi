@@ -491,3 +491,337 @@ saving, display mode). Findings, fixed:
   switch on the Board's Columns and Today stands ahead of the title as in
   the real toolbar (`ModeSwitch.paletteItem(navigational:)`); the owner
   saw the default sets right.
+
+## 15. W (návrh, Windows agent, 2026-11-04)
+
+Návrh portu pro Windows podle §5, napsaný nad dnešním `windows/`. UI se
+podle něj zatím nepíše. Otázky v W.12 rozhoduje vlastník.
+
+### W.0 Ověření větve na Windows
+
+Ověřeno 2026-11-04 na Windows 11 Pro x64 nad `b55f6e47`. Změny klíčů
+z M1 (pět klíčů v `SettingsKey`/`SettingsStore`, `SettingsTests` 54, sedm
+msgid gschema v exclusions) prošly bez úprav:
+
+- `build.ps1 app` prošel (Release x64, NativeAOT helper). Jediné varování,
+  NU1903 u `Microsoft.DotNet.ILCompiler`, je i na `main`.
+- `build.ps1 lint` prošel: `dotnet format` čistý, konvenční testy 28/28,
+  mezi nimi `GschemaCoverageTests` a `StringsCheckTests`.
+- `build.ps1 test`: 9 353 testů, 9 314 prošlo, 36 přeskočeno, 3 selhaly.
+  `SettingsTests` prošly. Žádné selhání s větví nesouvisí:
+  - `NetworkCanaryTests.NoWindowOpened`
+    a `NetworkCanaryTests.ActivatedLinksReachTheReaderAndNothingElse`
+    jsou známý kanárek WebView2 z `main`;
+  - `Model.UnifiedTests.TheModelListCoversItsInboxes` (čeká odznak 5,
+    dostane 0) selhává stejně i na čistém `main` (`01c00704`). Nejspíš je
+    to přesun Všech doručených do Oblíbených (U3), na Windows napsaný bez
+    sestavení. To patří jinam než do této větve.
+
+### W.1 Dnešní stav (Windows)
+
+Windows nemá jednu lištu okna. Má titulkovou lištu a pod ní pruhy
+jednotlivých panelů a WinUI pruh nemá vlastní přetok:
+
+- **Titulková lišta** (`MainWindow.xaml` `AppTitleBar`, ve všech režimech):
+  přepínač režimu `ModeSwitch`, pole `SearchBox` s `OwnWordsButton`
+  a v úzkém rozložení tlačítka panelu a Zpět.
+- **Pošta**:
+  - řádek postranního panelu (`SidebarPane`: zvýrazněné Nová zpráva
+    a „…“ hlavní nabídky);
+  - hlavička seznamu (`MessageListPane.HeaderRow`: Zkontrolovat poštu,
+    název složky s počty) a pod ní řádek filtru `FilterBar`
+    (`SelectorBar` Vše / Nepřečtené / Označené);
+  - pruh zprávy (`MessageCommandBar`): Odpovědět, Všem, Přeposlat |
+    Archivovat, Koš, eWay-CRM, Hvězdička, přepínač panelu asistenta, ✦,
+    Další akce (Nevyžádaná, Nepřečtené, Přečtené, Načíst obrázky,
+    Důvěřovat odesílateli, Změnit stav).
+- **Nástěnka**:
+  - lišta stránky (`BoardPage.Bar`: styl, nadpis, filtr účtu, Triage,
+    „…“), společná pro všechny styly;
+  - řádek akcí detailu (`BoardDetailView`): Zavřít, Hotovo, Připomenout…,
+    Archivovat, Smazat, „…“, Odpovědět. Detail je vedle Seznamu nebo ve
+    vysouvacím panelu.
+- **Kalendář**: `CalendarBar` (postranní panel, Dnes, ‹ ›, pohledy, nadpis,
+  Nová událost, ✦) a „…“ stránky. Pod `CalendarMetrics.BarCompactWidth`
+  se pohledy mění v `ComboBox`, protože pruh přetok nemá.
+- **Kontakty** jsou dnes jen v „…“ (tlačítko v liště má jen macOS).
+  Přepínač postranního panelu Pošty existuje jen jako tlačítko titulkové
+  lišty v úzkém rozložení.
+
+### W.2 Kam patří sekce modelu
+
+| lišta / sekce | pruh na Windows |
+|---|---|
+| `mail` sidebar | řádek `SidebarPane` (před stálým „…“ hlavní nabídky) |
+| `mail` list | `MessageListPane.HeaderRow` (před názvem složky) |
+| `mail` message | `MessageCommandBar` |
+| `board-list` sidebar + list | `BoardPage.Bar` (nejdřív položky sidebaru, oddělovač se nekreslí, protože pruh není zarovnaný se sloupci) |
+| `board-list` detail | řádek akcí `BoardDetailView`, dokud styl Seznam ukazuje detail (vedle seznamu i v panelu, je to týž pohled) |
+| `board-flow` main | `BoardPage.Bar` ve stylech Sloupce a Dnes |
+| `calendar` sidebar + main | `CalendarBar` |
+
+Položky, které Windows kreslí jinde, jsou odchylky do tabulky
+`windows/README.md`:
+
+- **`mode`** (pevný) je vždy přepínač titulkové lišty a v žádném pruhu se
+  nekreslí.
+- **`search` a `calendarSearch`** jsou pole titulkové lišty. Počítá se jen
+  to, zda jsou v rozvržení, na jejich pozici nezáleží.
+- **`filter`** je řádek `FilterBar` pod hlavičkou seznamu, také jen podle
+  přítomnosti (W.12 Q-W7).
+
+Strukturální položky jen pro Windows nejsou v katalogu, jsou pevné
+a v editoru se neukazují:
+
+- „…“ hlavní nabídky na konci řádku `SidebarPane`, `BoardPage.Bar`
+  a `CalendarBar`;
+- přepínač panelu asistenta v `MessageCommandBar` (= macOS
+  `toggleInspector`);
+- název složky s počty (= titulek okna macOS) a nadpis Nástěnky
+  a Kalendáře;
+- Zavřít a „…“ detailu Nástěnky.
+
+### W.3 Core (`Malachi.Core/Toolbars`)
+
+- **`Toolbar.cs`**: `public static partial class Toolbar` ve jmenném
+  prostoru `Malachi.Core.Toolbars` (podle vzoru `Boards`/`Board`). Je to
+  port Go 1:1: `Bar`, `DisplayMode`, id položek (konstanty se stejnými
+  řetězci), `Section`, `Feature`, `Item`, `Catalog`, `Default`, `Normalize`
+  (`MaxTokens` 128), `Stored`, `SectionAt`, `CanInsert`, `Immovable`,
+  `Allowed`, `Features`, `Present`, `MissingActions`, `SearchItem`,
+  `SearchIndex`.
+- **`ToolbarTests.cs`** v `Malachi.Core.Tests/Toolbars` jako 1:1 port
+  `toolbar_test.go`, případy navíc ze Swift `ToolbarTests`.
+- **`SettingsStore`**: `ToolbarLayout(bar)` (čte normalizovaně),
+  `SetToolbarLayout(bar, layout)` (zapisuje `Stored`, výchozí jako `[]`)
+  a `ToolbarDisplayMode`. Změny se hlásí stávající událostí klíče. Testy
+  jsou v `SettingsTests` (round-trip, výchozí ukládá prázdný seznam,
+  neznámý nick dá `icon`).
+- **`ToolbarFit`** (jen Windows, čistá funkce): ze šířek, priorit
+  a dostupné šířky určí, co se nevejde. Ustupuje nejnižší priorita, při
+  stejné prioritě položka dál vpravo (jako přetok AppKitu). Pevné
+  a strukturální položky neustupují nikdy. Má vlastní testy.
+- **`ToolbarEditorController`** popisuje W.6.
+- **`Features`** okna skládá kontroler nad stávajícím stavem:
+  - `crm`: existuje účet eWay-CRM;
+  - `assistant`: `Assistant.Shown`;
+  - `triage`: podmínky tlačítka Triage
+    (`BoardTriageController.TriageNeedsInAppTarget`);
+  - `print`: vždy vypnuto, dokud tisk na Windows neexistuje;
+  - `HiddenSections` = detail Nástěnky bez ukázaného případu;
+  - `HiddenSeparators` Windows nepotřebuje, oddělovače nekreslí.
+
+### W.4 Pruhy podle `Toolbar.Present`
+
+- **`Malachi.App/Toolbars/ToolbarStrip`** je `Panel`, který řadí potomky
+  v pořadí `Present`:
+  - `space` je 12 DIP a `flexibleSpace` si dělí zbytek;
+  - schovaná položka (T7) je `Collapsed` a drží své místo v pořadí;
+  - když se pruh nevejde, `ToolbarFit` určí, co ustoupí;
+  - pořadí potomků je i pořadí tabulátoru.
+- **Ovládací prvky se vyrábějí jen jednou.** Pro každou lištu jedna
+  továrna (`MailToolbarItems`, `BoardToolbarItems`,
+  `CalendarToolbarItems`) vrací podle id ovládací prvek, glyf
+  (`Icons.Glyph`), popisek a tooltip. Dnešní tlačítka (`ReplyButton`,
+  `ArchiveButton`, `StyleSwitch`…) se do ní přesunou a zůstanou cachovaná.
+  `CommandBinding`, `ActionPresentation` (skrytí akcí, které účet nemá)
+  i automatizační id proto zůstávají. Položka je skrytá, když ji skryje
+  `Present` nebo `ActionPresentation`.
+- **Přestavba**: změna klíče lišty v `SettingsStore` (z editoru nebo
+  z jiného procesu) jen znovu použije `Present`, nic se nevyrábí znovu.
+  Změna funkcí (účet eWay, registrace v Claude, cíl asistenta, ukázaný
+  případ) jen přepočítá `Features`.
+- **Režim zobrazení** (`toolbar-display-mode`, jeden pro všechny lišty,
+  O4) je společný styl obsahu tlačítek:
+  - Jen ikony = dnešní `FontIcon`;
+  - Ikony a text = `FontIcon` a pod ním popisek (jako `AppBarButton`),
+    řádek pruhu je pak vyšší;
+  - Jen text = popisek bez glyfu.
+
+  Přepínač režimu titulkové lišty, pole hledání a výběr pohledu Kalendáře
+  zůstávají v každém režimu stejné.
+- **Kotvení**: dnešní pevné `Grid`y pruhů (`StartGroup`/`EndGroup`
+  `MessageCommandBar`, sloupce `BoardPage.Bar` a `CalendarBar`) nahradí
+  `ToolbarStrip`. Výchozí rozvržení pak musí vypadat jako dnes (W.12
+  Q-W5) a ověří se snímky UI smoke testů před změnou a po ní.
+
+### W.5 Položky katalogu na Windows
+
+| id | dnes na Windows | v portu |
+|---|---|---|
+| `mode` | přepínač v titulkové liště | beze změny (pevný) |
+| `toggleSidebar` | jen tlačítko titulkové lišty v úzkém rozložení; Kalendář `SidebarButton` | nové tlačítko v Poště a na Nástěnce Seznam; v Kalendáři existující |
+| `newMessage` | zvýrazněné tlačítko `SidebarPane` | existuje, kde stojí podle výchozího rozvržení viz Q-W5 |
+| `contacts` | jen „…“ | nové tlačítko (Pošta, Nástěnka, Kalendář) |
+| `filter` | řádek `FilterBar` | jen přítomnost, Q-W7 |
+| `refresh` | `MessageListPane` | existuje |
+| `reply`, `replyAll`, `forward`, `archive`, `trash`, `crm`, `star`, `moreActions` | `MessageCommandBar` | existují |
+| `assistant` | ✦ v `MessageCommandBar` | existuje (podmíněná) |
+| `search` | pole titulkové lišty | jen přítomnost |
+| `markRead` | Další akce | nové přepínací tlačítko (O3, popisek a glyf z `ActionFlags`) |
+| `junk`, `loadPictures` | Další akce | nová tlačítka nad stávajícími příkazy |
+| `moveTo` | kontextové menu | nové `DropDownButton` s `ContextMenu.MoveTargets` |
+| `undo` | Ctrl+Z (`ShortcutCommand.Undo`) | nové tlačítko, zašedlé bez přesunu v zásobníku |
+| `print` | chybí | `Feature.Print` vypnutý, v editoru ani v liště není |
+| `boardStyle`, `boardAccount`, `boardTriage` | `BoardPage.Bar` | existují (Triage podmíněná) |
+| `boardDone`, `boardRemind`, `boardArchive`, `boardTrash`, `boardReply` | řádek akcí `BoardDetailView` | existují, viz Q-W6 |
+| `calendarToday`, `calendarStep`, `calendarView`, `calendarNewEvent`, `calendarAssistant` | `CalendarBar` | existují; `calendarView` dál sám přechází na `ComboBox` |
+| `calendarSearch` | pole titulkové lišty | jen přítomnost |
+
+### W.6 Editor v Předvolbách
+
+- **Místo**: navrhuji vlastní stránku navigace Předvoleb „Lišta“ hned
+  za Obecné (tag `toolbar`). Editor je seznam s asi 25 řádky a Obecné
+  už má deset skupin. Plán §5 počítá se skupinou v Obecné, proto Q-W1.
+- **Nahoře**: výběr lišty (`ComboBox`: Pošta, Nástěnka – Seznam, Nástěnka
+  – Sloupce a Dnes, Kalendář). Otevře se na liště režimu, ze kterého
+  uživatel přišel. Vedle je výběr Zobrazit (Jen ikony, Ikony a text,
+  Jen text), jeden pro všechny lišty.
+- **Seznam** je `ListView` se záhlavím sekce (název sekce; záhlaví se
+  nedá přetáhnout ani vybrat). Řádek má úchyt, glyf, popisek a zaškrtávátko
+  „na liště“. Mezera a pružná mezera mají místo zaškrtávátka ✕.
+  - Pevná položka (`mode`) je zaškrtnutá, zašedlá a bez úchytu.
+  - Podmíněná položka bez funkce se v editoru neukazuje (T7: jen
+    s funkcí), v rozvržení ale zůstává.
+  - Odškrtnutá položka zůstane v editoru na konci své domovské sekce
+    (neukládá se). Po zaškrtnutí jde do lišty tam, kde v editoru stojí.
+- **Řazení** jako na stránce Účty (`AccountListSection`):
+  - přetažení za úchyt s mezerou `ListView` pro vložení;
+  - Ctrl+↑ a Ctrl+↓ posunou vybraný řádek, a to i přes záhlaví sekce,
+    jen když to dovolí `CanInsert`;
+  - mezerník přepne zaškrtávátko;
+  - upuštění do sekce, kam položka nesmí, se vrátí na původní místo.
+- **Tlačítka**:
+  - Přidat mezeru a Přidat pružnou mezeru vloží řádek za vybraný, v jeho
+    sekci;
+  - Obnovit výchozí zapíše `[]` jen pro vybranou lištu (otázka Q-W10).
+- **Zápis** je okamžitý jako u ostatních předvoleb (`SetToolbarLayout`)
+  a hlavní okno ho sleduje živě. Náhled v Předvolbách není.
+- **`ToolbarEditorController`** (Core, testovaný) drží řádky, `SelectBar`,
+  `Toggle`, `Move(from, to)` / `MoveUp` / `MoveDown` s `CanInsert`,
+  `AddSpace`, `RemoveSpace`, `Reset`, `SetDisplayMode` a při změně klíče
+  odjinud načte lištu znovu. Stránka je jen jeho pohled.
+- **Vstup**: Předvolby → Lišta. Volitelně pravý klik na pruh s položkou
+  „Přizpůsobit lištu…“, která otevře stránku na té liště (Q-W2).
+
+### W.7 ✦, Triage a podmíněné položky (T7)
+
+Schované zůstávají na svém místě (`Collapsed` v pořadí `ToolbarStrip`).
+
+- Dnešní ruční přepínání viditelnosti ✦ v `MessageCommandBar`
+  a `CalendarBar`, Triage v `BoardPage` a eWay-CRM `CrmCommand` řídí
+  `Features` a `Present`.
+- Výměna ✦ tlačítko ↔ nabídka (`Assistant.ButtonOpensPanel`) se odehrává
+  uvnitř prvku položky a pozici nemění.
+- Když uživatel položku z rozvržení odebral, aplikace ji nevkládá.
+
+### W.8 Dočasné hledání (O5)
+
+- Bez `search` (Pošta) nebo `calendarSearch` (Kalendář) v rozvržení je
+  pole titulkové lišty v tom režimu `Collapsed`.
+- Ctrl+F nebo Ctrl+E (`ShortcutCommand` hledání) ho ukáže na obvyklém
+  místě a dá mu klávesnici. Hledání vlastními slovy (✦ vedle pole) se
+  ukazuje s ním.
+- Když je pole prázdné a ztratí klávesnici, zase zmizí. Uložené rozvržení
+  se nemění.
+- `SearchIndex` Windows nepotřebuje, protože pole má pevné místo
+  v titulkové liště.
+
+### W.9 Další akce (M6) a „…“
+
+- **Další akce**: `MessageCommandBar.MoreButton` při otevření
+  (`Opening`) vloží na začátek `Toolbar.MissingActions(mail, …)` (Odpovědět,
+  Všem, Přeposlat, Archivovat, Koš, Hvězdička, eWay-CRM, když by se jeho
+  tlačítko ukázalo). Za ně přijde, co `ToolbarStrip` pruhu zprávy schoval
+  pro nedostatek místa, a oddělovač. Položky mají tytéž příkazy
+  (`CommandBinding`), takže je i stejně validuje.
+- **Ostatní pruhy** nemají Další akce. Co se nevejde do `BoardPage.Bar`,
+  `CalendarBar`, hlavičky seznamu nebo řádku `SidebarPane`, navrhuji
+  ukázat tlačítkem » na konci pruhu, které je jen tehdy, když něco
+  ustoupilo (Q-W3). Hlavní nabídku „…“ se tím neplní, její obsah vlastník
+  ustálil 2026-11-04 (PR #20).
+- **Hlavní nabídka „…“** zůstává beze změny a v katalogu není.
+
+### W.10 Řetězce
+
+- **Popisky položek** jsou existující msgid: `Reply`, `Reply All`,
+  `Forward`, `Archive`, Koš podle `trashTooltip`, `Save to eWay-CRM…`,
+  `Undo`, `Move To`, `Mark as Junk`, `Mark as _Read` / `Mark as _Unread`,
+  `Load _Images`, `_Contacts`, `Check for New Mail`, `New Message`,
+  `Today`, `New Event`, `More Actions`, `Done`, `Remind…` a texty Nástěnky
+  a Kalendáře.
+- **Chybí** popisek přepínače postranního panelu (`Hide Sidebar` je na
+  macOS jen anglicky) a Triage pro editor.
+- **Editor potřebuje nové msgid**: název stránky nebo skupiny, názvy lišt
+  a sekcí, režimy zobrazení, Mezera, Pružná mezera, Přidat mezeru, Přidat
+  pružnou mezeru, Obnovit výchozí, volitelně Přizpůsobit lištu…
+  - Podle pravidla 6 vzniknou jako Go reference (`ui/internal/toolbar/text.go`
+    s `Translator` jako `jira.Translator`, v `po/POTFILES`, `make po`,
+    česky v `cs.po`) ve fázi G spolu s editorem GTK.
+  - Windows je pak použije podle msgid, viz Q-W4.
+- **Sedm msgid popisů klíčů gschema** zůstává v
+  `windows/parity-exclusions.txt` natrvalo jako u ostatních klíčů
+  („gschema: a key's summary or description…“).
+
+### W.11 Testy a fáze
+
+- **W1 Core**:
+  - `Toolbar.cs` a `ToolbarTests` (Go 1:1);
+  - `SettingsStore` vlastnosti a testy;
+  - `ToolbarFit` a testy.
+- **W2 Pruhy podle `Present`** zatím bez nových položek. S výchozím
+  rozvržením se nic viditelně nezmění (UI smoke testy beze změny, snímky
+  před a po).
+- **W3 Nové položky**: `toggleSidebar`, `contacts`, `markRead`, `junk`,
+  `moveTo`, `undo`, `loadPictures`; nové glyfy v `IconGlyphs` (test
+  `IconGlyphsTests`).
+- **W4**: Další akce (M6), dočasné hledání (O5), přetok pruhů (»),
+  režim zobrazení.
+- **W5 Editor**: `ToolbarEditorController` a testy (přepnutí, posuny přes
+  sekce, mezery, obnovení, změna klíče odjinud), stránka Předvoleb.
+- **W6**: UI smoke `ToolbarSmokeTests` nad vzorovými daty a devmailem:
+  - odškrtnout Archivovat → v `MessageCommandBar` chybí a Další akce ho mají;
+  - Ctrl+↓ posune položku;
+  - Obnovit výchozí;
+  - Ikony a text ukáže popisky;
+  - lišty Nástěnky a Kalendáře;
+  - Ctrl+F bez hledání v rozvržení.
+
+  Dál dokumentace (`windows/README.md` odchylky W.2 a W.9,
+  `docs/windows-port.md` nová §11.x), `build.ps1 app`/`test`/`lint`
+  a brána vlastníka B-W.
+
+### W.12 Otevřené otázky pro vlastníka
+
+- **Q-W1 Kde je editor**: vlastní stránka Předvoleb „Lišta“ za Obecné
+  (návrh), nebo skupina v Obecné (plán §5)? GTK by mělo totéž.
+- **Q-W2 Pravý klik**: má pravý klik na pruh nabízet „Přizpůsobit lištu…“,
+  nebo je vstup jen v Předvolbách (T11 je pro macOS)?
+- **Q-W3 Přetok**: co se nevejde do pruhu Nástěnky, Kalendáře, hlavičky
+  seznamu nebo řádku postranního panelu, ukáže tlačítko » na konci pruhu
+  (návrh), nebo položka jen zmizí?
+- **Q-W4 Pořadí G a W**: editor GTK (fáze G) první s texty v Go referenci
+  a Windows po něm (pravidlo 6), nebo Windows dřív s dočasnými texty jen
+  anglicky (`// Windows-only string`)?
+- **Q-W5 Výchozí vzhled**: `Default(mail)` má Nová zpráva, Kontakty, Filtr
+  a přepínač postranního panelu v sekci seznamu. Windows má dnes zvýrazněné
+  Nová zpráva v řádku postranního panelu, Kontakty jen v „…“, Filtr jako
+  řádek a přepínač panelu jen v úzkém rozložení. Klíče jsou společné, takže
+  výchozí rozvržení je jedno pro všechny platformy. Možnosti:
+  - Windows kreslí `Default` doslova: Nová zpráva se přesune do hlavičky
+    seznamu a přibudou tlačítka Kontakty a postranní panel;
+  - `newMessage` dostane na Windows domov v řádku postranního panelu
+    (zvýrazněné tlačítko), což ale mění sdílený model;
+  - jiné řešení vlastníka.
+- **Q-W6 Detail Nástěnky**: sekce `|detail` platí pro řádek akcí detailu
+  ve stylu Seznam vedle seznamu i ve vysouvacím panelu (návrh). Ve stylech
+  Sloupce a Dnes je řádek panelu pevný jako na macOS. Souhlas?
+- **Q-W7 Filtr**: odškrtnutý `filter` na Windows schová řádek
+  Vše / Nepřečtené / Označené (návrh), nebo `filter` na Windows v editoru
+  není (jako „Filtr jen pro macOS“ v §6)?
+- **Q-W8 Hledání v titulkové liště**: na pozici `search` a `calendarSearch`
+  v rozvržení na Windows nezáleží, počítá se jen přítomnost. Je to
+  přijatelná odchylka?
+- **Q-W9 Ikony a text**: popisek pod ikonou (jako `AppBarButton`, vyšší
+  řádky), nebo vedle ní (užší pruhy se dřív přeplní)?
+- **Q-W10 Obnovit výchozí**: s otázkou, nebo bez?
