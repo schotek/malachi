@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+The application object and its resources: the WinUI controls' styles,
+the app's text styles (Resources/Typography.xaml), the pills of an
+issue-tracker account (Resources/Pills.xaml), the surfaces and status
+colours of elements built in code (Resources/Surfaces.xaml), the board's colours
+(Boards/BoardStyles.xaml) and the calendar's (Calendars/CalendarStyles.xaml).
+-->
+<Application
+    x:Class="Malachi.App.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <ResourceDictionary Source="ms-appx:///Resources/Typography.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/Pills.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/Surfaces.xaml" />
+                <ResourceDictionary Source="ms-appx:///Boards/BoardStyles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Calendars/CalendarStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

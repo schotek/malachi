@@ -1,0 +1,736 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/MessageView/MessageViewController.swift
+(loadView) with MessageHeaderView, AddressHeaderView, RemoteBarView and
+MessageBodyTextView; GTK: the message pane of ui/data/ui/window.blp
+(message_page), message_window.blp and embedded_window.blp, which share
+their object ids (ui/internal/window/message_view.go). One message display
+in three modes (Core's ReaderController, docs/windows-port.md §11.3), from
+the top: the command row of the pane or window (the Adw.HeaderBar: Reply,
+Reply All, Forward at the start; Archive and Trash, then Star, Assistant and
+More at the end, GTK packing [end] from the right), the outbox and draft banners
+(InfoBars), the bulk-mail strip (BulkStripView: what the message is and
+the Unsubscribe button), the remote-image bar (a bar of its own, as in GTK: two
+buttons, reachable by Tab), the pictures bar under it (pictures of the
+HTML kept on the mail server only, Download Pictures; not in an attached
+message's window, whose pictures arrive inlined), and the message stack:
+No Message Selected, No Accounts and the count of several selected rows
+(the pane only) or the message, whose
+headers stay put in a clamp of 900 (sides 24, top 12,
+docs/windows-port.md §11.3), scrolling on their own only past two thirds
+of the page, while the body below scrolls on its own in the same clamp:
+the plain text, the spinner after 400 ms, or the viewer. Under the message
+stack, in the pane only, the quick-reply bar (docs/plans/chat-view.md §12,
+S1, S6): outside every scrolled area, on the same place under the page of a
+single message and under the chat of a conversation, a line above it; a
+message window has none. The "•••" row under the body is collapsed with its
+button, so no empty band stands above the bar. Everything shown
+is server data and set as plain text (Text properties only); the viewer
+gets the sanitiser's output only.
+-->
+<UserControl
+    x:Class="Malachi.App.Reader.MessageView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:crm="using:Malachi.App.Crm"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:local="using:Malachi.App.Reader"
+    xmlns:res="using:Malachi.App.Resources"
+    xmlns:signatures="using:Malachi.App.Signatures"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <!-- The chips are built in code (MessageChips); their looks. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Reader/ChipStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <!-- The star is a flat toggle with the main window's look
+                 (MessageCommandBar.xaml, GTK's flat header button in both):
+                 the filled star in the accent colour says it is on, where
+                 WinUI's checked AppBarToggleButton is an accent block. High
+                 contrast keeps WinUI's own. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedDisabled" ResourceKey="TextFillColorDisabledBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedDisabled" ResourceKey="TextFillColorDisabledBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast" />
+            </ResourceDictionary.ThemeDictionaries>
+            <!-- The header bar's buttons: icon only, 40 px, as dense as GTK's. -->
+            <Style x:Key="CommandRowButtonStyle" TargetType="AppBarButton">
+                <Setter Property="Width" Value="40" />
+                <Setter Property="Height" Value="40" />
+                <Setter Property="LabelPosition" Value="Collapsed" />
+            </Style>
+            <Style x:Key="CommandRowToggleStyle" TargetType="AppBarToggleButton">
+                <Setter Property="Width" Value="40" />
+                <Setter Property="Height" Value="40" />
+                <Setter Property="LabelPosition" Value="Collapsed" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid x:Name="Root" Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <!-- The quick-reply bar of the pane (ConversationQuickReplyBar),
+                 added in code in ReaderMode.Pane only; collapsed or absent,
+                 the row takes no room. -->
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- window.blp message_page's Adw.HeaderBar (message_window.blp's):
+             the buttons follow the window's commands; none in an attached
+             message's window. -->
+        <Grid
+            x:Name="CommandRow"
+            Grid.Row="0"
+            MinHeight="48"
+            Padding="6,4"
+            ColumnSpacing="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="2">
+                <AppBarButton
+                    x:Name="ReplyButton"
+                    AutomationProperties.AutomationId="ReplyButton"
+                    Label="{l:T Msgid='Reply'}"
+                    Style="{StaticResource CommandRowButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='Reply'}">
+                    <AppBarButton.Icon>
+                        <!-- Reply, or Comment on an issue (ShowFlags). -->
+                        <FontIcon x:Name="ReplyGlyph" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    x:Name="ReplyAllButton"
+                    AutomationProperties.AutomationId="ReplyAllButton"
+                    Label="{l:T Msgid='Reply All'}"
+                    Style="{StaticResource CommandRowButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='Reply All'}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('mail-reply-all')}" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    x:Name="ForwardButton"
+                    AutomationProperties.AutomationId="ForwardButton"
+                    Label="{l:T Msgid='Forward'}"
+                    Style="{StaticResource CommandRowButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='Forward'}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('mail-forward')}" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+            </StackPanel>
+            <StackPanel
+                Grid.Column="1"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                Spacing="2">
+                <!-- Two groups, Archive and Trash, then Star, the Assistant
+                     and More Actions: the gap is the trash button's margin
+                     (message_window.blp trash_button margin-end). -->
+                <AppBarButton
+                    x:Name="ArchiveButton"
+                    AutomationProperties.AutomationId="ArchiveButton"
+                    Label="{l:T Msgid='Archive'}"
+                    Style="{StaticResource CommandRowButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='Archive'}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('folder-download')}" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    x:Name="TrashButton"
+                    Margin="0,0,12,0"
+                    AutomationProperties.AutomationId="TrashButton"
+                    Style="{StaticResource CommandRowButtonStyle}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('user-trash')}" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <!-- The eWay-CRM button (docs/eway.md §2.6 crm_button), a
+                     group of its own between Archive and Trash and the Star
+                     (owner, Gate B 2026-10-17): Save to eWay-CRM, Saving, or
+                     In eWay-CRM with its menu; hidden without an eWay-CRM
+                     account or for a message that cannot be saved (its
+                     window's CrmController, MessageWindow). -->
+                <crm:CrmToolbarButton
+                    x:Name="CrmCommand"
+                    Margin="0,0,12,0"
+                    VerticalAlignment="Center" />
+                <!-- GTK's star ToggleButton: its state, icon (starred or
+                     not) and label (Star, Unstar) follow the flags. The
+                     glyph is set in code only (ShowFlags): a one-time
+                     binding here would put the empty star back when the
+                     view loads, over a flagged message's. -->
+                <AppBarToggleButton
+                    x:Name="StarButton"
+                    AutomationProperties.AutomationId="StarButton"
+                    Style="{StaticResource CommandRowToggleStyle}">
+                    <AppBarToggleButton.Icon>
+                        <FontIcon x:Name="StarGlyph" />
+                    </AppBarToggleButton.Icon>
+                </AppBarToggleButton>
+                <!-- message_window.blp assistant_button: the Assistant menu of
+                     a message window, shown while the Assistant is (its
+                     flyout, label and visibility from MessageWindow). -->
+                <AppBarButton
+                    x:Name="AssistantButton"
+                    AutomationProperties.AutomationId="AssistantButton"
+                    Style="{StaticResource CommandRowButtonStyle}"
+                    Visibility="Collapsed">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('malachi-assistant')}" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    x:Name="MoreButton"
+                    AutomationProperties.AutomationId="MessageMenuButton"
+                    Click="OnMore"
+                    Label="{l:T Msgid='More Actions'}"
+                    Style="{StaticResource CommandRowButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='More Actions'}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('view-more')}" />
+                    </AppBarButton.Icon>
+                    <!-- window.blp message_menu_model (attached, so the button
+                         shows no drop-down chevron; OnMore opens it). -->
+                    <FlyoutBase.AttachedFlyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <!-- msg.junk: no header button, disabled where there is no junk folder to go to. -->
+                            <MenuFlyoutItem x:Name="JunkItem" Text="{l:T Msgid='Mark as Junk'}" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="MarkUnreadItem" l:MnemonicLabel.Text="{l:T Msgid='Mark as _Unread'}" />
+                            <MenuFlyoutItem x:Name="MarkReadItem" l:MnemonicLabel.Text="{l:T Msgid='Mark as _Read'}" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="LoadImagesItem" l:MnemonicLabel.Text="{l:T Msgid='Load _Images'}" />
+                            <MenuFlyoutItem x:Name="TrustSenderItem" l:MnemonicLabel.Text="{l:T Msgid='Always Load Images From This _Sender'}" />
+                            <!-- The status of a Jira issue (hidden-when: action-disabled). -->
+                            <MenuFlyoutSeparator x:Name="ChangeStatusSeparator" Visibility="Collapsed" />
+                            <MenuFlyoutItem x:Name="ChangeStatusItem" Text="{l:T Msgid='Change Status'}" Visibility="Collapsed" />
+                        </MenuFlyout>
+                    </FlyoutBase.AttachedFlyout>
+                </AppBarButton>
+            </StackPanel>
+        </Grid>
+
+        <!-- outbox_banner: the delivery state of a message in the outbox
+             (outbox.go), Retry for a failed one; the title may carry the
+             daemon's error, as plain text. -->
+        <InfoBar
+            x:Name="OutboxBanner"
+            Grid.Row="1"
+            AutomationProperties.AutomationId="OutboxBanner"
+            IsClosable="False"
+            IsIconVisible="True"
+            IsOpen="{x:Bind Reader.OutboxVisible, Mode=OneWay}"
+            Message="{x:Bind Reader.OutboxTitle, Mode=OneWay}"
+            Severity="{x:Bind local:ReaderBind.SeverityOf(Reader.OutboxFailed), Mode=OneWay}">
+            <InfoBar.ActionButton>
+                <Button
+                    x:Name="RetryButton"
+                    Click="OnRetry"
+                    Content="{x:Bind Reader.OutboxButton, Mode=OneWay}"
+                    Visibility="{x:Bind local:ReaderBind.VisibleIfText(Reader.OutboxButton), Mode=OneWay}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!-- draft_banner: a message of the Drafts folder; Edit opens it in
+             the compose window (drafts.go; the pane only). -->
+        <InfoBar
+            x:Name="DraftBanner"
+            Grid.Row="2"
+            AutomationProperties.AutomationId="DraftBanner"
+            IsClosable="False"
+            IsOpen="{x:Bind Reader.DraftVisible, Mode=OneWay}"
+            Message="{l:T Msgid='This message is a draft'}"
+            Severity="Informational">
+            <InfoBar.ActionButton>
+                <Button
+                    x:Name="EditDraftButton"
+                    AutomationProperties.AutomationId="EditDraftButton"
+                    Click="OnEditDraft"
+                    Content="{l:T Msgid='Edit'}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!-- bulk_bar (window/bulk.go): what kind of bulk message this is
+             (a newsletter, a mailing list, an automated message), and the
+             button that unsubscribes; the warm tint in the junk folder. Not
+             in an attached message's window (embedded_window.blp has none).
+             Drawn by the code from Reader.Bulk (OnReaderChanged), plain
+             text. -->
+        <local:BulkStripView
+            x:Name="BulkBar"
+            Grid.Row="3"
+            ActionClicked="OnBulkClick" />
+
+        <!-- remote_bar (window/remote.go): the count of the remote images
+             the sanitiser removed and the two ways of loading them; the
+             spinner in their place while they load. Adw.Banner has room for
+             one button, hence a bar of its own. -->
+        <Border
+            x:Name="RemoteBar"
+            Grid.Row="4"
+            Padding="12,6"
+            AutomationProperties.AutomationId="RemoteBar"
+            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            Visibility="{x:Bind local:ReaderBind.Visible(Reader.RemoteBarVisible), Mode=OneWay}">
+            <!-- The buttons under the sentence when the pane is too narrow
+                 for both (BarPanel). -->
+            <local:BarPanel LineSpacing="6" Spacing="12">
+                <!-- Named with the bar's sentence (Loading remote images…),
+                     as the body's spinner is named. -->
+                <ProgressRing
+                    x:Name="RemoteSpinner"
+                    Width="16"
+                    Height="16"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="RemoteSpinner"
+                    AutomationProperties.Name="{x:Bind Reader.RemoteBarText, Mode=OneWay}"
+                    IsActive="{x:Bind Reader.RemoteBarLoading, Mode=OneWay}"
+                    Visibility="{x:Bind local:ReaderBind.Visible(Reader.RemoteBarLoading), Mode=OneWay}" />
+                <TextBlock
+                    x:Name="RemoteLabel"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="RemoteLabel"
+                    Style="{StaticResource BodyLabelStyle}"
+                    Text="{x:Bind Reader.RemoteBarText, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+                <Button
+                    x:Name="RemoteLoad"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="LoadImagesButton"
+                    Click="OnLoadImages"
+                    Visibility="{x:Bind local:ReaderBind.Hidden(Reader.RemoteBarLoading), Mode=OneWay}"
+                    l:MnemonicLabel.Text="{l:T Msgid='Load _Images'}" />
+                <Button
+                    x:Name="RemoteTrust"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="TrustSenderButton"
+                    Click="OnTrustSender"
+                    ToolTipService.ToolTip="{l:T Msgid='Load remote images now and whenever this sender writes'}"
+                    Visibility="{x:Bind local:ReaderBind.TrustVisible(Reader.RemoteBarLoading, Reader.TrustVisible), Mode=OneWay}"
+                    l:MnemonicLabel.Text="{l:T Msgid='Always From This _Sender'}" />
+            </local:BarPanel>
+        </Border>
+
+        <!-- pictures_bar (window/remote.go): how many pictures the HTML
+             shows are kept on the mail server only (neverStoreAttachments),
+             and the button that has the daemon download the message, after
+             which the body is asked for again; the spinner in its place
+             meanwhile. Under remote_bar when both apply; never in an
+             attached message's window (embedded_window.blp has none). -->
+        <Border
+            x:Name="PicturesBar"
+            Grid.Row="5"
+            Padding="12,6"
+            AutomationProperties.AutomationId="PicturesBar"
+            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            Visibility="{x:Bind local:ReaderBind.Visible(Reader.PicturesBarVisible), Mode=OneWay}">
+            <local:BarPanel LineSpacing="6" Spacing="12">
+                <!-- Named with the bar's sentence (Downloading pictures…),
+                     as the remote-image bar's spinner is named. -->
+                <ProgressRing
+                    x:Name="PicturesSpinner"
+                    Width="16"
+                    Height="16"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="PicturesSpinner"
+                    AutomationProperties.Name="{x:Bind Reader.PicturesBarText, Mode=OneWay}"
+                    IsActive="{x:Bind Reader.PicturesBarLoading, Mode=OneWay}"
+                    Visibility="{x:Bind local:ReaderBind.Visible(Reader.PicturesBarLoading), Mode=OneWay}" />
+                <TextBlock
+                    x:Name="PicturesLabel"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="PicturesLabel"
+                    Style="{StaticResource BodyLabelStyle}"
+                    Text="{x:Bind Reader.PicturesBarText, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+                <Button
+                    x:Name="PicturesDownload"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="DownloadPicturesButton"
+                    Click="OnDownloadPictures"
+                    Visibility="{x:Bind local:ReaderBind.Hidden(Reader.PicturesBarLoading), Mode=OneWay}"
+                    l:MnemonicLabel.Text="{l:T Msgid='_Download Pictures'}" />
+            </local:BarPanel>
+        </Border>
+
+        <!-- message_stack. -->
+        <Grid x:Name="Pages" Grid.Row="6">
+            <!-- "empty". -->
+            <StackPanel
+                x:Name="EmptyPage"
+                MaxWidth="400"
+                Margin="36,12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="EmptyPage"
+                Spacing="12"
+                Visibility="{x:Bind local:ReaderBind.PageVisible(Reader.Page, 'Empty'), Mode=OneWay}">
+                <StackPanel.OpacityTransition>
+                    <ScalarTransition Duration="0:0:0.2" />
+                </StackPanel.OpacityTransition>
+                <FontIcon
+                    Margin="0,0,0,24"
+                    FontSize="96"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Glyph="{x:Bind res:Icons.Glyph('mail-unread')}" />
+                <TextBlock Style="{StaticResource Title1LabelStyle}" Text="{l:T Msgid='No Message Selected'}" />
+                <TextBlock
+                    Style="{StaticResource BodyLabelStyle}"
+                    Text="{l:T Msgid='Select a message to read it here.'}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- "selection" (selection.go selectionPage): several rows are
+                 selected in the list; how many (ReaderController.SelectionText). -->
+            <StackPanel
+                x:Name="SelectionPage"
+                MaxWidth="400"
+                Margin="36,12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="SelectionPage"
+                Spacing="12"
+                Visibility="{x:Bind local:ReaderBind.PageVisible(Reader.Page, 'Selection'), Mode=OneWay}">
+                <StackPanel.OpacityTransition>
+                    <ScalarTransition Duration="0:0:0.2" />
+                </StackPanel.OpacityTransition>
+                <FontIcon
+                    Margin="0,0,0,24"
+                    FontSize="96"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Glyph="{x:Bind res:Icons.Glyph('edit-select-all')}" />
+                <TextBlock
+                    Style="{StaticResource Title1LabelStyle}"
+                    Text="{x:Bind Reader.SelectionText, Mode=OneWay}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- "no-accounts": shown instead of "empty" while account.list is empty. -->
+            <StackPanel
+                x:Name="NoAccountsPage"
+                MaxWidth="400"
+                Margin="36,12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="NoAccountsPage"
+                Spacing="12"
+                Visibility="{x:Bind local:ReaderBind.PageVisible(Reader.Page, 'NoAccounts'), Mode=OneWay}">
+                <StackPanel.OpacityTransition>
+                    <ScalarTransition Duration="0:0:0.2" />
+                </StackPanel.OpacityTransition>
+                <FontIcon
+                    Margin="0,0,0,24"
+                    FontSize="96"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Glyph="{x:Bind res:Icons.Glyph('system-users')}" />
+                <TextBlock Style="{StaticResource Title1LabelStyle}" Text="{l:T Msgid='No Accounts'}" />
+                <TextBlock
+                    Style="{StaticResource BodyLabelStyle}"
+                    Text="{l:T Msgid='Add a mail account to start reading and sending mail.'}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+                <Button
+                    x:Name="AddAccountButton"
+                    Margin="0,12,0,0"
+                    Padding="24,8"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="AddAccountButton"
+                    CornerRadius="18"
+                    Style="{StaticResource AccentButtonStyle}"
+                    l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
+                <!-- An issue tracker instead (the Jira assistant): flat. -->
+                <Button
+                    x:Name="AddJiraAccountButton"
+                    Padding="24,8"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="AddJiraAccountButton"
+                    CornerRadius="18"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
+                <!-- A CalDAV calendar is an account of its own (docs/calendar.md §5.8, macOS's third button): flat. -->
+                <Button
+                    x:Name="AddCalDAVCalendarButton"
+                    Padding="24,8"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="AddCalDAVCalendarButton"
+                    Content="{l:T Msgid='Add CalDAV Calendar…'}"
+                    CornerRadius="18"
+                    Style="{StaticResource SubtleButtonStyle}" />
+                <!-- The update check's first-run note (ui/internal/updates WizardNote), a dim caption under the buttons as on macOS; set in code. -->
+                <TextBlock
+                    x:Name="UpdateNote"
+                    Margin="0,12,0,0"
+                    AutomationProperties.AutomationId="UpdateCheckNote"
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- "message": the headers stay put at the top; the body below
+                 scrolls on its own. Email is hostile input: headers that
+                 would take more than two thirds of the page (a message
+                 listing hundreds of parts, every address unfolded) scroll
+                 on their own instead of pushing the body out of reach
+                 (MessagePage.SizeChanged sets HeaderScroller.MaxHeight);
+                 GTK's box just grows. -->
+            <Grid
+                x:Name="MessagePage"
+                AutomationProperties.AutomationId="MessagePage"
+                SizeChanged="OnMessagePageSizeChanged"
+                Visibility="{x:Bind local:ReaderBind.PageVisible(Reader.Page, 'Message'), Mode=OneWay}">
+                <Grid.OpacityTransition>
+                    <ScalarTransition Duration="0:0:0.2" />
+                </Grid.OpacityTransition>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <ScrollViewer
+                    x:Name="HeaderScroller"
+                    AutomationProperties.AutomationId="MessageHeaderScroller"
+                    HorizontalScrollBarVisibility="Disabled"
+                    IsTabStop="False"
+                    VerticalScrollBarVisibility="Auto"
+                    VerticalScrollMode="Auto">
+                    <!-- A panel as wide as the pane, so the clamp below is
+                         centred in it: a scroller lays its content out from
+                         the left. -->
+                    <Grid>
+                        <!-- The Adw.Clamp of 900 (min(width, 900), the width the
+                             viewer's CSS gives an HTML body, so its text lines up). -->
+                        <StackPanel
+                            x:Name="Headers"
+                            MaxWidth="900"
+                            Padding="24,12,24,12"
+                            HorizontalAlignment="Stretch"
+                            Spacing="12">
+                            <!-- The invitation card above the header (docs/calendar.md
+                                 §5.7; macOS MessageViewController's invitation):
+                                 a message with a calendar part, not in an
+                                 attached message's window. -->
+                            <local:InvitationCardView x:Name="InvitationCard" />
+                            <!-- issue_card_slot: the issue card of a Jira message
+                                 (window/issue_card.go); hidden for mail. -->
+                            <local:IssueCardView x:Name="IssueCard" State="{x:Bind Reader.IssueCard, Mode=OneWay}" />
+                            <TextBlock
+                                x:Name="SubjectLabel"
+                                AutomationProperties.AutomationId="MessageSubject"
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource Title2LabelStyle}"
+                                Text="{x:Bind Reader.Subject, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+
+                            <!-- message_addresses: From, To, Cc; a line without
+                                 addresses is hidden (window/addresses.go). -->
+                            <Grid
+                                x:Name="AddressGrid"
+                                ColumnSpacing="12"
+                                RowSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock
+                                    x:Name="FromLabel"
+                                    MinHeight="24"
+                                    VerticalAlignment="Top"
+                                    Padding="0,4,0,0"
+                                    Style="{StaticResource DimCaptionLabelStyle}"
+                                    Text="{l:T Msgid='From'}" />
+                                <local:WrapBox
+                                    x:Name="FromChips"
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="{l:T Msgid='From'}"
+                                    ChildSpacing="4"
+                                    LineSpacing="4" />
+                                <TextBlock
+                                    x:Name="ToLabel"
+                                    Grid.Row="1"
+                                    MinHeight="24"
+                                    VerticalAlignment="Top"
+                                    Padding="0,4,0,0"
+                                    Style="{StaticResource DimCaptionLabelStyle}"
+                                    Text="{l:T Msgid='To'}"
+                                    Visibility="Collapsed" />
+                                <local:WrapBox
+                                    x:Name="ToChips"
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="{l:T Msgid='To'}"
+                                    ChildSpacing="4"
+                                    LineSpacing="4"
+                                    Visibility="Collapsed" />
+                                <TextBlock
+                                    x:Name="CcLabel"
+                                    Grid.Row="2"
+                                    MinHeight="24"
+                                    VerticalAlignment="Top"
+                                    Padding="0,4,0,0"
+                                    Style="{StaticResource DimCaptionLabelStyle}"
+                                    Text="{l:T Msgid='Cc'}"
+                                    Visibility="Collapsed" />
+                                <local:WrapBox
+                                    x:Name="CcChips"
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="{l:T Msgid='Cc'}"
+                                    ChildSpacing="4"
+                                    LineSpacing="4"
+                                    Visibility="Collapsed" />
+                            </Grid>
+
+                            <TextBlock
+                                x:Name="DateLabel"
+                                AutomationProperties.AutomationId="MessageDate"
+                                Style="{StaticResource DimCaptionLabelStyle}"
+                                Text="{x:Bind Reader.DateText, Mode=OneWay}"
+                                Visibility="{x:Bind local:ReaderBind.VisibleIfText(Reader.DateText), Mode=OneWay}" />
+
+                            <!-- The badge of a signed message (docs/plans/signatures.md §6,
+                                 ui/internal/signature BadgeFor): the verdict's shield and
+                                 sentence, a click opens the details; set in code
+                                 (RenderSignature), hidden without a verdict and in an
+                                 attached message's window. -->
+                            <signatures:SignatureBadgeButton x:Name="SignatureBadge" />
+
+                            <!-- message_attachments (window/attachments.go). -->
+                            <local:WrapBox
+                                x:Name="AttachmentChips"
+                                ChildSpacing="6"
+                                LineSpacing="6"
+                                Visibility="Collapsed" />
+
+                            <!-- body_hint: why only the plain text is shown. -->
+                            <TextBlock
+                                x:Name="BodyHint"
+                                Style="{StaticResource DimCaptionLabelStyle}"
+                                Text="{l:T Msgid='The formatted version of this message could not be shown safely; this is its plain text.'}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind local:ReaderBind.Visible(Reader.HintVisible), Mode=OneWay}" />
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+
+                <!-- The separator under the headers, in the same clamp; it
+                     stays in place when the headers scroll. -->
+                <Border
+                    Grid.Row="1"
+                    MaxWidth="900"
+                    Padding="24,0"
+                    HorizontalAlignment="Stretch">
+                    <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                </Border>
+
+                <!-- body_stack and quoted_row: the body area takes no more
+                     room than its body needs while that fits, the "•••"
+                     right under it (BodyFitPanel, message_view_fit.go). -->
+                <local:BodyFitPanel x:Name="BodyFitArea" Grid.Row="2">
+                    <!-- body_stack: "text", "loading", "html". -->
+                    <Grid x:Name="BodyArea">
+                        <ScrollViewer
+                            x:Name="TextScroller"
+                            AutomationProperties.AutomationId="MessageBodyScroller"
+                            AutomationProperties.Name="{l:T Msgid='Message'}"
+                            HorizontalScrollBarVisibility="Disabled"
+                            IsTabStop="True"
+                            VerticalScrollBarVisibility="Auto"
+                            Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Text'), Mode=OneWay}">
+                            <!-- The same clamp as the headers: a panel as wide
+                                 as the pane centres the text in it. -->
+                            <Grid>
+                                <TextBlock
+                                    x:Name="BodyLabel"
+                                    MaxWidth="900"
+                                    Padding="24,12,24,24"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.AutomationId="MessageBody"
+                                    IsTextSelectionEnabled="True"
+                                    Text="{x:Bind Reader.BodyText, Mode=OneWay}"
+                                    TextWrapping="Wrap" />
+                            </Grid>
+                        </ScrollViewer>
+                        <ProgressRing
+                            x:Name="BodySpinner"
+                            Width="32"
+                            Height="32"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="{l:T Msgid='Loading the message', Context='accessibility'}"
+                            IsActive="{x:Bind local:ReaderBind.IsLoading(Reader.BodyPage), Mode=OneWay}"
+                            Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Loading'), Mode=OneWay}" />
+                        <Grid
+                            x:Name="HtmlSlot"
+                            Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Html'), Mode=OneWay}" />
+                    </Grid>
+
+                    <!-- The "•••" under the body: it shows or hides the quoted
+                         history the daemon cut (MessageViewController.swift
+                         quotedButton), after the body's last line, or at the
+                         bottom when the body scrolls, in the same clamp. Never
+                         in an attached message's window. -->
+                    <Border
+                        x:Name="QuotedRow"
+                        MaxWidth="900"
+                        Padding="24,4,24,8"
+                        HorizontalAlignment="Stretch"
+                        Visibility="Collapsed">
+                        <local:QuotedTextButton x:Name="QuotedButton" Click="OnQuotedClick" />
+                    </Border>
+                </local:BodyFitPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

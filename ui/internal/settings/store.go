@@ -1,0 +1,892 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Package settings persists UI-only preferences in GSettings.
+//
+// The schema lives in data/io.github.schotek.Malachi.gschema.xml. Only
+// presentation options belong here; anything that affects mail handling is
+// owned by the daemon and set through the RPC API (CLAUDE.md rule 1).
+//
+// When the schema is not installed (for example `go run` outside `make`,
+// which exports GSETTINGS_SCHEMA_DIR) Open falls back to an in-memory store
+// so the application keeps working; values then last until it exits.
+package settings
+
+import (
+	"log/slog"
+	"math"
+
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
+
+	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/toolbar"
+)
+
+// SchemaID must match the gschema, desktop file and application ID.
+const SchemaID = "io.github.schotek.Malachi"
+
+// Keys of the general settings. They must match the gschema.
+const (
+	KeyLaunchAtLogin        = "launch-at-login"
+	KeyRunInBackground      = "run-in-background"
+	KeyMarkReadDelay        = "mark-read-delay"
+	KeyConfirmDelete        = "confirm-delete"
+	KeyDesktopNotifications = "desktop-notifications"
+	KeyNotificationSound    = "notification-sound"
+)
+
+// MarkReadDelayMax is the largest accepted mark-read delay in seconds; must
+// match the <range> in the gschema.
+const MarkReadDelayMax = 60
+
+// Keys of the appearance settings. They must match the gschema.
+const (
+	KeyColorScheme        = "color-scheme"
+	KeyDensity            = "message-list-density"
+	KeyShowPreviewLine    = "show-preview-line"
+	KeyShowAvatars        = "show-avatars"
+	KeyMonochromeAvatars  = "monochrome-avatars"
+	KeyMonospacePlainText = "monospace-plain-text"
+	KeyTextZoom           = "text-zoom"
+	// KeyGroupByConversation switches the message list to one row per
+	// conversation (thread.list) instead of one per message.
+	KeyGroupByConversation = "group-by-conversation"
+	// KeyConversationChatLayout shows a conversation as a chat (others'
+	// messages on the left, yours on the right, oldest first) instead of
+	// the timeline.
+	KeyConversationChatLayout = "conversation-chat-layout"
+	// KeyConversationChatHTML renders a bubble of the chat layout as the
+	// message's sanitized HTML in a locked web view instead of its plain
+	// text.
+	KeyConversationChatHTML = "conversation-chat-html"
+	// KeyConversationChatTruncateMine shortens a bubble of the user's own
+	// message (and a draft) in the chat layout to about three lines until
+	// a click shows the whole message (conversation.ChatPreviewLines,
+	// BubbleShortened).
+	KeyConversationChatTruncateMine = "conversation-chat-truncate-mine"
+	// KeyConversationChatTruncateOthers shortens a bubble of the other
+	// party's message in the chat layout the same way.
+	KeyConversationChatTruncateOthers = "conversation-chat-truncate-others"
+	// KeySearchScope is where a search looks, as last chosen in the
+	// search bar.
+	KeySearchScope = "search-scope"
+)
+
+// Keys of the sidebar state: which parts of the folder tree the user folded
+// away and which folders are pinned to the Favourites section. Each entry is
+// one node; the encoding is the window package's business
+// (internal/window/collapse.go, favourites.go). They must match the gschema.
+const (
+	KeyCollapsedFolders  = "collapsed-folders"
+	KeyCollapsedAccounts = "collapsed-accounts"
+	KeyFavouriteFolders  = "favourite-folders"
+	// KeyUnifiedInbox shows the All Inboxes item, the first row of the
+	// Favourites section, while there are at least two mail accounts
+	// (ui/internal/unified Shown). Never part of the three keys above
+	// (the section's own fold is a sentinel in KeyCollapsedAccounts).
+	KeyUnifiedInbox = "unified-inbox"
+)
+
+// Keys of the main window's geometry, bound to its default-width,
+// default-height and maximized properties. They must match the gschema.
+const (
+	KeyWindowWidth     = "window-width"
+	KeyWindowHeight    = "window-height"
+	KeyWindowMaximized = "window-maximized"
+)
+
+// Keys of the Assistant menu (ui/internal/assistant): whether it is shown
+// (while the malachi-mcp bridge is registered, assistant.Shown) and where
+// it opens Claude; and of its panel (the In App target): the model, the
+// claude executable ("" looks in the usual places) and whether the user
+// allowed sending mail to Claude. They must match the gschema.
+const (
+	KeyAssistantMenu       = "assistant-menu"
+	KeyAssistantTarget     = "assistant-target"
+	KeyAssistantModel      = "assistant-model"
+	KeyAssistantClaudePath = "assistant-claude-path"
+	KeyAssistantConsent    = "assistant-consent"
+	// Reserved provider metadata; ChatGPT is currently implemented on Windows.
+	KeyAssistantProvider              = "assistant-provider"
+	KeyAssistantCodexPath             = "assistant-codex-path"
+	KeyAssistantChatGPTModel          = "assistant-chatgpt-model"
+	KeyAssistantChatGPTConsentVersion = "assistant-chatgpt-consent-version"
+	KeyBoardChatGPTModel              = "board-triage-chatgpt-model"
+	KeyBoardChatGPTConsentVersion     = "board-triage-chatgpt-consent-version"
+)
+
+// Keys of the board (ui/internal/board): the style it opens in the first
+// time it is shown after launch (a style, or Last Used: the one written to
+// board-last-style), the mode a new main window opens in (board-start-mode
+// over board-last-mode, board.StartMode), the account filter it remembers,
+// and its own triage consent and model, apart from the assistant panel's
+// (KeyAssistantConsent, KeyAssistantModel). They must match the gschema.
+const (
+	KeyBoardDefaultStyle  = "board-default-style"
+	KeyBoardLastStyle     = "board-last-style"
+	KeyBoardStartMode     = "board-start-mode"
+	KeyBoardLastMode      = "board-last-mode"
+	KeyBoardAccountFilter = "board-account-filter"
+	KeyBoardTriageConsent = "board-triage-consent"
+	KeyBoardTriageModel   = "board-triage-model"
+)
+
+// KeyCalendarView is the view the Calendar was shown in last: a nick of
+// calendar.View ("day", "week", "month", "agenda"), the gschema's
+// CalendarView enum. The calendar package reads the nick itself
+// (calendar.ParseView).
+const KeyCalendarView = "calendar-view"
+
+// CalendarViews are calendar-view's values in the order of the gschema's
+// CalendarView enum (calendar.Views' order); CalendarViewDefault is the
+// key's default.
+var CalendarViews = []string{"day", "week", "month", "agenda"}
+
+// CalendarViewDefault is calendar-view's default in the gschema.
+const CalendarViewDefault = "week"
+
+// KeyContactsSuggestScope is which address books complete the recipients
+// of a new message (Preferences → Contacts → Recipient Suggestions): a nick
+// of the gschema's ContactsSuggestScope enum, the values of
+// api.ContactSearchScope ("account", "all"), passed as contact.search's
+// scope.
+const KeyContactsSuggestScope = "contacts-suggest-scope"
+
+// ContactsSuggestScopes are contacts-suggest-scope's values in the order of
+// the gschema's enum (contacts.Scopes' order); the first is the default.
+var ContactsSuggestScopes = []string{"account", "all"}
+
+// ColorScheme is the nick of the ColorScheme enum in the gschema.
+type ColorScheme string
+
+// Density is the nick of the Density enum in the gschema.
+type Density string
+
+// SearchScope is the nick of the SearchScope enum in the gschema.
+type SearchScope string
+
+const (
+	ColorSchemeSystem ColorScheme = "system"
+	ColorSchemeLight  ColorScheme = "light"
+	ColorSchemeDark   ColorScheme = "dark"
+
+	DensityComfortable Density = "comfortable"
+	DensityCompact     Density = "compact"
+
+	SearchFolder  SearchScope = "folder"
+	SearchAccount SearchScope = "account"
+	SearchAll     SearchScope = "all"
+
+	// Text zoom bounds in percent; must match the <range> in the gschema.
+	TextZoomMin  = 50
+	TextZoomMax  = 200
+	TextZoomStep = 10
+)
+
+// BoardStyle is the nick of the gschema's BoardStyle enum (board-last-style)
+// and of its BoardDefaultStyle enum (board-default-style), which adds
+// BoardStyleLast: how the board (ui/internal/board) is laid out. The board
+// package reads the nicks itself (board.ParseStyle, board.ParseDefaultStyle).
+type BoardStyle string
+
+const (
+	BoardStyleList    BoardStyle = "list"
+	BoardStyleColumns BoardStyle = "columns"
+	BoardStyleToday   BoardStyle = "today"
+	// BoardStyleLast is board-default-style's Last Used: the style in
+	// board-last-style.
+	BoardStyleLast BoardStyle = "last"
+)
+
+// BoardStyles are the styles in the order of the gschema's BoardStyle enum.
+var BoardStyles = []BoardStyle{BoardStyleList, BoardStyleColumns, BoardStyleToday}
+
+// BoardDefaultStyles are board-default-style's values in the order of the
+// gschema's BoardDefaultStyle enum (board.DefaultStyles' order).
+var BoardDefaultStyles = []BoardStyle{BoardStyleLast, BoardStyleList, BoardStyleColumns, BoardStyleToday}
+
+// parseBoardStyle reads a stored nick of board-last-style; an unknown or
+// empty one is List, like assistant.ParseTarget and assistant.ParseModel
+// read their keys.
+func parseBoardStyle(nick string) BoardStyle {
+	switch BoardStyle(nick) {
+	case BoardStyleColumns:
+		return BoardStyleColumns
+	case BoardStyleToday:
+		return BoardStyleToday
+	}
+	return BoardStyleList
+}
+
+// parseBoardDefaultStyle reads a stored nick of board-default-style; an
+// unknown or empty one is Last Used, the key's default.
+func parseBoardDefaultStyle(nick string) BoardStyle {
+	for _, st := range BoardDefaultStyles {
+		if BoardStyle(nick) == st {
+			return st
+		}
+	}
+	return BoardStyleLast
+}
+
+// BoardStartMode is the nick of the gschema's BoardStartMode enum
+// (board-start-mode): what a new main window shows (board.StartChoice).
+type BoardStartMode string
+
+const (
+	BoardStartMail  BoardStartMode = "mail"
+	BoardStartBoard BoardStartMode = "board"
+	BoardStartLast  BoardStartMode = "last"
+	// BoardStartCalendar opens the Calendar (board.StartCalendar).
+	BoardStartCalendar BoardStartMode = "calendar"
+)
+
+// BoardStartModes are the values in the order of the gschema enum (mail,
+// board, last, calendar); Settings lists them in
+// board.StartModesWithCalendar's order.
+var BoardStartModes = []BoardStartMode{BoardStartMail, BoardStartBoard, BoardStartLast, BoardStartCalendar}
+
+// defaults mirror the gschema defaults for the in-memory fallback.
+var defaults = map[string]any{
+	KeyLaunchAtLogin:        false,
+	KeyRunInBackground:      false,
+	KeyMarkReadDelay:        2,
+	KeyConfirmDelete:        true,
+	KeyDesktopNotifications: true,
+	KeyNotificationSound:    false,
+
+	KeyColorScheme:                    string(ColorSchemeSystem),
+	KeyDensity:                        string(DensityComfortable),
+	KeyShowPreviewLine:                true,
+	KeyShowAvatars:                    true,
+	KeyMonochromeAvatars:              false,
+	KeyMonospacePlainText:             false,
+	KeyTextZoom:                       100,
+	KeyGroupByConversation:            false,
+	KeyConversationChatLayout:         false,
+	KeyConversationChatHTML:           false,
+	KeyConversationChatTruncateMine:   false,
+	KeyConversationChatTruncateOthers: false,
+	KeySearchScope:                    string(SearchFolder),
+
+	KeyCollapsedFolders:  []string(nil),
+	KeyCollapsedAccounts: []string(nil),
+	KeyFavouriteFolders:  []string(nil),
+	KeyUnifiedInbox:      true,
+
+	KeyWindowWidth:     1200,
+	KeyWindowHeight:    760,
+	KeyWindowMaximized: false,
+
+	KeyAssistantMenu:                  true,
+	KeyAssistantTarget:                string(assistant.Desktop),
+	KeyAssistantModel:                 string(assistant.Sonnet),
+	KeyAssistantClaudePath:            "",
+	KeyAssistantConsent:               false,
+	KeyAssistantProvider:              "claude",
+	KeyAssistantCodexPath:             "",
+	KeyAssistantChatGPTModel:          "",
+	KeyAssistantChatGPTConsentVersion: 0,
+	KeyBoardChatGPTModel:              "",
+	KeyBoardChatGPTConsentVersion:     0,
+
+	KeyBoardDefaultStyle:  string(BoardStyleLast),
+	KeyBoardLastStyle:     string(BoardStyleList),
+	KeyBoardStartMode:     string(BoardStartMail),
+	KeyBoardLastMode:      "mail",
+	KeyBoardAccountFilter: "",
+	KeyBoardTriageConsent: false,
+	KeyBoardTriageModel:   string(assistant.Sonnet),
+
+	KeyCalendarView: CalendarViewDefault,
+
+	KeyContactsSuggestScope: "account",
+
+	toolbar.Key(toolbar.BarMail):      []string(nil),
+	toolbar.Key(toolbar.BarBoardList): []string(nil),
+	toolbar.Key(toolbar.BarBoardFlow): []string(nil),
+	toolbar.Key(toolbar.BarCalendar):  []string(nil),
+	toolbar.DisplayModeKey:            string(toolbar.DisplayIcon),
+}
+
+// Store reads and writes preferences. All methods must be called from the
+// GTK main loop; change handlers run there too, so no glib.IdleAdd is needed.
+type Store struct {
+	gs  *gio.Settings  // nil in the in-memory fallback
+	mem map[string]any // in-memory values (fallback only)
+
+	handlers map[string]map[int]func()
+	nextID   int
+}
+
+// Open returns a GSettings-backed store, or an in-memory one (with a logged
+// warning) when the schema cannot be found. It never aborts.
+func Open(log *slog.Logger) *Store {
+	return open(SchemaID, log)
+}
+
+func open(schemaID string, log *slog.Logger) *Store {
+	// gio.NewSettings aborts the process on an unknown schema, so look it up
+	// first. The default source itself is nil when no schemas are installed.
+	src := gio.SettingsSchemaSourceGetDefault()
+	if src == nil || src.Lookup(schemaID, true) == nil {
+		log.Warn("GSettings schema not found; preferences will not persist",
+			"schema", schemaID, "hint", "run via `make run-dev` or set GSETTINGS_SCHEMA_DIR")
+		return NewMemory()
+	}
+
+	s := &Store{
+		gs:       gio.NewSettings(schemaID),
+		handlers: make(map[string]map[int]func()),
+	}
+	// GSettings only emits "changed" for keys that were read after the
+	// handler was connected, so connect first and then prime every key.
+	s.gs.ConnectChanged(func(key string) { s.fire(key) })
+	for key := range defaults {
+		_ = s.gs.Value(key)
+	}
+	return s
+}
+
+// NewMemory returns a store that keeps values only for the process lifetime.
+func NewMemory() *Store {
+	s := &Store{
+		mem:      make(map[string]any, len(defaults)),
+		handlers: make(map[string]map[int]func()),
+	}
+	for k, v := range defaults {
+		s.mem[k] = v
+	}
+	return s
+}
+
+// Persistent reports whether values survive a restart.
+func (s *Store) Persistent() bool { return s.gs != nil }
+
+// LaunchAtLogin mirrors the last autostart decision granted by the
+// Background portal; the portal, not this key, is authoritative.
+func (s *Store) LaunchAtLogin() bool     { return s.boolean(KeyLaunchAtLogin) }
+func (s *Store) SetLaunchAtLogin(v bool) { s.set(KeyLaunchAtLogin, v) }
+
+func (s *Store) RunInBackground() bool     { return s.boolean(KeyRunInBackground) }
+func (s *Store) SetRunInBackground(v bool) { s.set(KeyRunInBackground, v) }
+
+// MarkReadDelay is in seconds; 0 marks a message read as soon as it is shown.
+func (s *Store) MarkReadDelay() int { return s.integer(KeyMarkReadDelay) }
+func (s *Store) SetMarkReadDelay(v int) {
+	s.set(KeyMarkReadDelay, min(max(v, 0), MarkReadDelayMax))
+}
+
+func (s *Store) ConfirmDelete() bool     { return s.boolean(KeyConfirmDelete) }
+func (s *Store) SetConfirmDelete(v bool) { s.set(KeyConfirmDelete, v) }
+
+func (s *Store) DesktopNotifications() bool     { return s.boolean(KeyDesktopNotifications) }
+func (s *Store) SetDesktopNotifications(v bool) { s.set(KeyDesktopNotifications, v) }
+
+func (s *Store) NotificationSound() bool     { return s.boolean(KeyNotificationSound) }
+func (s *Store) SetNotificationSound(v bool) { s.set(KeyNotificationSound, v) }
+
+func (s *Store) ColorScheme() ColorScheme { return ColorScheme(s.str(KeyColorScheme)) }
+
+// SetColorScheme ignores values outside the enum.
+func (s *Store) SetColorScheme(v ColorScheme) {
+	switch v {
+	case ColorSchemeSystem, ColorSchemeLight, ColorSchemeDark:
+		s.set(KeyColorScheme, string(v))
+	}
+}
+
+func (s *Store) Density() Density { return Density(s.str(KeyDensity)) }
+
+// SetDensity ignores values outside the enum.
+func (s *Store) SetDensity(v Density) {
+	switch v {
+	case DensityComfortable, DensityCompact:
+		s.set(KeyDensity, string(v))
+	}
+}
+
+func (s *Store) SearchScope() SearchScope { return SearchScope(s.str(KeySearchScope)) }
+
+// SetSearchScope ignores values outside the enum.
+func (s *Store) SetSearchScope(v SearchScope) {
+	switch v {
+	case SearchFolder, SearchAccount, SearchAll:
+		s.set(KeySearchScope, string(v))
+	}
+}
+
+func (s *Store) ShowPreviewLine() bool     { return s.boolean(KeyShowPreviewLine) }
+func (s *Store) SetShowPreviewLine(v bool) { s.set(KeyShowPreviewLine, v) }
+
+func (s *Store) ShowAvatars() bool     { return s.boolean(KeyShowAvatars) }
+func (s *Store) SetShowAvatars(v bool) { s.set(KeyShowAvatars, v) }
+
+func (s *Store) MonochromeAvatars() bool     { return s.boolean(KeyMonochromeAvatars) }
+func (s *Store) SetMonochromeAvatars(v bool) { s.set(KeyMonochromeAvatars, v) }
+
+func (s *Store) UnifiedInbox() bool     { return s.boolean(KeyUnifiedInbox) }
+func (s *Store) SetUnifiedInbox(v bool) { s.set(KeyUnifiedInbox, v) }
+
+func (s *Store) GroupByConversation() bool     { return s.boolean(KeyGroupByConversation) }
+func (s *Store) SetGroupByConversation(v bool) { s.set(KeyGroupByConversation, v) }
+
+func (s *Store) ConversationChatLayout() bool     { return s.boolean(KeyConversationChatLayout) }
+func (s *Store) SetConversationChatLayout(v bool) { s.set(KeyConversationChatLayout, v) }
+
+func (s *Store) ConversationChatHTML() bool     { return s.boolean(KeyConversationChatHTML) }
+func (s *Store) SetConversationChatHTML(v bool) { s.set(KeyConversationChatHTML, v) }
+
+func (s *Store) ConversationChatTruncateMine() bool {
+	return s.boolean(KeyConversationChatTruncateMine)
+}
+func (s *Store) SetConversationChatTruncateMine(v bool) {
+	s.set(KeyConversationChatTruncateMine, v)
+}
+
+func (s *Store) ConversationChatTruncateOthers() bool {
+	return s.boolean(KeyConversationChatTruncateOthers)
+}
+func (s *Store) SetConversationChatTruncateOthers(v bool) {
+	s.set(KeyConversationChatTruncateOthers, v)
+}
+
+func (s *Store) MonospacePlainText() bool     { return s.boolean(KeyMonospacePlainText) }
+func (s *Store) SetMonospacePlainText(v bool) { s.set(KeyMonospacePlainText, v) }
+
+// TextZoom is the message body zoom in percent.
+func (s *Store) TextZoom() int { return s.integer(KeyTextZoom) }
+
+// SetTextZoom clamps v to [TextZoomMin, TextZoomMax].
+func (s *Store) SetTextZoom(v int) {
+	s.set(KeyTextZoom, min(max(v, TextZoomMin), TextZoomMax))
+}
+
+func (s *Store) AssistantMenu() bool     { return s.boolean(KeyAssistantMenu) }
+func (s *Store) SetAssistantMenu(v bool) { s.set(KeyAssistantMenu, v) }
+
+// AssistantTarget is the stored target as assistant.ParseTarget reads it:
+// an unknown nick is Desktop.
+func (s *Store) AssistantTarget() assistant.Target {
+	return assistant.ParseTarget(s.str(KeyAssistantTarget))
+}
+
+// SetAssistantTarget ignores values outside the enum.
+func (s *Store) SetAssistantTarget(v assistant.Target) {
+	for _, t := range assistant.Targets {
+		if v == t {
+			s.set(KeyAssistantTarget, string(v))
+			return
+		}
+	}
+}
+
+// AssistantModel is the stored model as assistant.ParseModel reads it: an
+// unknown nick is Sonnet.
+func (s *Store) AssistantModel() assistant.Model {
+	return assistant.ParseModel(s.str(KeyAssistantModel))
+}
+
+// SetAssistantModel ignores values outside the enum.
+func (s *Store) SetAssistantModel(v assistant.Model) {
+	for _, m := range assistant.Models {
+		if v == m {
+			s.set(KeyAssistantModel, string(v))
+			return
+		}
+	}
+}
+
+func (s *Store) AssistantClaudePath() string     { return s.str(KeyAssistantClaudePath) }
+func (s *Store) SetAssistantClaudePath(v string) { s.set(KeyAssistantClaudePath, v) }
+
+func (s *Store) AssistantConsent() bool     { return s.boolean(KeyAssistantConsent) }
+func (s *Store) SetAssistantConsent(v bool) { s.set(KeyAssistantConsent, v) }
+
+// Provider-specific consents never reuse permission given to another service.
+func (s *Store) AssistantProvider() string {
+	if s.str(KeyAssistantProvider) == "chatgpt" {
+		return "chatgpt"
+	}
+	return "claude"
+}
+func (s *Store) SetAssistantProvider(v string) {
+	if v == "claude" || v == "chatgpt" {
+		s.set(KeyAssistantProvider, v)
+	}
+}
+func (s *Store) AssistantCodexPath() string        { return s.str(KeyAssistantCodexPath) }
+func (s *Store) SetAssistantCodexPath(v string)    { s.set(KeyAssistantCodexPath, v) }
+func (s *Store) AssistantChatGPTModel() string     { return s.str(KeyAssistantChatGPTModel) }
+func (s *Store) SetAssistantChatGPTModel(v string) { s.set(KeyAssistantChatGPTModel, v) }
+func (s *Store) AssistantChatGPTConsentVersion() int {
+	return s.integer(KeyAssistantChatGPTConsentVersion)
+}
+func (s *Store) SetAssistantChatGPTConsentVersion(v int) {
+	s.set(KeyAssistantChatGPTConsentVersion, max(0, v))
+}
+func (s *Store) BoardChatGPTModel() string           { return s.str(KeyBoardChatGPTModel) }
+func (s *Store) SetBoardChatGPTModel(v string)       { s.set(KeyBoardChatGPTModel, v) }
+func (s *Store) BoardChatGPTConsentVersion() int     { return s.integer(KeyBoardChatGPTConsentVersion) }
+func (s *Store) SetBoardChatGPTConsentVersion(v int) { s.set(KeyBoardChatGPTConsentVersion, max(0, v)) }
+
+// BoardDefaultStyle is Board View, the style the board opens in the first
+// time it is shown after launch: a style or BoardStyleLast, read as
+// parseBoardDefaultStyle reads it (an unknown or empty stored value is
+// Last Used).
+func (s *Store) BoardDefaultStyle() BoardStyle {
+	return parseBoardDefaultStyle(s.str(KeyBoardDefaultStyle))
+}
+
+// SetBoardDefaultStyle ignores values outside the enum.
+func (s *Store) SetBoardDefaultStyle(v BoardStyle) {
+	for _, st := range BoardDefaultStyles {
+		if v == st {
+			s.set(KeyBoardDefaultStyle, string(v))
+			return
+		}
+	}
+}
+
+// BoardLastStyle is the style the board was shown in last (an unknown or
+// empty stored value is List).
+func (s *Store) BoardLastStyle() BoardStyle {
+	return parseBoardStyle(s.str(KeyBoardLastStyle))
+}
+
+// SetBoardLastStyle ignores values outside the enum (BoardStyleLast too).
+func (s *Store) SetBoardLastStyle(v BoardStyle) {
+	for _, st := range BoardStyles {
+		if v == st {
+			if s.str(KeyBoardLastStyle) != string(v) {
+				s.set(KeyBoardLastStyle, string(v))
+			}
+			return
+		}
+	}
+}
+
+// BoardStartMode is Open at Launch; an unknown stored value is Mail.
+func (s *Store) BoardStartMode() BoardStartMode {
+	for _, m := range BoardStartModes {
+		if BoardStartMode(s.str(KeyBoardStartMode)) == m {
+			return m
+		}
+	}
+	return BoardStartMail
+}
+
+// SetBoardStartMode ignores values outside the enum.
+func (s *Store) SetBoardStartMode(v BoardStartMode) {
+	for _, m := range BoardStartModes {
+		if v == m {
+			s.set(KeyBoardStartMode, string(v))
+			return
+		}
+	}
+}
+
+// BoardLastMode is the nick of the mode the main window showed last
+// (board.Mode.Nick), read by board.StartMode.
+func (s *Store) BoardLastMode() string { return s.str(KeyBoardLastMode) }
+
+// SetBoardLastMode writes the nick only when it changed.
+func (s *Store) SetBoardLastMode(v string) {
+	if s.str(KeyBoardLastMode) != v {
+		s.set(KeyBoardLastMode, v)
+	}
+}
+
+// BoardAccountFilter is the account the board was filtered to last, ""
+// for every account.
+func (s *Store) BoardAccountFilter() string { return s.str(KeyBoardAccountFilter) }
+
+// SetBoardAccountFilter writes the account id only when it changed.
+func (s *Store) SetBoardAccountFilter(v string) {
+	if s.str(KeyBoardAccountFilter) != v {
+		s.set(KeyBoardAccountFilter, v)
+	}
+}
+
+// CalendarView is the nick of the Calendar's view (calendar.View.Nick);
+// an unknown or empty stored value is the default.
+func (s *Store) CalendarView() string {
+	v := s.str(KeyCalendarView)
+	for _, n := range CalendarViews {
+		if v == n {
+			return v
+		}
+	}
+	return CalendarViewDefault
+}
+
+// SetCalendarView writes a view's nick only when it changed; a value
+// outside the enum is ignored.
+func (s *Store) SetCalendarView(v string) {
+	for _, n := range CalendarViews {
+		if v == n {
+			if s.str(KeyCalendarView) != v {
+				s.set(KeyCalendarView, v)
+			}
+			return
+		}
+	}
+}
+
+// ContactsSuggestScope is contacts-suggest-scope's nick; an unknown or
+// empty stored value is "account", the default.
+func (s *Store) ContactsSuggestScope() string {
+	v := s.str(KeyContactsSuggestScope)
+	for _, n := range ContactsSuggestScopes {
+		if v == n {
+			return v
+		}
+	}
+	return ContactsSuggestScopes[0]
+}
+
+// SetContactsSuggestScope writes a nick only when it changed; a value
+// outside the enum is ignored.
+func (s *Store) SetContactsSuggestScope(v string) {
+	for _, n := range ContactsSuggestScopes {
+		if v == n {
+			if s.str(KeyContactsSuggestScope) != v {
+				s.set(KeyContactsSuggestScope, v)
+			}
+			return
+		}
+	}
+}
+
+func (s *Store) BoardTriageConsent() bool     { return s.boolean(KeyBoardTriageConsent) }
+func (s *Store) SetBoardTriageConsent(v bool) { s.set(KeyBoardTriageConsent, v) }
+
+// BoardTriageModel is the model of the board's triage runs, apart from the
+// assistant panel's (AssistantModel): the same nicks, read with
+// assistant.ParseModel (an unknown nick is Sonnet).
+func (s *Store) BoardTriageModel() assistant.Model {
+	return assistant.ParseModel(s.str(KeyBoardTriageModel))
+}
+
+// SetBoardTriageModel ignores values outside the enum.
+func (s *Store) SetBoardTriageModel(v assistant.Model) {
+	for _, m := range assistant.Models {
+		if v == m {
+			s.set(KeyBoardTriageModel, string(v))
+			return
+		}
+	}
+}
+
+// CollapsedFolders and CollapsedAccounts are the folded-away nodes of the
+// folder sidebar, each entry one node. The window package owns the encoding
+// and tolerates entries it cannot parse, so an older or newer version of the
+// application never loses more than the rows it does not understand.
+func (s *Store) CollapsedFolders() []string     { return s.strv(KeyCollapsedFolders) }
+func (s *Store) SetCollapsedFolders(v []string) { s.set(KeyCollapsedFolders, v) }
+
+func (s *Store) CollapsedAccounts() []string     { return s.strv(KeyCollapsedAccounts) }
+func (s *Store) SetCollapsedAccounts(v []string) { s.set(KeyCollapsedAccounts, v) }
+
+// FavouriteFolders are the folders pinned to the sidebar's Favourites
+// section, encoded like CollapsedFolders (internal/window/favourites.go).
+func (s *Store) FavouriteFolders() []string     { return s.strv(KeyFavouriteFolders) }
+func (s *Store) SetFavouriteFolders(v []string) { s.set(KeyFavouriteFolders, v) }
+
+// ToolbarLayout is the stored arrangement of bar's toolbar (the key
+// toolbar.Key names): the tokens as written, empty for the default; the
+// client reads them with toolbar.NormalizeFor.
+func (s *Store) ToolbarLayout(bar toolbar.Bar) []string { return s.strv(toolbar.Key(bar)) }
+
+// SetToolbarLayout writes bar's arrangement (toolbar.StoredFor's tokens,
+// or an empty list for the default). An unknown bar is ignored.
+func (s *Store) SetToolbarLayout(bar toolbar.Bar, tokens []string) {
+	for _, b := range toolbar.Bars {
+		if b == bar {
+			if tokens == nil {
+				tokens = []string{}
+			}
+			s.set(toolbar.Key(bar), tokens)
+			return
+		}
+	}
+}
+
+// ToolbarDisplayMode is what the toolbars' items show; an unknown nick is
+// icons only.
+func (s *Store) ToolbarDisplayMode() toolbar.DisplayMode {
+	return toolbar.ParseDisplayMode(s.str(toolbar.DisplayModeKey))
+}
+
+// SetToolbarDisplayMode ignores values outside the enum.
+func (s *Store) SetToolbarDisplayMode(m toolbar.DisplayMode) {
+	for _, x := range toolbar.DisplayModes {
+		if m == x {
+			s.set(toolbar.DisplayModeKey, string(m))
+			return
+		}
+	}
+}
+
+// OnChanged calls f whenever key changes, from any source (this process or,
+// with the GSettings backend, another one). The returned function removes
+// the handler; callers that outlive the store may ignore it.
+func (s *Store) OnChanged(key string, f func()) (remove func()) {
+	id := s.nextID
+	s.nextID++
+	if s.handlers[key] == nil {
+		s.handlers[key] = make(map[int]func())
+	}
+	s.handlers[key][id] = f
+	return func() { delete(s.handlers[key], id) }
+}
+
+// Bind keeps property of obj and key in sync in both directions, starting
+// from the stored value. Numeric keys convert to the property's type (an
+// integer key may drive a double property). Do not also listen to the
+// property yourself. The returned function removes the binding; call it
+// when obj is about to go away and the store is not (e.g. a dialog).
+func (s *Store) Bind(key string, obj *coreglib.Object, property string) (unbind func()) {
+	if s.gs != nil {
+		s.gs.Bind(key, obj, property, gio.SettingsBindDefault)
+		return func() { gio.SettingsUnbind(obj, property) }
+	}
+
+	push := func() {
+		cur := obj.ObjectProperty(property)
+		if want := coerce(s.mem[key], cur); want != cur {
+			obj.SetObjectProperty(property, want)
+		}
+	}
+	push()
+	handle := obj.NotifyProperty(property, func() {
+		s.set(key, coerce(obj.ObjectProperty(property), s.mem[key]))
+	})
+	remove := s.OnChanged(key, push)
+	return func() {
+		remove()
+		obj.HandlerDisconnect(handle)
+	}
+}
+
+func (s *Store) str(key string) string {
+	if s.gs != nil {
+		return s.gs.String(key)
+	}
+	v, _ := s.mem[key].(string)
+	return v
+}
+
+func (s *Store) boolean(key string) bool {
+	if s.gs != nil {
+		return s.gs.Boolean(key)
+	}
+	v, _ := s.mem[key].(bool)
+	return v
+}
+
+func (s *Store) integer(key string) int {
+	if s.gs != nil {
+		return s.gs.Int(key)
+	}
+	v, _ := s.mem[key].(int)
+	return v
+}
+
+// strv reads a string-array key. The result is always a fresh slice, so a
+// caller may keep and mutate it without touching the store.
+func (s *Store) strv(key string) []string {
+	if s.gs != nil {
+		return s.gs.Strv(key)
+	}
+	v, _ := s.mem[key].([]string)
+	return append([]string(nil), v...)
+}
+
+// set stores v; the GSettings backend emits "changed" itself, the memory
+// backend fires handlers synchronously when the value actually changed.
+func (s *Store) set(key string, v any) {
+	if s.gs != nil {
+		switch v := v.(type) {
+		case string:
+			s.gs.SetString(key, v)
+		case bool:
+			s.gs.SetBoolean(key, v)
+		case int:
+			s.gs.SetInt(key, v)
+		case []string:
+			s.gs.SetStrv(key, v)
+		}
+		return
+	}
+	// Slices are not comparable: == on two interfaces holding one panics, so
+	// they are compared element by element and stored as a copy.
+	if list, ok := v.([]string); ok {
+		old, _ := s.mem[key].([]string)
+		if equalStrings(old, list) {
+			return
+		}
+		s.mem[key] = append([]string(nil), list...)
+		s.fire(key)
+		return
+	}
+	if s.mem[key] == v {
+		return
+	}
+	s.mem[key] = v
+	s.fire(key)
+}
+
+// equalStrings reports whether two string lists have the same contents.
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Store) fire(key string) {
+	// Copy first: a handler may remove itself.
+	fs := make([]func(), 0, len(s.handlers[key]))
+	for _, f := range s.handlers[key] {
+		fs = append(fs, f)
+	}
+	for _, f := range fs {
+		f()
+	}
+}
+
+// coerce converts v to the dynamic type of like, for the numeric conversions
+// GSettings would do itself (int key ↔ double property).
+func coerce(v, like any) any {
+	switch like.(type) {
+	case float64:
+		switch v := v.(type) {
+		case int:
+			return float64(v)
+		case uint:
+			return float64(v)
+		}
+	case int:
+		switch v := v.(type) {
+		case float64:
+			return int(math.Round(v))
+		case uint:
+			return int(v)
+		}
+	case uint:
+		switch v := v.(type) {
+		case int:
+			return uint(v)
+		case float64:
+			return uint(math.Round(v))
+		}
+	}
+	return v
+}

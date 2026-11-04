@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/AIPaneViewController.swift;
+GTK: preferences.blp ai_page. The group MCP (mcp_group) with its
+description, which a missing bridge or a status the bridge did not give
+replaces (GTK, U2 and U3), and its row Register with Claude (mcp_switch),
+insensitive while its state is not known and while a change runs; under
+it, while a change waits for Claude Desktop to restart, the row Claude
+Desktop with Restart (macOS; GTK has no Claude Desktop). The group
+Assistant (assistant_group): Show the Assistant Menu, Open In, and while In
+App is chosen Claude Code (the claude.exe the panel runs, Choose…, and in
+front of it the button of what the row offers: Sign In… or Get Claude
+Code…) and Model. Its texts come from ui/internal/assistant, set in code
+(AiPage.xaml.cs). The group Board (board_triage_group, AiPage.Board.cs):
+the board's triage, its consent, model, automatic runs, status and the
+tokens of the last 24 hours; its texts come from ui/internal/board.
+Above them the group About You (about_you_group) and the assistant's
+proposals (about_you_pending_group), built in code (AiPage.Profile.cs);
+their texts come from ui/internal/assistant profile.go.
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.AiPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto">
+        <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+        <Grid>
+            <StackPanel
+                MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                Padding="{StaticResource SettingsPagePadding}"
+                Spacing="{StaticResource SettingsGroupSpacing}">
+                <!-- About You and the assistant's proposals (AiPage.Profile.cs), built in code. -->
+                <StackPanel
+                    x:Name="AboutYouGroup"
+                    AutomationProperties.AutomationId="AboutYouGroup"
+                    Spacing="{StaticResource SettingsCardSpacing}" />
+                <StackPanel
+                    x:Name="ProfilePendingGroup"
+                    AutomationProperties.AutomationId="ProfilePendingGroup"
+                    Spacing="{StaticResource SettingsCardSpacing}"
+                    Visibility="Collapsed" />
+                <StackPanel x:Name="McpGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='MCP'}" />
+                    <TextBlock
+                        x:Name="McpDescription"
+                        AutomationProperties.AutomationId="McpDescription"
+                        Style="{StaticResource SettingsGroupDescriptionStyle}"
+                        Text="{l:T Msgid='Lets AI assistants read your mail and prepare drafts through the Model Context Protocol.'}" />
+                    <tk:SettingsCard
+                        x:Name="RegisterRow"
+                        Description="{l:T Msgid='Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer'}"
+                        Header="{l:T Msgid='Register with Claude'}"
+                        IsEnabled="False">
+                        <ToggleSwitch
+                            x:Name="RegisterSwitch"
+                            AutomationProperties.AutomationId="RegisterWithClaude"
+                            AutomationProperties.Name="{l:T Msgid='Register with Claude'}"
+                            Toggled="OnRegisterToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="PendingRow" Visibility="Collapsed">
+                        <Button x:Name="RestartButton" AutomationProperties.AutomationId="RestartClaudeDesktop" Click="OnRestartClick" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel x:Name="AssistantGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        x:Name="AssistantHeading"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <TextBlock x:Name="AssistantDescription" Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                    <tk:SettingsCard x:Name="AssistantProviderRow">
+                        <ComboBox x:Name="AssistantProviderBox" MinWidth="220" AutomationProperties.AutomationId="AssistantProvider" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="AssistantMenuRow">
+                        <ToggleSwitch x:Name="AssistantMenuSwitch" AutomationProperties.AutomationId="AssistantMenu" Toggled="OnAssistantMenuToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="AssistantTargetRow">
+                        <ComboBox
+                            x:Name="AssistantTargetBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="AssistantTarget" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="ClaudeCodeRow" Visibility="Collapsed">
+                        <tk:SettingsCard.Description>
+                            <TextBlock
+                                x:Name="ClaudeCodeState"
+                                AutomationProperties.AutomationId="ClaudeCodeState"
+                                IsTextSelectionEnabled="True"
+                                TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                x:Name="ClaudeOfferButton"
+                                AutomationProperties.AutomationId="ClaudeCodeOffer"
+                                Click="OnClaudeOfferClick"
+                                Visibility="Collapsed" />
+                            <Button x:Name="ClaudeChooseButton" AutomationProperties.AutomationId="ClaudeCodeChoose" Click="OnChooseClaudeClick" />
+                        </StackPanel>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="AssistantModelRow" Visibility="Collapsed">
+                        <ComboBox
+                            x:Name="AssistantModelBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="AssistantModel" />
+                    </tk:SettingsCard>
+                    <StackPanel x:Name="ChatGptRows" Visibility="Collapsed" Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock x:Name="ChatGptDescription" Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                        <tk:SettingsCard x:Name="CodexRow">
+                            <tk:SettingsCard.Description>
+                                <TextBlock x:Name="CodexState" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            </tk:SettingsCard.Description>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="CodexInstallButton" AutomationProperties.AutomationId="CodexInstall" Click="OnInstallCodexClick" />
+                                <Button x:Name="CodexChooseButton" AutomationProperties.AutomationId="CodexChoose" Click="OnChooseCodexClick" />
+                            </StackPanel>
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="ChatGptAccountRow">
+                            <tk:SettingsCard.Description>
+                                <TextBlock x:Name="ChatGptAccountState" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            </tk:SettingsCard.Description>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="ChatGptSignInButton" AutomationProperties.AutomationId="ChatGptSignIn" Click="OnChatGptSignInClick" />
+                                <Button x:Name="ChatGptDisconnectButton" AutomationProperties.AutomationId="ChatGptDisconnect" Click="OnChatGptDisconnectClick" />
+                            </StackPanel>
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="ChatGptModelRow">
+                            <ComboBox x:Name="ChatGptModelBox" MinWidth="220" AutomationProperties.AutomationId="ChatGptModel" SelectionChanged="OnChatGptModelChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="ChatGptUsageRow">
+                            <Button x:Name="ChatGptUsageButton" AutomationProperties.AutomationId="ChatGptUsage" Click="OnChatGptUsageClick" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- The board's triage (AiPage.Board.cs), shown while it is offered. -->
+                <StackPanel
+                    x:Name="BoardGroup"
+                    Spacing="{StaticResource SettingsCardSpacing}"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="BoardHeading"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <TextBlock
+                        x:Name="BoardDescription"
+                        AutomationProperties.AutomationId="BoardTriageDescription"
+                        Style="{StaticResource SettingsGroupDescriptionStyle}"
+                        Visibility="Collapsed" />
+                    <tk:SettingsCard x:Name="BoardConsentRow">
+                        <ToggleSwitch
+                            x:Name="BoardConsentSwitch"
+                            AutomationProperties.AutomationId="BoardTriageConsent"
+                            Toggled="OnBoardConsentToggled" />
+                    </tk:SettingsCard>
+                    <!-- Triage These Accounts: a check box per enabled account (AiPage.Board.cs). -->
+                    <tk:SettingsCard x:Name="BoardAccountsRow">
+                        <tk:SettingsCard.Description>
+                            <StackPanel Spacing="2">
+                                <TextBlock
+                                    x:Name="BoardAccountsSubtitle"
+                                    AutomationProperties.AutomationId="BoardTriageAccountsSubtitle"
+                                    TextWrapping="Wrap"
+                                    Visibility="Collapsed" />
+                                <StackPanel
+                                    x:Name="BoardAccountsList"
+                                    Margin="0,4,0,0"
+                                    AutomationProperties.AutomationId="BoardTriageAccounts"
+                                    Spacing="0" />
+                            </StackPanel>
+                        </tk:SettingsCard.Description>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardModelRow">
+                        <ComboBox
+                            x:Name="BoardModelBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="BoardTriageModel" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardChatGptModelRow" Visibility="Collapsed">
+                        <ComboBox
+                            x:Name="BoardChatGptModelBox"
+                            MinWidth="220"
+                            AutomationProperties.AutomationId="BoardTriageChatGptModel"
+                            SelectionChanged="OnBoardChatGptModelChanged" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardAutoRow">
+                        <ToggleSwitch
+                            x:Name="BoardAutoSwitch"
+                            AutomationProperties.AutomationId="BoardTriageAuto"
+                            Toggled="OnBoardAutoToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardIntervalRow">
+                        <ComboBox
+                            x:Name="BoardIntervalBox"
+                            MinWidth="160"
+                            AutomationProperties.AutomationId="BoardTriageInterval"
+                            SelectionChanged="OnBoardIntervalChanged" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardDailyRow">
+                        <ComboBox
+                            x:Name="BoardDailyBox"
+                            MinWidth="160"
+                            AutomationProperties.AutomationId="BoardTriageDaily"
+                            SelectionChanged="OnBoardDailyChanged" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardStatusRow">
+                        <tk:SettingsCard.Description>
+                            <TextBlock
+                                x:Name="BoardStatusText"
+                                AutomationProperties.AutomationId="BoardTriageStatus"
+                                IsTextSelectionEnabled="True"
+                                TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardUsageRow" Visibility="Collapsed">
+                        <tk:SettingsCard.Description>
+                            <TextBlock
+                                x:Name="BoardUsageDetail"
+                                AutomationProperties.AutomationId="BoardTriageUsageDetail"
+                                IsTextSelectionEnabled="True"
+                                TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                        <TextBlock
+                            x:Name="BoardUsageValue"
+                            AutomationProperties.AutomationId="BoardTriageUsage"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Typography.NumeralAlignment="Tabular" />
+                    </tk:SettingsCard>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

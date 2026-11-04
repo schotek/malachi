@@ -1,0 +1,172 @@
+# The macOS client for the Mac App Store.
+#
+# One job on the macos-26 image, as macos.yml: the universal App Store
+# variant (DISTRIBUTION=appstore) in build/Malachi-Mail-<version>-macos-universal.pkg,
+# signed with the Apple Distribution and Mac Installer Distribution
+# identities of the repository's secrets, with the two Mac App Store
+# provisioning profiles, and validated by App Store Connect. A v* tag
+# then uploads it to App Store Connect, where it shows up in TestFlight;
+# sending it to App Review is a manual step there. A run by hand
+# only builds and validates: it uploads nothing and keeps no artifact
+# (the artifacts of a public repository are anyone's).
+#
+# The build is make macos-mas, as on a Mac; the validation and the upload
+# are xcrun altool with the App Store Connect API key, the same command
+# make -C macos validate-pkg runs. CFBundleVersion is the run's number,
+# which grows with every run. What a tag builds was tested before it was
+# tagged. Only schotek/malachi uploads; a copy of this repository builds
+# and validates.
+#
+# Secrets:
+#   MACOS_MAS_CERTIFICATES           base64 of one .p12 with both identities
+#   MACOS_MAS_CERTIFICATES_PASSWORD  its password
+#   MACOS_MAS_PROFILE                base64 of the profile of io.github.schotek.Malachi
+#   MACOS_MAS_MCP_PROFILE            base64 of that of io.github.schotek.Malachi.malachi-mcp
+#   MACOS_MAS_API_KEY                the text of the API key's .p8
+#   MACOS_MAS_API_KEY_ID             its key ID
+#   MACOS_NOTARY_ISSUER              the issuer ID (the team's, shared with macos.yml)
+# Without all of them the job says so and stops before building.
+name: macOS App Store
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-mas-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  pkg:
+    name: pkg (universal)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - name: Check the secrets
+        id: secrets
+        env:
+          CERTIFICATES: ${{ secrets.MACOS_MAS_CERTIFICATES }}
+          CERTIFICATES_PASSWORD: ${{ secrets.MACOS_MAS_CERTIFICATES_PASSWORD }}
+          PROFILE: ${{ secrets.MACOS_MAS_PROFILE }}
+          MCP_PROFILE: ${{ secrets.MACOS_MAS_MCP_PROFILE }}
+          API_KEY: ${{ secrets.MACOS_MAS_API_KEY }}
+          API_KEY_ID: ${{ secrets.MACOS_MAS_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: |
+          for v in CERTIFICATES CERTIFICATES_PASSWORD PROFILE MCP_PROFILE API_KEY API_KEY_ID API_ISSUER; do
+            if [ -z "${!v}" ]; then
+              echo "::warning title=Not built::a secret of the App Store build is missing ($v); see the comment at the top of macos-mas.yml"
+              echo 'enabled=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo 'enabled=true' >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: steps.secrets.outputs.enabled == 'true'
+        with:
+          # git describe needs the tags, so no shallow clone.
+          fetch-depth: 0
+
+      - name: Read the Go version of backend/go.mod
+        if: steps.secrets.outputs.enabled == 'true'
+        id: go
+        run: |
+          minor="$(sed -nE 's/^go ([0-9]+\.[0-9]+).*/\1/p' backend/go.mod)"
+          [ -n "$minor" ] || { echo '::error::backend/go.mod has no go directive'; exit 1; }
+          echo "version=$minor" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v7
+        if: steps.secrets.outputs.enabled == 'true'
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache-dependency-path: backend/go.sum
+
+      - name: Check the SDK
+        if: steps.secrets.outputs.enabled == 'true'
+        run: |
+          sdk="$(xcrun --show-sdk-version)"
+          echo "$(xcodebuild -version | head -n 1), macOS SDK $sdk"
+          [ "${sdk%%.*}" -ge 26 ] || { echo "::error::macOS SDK $sdk is older than 26"; exit 1; }
+
+      - name: Put the identities, the profiles and the API key in place
+        # A temporary keychain as in macos.yml, with Apple's WWDR G3
+        # intermediate, which issues both identities; the profiles and the
+        # .p8 go into the runner's temporary directory. The last step
+        # removes all of it.
+        id: keychain
+        if: steps.secrets.outputs.enabled == 'true'
+        env:
+          CERTIFICATES: ${{ secrets.MACOS_MAS_CERTIFICATES }}
+          CERTIFICATES_PASSWORD: ${{ secrets.MACOS_MAS_CERTIFICATES_PASSWORD }}
+          PROFILE: ${{ secrets.MACOS_MAS_PROFILE }}
+          MCP_PROFILE: ${{ secrets.MACOS_MAS_MCP_PROFILE }}
+          API_KEY: ${{ secrets.MACOS_MAS_API_KEY }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$CERTIFICATES" | base64 --decode > "$RUNNER_TEMP/certificates.p12"
+          security import "$RUNNER_TEMP/certificates.p12" -k "$keychain" -f pkcs12 -P "$CERTIFICATES_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          rm -f "$RUNNER_TEMP/certificates.p12"
+          if curl -fsSL -o "$RUNNER_TEMP/AppleWWDRCAG3.cer" "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer"; then
+            security import "$RUNNER_TEMP/AppleWWDRCAG3.cer" -k "$keychain" >/dev/null 2>&1 || true
+          else
+            echo "::warning::could not download Apple's WWDR G3 intermediate"
+          fi
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          sign="$(security find-identity -v -p codesigning "$keychain" | sed -nE 's/.*"(Apple Distribution: [^"]+)".*/\1/p' | head -n 1)"
+          installer="$(security find-identity -v "$keychain" | sed -nE 's/.*"(3rd Party Mac Developer Installer: [^"]+)".*/\1/p' | head -n 1)"
+          [ -n "$sign" ] || { echo '::error::MACOS_MAS_CERTIFICATES holds no Apple Distribution identity'; exit 1; }
+          [ -n "$installer" ] || { echo '::error::MACOS_MAS_CERTIFICATES holds no 3rd Party Mac Developer Installer identity'; exit 1; }
+          echo "Signing as $sign, packaging as $installer"
+          echo "sign=$sign" >> "$GITHUB_OUTPUT"
+          echo "installer=$installer" >> "$GITHUB_OUTPUT"
+          printf '%s' "$PROFILE" | base64 --decode > "$RUNNER_TEMP/app.provisionprofile"
+          printf '%s' "$MCP_PROFILE" | base64 --decode > "$RUNNER_TEMP/mcp.provisionprofile"
+          printf '%s\n' "$API_KEY" > "$RUNNER_TEMP/api.p8"
+
+      - name: Build the package
+        if: steps.secrets.outputs.enabled == 'true'
+        env:
+          SIGN: ${{ steps.keychain.outputs.sign }}
+          INSTALLER_SIGN: ${{ steps.keychain.outputs.installer }}
+        run: |
+          make macos-mas SIGN="$SIGN" INSTALLER_SIGN="$INSTALLER_SIGN" \
+            PROFILE="$RUNNER_TEMP/app.provisionprofile" MCP_PROFILE="$RUNNER_TEMP/mcp.provisionprofile" \
+            BUILD_NUMBER="${{ github.run_number }}"
+          ls build/Malachi-Mail-*-macos-universal.pkg
+
+      - name: Validate
+        if: steps.secrets.outputs.enabled == 'true'
+        env:
+          API_KEY_ID: ${{ secrets.MACOS_MAS_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: |
+          xcrun altool --validate-app -f build/Malachi-Mail-*-macos-universal.pkg -t macos \
+            --api-key "$API_KEY_ID" --api-issuer "$API_ISSUER" --p8-file-path "$RUNNER_TEMP/api.p8"
+
+      - name: Upload to App Store Connect
+        # Only a release tag; the build appears in TestFlight once Apple
+        # has processed it.
+        if: steps.secrets.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v') && github.repository == 'schotek/malachi'
+        env:
+          API_KEY_ID: ${{ secrets.MACOS_MAS_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: |
+          xcrun altool --upload-app -f build/Malachi-Mail-*-macos-universal.pkg -t macos \
+            --api-key "$API_KEY_ID" --api-issuer "$API_ISSUER" --p8-file-path "$RUNNER_TEMP/api.p8"
+
+      - name: Remove the keychain, the profiles and the API key
+        if: always() && steps.secrets.outputs.enabled == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/api.p8" "$RUNNER_TEMP/certificates.p12" "$RUNNER_TEMP"/*.provisionprofile

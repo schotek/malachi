@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- The Assistant (ui/internal/assistant): a large and a small sparkle. -->
+  <path fill="#222222" d="M 7 3 Q 7.9 8.1 13 9 Q 7.9 9.9 7 15 Q 6.1 9.9 1 9 Q 6.1 8.1 7 3 Z"/>
+  <path fill="#222222" d="M 12.5 0.5 Q 12.95 3.05 15.5 3.5 Q 12.95 3.95 12.5 6.5 Q 12.05 3.95 9.5 3.5 Q 12.05 3.05 12.5 0.5 Z"/>
+</svg>

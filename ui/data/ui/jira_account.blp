@@ -1,0 +1,158 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The settings of a Jira account (kind jira): one scrolling page under a
+// header bar with Cancel and Save, the banner of a failed call under it.
+// Object IDs are looked up from ui/internal/jiraaccount/dialog.go; keep
+// them in sync. The titles come from ui/internal/jira (SettingsTexts) and
+// are set from Go, as are the rows that depend on the account: the
+// spaces, the switches of the views, the picker of the closed statuses
+// (statuses.go) and the lists of texts (lists.go). Every text from the
+// site or the stored configuration is plain. The subtitle of window_title
+// is the progress of the call under way; the banner says why the spaces
+// could not be listed, or why Save did nothing.
+Adw.Dialog jira_account_dialog {
+  content-width: 600;
+  content-height: 680;
+  focus-widget: name_row;
+  default-widget: save_button;
+
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      show-start-title-buttons: false;
+      show-end-title-buttons: false;
+
+      title-widget: Adw.WindowTitle window_title {};
+
+      [start]
+      Button cancel_button {
+        label: _("_Cancel");
+        use-underline: true;
+      }
+
+      [end]
+      Button save_button {
+        label: _("_Save");
+        use-underline: true;
+
+        styles [
+          "suggested-action",
+        ]
+      }
+
+      [end]
+      Adw.Spinner progress_spinner {
+        visible: false;
+      }
+    }
+
+    [top]
+    Adw.Banner banner {
+      revealed: false;
+      use-markup: false;
+    }
+
+    content: Adw.PreferencesPage {
+      Adw.PreferencesGroup site_group {
+        // The site's address as the subtitle, its deployment at the end.
+        Adw.ActionRow address_row {
+          use-markup: false;
+          subtitle-selectable: true;
+
+          [suffix]
+          Label deployment_label {
+            valign: center;
+            use-markup: false;
+
+            styles [
+              "dim-label",
+            ]
+          }
+        }
+
+        Adw.EntryRow name_row {
+          activates-default: true;
+        }
+
+        // The user's name at the end, the address as the subtitle.
+        Adw.ActionRow user_row {
+          use-markup: false;
+          subtitle-selectable: true;
+
+          [suffix]
+          Label user_label {
+            valign: center;
+            use-markup: false;
+            selectable: true;
+            ellipsize: middle;
+            max-width-chars: 28;
+
+            styles [
+              "dim-label",
+            ]
+          }
+        }
+
+        Adw.ActionRow token_row {
+          use-markup: false;
+
+          [suffix]
+          Button token_button {
+            valign: center;
+          }
+        }
+      }
+
+      // A site may list hundreds of spaces: the list scrolls on its own
+      // past a few rows, as on macOS.
+      Adw.PreferencesGroup spaces_group {
+        ScrolledWindow {
+          hscrollbar-policy: never;
+          propagate-natural-height: true;
+          max-content-height: 336;
+
+          child: ListBox spaces_list {
+            selection-mode: none;
+
+            styles [
+              "boxed-list",
+            ]
+          };
+        }
+
+        Label spaces_problem {
+          visible: false;
+          xalign: 0;
+          wrap: true;
+          margin-top: 6;
+
+          styles [
+            "error",
+            "caption",
+          ]
+        }
+      }
+
+      Adw.PreferencesGroup sync_group {
+        Adw.ComboRow offline_row {}
+
+        Adw.SwitchRow only_mine_row {}
+
+        Adw.SwitchRow show_events_row {}
+      }
+
+      // The switches of the views and the picker of the closed statuses.
+      Adw.PreferencesGroup folders_group {}
+
+      // The mode, then the list of senders.
+      Adw.PreferencesGroup notification_group {
+        Adw.ComboRow mode_row {}
+      }
+
+      // The bot accounts, the hidden lines and the name prefixes.
+      Adw.PreferencesGroup bots_group {}
+    };
+  };
+}

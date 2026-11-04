@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Shared/AttachmentTileView.swift; GTK: the
+attachment tile of attachments.go buildChip and compose.go addChip follows.
+One attachment as a tile, the same under the headers of a message and in a
+compose window: a card of fixed width (280 × 46, radius 6, the card's
+border and fill; GTK's TileWidth: three side by side fill a pane of about
+900 px at the text size of Windows, as of GNOME, where macOS has 216 pt at
+its smaller one), the shell's 32 px icon for the file's type, the name on
+the first line (its middle cut to the width, AttachmentTile.xaml.cs) over
+the size, and a trailing button (the arrow of the actions' menu, or the ✕
+of a compose window). The tints of hover and press show only on a tile
+that can be clicked.
+-->
+<UserControl
+    x:Class="Malachi.App.Attachments.AttachmentTile"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Width="280"
+    Height="46"
+    CornerRadius="6"
+    IsTabStop="True"
+    UseSystemFocusVisuals="True">
+    <Grid
+        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1"
+        CornerRadius="6">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- The tints of hover and press, under the content. -->
+        <Border
+            x:Name="HoverTint"
+            Grid.ColumnSpan="3"
+            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+            IsHitTestVisible="False"
+            Opacity="0" />
+        <Border
+            x:Name="PressTint"
+            Grid.ColumnSpan="3"
+            Background="{ThemeResource SubtleFillColorTertiaryBrush}"
+            IsHitTestVisible="False"
+            Opacity="0" />
+
+        <Border
+            x:Name="IconSlot"
+            Width="32"
+            Height="32"
+            Margin="8,0,0,0"
+            VerticalAlignment="Center" />
+
+        <StackPanel
+            x:Name="Texts"
+            Grid.Column="1"
+            Margin="8,0,4,0"
+            VerticalAlignment="Center"
+            Spacing="1">
+            <TextBlock
+                x:Name="NameText"
+                MaxLines="1"
+                Style="{StaticResource BodyLabelStyle}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <StackPanel
+                x:Name="DetailRow"
+                Orientation="Horizontal"
+                Spacing="4">
+                <TextBlock
+                    x:Name="SizeText"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource DimCaptionLabelStyle}" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border
+            x:Name="AccessorySlot"
+            Grid.Column="2"
+            Margin="0,0,6,0"
+            VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

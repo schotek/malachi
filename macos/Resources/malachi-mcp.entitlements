@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+The entitlements macos/Makefile signs into malachi-mcp alone. The bridge
+reads the text of PDF attachments with PDFium compiled to WebAssembly,
+which wazero translates to native code in memory it maps writable and
+then executable, without MAP_JIT; under the hardened runtime of a
+Developer ID build the kernel kills the process at the first PDF unless
+this entitlement allows unsigned executable memory (allow-jit alone does
+not). The worker that parses documents is malachi-mcp itself started
+again as a child process, so it runs under this signature too. The app,
+malachid and malachi-keychain run no such code and get none of it.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+</dict>
+</plist>

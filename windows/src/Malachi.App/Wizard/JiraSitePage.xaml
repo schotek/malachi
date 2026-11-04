@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/AccountWizard/Jira/JiraSitePageController.swift;
+GTK: jira_wizard.blp site_page. The assistant's first page: the banner
+(site_banner) across the top, then a scrolling column clamped to 480 px with
+24 px margins: the explanation (dim, wrapping), the Site Address row, and
+the text under it (site_status: what is wrong with the address in the
+critical colour, or what the site turned out to be, dim; hidden while
+empty); at the bottom the call under way (a spinner and its progress text)
+at the start and Next (site_next_button, the suggested action) at the end,
+12 px margins. The site's title is untrusted text, plain.
+-->
+<UserControl
+    x:Class="Malachi.App.Wizard.JiraSitePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Malachi.App.Wizard"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <InfoBar
+            x:Name="Banner"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="JiraSiteBanner"
+            CornerRadius="0"
+            IsClosable="False"
+            IsOpen="False"
+            Severity="Warning" />
+
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <StackPanel
+                    MaxWidth="480"
+                    Padding="24"
+                    Spacing="12">
+                    <TextBlock
+                        x:Name="Description"
+                        Margin="0,0,0,6"
+                        Style="{StaticResource DimLabelStyle}"
+                        TextWrapping="Wrap" />
+                    <tk:SettingsCard x:Name="SiteRow">
+                        <TextBox
+                            x:Name="SiteBox"
+                            MinWidth="{StaticResource SettingsEntryWidth}"
+                            AutomationProperties.AutomationId="JiraSite"
+                            InputScope="Url"
+                            IsSpellCheckEnabled="False"
+                            IsTextPredictionEnabled="False"
+                            KeyDown="OnSiteKeyDown"
+                            TextChanged="OnSiteChanged" />
+                    </tk:SettingsCard>
+                    <TextBlock
+                        x:Name="Status"
+                        AutomationProperties.AutomationId="JiraSiteStatus"
+                        AutomationProperties.LiveSetting="Polite"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <local:JiraWizardButtonBar x:Name="Bar" Grid.Row="2" />
+    </Grid>
+</UserControl>

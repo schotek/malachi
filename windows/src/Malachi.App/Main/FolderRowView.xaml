@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the sidebar rows of ui/internal/window/folders.go (newHeaderRow,
+newFolderRow, newTwisty) and favourites.go (newStar), with the sidebar
+rules of ui/internal/style (rows of 24 px plus 1 above and below, icons of
+14, the title at 88 %, the fold arrow and the star squeezed to 18, the star
+waiting for the pointer or the keyboard); macOS:
+Sidebar/FolderCellView.swift and SidebarHeaderCellView. A heading is the
+fold arrow (inert and invisible on Favourites) and a dim caption heading,
+3 px lower than a row, with the kind capsule of an account's heading
+(JIRA, GOOGLE, M365, IMAP; widget.NewKindBadge) right after its name; a
+folder sits 12 in from its heading (the start padding of GTK's
+Adw.ActionRow, SidebarRow.FolderInset) and 12 more per level: its arrow
+(in a nested account), icon (a
+Jira view's saved search, else its role's), name (and whose it is, for a
+pinned folder with several accounts), unread badge and pin star. What the
+row shows is Core's SidebarRow; every text is plain.
+-->
+<UserControl
+    x:Class="Malachi.App.Main.FolderRowView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <!-- The title box at 88 % (style.go row.folder-row), on a line of
+             its own height rather than the body's 20, so that the account
+             under a pinned folder's name sits close to it. -->
+        <Style x:Key="FolderTitleStyle" BasedOn="{StaticResource BodyLabelStyle}" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        </Style>
+        <!-- caption-heading dim-label. -->
+        <Style x:Key="FolderHeadingStyle" BasedOn="{StaticResource DimCaptionLabelStyle}" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </UserControl.Resources>
+    <Grid
+        x:Name="RowRoot"
+        MinHeight="{x:Bind main:FolderRowView.RowMinHeight(Row.TwoLines), Mode=OneWay}"
+        Margin="{x:Bind main:FolderRowView.RowMargin(Row.Indent, Row.IsHeading), Mode=OneWay}"
+        Background="Transparent"
+        ColumnSpacing="6"
+        ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.Tooltip), Mode=OneWay}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- newTwisty: pan-down open, pan-end folded; an inactive arrow
+             keeps its place, invisible and inert. -->
+        <Button
+            x:Name="Twisty"
+            Width="18"
+            Height="18"
+            Padding="0"
+            VerticalAlignment="Center"
+            AutomationProperties.AccessibilityView="{x:Bind main:MessageRowView.View(Row.TwistyActive), Mode=OneWay}"
+            AutomationProperties.Name="{x:Bind Row.TwistyTooltip, Mode=OneWay}"
+            Click="OnTwistyClick"
+            IsHitTestVisible="{x:Bind Row.TwistyActive, Mode=OneWay}"
+            IsTabStop="False"
+            Opacity="{x:Bind main:MessageRowView.Opaque(Row.TwistyActive), Mode=OneWay}"
+            Style="{StaticResource SubtleButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.TwistyTooltip), Mode=OneWay}"
+            Visibility="{x:Bind res:Bind.Visible(Row.TwistyShown), Mode=OneWay}">
+            <FontIcon FontSize="10" Glyph="{x:Bind res:Icons.Glyph(Row.TwistyIcon), Mode=OneWay}" />
+        </Button>
+
+        <FontIcon
+            x:Name="RoleIcon"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            AutomationProperties.AccessibilityView="Raw"
+            FontSize="14"
+            Glyph="{x:Bind res:Icons.Glyph(Row.Icon), Mode=OneWay}"
+            Opacity="{x:Bind main:FolderRowView.DimOpacity(Row.Dimmed), Mode=OneWay}"
+            Visibility="{x:Bind res:Bind.VisibleIfText(Row.Icon), Mode=OneWay}" />
+
+        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+            <main:CapsulePanel>
+                <TextBlock
+                    x:Name="TitleLabel"
+                    MaxLines="1"
+                    Opacity="{x:Bind main:FolderRowView.DimOpacity(Row.Dimmed), Mode=OneWay}"
+                    Style="{x:Bind TitleStyle(Row.IsHeading), Mode=OneWay}"
+                    Text="{x:Bind Row.Title, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <!-- The row's text names it for a screen reader (SidebarRow.ToString). -->
+                <Border
+                    x:Name="Capsule"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Style="{StaticResource KindBadgeBorderStyle}"
+                    Visibility="{x:Bind res:Bind.VisibleIfText(Row.Capsule), Mode=OneWay}">
+                    <TextBlock Style="{StaticResource KindBadgeTextStyle}" Text="{x:Bind Row.Capsule, Mode=OneWay}" />
+                </Border>
+            </main:CapsulePanel>
+            <TextBlock
+                x:Name="SubtitleLabel"
+                MaxLines="1"
+                Style="{StaticResource DimCaptionLabelStyle}"
+                Text="{x:Bind Row.Subtitle, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap"
+                Visibility="{x:Bind res:Bind.VisibleIfText(Row.Subtitle), Mode=OneWay}" />
+        </StackPanel>
+
+        <!-- label.unread-badge: a bold count in an accent disc 16 across,
+             a capsule with more digits; tight line bounds centre the digits
+             rather than the line box. -->
+        <Border
+            x:Name="Badge"
+            Grid.Column="3"
+            Height="16"
+            MinWidth="16"
+            Padding="4,0"
+            VerticalAlignment="Center"
+            Background="{ThemeResource AccentFillColorDefaultBrush}"
+            CornerRadius="8"
+            Visibility="{x:Bind res:Bind.VisibleIfText(Row.Badge), Mode=OneWay}">
+            <TextBlock
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontWeight="Bold"
+                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind Row.Badge, Mode=OneWay}"
+                TextLineBounds="Tight" />
+        </Border>
+
+        <!-- starSlot: the All Inboxes row keeps the star's place. -->
+        <Border
+            Grid.Column="4"
+            Width="18"
+            Height="18"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind main:FolderRowView.StarSlot(Row.Kind), Mode=OneWay}" />
+
+        <!-- newStar: Add to / Remove from Favourites; waits for the pointer,
+             the selection or the keyboard, but a filled star in the tree. -->
+        <Button
+            x:Name="Star"
+            Grid.Column="4"
+            Width="18"
+            Height="18"
+            Padding="0"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="{x:Bind Row.StarTooltip, Mode=OneWay}"
+            Click="OnStarClick"
+            GotFocus="OnStarFocus"
+            LostFocus="OnStarFocus"
+            Style="{StaticResource SubtleButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.StarTooltip), Mode=OneWay}"
+            Visibility="{x:Bind res:Bind.Visible(Row.HasStar), Mode=OneWay}">
+            <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph(Row.StarIcon), Mode=OneWay}" />
+        </Button>
+    </Grid>
+</UserControl>

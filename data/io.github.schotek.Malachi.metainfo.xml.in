@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>@APP_ID@</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later AND AGPL-3.0-only</project_license>
+
+  <name>Malachi Mail</name>
+  <summary>Native email client for the GNOME desktop</summary>
+
+  <description>
+    <p>
+      Malachi Mail is a desktop email client for Linux, built with GTK 4 and
+      libadwaita. It keeps mail available offline, renders HTML messages only
+      after sanitising them, and separates the user interface from the mail
+      engine, which also drives the native Malachi Mail apps for macOS and
+      Windows.
+    </p>
+    <p>
+      Mail is read, written, sent and searched, grouped into conversations
+      and shown as cards on a timeline or as a chat. Jira issues are followed
+      as conversations, a calendar keeps Microsoft 365 and CalDAV calendars
+      and answers invitations from the message, and the Board sorts what
+      waits for you, what waits for others and what is just for your
+      information. An optional bridge lets AI agents read the mail and write
+      drafts, and nothing more without your permission.
+    </p>
+    <p>
+      This is an early version: keep a second mail program for anything that
+      matters.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">@APP_ID@.desktop</launchable>
+
+  <url type="homepage">https://malachimail.app</url>
+  <url type="bugtracker">https://malachimail.app/#report</url>
+  <url type="vcs-browser">https://github.com/schotek/malachi</url>
+
+  <developer id="io.github.schotek">
+    <name>Malachi Mail contributors</name>
+  </developer>
+
+  <content_rating type="oars-1.1" />
+
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#f6d32d</color>
+    <color type="primary" scheme_preference="dark">#5e5c64</color>
+  </branding>
+
+  <!-- TODO: screenshots (Flathub requires at least one with a caption). -->
+
+  <!-- <releases> is generated from NEWS at build time; see the metainfo
+       rule in the Makefile and docs/releasing.md. Do not add it here. -->
+</component>

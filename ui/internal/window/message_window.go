@@ -1,0 +1,225 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package window
+
+import (
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+
+	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/conversation"
+	"github.com/schotek/malachi/ui/internal/printing"
+	"github.com/schotek/malachi/ui/internal/widget"
+)
+
+// MessageWindow shows one message in its own top-level window. It is built
+// from data/ui/message_window.blp and, like the main window, only displays
+// what it is given. Its actions live in the window-local "msg" group and
+// call back into the main window, which owns the model and the RPCs.
+type MessageWindow struct {
+	*adw.Window
+
+	id     api.MessageID
+	outbox bool
+	// s is the message's summary as last shown; crm the window's eWay-CRM
+	// controls on it (crm_actions.go).
+	s   api.MessageSummary
+	crm *crmControls
+
+	// markRead and markUnread follow the seen flag (setSeen), as in the
+	// main window.
+	markRead, markUnread *gio.SimpleAction
+
+	// closed is set from close-request so late fetch replies are dropped.
+	closed bool
+
+	// quoted is whether the user revealed the quoted history of the
+	// message (its "•••", quoted.go): kept while the window is open.
+	quoted conversation.QuotedReveal
+
+	title  *adw.WindowTitle
+	view   *messageView
+	star   *gtk.ToggleButton
+	menu   *gtk.MenuButton
+	toasts *adw.ToastOverlay
+	banner *adw.Banner // delivery state of an outbox message (outbox.go)
+}
+
+// messageShortcuts are the msg.* accelerators of a message window; the
+// main window's win.* equivalents are set in main.go.
+var messageShortcuts = []struct{ trigger, action string }{
+	{"Delete", "msg.trash"},
+	{"a", "msg.archive"},
+	{"j", "msg.junk"},
+	{"u", "msg.mark-unread"},
+	{"s", "msg.toggle-flag"},
+	{PrintAccel, "msg.print"},
+}
+
+// newMessageWindow creates the window for message s of the main window w
+// and shows what is cached; openMessageWindow fetches the rest. The window
+// is owned by the application (so it stays alive while open) but is not
+// transient for the main window: the user asked for independent windows.
+func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
+	b := data.Builder("message_window.ui")
+	id := s.ID
+
+	mw := &MessageWindow{
+		Window: b.GetObject("message_window").Cast().(*adw.Window),
+		id:     id,
+		s:      s,
+		title:  b.GetObject("window_title").Cast().(*adw.WindowTitle),
+		star:   b.GetObject("star_button").Cast().(*gtk.ToggleButton),
+		menu:   b.GetObject("message_menu").Cast().(*gtk.MenuButton),
+		toasts: b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
+		banner: b.GetObject("outbox_banner").Cast().(*adw.Banner),
+	}
+	mw.SetApplication(&w.app.Application)
+	mw.view = newMessageView(w, &mw.Window.Window, b)
+	mw.view.load = func() { w.loadRemoteImages(id) }
+	mw.view.trust = func() { w.trustSender(id) }
+	mw.view.toast = func(text string) { mw.toasts.AddToast(widget.PlainToast(text)) }
+	mw.view.pictures = func() { w.downloadPictures(id, mw.view.say) }
+	mw.quoted.Show(string(id))
+	mw.view.onQuoted = func(on bool) { w.setWindowQuoted(mw, on) }
+
+	// The "msg" action group: the header buttons and the menu bind to it,
+	// so their sensitivity follows the actions. Moves and trash close the
+	// window through closeMessageWindow once the row is gone. An outbox
+	// message takes no flags or moves (the daemon refuses them); its trash
+	// button cancels the send.
+	outbox := w.model.inOutbox(s)
+	mw.outbox = outbox
+	// What the message's account offers (action_rules.go): a Jira account
+	// comments instead of replying and has no Trash, Archive or Junk.
+	st := w.model.messageActionState(listRow{Key: listKey{Message: id}, Message: s}, true)
+	g := gio.NewSimpleActionGroup()
+	add := func(name string, enabled bool, fn func()) *gio.SimpleAction {
+		a := gio.NewSimpleAction(name, nil)
+		a.SetEnabled(enabled)
+		a.ConnectActivate(func(*glib.Variant) { fn() })
+		g.AddAction(a)
+		return a
+	}
+	mw.markRead = add("mark-read", false, func() { w.markRead(id) })
+	mw.markUnread = add("mark-unread", false, func() { w.markUnread(id) })
+	mw.setSeen(hasFlag(s.Flags, api.FlagSeen))
+	add("toggle-flag", !outbox, func() { w.toggleFlagged(id) })
+	add("trash", st.trash, func() { w.trashFrom(mw, id) })
+	add("archive", st.archive, func() { w.archive(id) })
+	add("junk", st.junk, func() { w.junkFrom(mw, id) })
+	add("load-images", true, func() { w.loadRemoteImages(id) })
+	add("trust-sender", !outbox, func() { w.trustSender(id) })
+	add("change-status", s.Issue != nil && w.issues.canTransition(s.AccountID), func() {
+		if mw.view.card != nil {
+			mw.view.card.popupStatus()
+		}
+	})
+	// The Assistant menu (assistant.go) on this message, never an outbox
+	// one; enabled as the menu opens, while the chosen target can run it.
+	ask := gio.NewSimpleAction("assistant", glib.NewVariantType("s"))
+	ask.SetEnabled(false)
+	ask.ConnectActivate(func(v *glib.Variant) {
+		if v != nil {
+			w.askAssistantAbout(&mw.Window.Window, assistant.Action(v.String()), s, mw.view.say)
+		}
+	})
+	g.AddAction(ask)
+	mw.crm = newCrmControls(w, "msg", &mw.Window.Window, b, func(a *gio.SimpleAction) { g.AddAction(a) },
+		func() []crmSubject { return []crmSubject{{s: mw.s}} },
+		func(text string) { mw.toasts.AddToast(widget.PlainToast(text)) })
+	// Print… prints this message (print.go), from More Actions and Ctrl+P.
+	add("print", true, func() { w.printMessages([]api.MessageSummary{mw.s}, printing.Single, &mw.Window.Window) })
+	if m, ok := b.GetObject("message_menu_model").Cast().(*gio.Menu); ok {
+		m.AppendSection("", printMenuSection("msg.print"))
+	}
+	mw.InsertActionGroup("msg", g)
+	unbind := w.assist.bindAssistantButton(b.GetObject("assistant_button").Cast().(*gtk.MenuButton), "msg", false, func() {
+		_, ok := w.assist.pick(true)
+		ask.SetEnabled(ok && !outbox)
+	}, nil, nil)
+	activeHandle := mw.NotifyProperty("is-active", func() {
+		if mw.IsActive() {
+			w.assist.Refresh()
+		}
+	})
+	mw.ConnectCloseRequest(func() bool {
+		unbind()
+		mw.HandlerDisconnect(activeHandle)
+		return false
+	})
+	for name, obj := range map[string]string{"trash": "trash_button", "archive": "archive_button"} {
+		b.GetObject(obj).Cast().(*gtk.Button).SetActionName("msg." + name)
+	}
+	for obj, supported := range map[string]bool{
+		"trash_button": st.supported.Trash, "archive_button": st.supported.Archive,
+		"reply_all_button": st.supported.ReplyAll, "forward_button": st.supported.Forward,
+		"reply_button": st.supported.Reply,
+	} {
+		b.GetObject(obj).Cast().(*gtk.Button).SetVisible(supported)
+	}
+	w.presentReply(b.GetObject("reply_button").Cast().(*gtk.Button), st.comment)
+	b.GetObject("forward_button").Cast().(*gtk.Button).SetSensitive(st.forward)
+	b.GetObject("trash_button").Cast().(*gtk.Button).SetTooltipText(trashTooltip(outbox))
+	mw.star.SetSensitive(!outbox)
+	// "clicked" fires for user clicks only, not for SetActive from Go.
+	mw.star.ConnectClicked(func() { w.toggleFlagged(id) })
+	mw.banner.ConnectButtonClicked(func() { w.retryOutbox(id) })
+	for _, r := range []struct {
+		id   string
+		kind compose.Kind
+	}{{"reply_button", compose.KindReply}, {"reply_all_button", compose.KindReplyAll}, {"forward_button", compose.KindForward}} {
+		r := r
+		b.GetObject(r.id).Cast().(*gtk.Button).ConnectClicked(func() { w.openComposeFrom(mw, r.kind, id) })
+	}
+
+	// Single-letter shortcuts are safe here: the window has no text entry,
+	// and selectable labels do not consume plain keys. Capture phase so the
+	// HTML view, when it has the focus, does not see them first.
+	sc := gtk.NewShortcutController()
+	sc.SetPropagationPhase(gtk.PhaseCapture)
+	for _, short := range messageShortcuts {
+		sc.AddShortcut(gtk.NewShortcut(gtk.NewShortcutTriggerParseString(short.trigger), gtk.NewNamedAction(short.action)))
+	}
+	mw.AddController(sc)
+
+	mw.show(s, w.loaded[id])
+	return mw
+}
+
+// setSeen enables Mark as Read or Mark as Unread by the seen flag, by the
+// main window's rules (setMessageActionsSensitive); an outbox message
+// takes neither.
+func (mw *MessageWindow) setSeen(seen bool) {
+	mw.markRead.SetEnabled(!mw.outbox && !seen)
+	mw.markUnread.SetEnabled(!mw.outbox && seen)
+}
+
+// show displays the summary headers and, when lm is not nil, the full
+// headers, the body (or the error) and the outbox banner. Everything is
+// untrusted data: plain labels, no markup, and the HTML view gets the
+// sanitiser's output only. Body zoom and font are applied globally by
+// internal/style.
+func (mw *MessageWindow) show(s api.MessageSummary, lm *loadedMessage) {
+	subject := subjectText(s.Subject)
+	var msg *api.Message
+	if lm != nil && lm.msg != nil {
+		msg = lm.msg
+		subject = subjectText(msg.Subject)
+	}
+	mw.title.SetTitle(subject)
+	mw.SetTitle(subject)
+	setStar(mw.star, hasFlag(s.Flags, api.FlagFlagged))
+	mw.s = s
+	mw.view.render(s, lm)
+	renderOutboxBanner(mw.banner, msg)
+	if mw.crm != nil {
+		mw.crm.refresh()
+	}
+}

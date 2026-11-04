@@ -1,0 +1,232 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The editor of a mail rule (docs/plans/rules.md R14; window/rules_editor.go
+// over rulesctl.Editor). Every text is set from Go (the reference is
+// ui/internal/rules/text.go), so this file has no translatable strings.
+// The rows of the conditions and of the actions are built in Go; the
+// match row is the first row of the conditions list. Everything that may
+// come from mail is plain text.
+Adw.Dialog rules_editor {
+  content-width: 680;
+  content-height: 760;
+  focus-widget: rules_name;
+
+  child: Adw.ToolbarView rules_editor_page {
+    [top]
+    Adw.HeaderBar rules_editor_header {
+      show-start-title-buttons: false;
+      show-end-title-buttons: false;
+
+      title-widget: Adw.WindowTitle rules_editor_title {};
+
+      [start]
+      Button rules_cancel {
+        use-underline: true;
+        can-shrink: true;
+      }
+
+      [end]
+      Button rules_save {
+        use-underline: true;
+        can-shrink: true;
+
+        styles [
+          "suggested-action",
+        ]
+      }
+    }
+
+    content: ScrolledWindow {
+      hscrollbar-policy: never;
+      vexpand: true;
+
+      child: Adw.Clamp {
+        maximum-size: 620;
+
+        child: Box rules_column {
+          orientation: vertical;
+          spacing: 12;
+          margin-top: 12;
+          margin-bottom: 24;
+          margin-start: 18;
+          margin-end: 18;
+
+          // Name and the account the rule is for.
+          ListBox rules_general {
+            selection-mode: none;
+
+            styles [
+              "boxed-list",
+            ]
+
+            Adw.EntryRow rules_name {
+              use-markup: false;
+            }
+
+            Adw.ComboRow rules_account {
+              use-markup: false;
+            }
+          }
+
+          Label rules_name_problem {
+            use-markup: false;
+            wrap: true;
+            xalign: 0;
+            visible: false;
+
+            styles [
+              "error",
+              "caption",
+            ]
+          }
+
+          // How the conditions combine, then one row per condition.
+          ListBox rules_conditions {
+            selection-mode: none;
+
+            styles [
+              "boxed-list",
+            ]
+
+            Adw.ComboRow rules_match {
+              use-markup: false;
+            }
+          }
+
+          Label rules_conditions_problem {
+            use-markup: false;
+            wrap: true;
+            xalign: 0;
+            visible: false;
+
+            styles [
+              "error",
+              "caption",
+            ]
+          }
+
+          Button rules_add_condition {
+            halign: start;
+
+            child: Adw.ButtonContent rules_add_condition_content {
+              icon-name: "list-add-symbolic";
+            };
+
+            styles [
+              "flat",
+            ]
+          }
+
+          Label rules_actions_heading {
+            use-markup: false;
+            xalign: 0;
+            margin-top: 12;
+
+            styles [
+              "heading",
+            ]
+          }
+
+          // One row per action.
+          ListBox rules_actions {
+            selection-mode: none;
+
+            styles [
+              "boxed-list",
+            ]
+          }
+
+          Label rules_actions_problem {
+            use-markup: false;
+            wrap: true;
+            xalign: 0;
+            visible: false;
+
+            styles [
+              "error",
+              "caption",
+            ]
+          }
+
+          MenuButton rules_add_action {
+            halign: start;
+
+            child: Adw.ButtonContent rules_add_action_content {
+              icon-name: "list-add-symbolic";
+            };
+
+            styles [
+              "flat",
+            ]
+          }
+
+          // Stop processing more rules, and whether the rule is on.
+          ListBox rules_options {
+            selection-mode: none;
+            margin-top: 12;
+
+            styles [
+              "boxed-list",
+            ]
+
+            Adw.ActionRow rules_stop_row {
+              use-markup: false;
+              activatable-widget: rules_stop;
+
+              [prefix]
+              CheckButton rules_stop {
+                valign: center;
+              }
+            }
+
+            Adw.SwitchRow rules_enabled {
+              use-markup: false;
+            }
+          }
+
+          // Try It: which stored messages of a folder the rule would match.
+          ListBox rules_test {
+            selection-mode: none;
+
+            styles [
+              "boxed-list",
+            ]
+
+            Adw.ComboRow rules_test_folder {
+              use-markup: false;
+            }
+
+            Adw.ActionRow rules_test_row {
+              use-markup: false;
+
+              [suffix]
+              Adw.Spinner rules_test_spinner {
+                visible: false;
+                valign: center;
+              }
+
+              [suffix]
+              Button rules_test_button {
+                valign: center;
+              }
+            }
+          }
+
+          // The daemon's refusal of Save, as a sentence.
+          Label rules_error {
+            use-markup: false;
+            wrap: true;
+            xalign: 0;
+            visible: false;
+
+            styles [
+              "error",
+            ]
+          }
+        };
+      };
+    };
+  };
+}

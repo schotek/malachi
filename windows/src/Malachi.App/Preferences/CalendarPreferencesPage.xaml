@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/CalendarPaneViewController.swift
+(loadView, buildDisplay); GTK: none yet (Swift-first, the structure is
+ui/internal/calendar/preferences.go PreferencesLayout, Core's Cal.Prefs).
+Preferences → Calendar (the owner's decision of 2026-10-16, docs/calendar.md
+§5.8 "As built (M9)"), one scrolling page clamped to the Preferences'
+width: the group Display (Week Starts On, Default Duration, Default Alert,
+Show Declined Events, Working Hours as a start and an end at half hours
+with its subtitle, then the working days as seven toggle buttons under the
+working hours' summary), its refusal under its heading and the write under
+way beside it; then a section per account with the calendar capability
+(CalendarAccountSection, made in code); the empty state "No calendars
+yet." with its advice when no account has one; at the bottom Add CalDAV
+Calendar…. Its texts are Core's, set in code.
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.CalendarPreferencesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:compose="using:Malachi.App.Compose"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer
+        x:Name="Scroller"
+        AutomationProperties.AutomationId="PrefsCalendar"
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto">
+        <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+        <Grid>
+            <StackPanel
+                MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                Padding="{StaticResource SettingsPagePadding}"
+                Spacing="{StaticResource SettingsGroupSpacing}">
+                <!-- Display: a named group for UI Automation (a panel has no automation peer). -->
+                <compose:ChipGroup x:Name="DisplayGroup" AutomationProperties.AutomationId="PrefsCalendarDisplay">
+                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="DisplayHeading"
+                                VerticalAlignment="Center"
+                                AutomationProperties.HeadingLevel="Level2"
+                                Style="{StaticResource SettingsGroupHeaderStyle}" />
+                            <ProgressRing
+                                x:Name="DisplaySaving"
+                                Grid.Column="1"
+                                Width="16"
+                                Height="16"
+                                Margin="0,0,0,4"
+                                IsActive="False"
+                                Visibility="Collapsed" />
+                        </Grid>
+                        <TextBlock
+                            x:Name="DisplayError"
+                            AutomationProperties.AutomationId="PrefsCalendarDisplayError"
+                            Style="{StaticResource SettingsGroupDescriptionStyle}"
+                            Visibility="Collapsed" />
+                        <tk:SettingsCard x:Name="WeekStartRow" IsEnabled="False">
+                            <ComboBox
+                                x:Name="WeekStartBox"
+                                MinWidth="200"
+                                AutomationProperties.AutomationId="PrefsCalendarWeekStart"
+                                SelectionChanged="OnWeekStartChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="DurationRow" IsEnabled="False">
+                            <ComboBox
+                                x:Name="DurationBox"
+                                MinWidth="200"
+                                AutomationProperties.AutomationId="PrefsCalendarDuration"
+                                SelectionChanged="OnDurationChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="AlertRow" IsEnabled="False">
+                            <ComboBox
+                                x:Name="AlertBox"
+                                MinWidth="200"
+                                AutomationProperties.AutomationId="PrefsCalendarAlert"
+                                SelectionChanged="OnAlertChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="DeclinedRow" IsEnabled="False">
+                            <ToggleSwitch
+                                x:Name="DeclinedSwitch"
+                                AutomationProperties.AutomationId="PrefsCalendarDeclined"
+                                Toggled="OnDeclinedToggled" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="WorkingHoursRow" IsEnabled="False">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <ComboBox
+                                    x:Name="WorkStartBox"
+                                    MinWidth="100"
+                                    AutomationProperties.AutomationId="PrefsCalendarWorkStart"
+                                    SelectionChanged="OnWorkStartChanged" />
+                                <!-- Windows-only string: the dash between the two times (macOS's literal). -->
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Text="–" />
+                                <ComboBox
+                                    x:Name="WorkEndBox"
+                                    MinWidth="100"
+                                    AutomationProperties.AutomationId="PrefsCalendarWorkEnd"
+                                    SelectionChanged="OnWorkEndChanged" />
+                            </StackPanel>
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="WorkingDaysRow" IsEnabled="False">
+                            <tk:SettingsCard.Header>
+                                <TextBlock
+                                    x:Name="WorkingDaysText"
+                                    AutomationProperties.AutomationId="PrefsCalendarWorkingDays"
+                                    TextWrapping="Wrap" />
+                            </tk:SettingsCard.Header>
+                            <StackPanel
+                                x:Name="WorkingDays"
+                                Orientation="Horizontal"
+                                Spacing="4" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+                </compose:ChipGroup>
+
+                <!-- A section per account with the calendar capability. -->
+                <StackPanel x:Name="SectionsHost" Spacing="{StaticResource SettingsGroupSpacing}" />
+
+                <!-- No account has a calendar. -->
+                <StackPanel
+                    x:Name="EmptyGroup"
+                    Spacing="{StaticResource SettingsCardSpacing}"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="EmptyTitle"
+                        AutomationProperties.AutomationId="PrefsCalendarEmpty"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <TextBlock x:Name="EmptyBody" Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                </StackPanel>
+
+                <Button
+                    x:Name="AddCalDAVButton"
+                    AutomationProperties.AutomationId="PrefsCalendarAddCalDAV"
+                    Click="OnAddCalDAVClick" />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

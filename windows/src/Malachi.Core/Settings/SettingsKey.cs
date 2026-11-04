@@ -1,0 +1,178 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiCore/Settings/Settings.swift (Settings.Key);
+// GTK: ui/internal/settings/store.go (the Key constants). The keys of
+// data/io.github.schotek.Malachi.gschema.xml in its order, the window
+// geometry included (GTK declares it but never writes it; Windows keeps the
+// window there, docs/windows-port.md §8), plus the Windows-only ctrl-r, the
+// counterpart of macOS's command-r. SettingsStore.Schema has the names,
+// types, defaults and ranges.
+
+namespace Malachi.Core.Settings;
+
+/// <summary>A key of the settings schema.</summary>
+public enum SettingsKey
+{
+    /// <summary><c>window-width</c>.</summary>
+    WindowWidth,
+
+    /// <summary><c>window-height</c>.</summary>
+    WindowHeight,
+
+    /// <summary><c>window-maximized</c>.</summary>
+    WindowMaximized,
+
+    /// <summary><c>folder-pane-width</c>.</summary>
+    FolderPaneWidth,
+
+    /// <summary><c>message-list-width</c>.</summary>
+    MessageListWidth,
+
+    /// <summary><c>collapsed-folders</c>.</summary>
+    CollapsedFolders,
+
+    /// <summary><c>collapsed-accounts</c>.</summary>
+    CollapsedAccounts,
+
+    /// <summary><c>favourite-folders</c>.</summary>
+    FavouriteFolders,
+
+    /// <summary><c>unified-inbox</c>.</summary>
+    UnifiedInbox,
+
+    /// <summary><c>launch-at-login</c>.</summary>
+    LaunchAtLogin,
+
+    /// <summary><c>run-in-background</c>.</summary>
+    RunInBackground,
+
+    /// <summary><c>mark-read-delay</c>.</summary>
+    MarkReadDelay,
+
+    /// <summary><c>confirm-delete</c>.</summary>
+    ConfirmDelete,
+
+    /// <summary><c>desktop-notifications</c>.</summary>
+    DesktopNotifications,
+
+    /// <summary><c>notification-sound</c>.</summary>
+    NotificationSound,
+
+    /// <summary><c>color-scheme</c>.</summary>
+    ColorScheme,
+
+    /// <summary><c>message-list-density</c>.</summary>
+    Density,
+
+    /// <summary><c>show-preview-line</c>.</summary>
+    ShowPreviewLine,
+
+    /// <summary><c>group-by-conversation</c>.</summary>
+    GroupByConversation,
+
+    /// <summary><c>conversation-chat-layout</c>.</summary>
+    ConversationChatLayout,
+
+    /// <summary><c>conversation-chat-html</c>.</summary>
+    ConversationChatHtml,
+
+    /// <summary><c>conversation-chat-truncate-mine</c>.</summary>
+    ConversationChatTruncateMine,
+
+    /// <summary><c>conversation-chat-truncate-others</c>.</summary>
+    ConversationChatTruncateOthers,
+
+    /// <summary><c>search-scope</c>.</summary>
+    SearchScope,
+
+    /// <summary><c>show-avatars</c>.</summary>
+    ShowAvatars,
+
+    /// <summary><c>monochrome-avatars</c>.</summary>
+    MonochromeAvatars,
+
+    /// <summary><c>monospace-plain-text</c>.</summary>
+    MonospacePlainText,
+
+    /// <summary><c>text-zoom</c>.</summary>
+    TextZoom,
+
+    /// <summary><c>assistant-menu</c>.</summary>
+    AssistantMenu,
+
+    /// <summary><c>assistant-target</c>.</summary>
+    AssistantTarget,
+
+    /// <summary><c>assistant-model</c>.</summary>
+    AssistantModel,
+
+    /// <summary><c>assistant-claude-path</c>.</summary>
+    AssistantClaudePath,
+
+    /// <summary><c>assistant-consent</c>.</summary>
+    AssistantConsent,
+
+    /// <summary><c>assistant-provider</c>, independent of the external hand-off target.</summary>
+    AssistantProvider,
+
+    /// <summary><c>assistant-codex-path</c>.</summary>
+    AssistantCodexPath,
+
+    /// <summary><c>assistant-chatgpt-model</c>.</summary>
+    AssistantChatGptModel,
+
+    /// <summary><c>assistant-chatgpt-consent-version</c>.</summary>
+    AssistantChatGptConsentVersion,
+
+    /// <summary><c>board-default-style</c>: <see cref="SettingsStore.BoardDefaultStyle"/>.</summary>
+    BoardDefaultStyle,
+
+    /// <summary><c>board-last-style</c>: <see cref="SettingsStore.BoardLastStyle"/>.</summary>
+    BoardLastStyle,
+
+    /// <summary><c>board-start-mode</c>: <see cref="SettingsStore.BoardStartMode"/>.</summary>
+    BoardStartMode,
+
+    /// <summary><c>board-last-mode</c>: <see cref="SettingsStore.BoardLastMode"/>.</summary>
+    BoardLastMode,
+
+    /// <summary><c>board-account-filter</c>: <see cref="SettingsStore.BoardAccountFilter"/>.</summary>
+    BoardAccountFilter,
+
+    /// <summary><c>board-triage-consent</c>; reserved for the Board UI port.</summary>
+    BoardTriageConsent,
+
+    /// <summary><c>board-triage-model</c>; reserved for the Board UI port.</summary>
+    BoardTriageModel,
+
+    /// <summary><c>board-triage-chatgpt-model</c>; reserved for the Board UI port.</summary>
+    BoardChatGptModel,
+
+    /// <summary><c>board-triage-chatgpt-consent-version</c>; separate OpenAI Board disclosure.</summary>
+    BoardChatGptConsentVersion,
+
+    /// <summary><c>calendar-view</c>: <see cref="SettingsStore.CalendarView"/>.</summary>
+    CalendarView,
+
+    /// <summary><c>contacts-suggest-scope</c>: <see cref="SettingsStore.ContactsSuggestScope"/>.</summary>
+    ContactsSuggestScope,
+
+    /// <summary><c>toolbar-mail</c>: the user's arrangement of the Mail toolbar (<see cref="SettingsStore.ToolbarLayout"/>).</summary>
+    ToolbarMail,
+
+    /// <summary><c>toolbar-board-list</c>: the Board's toolbar in the List style.</summary>
+    ToolbarBoardList,
+
+    /// <summary><c>toolbar-board-flow</c>: the Board's toolbar in the Columns and Today styles.</summary>
+    ToolbarBoardFlow,
+
+    /// <summary><c>toolbar-calendar</c>: the Calendar's toolbar.</summary>
+    ToolbarCalendar,
+
+    /// <summary><c>toolbar-display-mode</c>: icon, icon-and-label or label for every toolbar.</summary>
+    ToolbarDisplayMode,
+
+    /// <summary><c>ctrl-r</c>, Windows only: what Ctrl+R does.</summary>
+    CtrlR,
+}

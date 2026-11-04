@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Template for the bundle's Info.plist; macos/Makefile substitutes the
+@…@ placeholders when it assembles build/Malachi Mail.app.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleIdentifier</key>
+	<string>@BUNDLE_ID@</string>
+	<key>CFBundleIconFile</key>
+	<string>Malachi</string>
+	<key>CFBundleName</key>
+	<string>Malachi Mail</string>
+	<key>CFBundleDisplayName</key>
+	<string>Malachi Mail</string>
+	<key>CFBundleExecutable</key>
+	<string>@EXECUTABLE@</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>MalachiVersion</key>
+	<string>@FULL_VERSION@</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Vladislav Janeček. GPL-3.0-or-later (core: AGPL-3.0-only).</string>
+	<!-- Languages present as .lproj directories in Contents/Resources; the
+	     Makefile fills the list from po/*.po plus English. -->
+	<key>CFBundleLocalizations</key>
+	<array>@LOCALIZATIONS@</array>
+	<!-- mailto: links open a compose window (the GTK UI registers
+	     x-scheme-handler/mailto in its desktop file). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Email Address URL</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mailto</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+		</dict>
+	</array>
+	<!-- macOS-only string: what macOS shows if it asks whether the app may
+	     send Apple events (Resources/MalachiMail.entitlements). -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Malachi Mail asks Claude Desktop to quit and opens it again, so that Claude reads its new connection to your mail.</string>
+</dict>
+</plist>

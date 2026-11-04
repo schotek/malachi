@@ -1,0 +1,547 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// "Add Account" wizard: identity → (account.discover) → server settings,
+// GNOME Online Accounts hint or browser sign-in → account.test →
+// account.add. Object IDs are looked up from
+// ui/internal/accountwizard/wizard.go; keep them in sync. The daemon
+// discovers, tests and validates; this dialog only checks field syntax and
+// fills port defaults.
+Adw.Dialog account_wizard {
+  title: _("Add Account");
+  content-width: 520;
+  content-height: 640;
+  focus-widget: email_row;
+
+  child: Adw.ToastOverlay wizard_toasts {
+    child: Adw.NavigationView wizard_nav {
+      Adw.NavigationPage identity_page {
+        tag: "identity";
+        title: _("Add Account");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Box {
+            orientation: vertical;
+
+            Adw.Banner identity_banner {
+              revealed: false;
+            }
+
+            ScrolledWindow {
+              hscrollbar-policy: never;
+              vexpand: true;
+
+              child: Adw.Clamp {
+                maximum-size: 480;
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 18;
+                  margin-top: 24;
+                  margin-bottom: 24;
+                  margin-start: 24;
+                  margin-end: 24;
+
+                  Label {
+                    label: _("Enter your e-mail address and, unless the account signs in through your browser, its password. Malachi Mail will look up the server settings for you.");
+                    wrap: true;
+                    xalign: 0;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+
+                  // Accounts other desktop services are signed in to
+                  // (account.linked); filled from Go, hidden when empty.
+                  Adw.PreferencesGroup linked_group {
+                    title: _("Signed In on This Computer");
+                    description: _("Accounts from GNOME Online Accounts can be added without a password.");
+                    visible: false;
+
+                    ListBox linked_rows {
+                      selection-mode: none;
+
+                      styles [
+                        "boxed-list",
+                      ]
+                    }
+                  }
+
+                  ListBox identity_rows {
+                    selection-mode: none;
+
+                    styles [
+                      "boxed-list",
+                    ]
+
+                    Adw.EntryRow display_name_row {
+                      title: _("Your Name");
+                    }
+
+                    Adw.EntryRow email_row {
+                      title: _("E-mail Address");
+                      input-purpose: email;
+                    }
+
+                    Adw.PasswordEntryRow password_row {
+                      title: _("Password");
+                    }
+                  }
+                };
+              };
+            }
+          };
+
+          [bottom]
+          Box {
+            halign: end;
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            Button identity_next_button {
+              label: _("_Next");
+              use-underline: true;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+
+      Adw.NavigationPage servers_page {
+        tag: "servers";
+        title: _("Server Settings");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Adw.PreferencesPage servers_prefs {
+            Adw.PreferencesGroup {
+              title: _("Account");
+
+              Adw.EntryRow account_name_row {
+                title: _("Account Name");
+              }
+            }
+
+            Adw.PreferencesGroup {
+              title: _("Incoming Mail (IMAP)");
+
+              Adw.EntryRow imap_host_row {
+                title: _("Server");
+              }
+
+              Adw.SpinRow imap_port_row {
+                title: _("Port");
+
+                adjustment: Adjustment {
+                  lower: 1;
+                  upper: 65535;
+                  step-increment: 1;
+                  value: 993;
+                };
+              }
+
+              Adw.ComboRow imap_security_row {
+                title: _("Security");
+
+                model: StringList {
+                  strings [
+                    _("TLS"),
+                    _("STARTTLS"),
+                    _("None"),
+                  ]
+                };
+              }
+
+              Adw.EntryRow imap_user_row {
+                title: _("User Name");
+              }
+
+              // Shown from Go while the endpoint pins a certificate
+              // (certificateSha256); the subtitle is its fingerprint.
+              Adw.ActionRow imap_pin_row {
+                // TRANSLATORS: row title on the Servers page
+                title: _("Pinned Certificate");
+                use-markup: false;
+                subtitle-selectable: true;
+                visible: false;
+
+                [suffix]
+                Button imap_pin_forget_button {
+                  // TRANSLATORS: button: stop trusting the pinned certificate
+                  label: _("_Forget");
+                  use-underline: true;
+                  valign: center;
+                }
+              }
+            }
+
+            Adw.PreferencesGroup {
+              title: _("Outgoing Mail (SMTP)");
+
+              Adw.EntryRow smtp_host_row {
+                title: _("Server");
+              }
+
+              Adw.SpinRow smtp_port_row {
+                title: _("Port");
+
+                adjustment: Adjustment {
+                  lower: 1;
+                  upper: 65535;
+                  step-increment: 1;
+                  value: 587;
+                };
+              }
+
+              Adw.ComboRow smtp_security_row {
+                title: _("Security");
+
+                model: StringList {
+                  strings [
+                    _("TLS"),
+                    _("STARTTLS"),
+                    _("None"),
+                  ]
+                };
+              }
+
+              Adw.EntryRow smtp_user_row {
+                title: _("User Name");
+              }
+
+              // Shown from Go while the endpoint pins a certificate
+              // (certificateSha256); the subtitle is its fingerprint.
+              Adw.ActionRow smtp_pin_row {
+                // TRANSLATORS: row title on the Servers page
+                title: _("Pinned Certificate");
+                use-markup: false;
+                subtitle-selectable: true;
+                visible: false;
+
+                [suffix]
+                Button smtp_pin_forget_button {
+                  // TRANSLATORS: button: stop trusting the pinned certificate
+                  label: _("_Forget");
+                  use-underline: true;
+                  valign: center;
+                }
+              }
+            }
+          };
+
+          [bottom]
+          Box {
+            halign: end;
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            Button servers_test_button {
+              label: _("_Test Connection");
+              use-underline: true;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+
+      // An address of a provider whose sign-in belongs to GNOME Online
+      // Accounts (Microsoft 365, Google) that the desktop is not signed in
+      // to yet: the sign-in happens in GNOME Settings. The description
+      // names the provider and is set from Go.
+      Adw.NavigationPage goa_hint_page {
+        tag: "goa";
+        title: _("Sign In");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Adw.StatusPage goa_hint {
+            icon-name: "system-users-symbolic";
+            title: _("Sign In Through GNOME Settings");
+
+            child: Box {
+              orientation: vertical;
+              spacing: 12;
+              halign: center;
+
+              Button goa_open_button {
+                label: _("Open Online Accounts");
+
+                styles [
+                  "pill",
+                  "suggested-action",
+                ]
+              }
+
+              Button goa_recheck_button {
+                label: _("Check Again");
+
+                styles [
+                  "pill",
+                ]
+              }
+
+              // Shown from Go when account.discover offers the backend's
+              // own sign-in as an alternative.
+              Button goa_browser_button {
+                // TRANSLATORS: button on the GNOME Online Accounts hint page
+                label: _("Use the Browser Instead");
+                visible: false;
+
+                styles [
+                  "pill",
+                ]
+              }
+            };
+          };
+        };
+      }
+
+      // The backend's own sign-in (account.oauthStart): a Google or
+      // Microsoft 365 address signs in in the user's browser and the daemon
+      // receives the redirect. prompt → waiting (account.oauthWait) → the
+      // connection test; unavailable when no OAuth client is configured.
+      // The prompt's description, the sign-in button's label and the
+      // unavailable description name the provider and are set from Go.
+      Adw.NavigationPage oauth_page {
+        tag: "oauth";
+        title: _("Sign In");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Stack oauth_stack {
+            transition-type: crossfade;
+
+            StackPage {
+              name: "prompt";
+
+              child: Adw.StatusPage oauth_prompt {
+                icon-name: "web-browser-symbolic";
+                title: _("Sign In Through Your Browser");
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  halign: center;
+
+                  Button oauth_signin_button {
+                    use-underline: true;
+
+                    styles [
+                      "pill",
+                      "suggested-action",
+                    ]
+                  }
+                };
+              };
+            }
+
+            StackPage {
+              name: "waiting";
+
+              // The spinner paintable is set from Go, as on testing_progress.
+              child: Adw.StatusPage oauth_waiting {
+                title: _("Waiting for the sign-in in your browser…");
+                description: _("Finish signing in there; this page continues by itself.");
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  halign: center;
+
+                  Button oauth_reopen_button {
+                    label: _("Open the Browser Again");
+
+                    styles [
+                      "pill",
+                    ]
+                  }
+
+                  Button oauth_cancel_button {
+                    label: _("_Cancel");
+                    use-underline: true;
+
+                    styles [
+                      "pill",
+                    ]
+                  }
+                };
+              };
+            }
+
+            StackPage {
+              name: "unavailable";
+
+              child: Adw.StatusPage oauth_unavailable {
+                icon-name: "dialog-warning-symbolic";
+                title: _("No Sign-In Client Configured");
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  halign: center;
+
+                  // Shown from Go when the provider has an app-password
+                  // alternative (Google).
+                  Button oauth_password_button {
+                    label: _("Use an App Password Instead");
+                    visible: false;
+
+                    styles [
+                      "pill",
+                      "suggested-action",
+                    ]
+                  }
+                };
+              };
+            }
+          };
+        };
+      }
+
+      Adw.NavigationPage testing_page {
+        tag: "testing";
+        title: _("Connection Test");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Stack testing_stack {
+            transition-type: crossfade;
+
+            StackPage {
+              name: "progress";
+
+              // The spinner paintable is set from Go: GtkBuilder takes an
+              // inline object in a paintable property for a file name.
+              child: Adw.StatusPage testing_progress {
+                title: _("Testing Connection…");
+                description: _("This can take a moment.");
+              };
+            }
+
+            StackPage {
+              name: "results";
+
+              child: Adw.StatusPage testing_results {
+                child: Adw.Clamp {
+                  maximum-size: 480;
+
+                  child: ListBox result_rows {
+                    selection-mode: none;
+
+                    styles [
+                      "boxed-list",
+                    ]
+
+                    Adw.ActionRow imap_result_row {
+                      title: _("Incoming (IMAP)");
+                      use-markup: false;
+
+                      [prefix]
+                      Image imap_result_icon {}
+
+                      // Shown from Go when the server's certificate can
+                      // be trusted (certtrust.Trustable).
+                      [suffix]
+                      Button imap_trust_button {
+                        // TRANSLATORS: button in a test result row
+                        label: _("_Trust Certificate…");
+                        use-underline: true;
+                        valign: center;
+                        visible: false;
+                      }
+                    }
+
+                    Adw.ActionRow smtp_result_row {
+                      title: _("Outgoing (SMTP)");
+                      use-markup: false;
+
+                      [prefix]
+                      Image smtp_result_icon {}
+
+                      // Shown from Go when the server's certificate can
+                      // be trusted (certtrust.Trustable).
+                      [suffix]
+                      Button smtp_trust_button {
+                        // TRANSLATORS: button in a test result row
+                        label: _("_Trust Certificate…");
+                        use-underline: true;
+                        valign: center;
+                        visible: false;
+                      }
+                    }
+
+                    Adw.ActionRow graph_result_row {
+                      title: _("Microsoft 365");
+                      use-markup: false;
+                      visible: false;
+
+                      [prefix]
+                      Image graph_result_icon {}
+                    }
+                  };
+                };
+              };
+            }
+          };
+
+          [bottom]
+          Box testing_buttons {
+            halign: end;
+            spacing: 8;
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            Button test_edit_button {
+              label: _("_Edit Servers");
+              use-underline: true;
+            }
+
+            Button test_retry_button {
+              label: _("_Retry");
+              use-underline: true;
+            }
+
+            Button test_add_anyway_button {
+              label: _("Add _Anyway");
+              use-underline: true;
+            }
+
+            Button test_add_button {
+              label: _("_Add Account");
+              use-underline: true;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+    };
+  };
+}

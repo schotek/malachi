@@ -1,0 +1,1290 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import Foundation
+import os
+
+/// What the list pane shows (window.blp `list_stack`): the rows with their
+/// Load More footer, or a status page for the times there are none (nothing
+/// selected, loading, empty, an error with a Try Again button). Icons are
+/// GTK names; the AppKit layer maps them to symbols. An empty icon means
+/// none (the "Loading…" page).
+public enum ListState: Equatable, Sendable {
+    case messages
+    case status(icon: String, title: String, description: String, retry: Bool)
+}
+
+/// The Load More footer under the rows (messages.go `showLoadMore`): the
+/// button while a further page exists, the spinner while it is fetched,
+/// and under the last page of search results how far back search reaches
+/// (window.blp `search_note`; empty otherwise).
+public struct LoadMoreState: Equatable, Sendable {
+    public var spinner: Bool
+    public var button: Bool
+    public var note: String
+
+    public init(spinner: Bool = false, button: Bool = false, note: String = "") {
+        self.spinner = spinner
+        self.button = button
+        self.note = note
+    }
+}
+
+/// How the selection was reconciled with a new set of rows (threads.go
+/// `reconcileRows`), handed to the view with the rows so it can mirror the
+/// controller's `selectedKey` afterwards.
+///
+/// - `keep`: the same key stays selected; when a member row folded away its
+///   conversation row takes over; otherwise the selection is dropped.
+/// - `neighbour`: as `keep`, but a selected row that is gone hands the
+///   selection to the row now at its place (a removal).
+/// - `clear`: the list was emptied for another folder, mode or filter; the
+///   selection is dropped without looking.
+public enum SelectionHint: Equatable, Sendable {
+    case keep, neighbour, clear
+}
+
+/// The message-list half of the GTK main window (ui/internal/window/
+/// messages.go, threads.go, the list part of folders.go `onNewMessage`
+/// and the selection handler of window.go): paging through message.list or
+/// thread.list, the rows and their keys, the status pages, folding
+/// conversations, the selection with its mark-as-read timer, and the
+/// in-place edits between two loads (a notified arrival, a flag change, a
+/// removal and its undo).
+///
+/// It is the second half of one GTK window object: it owns a reference to
+/// the `MailboxController` (the folder half), reads and writes the shared
+/// `model` there and installs itself into the folder half's list hooks
+/// (`reloadMessages`, `onNewMessageForList`, `refreshOutboxViews`,
+/// `collapseLoading`). No AppKit: the view subscribes to the callbacks and
+/// sends the user's clicks back through the methods; the actions phase
+/// drives `applyFlags`, `removeRows`, `selectedIDs` and `onMarkRead`.
+///
+/// Every RPC runs as a `Task` on the main actor through the mailbox's
+/// `perform`, so the continuation is on the main actor too and the list
+/// generation checks race with nothing (`glib.IdleAdd` in GTK).
+@MainActor
+public final class ListController {
+    public typealias Restore = @MainActor () -> Void
+
+    public let mailbox: MailboxController
+    public let settings: Settings
+
+    /// What the pane shows: the rows or a status page.
+    public private(set) var listState: ListState = .messages
+    /// The Load More footer.
+    public private(set) var loadMoreState = LoadMoreState()
+    /// The rows on screen, in order: `model.rows` in grouped mode, one row
+    /// per message in flat mode (messages.go `rebuildMessageRows`).
+    public private(set) var rows: [ListRow] = []
+    /// The keys of the selected rows in list order, empty for none
+    /// (selection.go `selectedKeys`; several within one account,
+    /// `Selection.restrict`).
+    public private(set) var selectedKeys: [ListKey] = []
+    /// The key of the selected row when it is one; nil for none or several
+    /// (the single-message features have none then).
+    public var selectedKey: ListKey? { selectedKeys.count == 1 ? selectedKeys[0] : nil }
+    /// What the selection allows (actions.go `setMessageActionsSensitive`).
+    public private(set) var actionFlags: ActionFlags = .none
+
+    /// The unit of `Settings.markReadDelay` (seconds); tests shorten it.
+    public var markReadTick: Duration = .seconds(1)
+
+    // MARK: Callbacks (the view)
+
+    /// The rows changed: reconcile the table by key (`apply(rows:hint:)`),
+    /// then mirror `selectedKey`.
+    public var onRows: (@MainActor ([ListRow], SelectionHint) -> Void)?
+    /// Switch between the rows and a status page.
+    public var onListState: (@MainActor (ListState) -> Void)?
+    /// The Load More footer changed.
+    public var onLoadMore: (@MainActor (LoadMoreState) -> Void)?
+    /// The controller dropped the selection (also announced as
+    /// `onSelectedMessageChanged(nil)`).
+    public var onSelectionCleared: (@MainActor () -> Void)?
+    /// Flat mode: the rows with these keys changed in place (a flag);
+    /// `row(for:)` has the new content. Grouped mode goes through `onRows`.
+    public var onRowsRefreshed: (@MainActor ([ListKey]) -> Void)?
+    /// The scope bar of a search (search.go `refreshSearchScope`); nil
+    /// hides it, as the search ended.
+    public var onSearchBar: (@MainActor (SearchBarState?) -> Void)?
+    /// Select this row and give the list the keyboard (Return in the
+    /// search field: search.go `selectFirstResult`).
+    public var onFocusRow: (@MainActor (ListKey) -> Void)?
+
+    // MARK: Callbacks (the rest of the window)
+
+    /// The message the pane should show: the selected row's (a conversation
+    /// row's newest folder member), nil when nothing is selected
+    /// (window.go `onMessageRowSelected`).
+    public var onSelectedMessageChanged: (@MainActor (MessageSummary?) -> Void)?
+    /// The selected row itself, announced just before
+    /// `onSelectedMessageChanged`, nil when nothing is selected: a
+    /// conversation row (`ListRow.showsConversation`) puts the whole
+    /// conversation in the pane (ConversationController), any other row its
+    /// message.
+    public var onSelectedRowChanged: (@MainActor (ListRow?) -> Void)?
+    /// The folder members the model holds of conversation `tid` changed
+    /// while its row may have kept its key (an arrival, a flag change, a
+    /// removal and its undo, thread.get answering, a reload): what the
+    /// conversation view shows follows (ConversationController). Grouped
+    /// mode only.
+    public var onThreadMembersChanged: (@MainActor (ThreadID) -> Void)?
+    /// The messages of the shown conversation `tid` were rebuilt in place
+    /// by the daemon (notify.messagesChanged, `refreshShown`): the
+    /// conversation view lets go of the bodies it holds and asks for them
+    /// again (ConversationController); its folder members were forgotten
+    /// here and come back through `onThreadMembersChanged` once the reload
+    /// asked thread.get for them. Grouped mode only.
+    public var onConversationChanged: (@MainActor (ThreadID) -> Void)?
+    /// A message row was activated (double-click, Return): open it in a
+    /// window (window.go, the row-activated handler). A conversation row
+    /// folds or unfolds instead and never reaches this.
+    public var onActivateMessage: (@MainActor (MessageSummary) -> Void)?
+    /// A message row of a Drafts folder was activated: open it in the
+    /// compose window (window.go, the row-activated handler; drafts.go
+    /// `openDraft`).
+    public var onActivateDraft: (@MainActor (MessageSummary) -> Void)?
+    /// Several rows are selected (their number): the pane shows their
+    /// count (selection.go `showSelectionPage`); `onSelectedRowChanged` and
+    /// `onSelectedMessageChanged` announced nil just before.
+    public var onSeveralSelected: (@MainActor (Int) -> Void)?
+    /// The per-message actions changed with the selection or its flags.
+    public var onActionFlagsChanged: (@MainActor (ActionFlags) -> Void)?
+    /// The mark-as-read timer fired for the selected message (actions.go
+    /// `scheduleMarkRead` → `markRead`); the actions phase sets the flag.
+    public var onMarkRead: (@MainActor (MessageID) -> Void)?
+    /// The list's share of outbox.go `refreshOutboxViews` ran (the outbox
+    /// listing reloaded when it was shown); the reader's share follows.
+    public var onOutboxRefreshed: (@MainActor (AccountID) -> Void)?
+
+    private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "list")
+    /// Closures to run once a conversation's members are known (the
+    /// `waiters` of thread_model.go `threadMembers`).
+    private var waiters: [ThreadID: [@MainActor () -> Void]] = [:]
+    /// What runs instead when that thread.get fails.
+    private var failureWaiters: [ThreadID: [@MainActor () -> Void]] = [:]
+    /// Conversations whose thread.get in flight is followed by another
+    /// (`refetchMembers`).
+    private var refetchAfter: Set<ThreadID> = []
+    private var markReadTask: Task<Void, Never>?
+    private var markReadID: MessageID?
+    private var settingsToken: Settings.ChangeToken?
+    private var closed = false
+    /// Show in Mail (`reveal`, MailboxController+Reveal): the message to
+    /// select once its folder's first page is listed.
+    var pendingReveal: PendingReveal?
+    /// What the next first page of the folder on display selects after an
+    /// Undo (`relistAfterUndo`; window.go `undoReselect`).
+    private var undoReselect: [Undo.Moved] = []
+
+    /// Installs the list half into `mailbox`'s hooks and publishes the
+    /// initial state (the folder the mailbox has selected, if any, is
+    /// listed at once).
+    public init(mailbox: MailboxController, settings: Settings) {
+        self.mailbox = mailbox
+        self.settings = settings
+        // The filter is deliberately not persisted (window.go).
+        mailbox.model.listFilter = .all
+        mailbox.reloadMessages = { [weak self] in self?.loadMessages() }
+        mailbox.onNewMessageForList = { [weak self] n in self?.applyNewMessage(n) }
+        mailbox.onNewMessageElsewhere = { [weak self] n in self?.applyNewMessageElsewhere(n) }
+        mailbox.refreshShownSent = { [weak self] acc in self?.refreshShownSent(acc) }
+        mailbox.refreshDrafts = { [weak self] n in self?.refreshDrafts(n) }
+        mailbox.refreshOutboxViews = { [weak self] acc in self?.refreshOutboxViews(acc) }
+        mailbox.refreshShown = { [weak self] acc in self?.refreshShown(acc) }
+        mailbox.collapseLoading = { [weak self] in self?.collapseLoadingRows() }
+        // Grouping is a different listing (thread.list): loadMessages
+        // notices the mode change and starts the folder over (window.go).
+        settingsToken = settings.onChange(.groupByConversation) { [weak self] in self?.groupingChanged() }
+        if mailbox.model.selected != nil {
+            loadMessages()
+        } else {
+            showListState()
+        }
+    }
+
+    /// Stops the timers and detaches from the settings (the window closed).
+    public func close() {
+        closed = true
+        markReadTask?.cancel()
+        markReadTask = nil
+        settingsToken?.cancel()
+        settingsToken = nil
+        waiters = [:]
+        failureWaiters = [:]
+        refetchAfter = []
+        pendingReveal = nil
+        undoReselect = []
+    }
+
+    // MARK: Loading
+
+    /// Runs message.list (or thread.list) for the selected folder, first
+    /// page (messages.go `loadMessages`). A switch to another folder, or of
+    /// the grouping mode, empties the list at once; a reload of the same
+    /// folder keeps the rows until the reply, so the list never flickers
+    /// through the loading state and the selection survives (by key).
+    public func loadMessages() {
+        if mailbox.model.search.active {
+            // The list shows search results; a reload of the folder (a
+            // sync, a selection) is a new search only if it changes the
+            // scope (search.go).
+            publishSearchBar()
+            runSearch(force: false)
+            return
+        }
+        let k = mailbox.model.selected
+        let gen = mailbox.model.bumpList()
+        if let r = pendingReveal {
+            // Show in Mail waits for this folder's listing, this one now; a
+            // listing of another folder drops it.
+            if r.folder == k {
+                pendingReveal?.generation = gen
+            } else {
+                pendingReveal = nil
+            }
+        }
+        mailbox.model.loadingMore = false
+        let grouped = groupedListing(k)
+        if k != mailbox.model.listFolder || grouped != mailbox.model.grouped {
+            mailbox.model.listFolder = k
+            mailbox.model.grouped = grouped
+            mailbox.model.clearMessages()
+            reconcile(.clear)
+            // With nothing selected the actions follow the listed folder's
+            // account (a Jira folder has no Reply).
+            refreshActionFlags()
+        }
+        guard let k else {
+            mailbox.model.loading = false
+            showListState()
+            return
+        }
+        if folderUnsynced(k) {
+            // Never downloaded (Gmail's All Mail): nothing to ask for.
+            mailbox.model.loading = false
+            showListState()
+            return
+        }
+        mailbox.model.loading = true
+        mailbox.model.listErr = nil
+        showListState()
+        if grouped {
+            loadThreadPage(k, gen)
+            return
+        }
+        let params = k.isUnified
+            ? Unified.messageParams(filter: mailbox.model.listFilter)
+            : MessageListParams(
+                accountId: k.account, folderId: k.folder, page: Page(limit: API.Limits.defaultPageLimit),
+                sort: .dateDesc, filter: mailbox.model.listFilter
+            )
+        mailbox.perform(API.MessageList.self, params) { [weak self] outcome in
+            guard let self, gen == self.mailbox.model.listGen else { return }
+            defer { self.finishReveal() }
+            self.mailbox.model.loading = false
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("message.list \(k.folder.rawValue, privacy: .public): \(String(describing: err), privacy: .public)")
+                if self.mailbox.model.rowCount > 0 {
+                    // A reload failed: keep what is shown, say so once.
+                    self.mailbox.toast(rpcErrorText(L10n.T("Loading messages"), err))
+                    return
+                }
+                self.mailbox.model.listErr = err
+                self.showListState()
+            case .success(let res):
+                self.mailbox.model.setMessages(res.messages, page: res.page)
+                self.reconcile(.keep, announce: self.takeUndoReselect())
+            }
+        }
+    }
+
+    /// Whether folder `k` is listed as conversations (thread.list): with
+    /// the "group by conversation" setting, and always for a folder of a
+    /// Jira account (`MailModel.alwaysGrouped`); never the outbox.
+    func groupedListing(_ k: FolderKey?) -> Bool {
+        (settings.groupByConversation || mailbox.model.alwaysGrouped(k)) && folderRole(k) != .outbox
+    }
+
+    /// The "group by conversation" setting changed: the folder is listed
+    /// again in the other mode. A folder whose mode stays (a Jira account's,
+    /// the outbox) keeps its rows and is not asked again.
+    private func groupingChanged() {
+        let m = mailbox.model
+        if !m.search.active, m.listFolder == m.selected, groupedListing(m.selected) == m.grouped {
+            return
+        }
+        loadMessages()
+    }
+
+    /// Runs thread.list for folder `k`, first page (threads.go
+    /// `loadThreadPage`); `gen` is the list generation the reply belongs to.
+    private func loadThreadPage(_ k: FolderKey, _ gen: UInt64) {
+        let params = k.isUnified
+            ? Unified.threadParams(filter: mailbox.model.listFilter)
+            : ThreadListParams(
+                accountId: k.account, folderId: k.folder, page: Page(limit: API.Limits.defaultPageLimit),
+                sort: .dateDesc, filter: mailbox.model.listFilter
+            )
+        mailbox.perform(API.ThreadList.self, params) { [weak self] outcome in
+            guard let self, gen == self.mailbox.model.listGen else { return }
+            defer { self.finishReveal() }
+            self.mailbox.model.loading = false
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("thread.list \(k.folder.rawValue, privacy: .public): \(String(describing: err), privacy: .public)")
+                if self.mailbox.model.rowCount > 0 {
+                    self.mailbox.toast(rpcErrorText(L10n.T("Loading messages"), err))
+                    return
+                }
+                self.mailbox.model.listErr = err
+                self.showListState()
+            case .success(let res):
+                self.mailbox.model.setThreads(k.isUnified ? res.threads.map(Unified.scopedConversation) : res.threads, page: res.page)
+                self.reconcile(.keep, announce: self.takeUndoReselect())
+                self.fetchExpandedMembers()
+                self.announceSelectedMembers()
+            }
+        }
+    }
+
+    /// The Try Again button of the error page.
+    public func retry() {
+        loadMessages()
+    }
+
+    /// Switches the list between all, unread and flagged messages
+    /// (messages.go `setListFilter`). The backend does the filtering, so
+    /// the rows and the cursor of the previous filter are dropped and the
+    /// folder is paged again from the start. A no-op on an unchanged
+    /// filter, as the toggle group also fires for its own write-back.
+    /// The filter the list shows (All until changed; not persisted).
+    public var listFilter: MessageFilter { mailbox.model.listFilter }
+
+    public func setListFilter(_ filter: MessageFilter) {
+        var f = filter
+        if f.rawValue.isEmpty {
+            f = .all
+        }
+        guard f != mailbox.model.listFilter else { return }
+        mailbox.model.listFilter = f
+        mailbox.model.clearMessages()
+        reconcile(.clear)
+        loadMessages()
+    }
+
+    /// Fetches the next page (the Load More button, the scroll edge;
+    /// messages.go `loadMore`). A no-op while a page is in flight or when
+    /// the last page is shown.
+    public func loadMore() {
+        let m = mailbox.model
+        guard !m.loading, !m.loadingMore, let cursor = m.nextCursor, !cursor.isEmpty, m.listErr == nil else { return }
+        if m.search.active {
+            let gen = m.listGen
+            mailbox.model.loadingMore = true
+            showLoadMore()
+            loadMoreSearch(gen, cursor: cursor)
+            return
+        }
+        guard let k = m.listFolder else { return }
+        let gen = m.listGen
+        mailbox.model.loadingMore = true
+        showLoadMore()
+        if m.grouped {
+            let params = k.isUnified
+                ? Unified.threadParams(filter: m.listFilter, cursor: cursor)
+                : ThreadListParams(
+                    accountId: k.account, folderId: k.folder, page: Page(cursor: cursor, limit: API.Limits.defaultPageLimit),
+                    sort: .dateDesc, filter: m.listFilter
+                )
+            mailbox.perform(API.ThreadList.self, params) { [weak self] outcome in
+                guard let self, gen == self.mailbox.model.listGen else { return }
+                self.mailbox.model.loadingMore = false
+                switch outcome {
+                case .failure(let err):
+                    self.log.warning("thread.list (more): \(String(describing: err), privacy: .public)")
+                    self.mailbox.toast(rpcErrorText(L10n.T("Loading more messages"), err))
+                    self.showLoadMore()
+                case .success(let res):
+                    self.mailbox.model.appendThreads(k.isUnified ? res.threads.map(Unified.scopedConversation) : res.threads, page: res.page)
+                    self.syncRows()
+                }
+            }
+            return
+        }
+        let params = k.isUnified
+            ? Unified.messageParams(filter: m.listFilter, cursor: cursor)
+            : MessageListParams(
+                accountId: k.account, folderId: k.folder, page: Page(cursor: cursor, limit: API.Limits.defaultPageLimit),
+                sort: .dateDesc, filter: m.listFilter
+            )
+        mailbox.perform(API.MessageList.self, params) { [weak self] outcome in
+            guard let self, gen == self.mailbox.model.listGen else { return }
+            self.mailbox.model.loadingMore = false
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("message.list (more): \(String(describing: err), privacy: .public)")
+                self.mailbox.toast(rpcErrorText(L10n.T("Loading more messages"), err))
+                self.showLoadMore() // the cursor is still there; the button offers a retry
+            case .success(let res):
+                self.mailbox.model.appendMessages(res.messages, page: res.page)
+                self.reconcile(.keep)
+            }
+        }
+    }
+
+    // MARK: States
+
+    /// Switches between the rows and the status page (messages.go
+    /// `showListState`): nothing selected, not synchronised, an error with
+    /// Try Again, loading, or empty for the active filter.
+    public func showListState() {
+        let m = mailbox.model
+        if m.rowCount > 0 {
+            setListState(.messages)
+            showLoadMore()
+            return
+        }
+        if m.search.active {
+            setListState(searchListState())
+            return
+        }
+        let state: ListState
+        if m.selected == nil {
+            state = .status(
+                icon: "folder-symbolic", title: L10n.T("Select a folder"),
+                description: L10n.T("Choose a folder in the sidebar to see its messages."), retry: false
+            )
+        } else if let sel = m.selected, folderUnsynced(sel) {
+            state = .status(
+                icon: "folder-download-symbolic", title: L10n.T("Not Synchronised"),
+                description: L10n.T("Messages moved here are archived on the server; the folder itself is not downloaded."),
+                retry: false
+            )
+        } else if let err = m.listErr {
+            state = .status(
+                icon: "dialog-warning-symbolic", title: L10n.T("Messages Unavailable"),
+                description: rpcErrorText(L10n.T("Loading messages"), err), retry: true
+            )
+        } else if m.loading {
+            state = .status(icon: "", title: L10n.T("Loading…"), description: "", retry: false)
+        } else if m.listFilter == .unread {
+            state = .status(
+                icon: "mail-read-symbolic", title: L10n.T("No Unread Messages"),
+                description: L10n.T("Everything in this folder has been read."), retry: false
+            )
+        } else if m.listFilter == .flagged {
+            state = .status(
+                icon: "starred-symbolic", title: L10n.T("No Flagged Messages"),
+                description: L10n.T("No message in this folder carries a flag."), retry: false
+            )
+        } else {
+            state = .status(
+                icon: "mail-unread-symbolic", title: L10n.T("No Messages"),
+                description: L10n.T("This folder is empty."), retry: false
+            )
+        }
+        setListState(state)
+    }
+
+    /// Shows the Load More button while a further page exists and the
+    /// spinner while it is being fetched (messages.go `showLoadMore`).
+    public func showLoadMore() {
+        let m = mailbox.model
+        let cursor = m.nextCursor ?? ""
+        // Under the last page of results: how far back search reaches.
+        let st = m.search
+        let note = st.active && st.shown && cursor.isEmpty && !m.loadingMore && m.rowCount > 0
+            ? searchRetentionText(days: st.offlineDays, known: st.offlineKnown) : ""
+        let state = LoadMoreState(spinner: m.loadingMore, button: !m.loadingMore && !cursor.isEmpty && m.listErr == nil, note: note)
+        guard state != loadMoreState else { return }
+        loadMoreState = state
+        onLoadMore?(state)
+    }
+
+    func setListState(_ s: ListState) {
+        guard s != listState else { return }
+        listState = s
+        onListState?(s)
+    }
+
+    /// The special-use role of the listed folder, `.none` when nothing is
+    /// listed or the folder is plain.
+    public var folderRole: FolderRole {
+        folderRole(mailbox.model.listFolder)
+    }
+
+    /// The listed folder is the account's outbox: never grouped, never
+    /// marked read.
+    public var inOutbox: Bool {
+        folderRole == .outbox
+    }
+
+    private func folderRole(_ k: FolderKey?) -> FolderRole {
+        guard let k else { return .none }
+        return mailbox.model.folderRole(k)
+    }
+
+    /// A selected folder the daemon never downloads (messages.go
+    /// `folderUnsynced`).
+    private func folderUnsynced(_ k: FolderKey) -> Bool {
+        guard let f = mailbox.model.folder(k) else { return false }
+        return !f.synced
+    }
+
+    // MARK: Rows
+
+    /// The row with the given key, if listed.
+    public func row(for key: ListKey) -> ListRow? {
+        let idx = mailbox.model.rowIndexOf(key)
+        return mailbox.model.rowAt(idx)
+    }
+
+    /// The row behind the selection when it is one row (selection.go
+    /// `selectedRow`); nil for none or several.
+    public var selectedRow: ListRow? {
+        guard let key = selectedKey else { return nil }
+        return row(for: key)
+    }
+
+    /// The selected rows in list order (selection.go `selectedRows`).
+    public var selectedRows: [ListRow] {
+        selectedKeys.compactMap { row(for: $0) }
+    }
+
+    /// The rows the model has right now, in either mode.
+    private func currentRows() -> [ListRow] {
+        let m = mailbox.model
+        if m.grouped {
+            return m.rows
+        }
+        return m.messages.map { ListRow(key: ListKey(message: $0.id), message: $0) }
+    }
+
+    /// Brings the rows in line with the model (threads.go `syncRows`): the
+    /// selection follows its key; when a member row folded away its
+    /// conversation row takes over (and the pane shows the newest member);
+    /// when the selected row is gone the pane is cleared.
+    public func syncRows() {
+        reconcile(.keep)
+    }
+
+    /// `syncRows` for a removal (threads.go `syncRowsAfterRemoval`): a
+    /// selected row that is gone hands the selection to the row now at its
+    /// place, pane included, as the flat list does.
+    private func syncRowsAfterRemoval() {
+        reconcile(.neighbour)
+    }
+
+    /// Publishes the model's rows and reconciles the selection with them
+    /// (threads.go `reconcileRows`, messages.go `rebuildMessageRows`). The
+    /// index of the selected row is read off the rows as they were before
+    /// the model moved on, as the GTK code reads it off the widgets.
+    /// `announce` tells the views of the selection even when its keys did
+    /// not change (an Undo set them, `takeUndoReselect`).
+    func reconcile(_ hint: SelectionHint, announce: Bool = false) {
+        let prev = selectedKeys
+        let prevIdx = prev.first.flatMap { k in rows.firstIndex { $0.key == k } } ?? -1
+        rows = currentRows()
+        var changed = announce
+        if !prev.isEmpty {
+            if hint == .clear {
+                selectedKeys = []
+                changed = true
+            } else {
+                // Still listed: kept (the pane already shows them); a
+                // member that folded away: its conversation row; all gone
+                // in a removal: the row now at the first one's place.
+                let present = Set(rows.map(\.key))
+                let now = rows
+                let next = Selection.reconcile(prev, resolve: { k in
+                    if present.contains(k) {
+                        return k
+                    }
+                    if let tid = k.thread, present.contains(ListKey(thread: tid)) {
+                        return ListKey(thread: tid)
+                    }
+                    return nil
+                }, neighbour: hint == .neighbour ? {
+                    let i = min(prevIdx, now.count - 1)
+                    return prevIdx >= 0 && i >= 0 ? now[i].key : nil
+                } : nil)
+                if next != prev {
+                    selectedKeys = next
+                    changed = true
+                }
+            }
+        }
+        onRows?(rows, hint)
+        if changed {
+            announceSelection()
+        }
+        showListState()
+    }
+
+    /// Pushes the model to the rows of the given messages (actions.go
+    /// `refreshRows`); in grouped mode the conversation rows carry
+    /// aggregates, so the whole list is reconciled.
+    public func refreshRows(_ ids: [MessageID]) {
+        if mailbox.model.grouped {
+            syncRows()
+            return
+        }
+        rows = currentRows()
+        let keys = ids.filter { mailbox.model.index[$0] != nil }.map { ListKey(message: $0) }
+        if !keys.isEmpty {
+            onRowsRefreshed?(keys)
+        }
+    }
+
+    // MARK: Conversations
+
+    /// Folds or unfolds a conversation row; unfolding asks for the members
+    /// when they are not known yet (threads.go `toggleThread`).
+    public func toggleThread(_ tid: ThreadID) {
+        let on = !mailbox.model.expanded.contains(tid)
+        mailbox.model.setExpanded(tid, on)
+        if on {
+            ensureMembers(tid, nil)
+        }
+        syncRows()
+    }
+
+    /// `toggleThread` for the Left/Right keys (threads.go
+    /// `addThreadShortcuts`): false when the conversation is in that state
+    /// already, so the key still reaches the list for its normal navigation.
+    @discardableResult
+    public func setThreadExpanded(_ tid: ThreadID, _ on: Bool) -> Bool {
+        guard mailbox.model.expanded.contains(tid) != on else { return false }
+        toggleThread(tid)
+        return true
+    }
+
+    /// Double-click or Return on a row (window.go, the row-activated
+    /// handler): a conversation row folds or unfolds, a message opens in a
+    /// window — a draft in the compose window.
+    public func activate(key: ListKey) {
+        guard let r = row(for: key) else { return }
+        if r.thread, let tid = r.key.thread {
+            toggleThread(tid)
+        } else if mailbox.model.inDrafts(r.message) {
+            onActivateDraft?(r.message)
+        } else {
+            onActivateMessage?(r.message)
+        }
+    }
+
+    /// Makes the folder members of a conversation known, through thread.get
+    /// when needed, and runs `then` afterwards (at once when they are). A
+    /// failed fetch folds the row back and says why (threads.go
+    /// `ensureMembers`), and runs `failed` instead of `then`. Neither runs
+    /// when the list moved on meanwhile (another folder, a reload, the
+    /// connection lost). thread.get asks for the user's replies in Sent
+    /// too (`withSent`), which the conversation view shows beside the
+    /// members (`ThreadMembers.sent`).
+    public func ensureMembers(
+        _ tid: ThreadID, _ then: (@MainActor () -> Void)?, failed: (@MainActor () -> Void)? = nil
+    ) {
+        guard let mem = mailbox.model.members[tid] else { return }
+        if mem.complete {
+            then?()
+            return
+        }
+        if let then {
+            waiters[tid, default: []].append(then)
+        }
+        if let failed {
+            failureWaiters[tid, default: []].append(failed)
+        }
+        if mem.fetching {
+            return
+        }
+        fetchMembers(tid)
+    }
+
+    /// Asks thread.get for conversation `tid` again while the model keeps
+    /// what it holds of it, so nothing blinks: the user's replies in Sent
+    /// changed (one arrived, or a message that may carry a reply's
+    /// Message-ID arrived in the folder; the client cannot compare
+    /// Message-IDs, the daemon does), or the shown conversation's sent
+    /// folder changed. The answer replaces the members, the replies and
+    /// the summary (`sentCount`, so a single message the user answered
+    /// becomes a conversation row) and reaches the conversation view
+    /// through `onThreadMembersChanged`. A fetch in flight is followed by
+    /// one more, since it may have been answered before the change. A
+    /// failure is only logged, unless someone waits for the members.
+    public func refetchMembers(_ tid: ThreadID) {
+        guard let mem = mailbox.model.members[tid] else { return }
+        if mem.fetching {
+            refetchAfter.insert(tid)
+            return
+        }
+        fetchMembers(tid, quiet: true)
+    }
+
+    /// The thread.get of `ensureMembers` and `refetchMembers`.
+    private func fetchMembers(_ tid: ThreadID, quiet: Bool = false) {
+        guard let k = mailbox.model.listFolder else { return }
+        var account = k.account
+        var folder = k.folder
+        if k.isUnified {
+            // The All Inboxes list has no folder of its own: the
+            // conversation's account is the row's and its folder the one
+            // its newest message lies in (docs/api.md §4.4, "Unified
+            // listing").
+            guard let i = mailbox.model.tindex[tid] else { return }
+            let t = mailbox.model.threads[i]
+            account = t.accountId
+            folder = t.latest.folderId
+        }
+        // The model's thread ids are account-scoped in this list; the
+        // daemon's is the raw one (`Unified.scopedThread`).
+        let wire = k.isUnified ? Unified.rawThread(tid) : tid
+        mailbox.model.members[tid]?.fetching = true
+        let gen = mailbox.model.listGen
+        let params = ThreadGetParams(
+            accountId: account, threadId: wire, folderId: folder, withSent: true, withDrafts: true)
+        mailbox.perform(API.ThreadGet.self, params) { [weak self] outcome in
+            guard let self, gen == self.mailbox.model.listGen, self.mailbox.model.members[tid] != nil else { return }
+            self.mailbox.model.members[tid]?.fetching = false
+            let waiting = self.waiters[tid] ?? []
+            let failing = self.failureWaiters[tid] ?? []
+            self.waiters[tid] = nil
+            self.failureWaiters[tid] = nil
+            let again = self.refetchAfter.remove(tid) != nil
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("thread.get: \(String(describing: err), privacy: .public)")
+                if quiet, waiting.isEmpty, failing.isEmpty {
+                    return
+                }
+                self.mailbox.toast(rpcErrorText(L10n.T("Loading the conversation"), err))
+                self.mailbox.model.setExpanded(tid, false)
+                self.syncRows()
+                for fn in failing {
+                    fn()
+                }
+            case .success(let res):
+                if k.isUnified {
+                    let acc = res.thread.accountId
+                    self.mailbox.model.setMembers(
+                        tid, Unified.scopedConversation(res.thread), res.messages.map { Unified.scoped($0, account: acc) },
+                        sent: res.sent.map { Unified.scoped($0, account: acc) }, drafts: res.drafts)
+                } else {
+                    self.mailbox.model.setMembers(tid, res.thread, res.messages, sent: res.sent, drafts: res.drafts)
+                }
+                self.syncRows()
+                if let row = self.selectedRow, row.key.thread == tid {
+                    self.refreshActionFlags()
+                }
+                self.onThreadMembersChanged?(tid)
+                for fn in waiting {
+                    fn()
+                }
+                if again {
+                    self.refetchMembers(tid)
+                }
+            }
+        }
+    }
+
+    /// Forgets that the folder members of conversation `tid` are known, so
+    /// the next `ensureMembers` asks thread.get again (the conversation
+    /// view lost every member it showed while older ones are left out).
+    public func refreshMembers(_ tid: ThreadID) {
+        guard let mem = mailbox.model.members[tid], mem.complete else { return }
+        mailbox.model.members[tid]?.complete = false
+        mailbox.model.rebuildRows()
+        syncRows()
+    }
+
+    /// Asks for the members of every unfolded conversation that lost them
+    /// (a reload that changed the conversation; threads.go
+    /// `fetchExpandedMembers`).
+    private func fetchExpandedMembers() {
+        for tid in mailbox.model.expanded {
+            if let mem = mailbox.model.members[tid], !mem.complete {
+                ensureMembers(tid, nil)
+            }
+        }
+    }
+
+    /// Folds every conversation waiting for its members and forgets their
+    /// waiters (the backend went away; window.go `showConnectionState`).
+    public func collapseLoadingRows() {
+        mailbox.model.collapseLoading()
+        waiters = [:]
+        failureWaiters = [:]
+        refetchAfter = []
+        syncRows()
+        showLoadMore()
+    }
+
+    /// The list's share of window.go `showConnectionState`, after the
+    /// folder half's: the model's `bumpAll` there dropped the in-flight
+    /// replies and cleared the loading flags, so the Load More footer is
+    /// redrawn from it (the spinner stops) and a conversation waiting for
+    /// its members folds back. The folder half's `collapseLoading` hook
+    /// does the latter as well; both are idempotent. A protocol mismatch
+    /// leaves no connection either.
+    public func handleConnection(_ state: ConnectionController.ConnectionState) {
+        switch state {
+        case .unavailable, .protocolMismatch, .stopping:
+            if mailbox.model.grouped {
+                collapseLoadingRows()
+            }
+            showLoadMore()
+        case .connecting, .connected, .infoFailed:
+            break
+        }
+    }
+
+    // MARK: Selection
+
+    /// The user selected a row, or cleared the selection (window.go, the
+    /// row-selected handler → `onMessageRowSelected`): the pane shows the
+    /// row's message (a conversation row's newest folder member), the
+    /// actions follow, the mark-as-read timer is armed.
+    public func select(key: ListKey?) {
+        select(keys: key.map { [$0] } ?? [])
+    }
+
+    /// The user selected several rows (or one, or none): `keys` in list
+    /// order, within one account (the view restricts them first,
+    /// `restrict(_:latest:)`). Several show their count, mark nothing read
+    /// and combine their actions (`Selection.combine`).
+    public func select(keys: [ListKey]) {
+        var seen = Set<ListKey>()
+        let next = keys.filter { seen.insert($0).inserted }
+        guard next != selectedKeys || next.count <= 1 else { return }
+        selectedKeys = next
+        announceSelection()
+    }
+
+    /// `Selection.restrictIn` over the rows of `keys`: the keys within the
+    /// account of `latest`, the row the user added last; in the All Inboxes
+    /// list (decision U2) the selection may span accounts and every key
+    /// stays.
+    public func restrict(_ keys: [ListKey], latest: ListKey) -> [ListKey] {
+        let rows = keys.compactMap { k in row(for: k).map { (key: k, account: $0.message.accountId) } }
+        return Selection.restrictIn(rows, latest: latest, crossAccount: mailbox.model.listIsUnified)
+    }
+
+    /// window.go `onMessageRowSelected` for the current `selectedKey`. A
+    /// conversation row shows the whole conversation and marks only the
+    /// member `Conversation.build` picks (`markConversationRead`).
+    private func announceSelection() {
+        let rows = selectedRows
+        if rows.count != selectedKeys.count {
+            selectedKeys = rows.map(\.key)
+        }
+        if rows.count > 1 {
+            // Several: their count in the pane, nothing marked read.
+            onSelectedRowChanged?(nil)
+            onSelectedMessageChanged?(nil)
+            onSeveralSelected?(rows.count)
+            refreshActionFlags()
+            scheduleMarkRead(nil)
+            return
+        }
+        let row = rows.first
+        if row == nil {
+            selectedKeys = []
+            onSelectionCleared?()
+        }
+        onSelectedRowChanged?(row)
+        onSelectedMessageChanged?(row?.message)
+        refreshActionFlags()
+        if let row, row.showsConversation, let tid = row.key.thread {
+            markConversationRead(tid)
+        } else if let row, !mailbox.model.inOutbox(row.message) {
+            scheduleMarkRead(row.message.id)
+        } else {
+            scheduleMarkRead(nil) // the daemon refuses flags on outbox messages
+        }
+    }
+
+    /// Arms the mark-as-read timer for the member opening conversation
+    /// `tid` marks read (`Conversation.Model.markRead`: the newest message
+    /// that is not an event, when it is unread; older unread members stay
+    /// unread), once the folder members are known; nothing when the
+    /// selection has moved on by then, or when thread.get fails. The
+    /// conversation view's controller calls it again when the members
+    /// arrive after such a failure (`ConversationController.membersChanged`).
+    func markConversationRead(_ tid: ThreadID) {
+        // The previous selection's timer goes now, whatever the wait.
+        scheduleMarkRead(nil)
+        ensureMembers(tid) { [weak self] in
+            guard let self, let row = self.selectedRow, row.key == ListKey(thread: tid), row.showsConversation,
+                  let thread = row.summary, let mem = self.mailbox.model.members[tid], mem.complete else { return }
+            self.scheduleMarkRead(Conversation.build(thread, mem.list).markRead)
+        }
+    }
+
+    /// Tells the conversation view that the members of the selected
+    /// conversation may have changed (a reload kept its key): it merges
+    /// them, or asks for them again when the reload dropped them.
+    private func announceSelectedMembers() {
+        guard let row = selectedRow, row.showsConversation, let tid = row.key.thread else { return }
+        onThreadMembersChanged?(tid)
+    }
+
+    /// notify.messagesChanged for the account of the selected row, just
+    /// before the folder is listed again (`MailboxController.refreshShown`):
+    /// the cache let go of the account's messages, so what the pane shows
+    /// is fetched again. A message row is announced again, which shows its
+    /// message afresh (and re-arms the mark-as-read timer, a no-op for a
+    /// read message); a conversation row's folder members are forgotten,
+    /// so the reload's answer asks thread.get for them again (their senders
+    /// and dates may have changed), and the conversation view drops the
+    /// bodies it holds (`onConversationChanged`). Not the whole selection
+    /// announcement for a conversation: that would ask thread.get a second
+    /// time (`markConversationRead`).
+    public func refreshShown(_ acc: AccountID) {
+        guard let row = selectedRow, row.message.accountId == acc else { return }
+        if row.showsConversation, let tid = row.key.thread {
+            refreshMembers(tid)
+            onConversationChanged?(tid)
+        } else {
+            announceSelection()
+        }
+    }
+
+    /// Re-evaluates the per-message actions for the selected row
+    /// (actions.go `refreshMessageActions`).
+    public func refreshActionFlags() {
+        let rows = selectedRows
+        let f = rows.count > 1
+            ? Selection.combineAccounts(
+                rows.map { messageActionState($0, model: mailbox.model) }, accounts: rows.map { $0.message.accountId })
+            : messageActionState(rows.first, model: mailbox.model)
+        guard f != actionFlags else { return }
+        actionFlags = f
+        onActionFlagsChanged?(f)
+    }
+
+    /// Runs `then` with the selected rows and every message they stand
+    /// for: one each, or all the folder members of a conversation row,
+    /// fetched first when they are not known yet (the selection must still
+    /// be those rows by then; selection.go `selectedIDs`).
+    public func selectedIDs(_ then: @escaping @MainActor ([ListRow], [MessageID]) -> Void) {
+        let keys = selectedKeys
+        let rows = selectedRows
+        guard !rows.isEmpty else { return }
+        let missing = rows.filter { mailbox.model.rowIDs($0) == nil }.compactMap(\.key.thread)
+        let run: @MainActor () -> Void = { [weak self] in
+            guard let self, self.selectedKeys == keys else { return }
+            let now = self.selectedRows
+            var ids: [MessageID] = []
+            for r in now {
+                guard let got = self.mailbox.model.rowIDs(r) else { return }
+                ids += got
+            }
+            then(now, ids)
+        }
+        if missing.isEmpty {
+            run()
+            return
+        }
+        var left = missing.count
+        for tid in missing {
+            ensureMembers(tid) {
+                left -= 1
+                if left == 0 {
+                    run()
+                }
+            }
+        }
+    }
+
+    /// The body of a confirmation for rows: the subject of one row, nothing
+    /// for several (the heading counts them; selection.go
+    /// `selectionSubject`).
+    public func selectionSubject(_ rows: [ListRow]) -> String {
+        rows.count == 1 ? rowSubject(rows[0]) : ""
+    }
+
+    /// What the star does to rows: a row's own rule (`flagTarget`), for
+    /// several `Selection.flagTarget` of the combined flags.
+    public func flagTarget(_ rows: [ListRow]) -> Bool {
+        rows.count == 1 ? flagTarget(rows[0]) : Selection.flagTarget(actionFlags)
+    }
+
+    /// The subject a confirmation shows for a row: the conversation's, or
+    /// the message's (threads.go `rowSubject`).
+    public func rowSubject(_ row: ListRow) -> String {
+        if row.thread, let summary = row.summary {
+            return subjectText(summary.subject)
+        }
+        return subjectText(row.message.subject)
+    }
+
+    /// The flagged state the star moves a row to (thread_model.go
+    /// `flagTarget`).
+    public func flagTarget(_ row: ListRow) -> Bool {
+        mailbox.model.flagTarget(row)
+    }
+
+    /// Arms the mark-as-read timer for the newly selected message,
+    /// cancelling any pending one; nil only cancels (actions.go
+    /// `scheduleMarkRead`). A message that is read already, or unknown to
+    /// the list, arms nothing.
+    private func scheduleMarkRead(_ id: MessageID?) {
+        markReadTask?.cancel()
+        markReadTask = nil
+        markReadID = id
+        guard let id, let found = mailbox.model.message(id), !hasFlag(found.summary.flags, .seen) else { return }
+        let delay = settings.markReadDelay
+        if delay <= 0 {
+            onMarkRead?(id)
+            return
+        }
+        let wait = markReadTick * delay
+        markReadTask = Task { [weak self] in
+            try? await Task.sleep(for: wait)
+            guard let self, !Task.isCancelled, !self.closed else { return }
+            self.markReadTask = nil
+            if self.markReadID == id {
+                self.onMarkRead?(id)
+            }
+        }
+    }
+
+    // MARK: Changes between loads
+
+    /// Inserts a notified message at the top of the list when it belongs to
+    /// the listed folder (the list part of folders.go `onNewMessage`; the
+    /// folder half adjusts the badge and filters out what the model holds
+    /// already). While the page is (re)loading the reply will include the
+    /// message; only a settled list gets the row, and only when the active
+    /// filter would have listed it anyway.
+    public func applyNewMessage(_ n: NewMessageNotification) {
+        let k = FolderKey(account: n.accountId, folder: n.folderId)
+        // The All Inboxes list keys its conversations by account and thread.
+        let s = mailbox.model.listIsUnified ? Unified.scoped(n.message, account: n.accountId) : n.message
+        guard mailbox.model.listCovers(k), mailbox.model.message(s.id) == nil else { return }
+        let m = mailbox.model
+        if m.loading || m.listErr != nil {
+            return
+        }
+        if m.grouped {
+            // Into its conversation row, or a new one at the top; without a
+            // thread id (a daemon still linking) the list is asked again.
+            if mailbox.model.applyNewMessage(s, filter: m.listFilter, selected: selectedKey ?? ListKey()) {
+                syncRows()
+                if let tid = s.threadId {
+                    onThreadMembersChanged?(tid)
+                    // A conversation that shows the user's replies: the
+                    // arrival may be one of them (a Bcc to oneself), which
+                    // only the daemon tells by its Message-ID.
+                    let model = mailbox.model
+                    let replies = model.tindex[tid].map { model.threads[$0].sentCount > 0 } ?? false
+                    if replies || !(model.members[tid]?.sent.isEmpty ?? true) {
+                        refetchMembers(tid)
+                    }
+                }
+            } else {
+                loadMessages()
+            }
+            return
+        }
+        if matchesFilter(s, m.listFilter), mailbox.model.insertMessage(at: 0, s) {
+            reconcile(.keep)
+        }
+    }
+
+    /// notify.newMessage for another folder of the listed folder's account
+    /// (`MailboxController.onNewMessageElsewhere`): a message in a sent
+    /// folder that belongs to a listed conversation is the user's reply to
+    /// it, so the conversation is asked for again (`refetchMembers`): its
+    /// `sentCount` changes (a single message becomes a conversation row) and
+    /// the conversation view, when it shows it, gets the reply. Nothing in
+    /// flat mode, and nothing while a sent folder or the outbox is listed
+    /// (their conversations have no replies of their own).
+    public func applyNewMessageElsewhere(_ n: NewMessageNotification) {
+        let m = mailbox.model
+        guard m.grouped, !m.loading, let k = m.listFolder, listShowsAccount(k, n.accountId),
+              k.isUnified || k.folder != n.folderId,
+              let tid = (k.isUnified ? Unified.scoped(n.message, account: n.accountId) : n.message).threadId,
+              m.tindex[tid] != nil,
+              m.folderRole(FolderKey(account: n.accountId, folder: n.folderId)) == .sent
+        else { return }
+        let listed = folderRole(k)
+        guard listed != .sent, listed != .outbox else { return }
+        refetchMembers(tid)
+    }
+
+    /// Whether the list on `k` shows conversations of `account`: the
+    /// listed folder's account, or any account the All Inboxes list covers.
+    private func listShowsAccount(_ k: FolderKey, _ account: AccountID) -> Bool {
+        k.isUnified ? Unified.accounts(mailbox.model.accounts).contains(account) : k.account == account
+    }
+
+    /// notify.messagesChanged named a sent folder of the account of the
+    /// selected conversation (`MailboxController.refreshShownSent`), whose
+    /// folder is not named itself (`refreshShown` covers that): the user's
+    /// replies it shows are asked for again.
+    public func refreshShownSent(_ acc: AccountID) {
+        guard mailbox.model.grouped, let row = selectedRow, row.message.accountId == acc, row.showsConversation,
+              let tid = row.key.thread else { return }
+        refetchMembers(tid)
+    }
+
+    /// notify.draftsChanged (conversation_draft.go `onDraftsChanged`): the
+    /// listed conversations it names, and with no names the one on show
+    /// and every listed one with drafts, ask thread.get again
+    /// (`refetchMembers`), which brings their `draftCount` and drafts.
+    /// Nothing in flat mode (no row shows a conversation) or for another
+    /// account than the listed folder's.
+    public func refreshDrafts(_ n: DraftsChangedNotification) {
+        let model = mailbox.model
+        guard model.grouped, !model.loading, let k = model.listFolder, listShowsAccount(k, n.accountId) else { return }
+        var want = Set(n.threadIds.map { k.isUnified ? Unified.scopedThread($0, account: n.accountId) : $0 })
+        if n.threadIds.isEmpty {
+            if let row = selectedRow, row.thread, let tid = row.key.thread {
+                want.insert(tid)
+            }
+            for t in model.threads where t.draftCount > 0 {
+                want.insert(t.id)
+            }
+        }
+        for tid in want.sorted(by: { $0.rawValue < $1.rawValue }) where model.tindex[tid] != nil {
+            refetchMembers(tid)
+        }
+    }
+
+    /// Changes the flags of the given messages in the model, refreshes their
+    /// rows and the actions, and returns the ids that actually changed (the
+    /// `apply` step of actions.go `setSeenIDs` / `setFlaggedIDs`; the
+    /// caller adjusts the folder badge and sends message.flag).
+    @discardableResult
+    public func applyFlags(_ ids: [MessageID], set: [Flag] = [], clear: [Flag] = []) -> [MessageID] {
+        let changed = mailbox.model.applyFlags(ids, set: set, clear: clear)
+        refreshRows(changed)
+        refreshActionFlags()
+        if mailbox.model.grouped {
+            for tid in threads(of: changed) {
+                onThreadMembersChanged?(tid)
+            }
+        }
+        return changed
+    }
+
+    /// The conversations the given messages are members of in the grouped
+    /// list, each once, in the order they first appear.
+    private func threads(of ids: [MessageID]) -> [ThreadID] {
+        var seen = Set<ThreadID>()
+        return ids.compactMap { mailbox.model.memberOf[$0] }.filter { seen.insert($0).inserted }
+    }
+
+    /// Drops messages from the list in either mode and returns the closure
+    /// that puts them back after a failed move or delete (messages.go
+    /// `removeRows`). A grouped conversation whose members are not all
+    /// known cannot be edited in place; the list is loaded again instead
+    /// and the restore does nothing. A restore after the list moved on (a
+    /// reload) does nothing either.
+    public func removeRows(_ ids: [MessageID]) -> Restore {
+        if !mailbox.model.grouped {
+            return removeMessageRows(ids)
+        }
+        // The conversations the messages belong to, while the model still
+        // knows it.
+        let tids = threads(of: ids)
+        guard let removal = mailbox.model.removeMessages(ids) else {
+            loadMessages()
+            return {}
+        }
+        let gen = mailbox.model.listGen
+        syncRowsAfterRemoval()
+        for tid in tids {
+            onThreadMembersChanged?(tid)
+        }
+        return { [weak self] in
+            guard let self, self.mailbox.model.listGen == gen else { return }
+            self.mailbox.model.restoreRemoval(removal)
+            self.syncRows()
+            for tid in tids {
+                self.onThreadMembersChanged?(tid)
+            }
+        }
+    }
+
+    /// Drops messages from the flat list in one go (messages.go
+    /// `removeMessageRows`): the selection keeps the rows still listed;
+    /// when every selected row went, the row now at the first one's place
+    /// takes over (the pane follows), or the pane is cleared when the list
+    /// ran empty. The restore puts them back at their places.
+    private func removeMessageRows(_ ids: [MessageID]) -> Restore {
+        var gone: [(MessageSummary, Int)] = []
+        for id in ids {
+            if let removed = mailbox.model.removeMessage(id) {
+                gone.append(removed)
+            }
+        }
+        guard !gone.isEmpty else {
+            return {}
+        }
+        let gen = mailbox.model.listGen
+        syncRowsAfterRemoval()
+        return { [weak self] in
+            guard let self, self.mailbox.model.listGen == gen else { return }
+            for (s, idx) in gone.reversed() {
+                _ = self.mailbox.model.insertMessage(at: idx, s)
+            }
+            self.reconcile(.keep)
+        }
+    }
+
+    /// The list's share of outbox.go `refreshOutboxViews`: the outbox
+    /// listing is reloaded when it is shown; `onOutboxRefreshed` hands the
+    /// account on for the reader's share.
+    public func refreshOutboxViews(_ acc: AccountID) {
+        if let outbox = mailbox.model.folderByRole(acc, .outbox),
+           mailbox.model.listFolder == FolderKey(account: acc, folder: outbox.id) {
+            loadMessages()
+        }
+        onOutboxRefreshed?(acc)
+    }
+}
+
+// MARK: Undo
+
+extension ListController {
+    /// Lists the folder on display again after an Undo took messages back
+    /// (ActionsController+Undo `afterUndo`), selecting the rows of `back`,
+    /// the messages that came back to it, once its first page arrives
+    /// (window.go `afterUndo`, `takeUndoReselect`).
+    public func relistAfterUndo(_ back: [Undo.Moved]) {
+        undoReselect = back
+        loadMessages()
+    }
+
+    /// The rows of the messages Undo brought back to the folder just listed
+    /// again (a message's row, or its conversation's), made the selection,
+    /// once; called when a first page of the list is in the model, before
+    /// its rows are published. True when the selection was set.
+    func takeUndoReselect() -> Bool {
+        let back = undoReselect
+        undoReselect = []
+        guard !back.isEmpty else { return false }
+        let m = mailbox.model
+        var keys: [ListKey] = []
+        for b in back {
+            let candidates = [
+                ListKey(message: b.messageId),
+                ListKey(thread: b.threadId, message: b.messageId),
+                b.threadId.map { ListKey(thread: $0) },
+            ].compactMap { $0 }
+            if let k = candidates.first(where: { m.rowIndexOf($0) >= 0 }), !keys.contains(k) {
+                keys.append(k)
+            }
+        }
+        guard !keys.isEmpty else { return false }
+        // In list order, as a selection is (`select(keys:)`).
+        keys.sort { m.rowIndexOf($0) < m.rowIndexOf($1) }
+        selectedKeys = keys
+        return true
+    }
+}

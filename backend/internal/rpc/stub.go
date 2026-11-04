@@ -1,0 +1,531 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
+package rpc
+
+import (
+	"context"
+	"os"
+
+	"github.com/schotek/malachi/backend/pkg/api"
+)
+
+// StubBackend implements api.Backend with every data method returning
+// api.ErrNotImplemented. Only system.info works. internal/core embeds it and
+// overrides the services it has implemented so far; malachid serves that.
+//
+// TODO(phase-1): as internal/core grows (account, imap, …) the stub shrinks
+// and eventually disappears. The RPC package depends on core only through
+// api.Backend.
+type StubBackend struct {
+	Version   string
+	StorePath string
+}
+
+var _ api.Backend = (*StubBackend)(nil)
+
+func (b *StubBackend) System() api.SystemService          { return stubSystem{b} }
+func (b *StubBackend) Accounts() api.AccountService       { return stubAccounts{} }
+func (b *StubBackend) Folders() api.FolderService         { return stubFolders{} }
+func (b *StubBackend) Messages() api.MessageService       { return stubMessages{} }
+func (b *StubBackend) Outbox() api.OutboxService          { return stubOutbox{} }
+func (b *StubBackend) Threads() api.ThreadService         { return stubThreads{} }
+func (b *StubBackend) Drafts() api.DraftService           { return stubDrafts{} }
+func (b *StubBackend) Attachments() api.AttachmentService { return stubAttachments{} }
+func (b *StubBackend) Search() api.SearchService          { return stubSearch{} }
+func (b *StubBackend) Sync() api.SyncService              { return stubSync{} }
+func (b *StubBackend) Config() api.ConfigService          { return stubConfig{} }
+func (b *StubBackend) Senders() api.SenderService         { return stubSenders{} }
+func (b *StubBackend) Contacts() api.ContactService       { return stubContacts{} }
+func (b *StubBackend) Issues() api.IssueService           { return stubIssues{} }
+func (b *StubBackend) Board() api.BoardService            { return stubBoard{} }
+func (b *StubBackend) Calendars() api.CalendarService     { return stubCalendars{} }
+func (b *StubBackend) Events() api.EventService           { return stubEvents{} }
+func (b *StubBackend) Invitations() api.InvitationService { return stubInvitations{} }
+func (b *StubBackend) Crm() api.CrmService                { return stubCrm{} }
+func (b *StubBackend) Assistant() api.AssistantService    { return stubAssistant{} }
+func (b *StubBackend) AddressBooks() api.AddressBookService {
+	return stubAddressBooks{}
+}
+
+func (b *StubBackend) Update() api.UpdateService { return stubUpdate{} }
+
+func (b *StubBackend) Rules() api.RulesService { return stubRules{} }
+
+type stubRules struct{}
+
+func (stubRules) List(context.Context, api.RulesListParams) (*api.RulesListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Create(context.Context, api.RulesCreateParams) (*api.RulesCreateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Update(context.Context, api.RulesUpdateParams) (*api.RulesUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Delete(context.Context, api.RulesDeleteParams) (*api.RulesDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Reorder(context.Context, api.RulesReorderParams) (*api.RulesReorderResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Test(context.Context, api.RulesTestParams) (*api.RulesTestResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubRules) Apply(context.Context, api.RulesApplyParams) (*api.RulesApplyResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+func (b *StubBackend) Signatures() api.SignatureService { return stubSignatures{} }
+func (b *StubBackend) PGP() api.PGPService              { return stubPGP{} }
+
+type stubSignatures struct{}
+
+func (stubSignatures) Signature(context.Context, api.MessageSignatureParams) (*api.MessageSignatureResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubSignatures) Revocation(context.Context, api.MessageSignatureRevocationParams) (*api.MessageSignatureResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubPGP struct{}
+
+func (stubPGP) KeyImport(context.Context, api.PGPKeyImportParams) (*api.PGPKeyImportResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubPGP) KeyVerify(context.Context, api.PGPKeyVerifyParams) (*api.PGPKeyVerifyResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubPGP) KeyList(context.Context, api.PGPKeyListParams) (*api.PGPKeyListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubPGP) KeyRemove(context.Context, api.PGPKeyRemoveParams) (*api.PGPKeyRemoveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubUpdate struct{}
+
+func (stubUpdate) Status(context.Context, api.UpdateStatusParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubUpdate) Check(context.Context, api.UpdateCheckParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubUpdate) SetPrefs(context.Context, api.UpdateSetPrefsParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubUpdate) Dismiss(context.Context, api.UpdateDismissParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubUpdate) DismissNotice(context.Context, api.UpdateDismissNoticeParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubAddressBooks struct{}
+
+func (stubAddressBooks) ListBooks(context.Context, api.AddressBookListParams) (*api.AddressBookListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) SetBook(context.Context, api.AddressBookSetParams) (*api.AddressBookSetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) ListContacts(context.Context, api.ContactListParams) (*api.ContactListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) GetContact(context.Context, api.ContactGetParams) (*api.ContactGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) Lookup(context.Context, api.ContactLookupParams) (*api.ContactLookupResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) CreateContact(context.Context, api.ContactCreateParams) (*api.ContactCreateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) UpdateContact(context.Context, api.ContactUpdateParams) (*api.ContactUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) DeleteContact(context.Context, api.ContactDeleteParams) (*api.ContactDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) Photo(context.Context, api.ContactPhotoParams) (*api.ContactPhotoResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubAssistant struct{}
+
+func (stubAssistant) ProfileGet(context.Context, api.AssistantProfileGetParams) (*api.AssistantProfileGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) ProfileSet(context.Context, api.AssistantProfileSetParams) (*api.AssistantProfileSetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) ProfilePropose(context.Context, api.AssistantProfileProposeParams) (*api.AssistantProfileProposeResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) ProfileResolve(context.Context, api.AssistantProfileResolveParams) (*api.AssistantProfileResolveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubCrm struct{}
+
+func (stubCrm) Lookup(context.Context, api.CrmLookupParams) (*api.CrmLookupResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCrm) Search(context.Context, api.CrmSearchParams) (*api.CrmSearchResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCrm) Save(context.Context, api.CrmSaveParams) (*api.CrmSaveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCrm) Remove(context.Context, api.CrmRemoveParams) (*api.CrmRemoveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubCalendars struct{}
+
+func (stubCalendars) List(context.Context, api.CalendarListParams) (*api.CalendarListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) Update(context.Context, api.CalendarUpdateParams) (*api.CalendarUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) Sync(context.Context, api.CalendarSyncParams) (*api.CalendarSyncResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) Preferences(context.Context, api.CalendarPreferencesParams) (*api.CalendarPreferencesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) SetPreferences(context.Context, api.CalendarSetPreferencesParams) (*api.CalendarSetPreferencesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) FreeBusy(context.Context, api.CalendarFreeBusyParams) (*api.CalendarFreeBusyResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) FindFreeTime(context.Context, api.CalendarFindFreeTimeParams) (*api.CalendarFindFreeTimeResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubEvents struct{}
+
+func (stubEvents) List(context.Context, api.EventListParams) (*api.EventListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Get(context.Context, api.EventGetParams) (*api.EventGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Search(context.Context, api.EventSearchParams) (*api.EventSearchResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Create(context.Context, api.EventCreateParams) (*api.EventCreateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Update(context.Context, api.EventUpdateParams) (*api.EventUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Delete(context.Context, api.EventDeleteParams) (*api.EventDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Respond(context.Context, api.EventRespondParams) (*api.EventRespondResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) SnoozeAlert(context.Context, api.EventSnoozeAlertParams) (*api.EventSnoozeAlertResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) DismissAlert(context.Context, api.EventDismissAlertParams) (*api.EventDismissAlertResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubInvitations struct{}
+
+func (stubInvitations) List(context.Context, api.InvitationListParams) (*api.InvitationListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubInvitations) Respond(context.Context, api.InvitationRespondParams) (*api.InvitationRespondResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubInvitations) ApplyCancel(context.Context, api.InvitationApplyCancelParams) (*api.InvitationApplyCancelResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubContacts struct{}
+
+func (stubContacts) Search(context.Context, api.ContactSearchParams) (*api.ContactSearchResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubIssues struct{}
+
+func (stubIssues) Transitions(context.Context, api.IssueTransitionsParams) (*api.IssueTransitionsResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+func (stubIssues) Transition(context.Context, api.IssueTransitionParams) (*api.IssueTransitionResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubBoard struct{}
+
+func (stubBoard) List(context.Context, api.BoardListParams) (*api.BoardListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Get(context.Context, api.BoardGetParams) (*api.BoardGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetState(context.Context, api.BoardSetStateParams) (*api.BoardSetStateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetDone(context.Context, api.BoardSetDoneParams) (*api.BoardSetDoneResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Remind(context.Context, api.BoardRemindParams) (*api.BoardRemindResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Archive(context.Context, api.BoardArchiveParams) (*api.BoardArchiveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Trash(context.Context, api.BoardTrashParams) (*api.BoardTrashResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Unflag(context.Context, api.BoardUnflagParams) (*api.BoardUnflagResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) DiscardDraft(context.Context, api.BoardDiscardDraftParams) (*api.BoardDiscardDraftResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetDraft(context.Context, api.BoardSetDraftParams) (*api.BoardSetDraftResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Queue(context.Context, api.BoardQueueParams) (*api.BoardQueueResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Annotate(context.Context, api.BoardAnnotateParams) (*api.BoardAnnotateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Commit(context.Context, api.BoardCommitParams) (*api.BoardCommitResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetCommitment(context.Context, api.BoardSetCommitmentParams) (*api.BoardSetCommitmentResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Preferences(context.Context, api.BoardPreferencesParams) (*api.BoardPreferencesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetPreferences(context.Context, api.BoardSetPreferencesParams) (*api.BoardSetPreferencesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) RunStart(context.Context, api.BoardRunStartParams) (*api.BoardRunStartResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) RunEnd(context.Context, api.BoardRunEndParams) (*api.BoardRunEndResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubSystem struct{ b *StubBackend }
+
+func (s stubSystem) Info(context.Context, api.SystemInfoParams) (*api.SystemInfoResult, error) {
+	return &api.SystemInfoResult{
+		Version:         s.b.Version,
+		ProtocolVersion: api.ProtocolVersion,
+		PID:             os.Getpid(),
+		StorePath:       s.b.StorePath,
+	}, nil
+}
+
+func (stubSystem) Storage(context.Context, api.SystemStorageParams) (*api.SystemStorageResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubAccounts struct{}
+
+func (stubAccounts) DiscoverCalDAV(context.Context, api.AccountDiscoverCalDAVParams) (*api.AccountDiscoverCalDAVResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) ListCalDAVCalendars(context.Context, api.AccountListCalDAVCalendarsParams) (*api.AccountListCalDAVCalendarsResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+func (stubAccounts) List(context.Context, api.AccountListParams) (*api.AccountListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) Add(context.Context, api.AccountAddParams) (*api.AccountAddResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) Remove(context.Context, api.AccountRemoveParams) (*api.AccountRemoveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) SetEnabled(context.Context, api.AccountSetEnabledParams) (*api.AccountSetEnabledResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) Update(context.Context, api.AccountUpdateParams) (*api.AccountUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) Discover(context.Context, api.AccountDiscoverParams) (*api.AccountDiscoverResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) Test(context.Context, api.AccountTestParams) (*api.AccountTestResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) Linked(context.Context, api.AccountLinkedParams) (*api.AccountLinkedResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) Reorder(context.Context, api.AccountReorderParams) (*api.AccountReorderResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) OAuthStart(context.Context, api.AccountOAuthStartParams) (*api.AccountOAuthStartResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) OAuthWait(context.Context, api.AccountOAuthWaitParams) (*api.AccountOAuthWaitResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) OAuthCancel(context.Context, api.AccountOAuthCancelParams) (*api.AccountOAuthCancelResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) DetectSite(context.Context, api.AccountDetectSiteParams) (*api.AccountDetectSiteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) DetectEway(context.Context, api.AccountDetectEwayParams) (*api.AccountDetectEwayResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) ListSpaces(context.Context, api.AccountListSpacesParams) (*api.AccountListSpacesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubFolders struct{}
+
+func (stubFolders) List(context.Context, api.FolderListParams) (*api.FolderListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubFolders) Subscribe(context.Context, api.FolderSubscribeParams) (*api.FolderSubscribeResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubFolders) MarkRead(context.Context, api.FolderMarkReadParams) (*api.FolderMarkReadResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubFolders) Empty(context.Context, api.FolderEmptyParams) (*api.FolderEmptyResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubMessages struct{}
+
+func (stubMessages) List(context.Context, api.MessageListParams) (*api.MessageListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Get(context.Context, api.MessageGetParams) (*api.MessageGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Body(context.Context, api.MessageBodyParams) (*api.MessageBodyResult, error) {
+	// When implemented, this MUST route through internal/sanitize and never
+	// return the stored HTML directly. See docs/security.md.
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Part(context.Context, api.MessagePartParams) (*api.MessagePartResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Embedded(context.Context, api.MessageEmbeddedParams) (*api.MessageEmbeddedResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Download(context.Context, api.MessageDownloadParams) (*api.MessageDownloadResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Unsubscribe(context.Context, api.MessageUnsubscribeParams) (*api.MessageUnsubscribeResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Flag(context.Context, api.MessageFlagParams) (*api.MessageFlagResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Move(context.Context, api.MessageMoveParams) (*api.MessageMoveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Delete(context.Context, api.MessageDeleteParams) (*api.MessageDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Send(context.Context, api.MessageSendParams) (*api.MessageSendResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubThreads struct{}
+
+func (stubThreads) List(context.Context, api.ThreadListParams) (*api.ThreadListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubThreads) Get(context.Context, api.ThreadGetParams) (*api.ThreadGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubOutbox struct{}
+
+func (stubOutbox) Retry(context.Context, api.OutboxRetryParams) (*api.OutboxRetryResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubDrafts struct{}
+
+func (stubDrafts) Save(context.Context, api.DraftSaveParams) (*api.DraftSaveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) List(context.Context, api.DraftListParams) (*api.DraftListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) Delete(context.Context, api.DraftDeleteParams) (*api.DraftDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) Create(context.Context, api.DraftCreateParams) (*api.DraftCreateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) Open(context.Context, api.DraftOpenParams) (*api.DraftOpenResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) Markdown(context.Context, api.DraftMarkdownParams) (*api.DraftMarkdownResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) Get(context.Context, api.DraftGetParams) (*api.DraftGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubAttachments struct{}
+
+func (stubAttachments) Import(context.Context, api.AttachmentImportParams) (*api.AttachmentImportResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAttachments) Remove(context.Context, api.AttachmentRemoveParams) (*api.AttachmentRemoveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAttachments) Get(context.Context, api.AttachmentGetParams) (*api.AttachmentGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubSearch struct{}
+
+func (stubSearch) Query(context.Context, api.SearchQueryParams) (*api.SearchQueryResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubSync struct{}
+
+func (stubSync) Status(context.Context, api.SyncStatusParams) (*api.SyncStatusResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubSync) Trigger(context.Context, api.SyncTriggerParams) (*api.SyncTriggerResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubConfig struct{}
+
+func (stubConfig) Get(context.Context, api.ConfigGetParams) (*api.ConfigGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubConfig) Set(context.Context, api.ConfigSetParams) (*api.ConfigSetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubSenders struct{}
+
+func (stubSenders) List(context.Context, api.SenderListParams) (*api.SenderListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubSenders) Add(context.Context, api.SenderAddParams) (*api.SenderAddResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubSenders) Remove(context.Context, api.SenderRemoveParams) (*api.SenderRemoveResult, error) {
+	return nil, api.ErrNotImplemented
+}

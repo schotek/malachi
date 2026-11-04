@@ -1,0 +1,242 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import AppKit
+import MalachiCore
+
+/// The settings window (preferences.blp `preferences_dialog`): a
+/// toolbar-style tab view with the Accounts, Integrations, Rules, General,
+/// Calendar (docs/calendar.md §5.8), Contacts, Appearance, AI and Security pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
+/// at a time; `show` brings it to the front. There is no search (deviation
+/// D9).
+@MainActor
+final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
+    /// The pages, in the order of the tabs.
+    enum Page: Int {
+        case accounts, integrations, rules, general, calendar, contacts, appearance, ai, security
+    }
+
+    private static var shared: PreferencesWindowController?
+
+    /// The open settings window, if any (to select a page after
+    /// `hooks.openPreferences`).
+    static var open: PreferencesWindowController? { shared }
+
+    let accountsPane: AccountsPaneViewController
+    let integrationsPane: IntegrationsPaneViewController
+    /// Settings → Rules (docs/plans/rules.md R14), bound to the
+    /// application's rules by `Integration.showPreferences`.
+    let rulesPane: RulesPaneViewController
+    let generalPane = GeneralPaneViewController()
+    let calendarPane: CalendarPaneViewController
+    /// Settings → Contacts (docs/plans/address-book.md W3), bound to the
+    /// application's address books by `Integration.showPreferences`.
+    let contactsPane = ContactsPaneViewController()
+    let appearancePane = AppearancePaneViewController()
+    let aiPane = AIPaneViewController()
+    /// Settings → Security (docs/plans/signatures.md §6): the OpenPGP keys,
+    /// bound to the application by `Integration.showPreferences`.
+    let securityPane = SecurityPaneViewController()
+    let settings: Settings
+    private let tabs = PrefsTabViewController()
+    private let toasts = WizardToastPresenter()
+
+    /// Opens the settings, or brings the open window to the front.
+    /// `bridge` is the path of the bundled `malachi-mcp` for the AI page
+    /// (`Paths.mcpBridge`; nil when there is none beside the application),
+    /// `assistant` what the page's Assistant group reports on (nil leaves
+    /// the choice of the Claude app without its problem), `claudeDesktop`
+    /// and `confirmRestart` the offer to restart Claude Desktop around a
+    /// change of "Register with Claude" (nil: the change is written at
+    /// once, as in GTK).
+    /// `triage` is the board's triage for the AI page's Board group (nil:
+    /// none) and `confirmTriage` its consent sheet.
+    /// `confirmRemoval` renders the "Remove this account?" alert,
+    /// `confirmTrust` the account wizard's "Trust This Certificate?".
+    @discardableResult
+    static func show(
+        client: RPCClient, settings: Settings, bridge: String? = Paths.resolve().mcpBridge?.path,
+        assistant: AssistantController? = nil, claudeDesktop: ClaudeDesktopController? = nil,
+        confirmRestart: PrefsConfirmRestart? = nil, triage: BoardTriageController? = nil,
+        confirmTriage: PrefsConfirmRestart? = nil,
+        confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust
+    ) -> PreferencesWindowController {
+        if let open = shared {
+            open.showWindow(nil)
+            open.window?.makeKeyAndOrderFront(nil)
+            return open
+        }
+        let c = PreferencesWindowController(
+            client: client, settings: settings, bridge: bridge, assistant: assistant, claudeDesktop: claudeDesktop,
+            confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage, confirmRemoval: confirmRemoval,
+            confirmTrust: confirmTrust)
+        shared = c
+        c.showWindow(nil)
+        c.window?.makeKeyAndOrderFront(nil)
+        return c
+    }
+
+    private init(
+        client: RPCClient, settings: Settings, bridge: String?, assistant: AssistantController?,
+        claudeDesktop: ClaudeDesktopController?, confirmRestart: PrefsConfirmRestart?,
+        triage: BoardTriageController?, confirmTriage: PrefsConfirmRestart?,
+        confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust
+    ) {
+        self.settings = settings
+        let toasts = toasts
+        accountsPane = AccountsPaneViewController(client: client, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust) { text in
+            toasts.show(text)
+        }
+        integrationsPane = IntegrationsPaneViewController(client: client, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust) { text in
+            toasts.show(text)
+        }
+        calendarPane = CalendarPaneViewController(client: client, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust) { text in
+            toasts.show(text)
+        }
+        rulesPane = RulesPaneViewController { text in
+            toasts.show(text)
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: PreferencesPaneViewController.paneWidth, height: PreferencesPaneViewController.paneHeight),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered, defer: false
+        )
+        window.title = PrefsTabViewController.windowTitle
+        window.toolbarStyle = .preference
+        window.isReleasedWhenClosed = false
+        window.autorecalculatesKeyViewLoop = true
+        // Never restored by the system at launch; it opens on Accounts.
+        window.isRestorable = false
+        // Fixed width, free height, as macOS settings windows are.
+        window.contentMinSize = NSSize(width: PreferencesPaneViewController.paneWidth, height: 360)
+        window.contentMaxSize = NSSize(width: PreferencesPaneViewController.paneWidth, height: 4000)
+        window.center()
+        window.setFrameAutosaveName("Settings")
+        super.init(window: window)
+
+        // The General and Appearance pages bind their controls once they
+        // know the settings and the daemon; GTK builds every page at once,
+        // so General loads config.get now rather than on its first visit.
+        // The AI page asks the bridge for its status whenever it comes up.
+        generalPane.configure(settings: settings, client: client, boardPreferences: triage?.preferences) { text in
+            toasts.show(text)
+        }
+        appearancePane.configure(settings: settings)
+        aiPane.configure(
+            bridge: bridge, settings: settings, assistant: assistant, claudeDesktop: claudeDesktop,
+            confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage, client: client
+        ) { text in toasts.show(text) }
+        _ = generalPane.view
+        securityPane.toast = { text in toasts.show(text) }
+
+        tabs.tabStyle = .toolbar
+        tabs.transitionOptions = []
+        let pages: [(NSViewController, String, String)] = [
+            (accountsPane, L10n.T("Accounts"), "person.2"),
+            (integrationsPane, Integrations.texts().title, "puzzlepiece.extension"),
+            (rulesPane, Rules.pageTitle, "line.3.horizontal.decrease.circle"),
+            (generalPane, L10n.T("General"), "gearshape"),
+            (calendarPane, Cal.Prefs.tabTitle, "calendar"),
+            (contactsPane, ContactBook.windowTitle, "person.text.rectangle"),
+            (appearancePane, L10n.T("Appearance"), "paintpalette"),
+            (aiPane, L10n.T("AI"), "sparkles"),
+            (securityPane, SignatureView.securityPageTexts().title, SignatureView.symbolName(SignatureView.iconPage)),
+        ]
+        for (controller, label, symbol) in pages {
+            let item = NSTabViewItem(viewController: controller)
+            item.label = label
+            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+            tabs.addTabViewItem(item)
+        }
+        window.contentViewController = tabs
+        // The calendar page works over the application's calendar source
+        // for this window (AppState.startedCalendarSource).
+        calendarPane.attach(window: self)
+        wireAccountPages()
+        tabs.selectedTabViewItemIndex = 0
+        window.delegate = self
+        if let content = window.contentView {
+            toasts.attach(to: content)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    /// Shows `page` (the Assistant menu's "Set Up the Assistant…" wants
+    /// the AI page).
+    func select(_ page: Page) {
+        guard tabs.tabViewItems.indices.contains(page.rawValue) else { return }
+        tabs.selectedTabViewItemIndex = page.rawValue
+    }
+
+    /// The account pages follow each other (integrations_page.go): what
+    /// one adds, removes or reorders, the others load again; a CalDAV
+    /// row's Edit shows the Calendar page, and its Add CalDAV sheet works
+    /// over the Calendar page's source.
+    private func wireAccountPages() {
+        let calendar = calendarPane
+        let accounts = accountsPane
+        let integrations = integrationsPane
+        @MainActor func reload(_ pane: AccountsPaneViewController) {
+            guard pane.isViewLoaded, !pane.closed else { return }
+            pane.loadAccounts()
+        }
+        @MainActor func refreshCalendar() {
+            guard !calendar.closed else { return }
+            calendar.source?.refresh()
+        }
+        accountsPane.onAccountsChanged = { [weak integrations] in
+            if let integrations { reload(integrations) }
+        }
+        integrationsPane.onAccountsChanged = { [weak accounts] in
+            if let accounts { reload(accounts) }
+            refreshCalendar()
+        }
+        calendarPane.onAccountsChanged = { [weak accounts, weak integrations] in
+            if let accounts { reload(accounts) }
+            if let integrations { reload(integrations) }
+        }
+        integrationsPane.onShowCalendar = { [weak self] in self?.select(.calendar) }
+        integrationsPane.calendarSource = { [weak calendar] in calendar?.source }
+    }
+
+    func windowWillClose(_ notification: Foundation.Notification) {
+        accountsPane.closed = true
+        integrationsPane.closed = true
+        rulesPane.closed = true
+        generalPane.closed = true
+        calendarPane.closed = true
+        contactsPane.closed = true
+        appearancePane.closed = true
+        aiPane.closed = true
+        securityPane.closed = true
+        if PreferencesWindowController.shared === self {
+            PreferencesWindowController.shared = nil
+        }
+    }
+}
+
+/// The tab view controller of the settings; keeps the window title the
+/// same on every page and the window at the size the user gave it (a
+/// toolbar-style tab view otherwise snaps to the page's preferred size).
+@MainActor
+final class PrefsTabViewController: NSTabViewController {
+    static let windowTitle = "Settings" // macOS-only string
+
+    override func tabView(_ tabView: NSTabView, willSelect tabViewItem: NSTabViewItem?) {
+        // Only once the window shows: before that the bounds are the tab
+        // view's defaults, not a size the user chose.
+        if let vc = tabViewItem?.viewController, let content = view.window?.contentView, content.bounds.width > 0 {
+            vc.preferredContentSize = content.bounds.size
+        }
+        super.tabView(tabView, willSelect: tabViewItem)
+    }
+
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
+        view.window?.title = PrefsTabViewController.windowTitle
+    }
+}

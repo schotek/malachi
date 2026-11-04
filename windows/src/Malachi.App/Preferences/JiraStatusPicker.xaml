@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/JiraAccount/JiraStatusPickerView.swift;
+GTK: ui/internal/jiraaccount/statuses.go (statusPicker, a row of the Folders
+group). The picker of the statuses that count as closed as a card: the
+title and its explanation (dim caption), the statuses by category (built in
+code) and why the choice cannot be saved (the critical colour).
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.JiraStatusPicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <Border
+        Padding="16,12,16,14"
+        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1"
+        CornerRadius="{StaticResource ControlCornerRadius}">
+        <StackPanel Spacing="8">
+            <StackPanel Spacing="2">
+                <TextBlock
+                    x:Name="TitleLabel"
+                    Style="{StaticResource BodyLabelStyle}"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    x:Name="SubtitleLabel"
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel
+                x:Name="Body"
+                Spacing="10"
+                Visibility="Collapsed" />
+            <TextBlock
+                x:Name="ProblemText"
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                Style="{StaticResource CaptionLabelStyle}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+        </StackPanel>
+    </Border>
+</UserControl>

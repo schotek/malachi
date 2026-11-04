@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/AccountWizard/SignInHintPageController.swift;
+GTK: account_wizard.blp goa_hint_page. The status page goa_hint (the
+people icon, "Sign In Through GNOME Settings", the hint naming the
+provider) with its button column (vertical, 12 px apart, centred): Use
+the Browser Instead (goa_browser_button), shown when the daemon offers its
+own sign-in. GNOME Online Accounts does not exist on Windows, so Open
+Online Accounts (goa_open_button) and Check Again (goa_recheck_button)
+are left out as on macOS (M20); the page itself is normally not reached,
+because a daemon without GNOME Online Accounts answers account.discover
+with its own sign-in.
+-->
+<UserControl
+    x:Class="Malachi.App.Wizard.SignInHintPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:local="using:Malachi.App.Wizard"
+    IsTabStop="False">
+    <local:StatusPage
+        x:Name="GoaHint"
+        IconName="system-users-symbolic"
+        Title="{l:T Msgid='Sign In Through GNOME Settings'}">
+        <StackPanel HorizontalAlignment="Center" Spacing="12">
+            <Button
+                x:Name="BrowserButton"
+                HorizontalAlignment="Center"
+                AutomationProperties.AutomationId="UseBrowser"
+                Click="OnBrowserClick"
+                Content="{l:T Msgid='Use the Browser Instead'}"
+                Visibility="Collapsed" />
+        </StackPanel>
+    </local:StatusPage>
+</UserControl>

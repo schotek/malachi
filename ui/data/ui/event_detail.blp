@@ -1,0 +1,397 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+// The event detail popover (docs/calendar.md §5.5, §6.5 G13): one per
+// window, parented to the calendar page's content
+// (window/calendar_detail.go, the port of macOS's EventDetailPopover and
+// EventDetailViewController). No translatable strings here on purpose:
+// every text comes from Go through ui/internal/calendar, every string of
+// the server goes in with use-markup off. The rows hide while they have
+// nothing to show; the attendee list and the menus are filled from Go.
+// Object IDs are looked up from Go; keep them in sync.
+Popover event_detail_popover {
+  autohide: true;
+  has-arrow: true;
+  position: right;
+
+  styles [
+    "cal-detail",
+  ]
+
+  child: Box event_detail_box {
+    orientation: vertical;
+    spacing: 10;
+    width-request: 348;
+    margin-top: 16;
+    margin-bottom: 16;
+    margin-start: 16;
+    margin-end: 16;
+
+    Box event_detail_header {
+      orientation: horizontal;
+      spacing: 6;
+
+      Box event_detail_swatch {
+        width-request: 10;
+        height-request: 10;
+        valign: center;
+
+        styles [
+          "cal-swatch",
+          "cal-detail-swatch",
+        ]
+      }
+
+      Label event_detail_calendar {
+        use-markup: false;
+        xalign: 0;
+        ellipsize: end;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+
+      Label event_detail_kind {
+        use-markup: false;
+        valign: center;
+        visible: false;
+
+        styles [
+          "kind-badge",
+        ]
+      }
+    }
+
+    Label event_detail_title {
+      use-markup: false;
+      selectable: true;
+      focusable: false;
+      wrap: true;
+      wrap-mode: word_char;
+      xalign: 0;
+      max-width-chars: 1;
+      hexpand: true;
+
+      styles [
+        "cal-detail-title",
+      ]
+    }
+
+    Box event_detail_time_row {
+      orientation: horizontal;
+      spacing: 10;
+
+      Image {
+        icon-name: "preferences-system-time-symbolic";
+        valign: start;
+
+        styles [
+          "cal-detail-icon",
+        ]
+      }
+
+      Box {
+        orientation: vertical;
+        spacing: 2;
+        hexpand: true;
+
+        Label event_detail_time {
+          use-markup: false;
+          wrap: true;
+          wrap-mode: word_char;
+          xalign: 0;
+          max-width-chars: 1;
+        }
+
+        Label event_detail_time2 {
+          use-markup: false;
+          wrap: true;
+          wrap-mode: word_char;
+          xalign: 0;
+          max-width-chars: 1;
+          visible: false;
+
+          styles [
+            "dim-label",
+          ]
+        }
+      }
+    }
+
+    Box event_detail_recurrence_row {
+      orientation: horizontal;
+      spacing: 10;
+      visible: false;
+
+      Image {
+        icon-name: "media-playlist-repeat-symbolic";
+        valign: start;
+
+        styles [
+          "cal-detail-icon",
+        ]
+      }
+
+      Label event_detail_recurrence {
+        use-markup: false;
+        wrap: true;
+        wrap-mode: word_char;
+        xalign: 0;
+        max-width-chars: 1;
+        hexpand: true;
+      }
+    }
+
+    Box event_detail_location_row {
+      orientation: horizontal;
+      spacing: 10;
+      visible: false;
+
+      Image {
+        icon-name: "mark-location-symbolic";
+        valign: start;
+
+        styles [
+          "cal-detail-icon",
+        ]
+      }
+
+      Label event_detail_location {
+        use-markup: false;
+        selectable: true;
+        focusable: false;
+        wrap: true;
+        wrap-mode: word_char;
+        xalign: 0;
+        max-width-chars: 1;
+        hexpand: true;
+      }
+    }
+
+    Box event_detail_video_row {
+      orientation: horizontal;
+      spacing: 10;
+      visible: false;
+
+      Image {
+        icon-name: "camera-web-symbolic";
+        valign: center;
+
+        styles [
+          "cal-detail-icon",
+        ]
+      }
+
+      Box {
+        orientation: horizontal;
+        spacing: 6;
+        hexpand: true;
+
+        Button event_detail_video {
+          use-underline: false;
+
+          styles [
+            "flat",
+            "cal-detail-link",
+          ]
+        }
+
+        Label event_detail_video_host {
+          use-markup: false;
+          xalign: 0;
+          ellipsize: end;
+          hexpand: true;
+
+          styles [
+            "dim-label",
+          ]
+        }
+      }
+    }
+
+    Box event_detail_people_row {
+      orientation: horizontal;
+      spacing: 10;
+      visible: false;
+
+      Image {
+        icon-name: "system-users-symbolic";
+        valign: start;
+
+        styles [
+          "cal-detail-icon",
+        ]
+      }
+
+      Box {
+        orientation: vertical;
+        spacing: 4;
+        hexpand: true;
+
+        Label event_detail_people {
+          use-markup: false;
+          wrap: true;
+          wrap-mode: word_char;
+          xalign: 0;
+          max-width-chars: 1;
+        }
+
+        Box event_detail_attendees {
+          orientation: vertical;
+          spacing: 4;
+        }
+
+        Button event_detail_show_all {
+          use-underline: false;
+          halign: start;
+          visible: false;
+
+          styles [
+            "flat",
+            "cal-detail-link",
+            "caption",
+          ]
+        }
+
+        MenuButton event_detail_response {
+          halign: start;
+          margin-top: 4;
+          visible: false;
+        }
+      }
+    }
+
+    Box event_detail_alert_row {
+      orientation: horizontal;
+      spacing: 10;
+      visible: false;
+
+      Image {
+        icon-name: "alarm-symbolic";
+        valign: start;
+
+        styles [
+          "cal-detail-icon",
+        ]
+      }
+
+      Label event_detail_alert {
+        use-markup: false;
+        wrap: true;
+        wrap-mode: word_char;
+        xalign: 0;
+        max-width-chars: 1;
+        hexpand: true;
+      }
+    }
+
+    Box event_detail_notes_row {
+      orientation: horizontal;
+      spacing: 10;
+      visible: false;
+
+      Image {
+        icon-name: "text-x-generic-symbolic";
+        valign: start;
+
+        styles [
+          "cal-detail-icon",
+        ]
+      }
+
+      ScrolledWindow event_detail_notes_scroll {
+        hscrollbar-policy: never;
+        propagate-natural-height: true;
+        max-content-height: 160;
+        hexpand: true;
+
+        styles [
+          "cal-detail-notes",
+        ]
+
+        child: TextView event_detail_notes {
+          editable: false;
+          cursor-visible: false;
+          wrap-mode: word_char;
+          left-margin: 6;
+          right-margin: 6;
+          top-margin: 6;
+          bottom-margin: 6;
+        };
+      }
+    }
+
+    Box event_detail_invitation_row {
+      orientation: horizontal;
+      spacing: 10;
+      visible: false;
+
+      Image {
+        icon-name: "mail-unread-symbolic";
+        valign: center;
+
+        styles [
+          "cal-detail-icon",
+        ]
+      }
+
+      Button event_detail_invitation {
+        use-underline: false;
+        halign: start;
+
+        styles [
+          "flat",
+          "cal-detail-link",
+        ]
+      }
+    }
+
+    Spinner event_detail_spinner {
+      halign: start;
+      visible: false;
+    }
+
+    Box event_detail_footer {
+      orientation: horizontal;
+      spacing: 8;
+      margin-top: 4;
+      visible: false;
+
+      Button event_detail_edit {
+        use-underline: false;
+      }
+
+      Button event_detail_remove {
+        use-underline: false;
+
+        styles [
+          "destructive-action",
+        ]
+      }
+
+      Box {
+        hexpand: true;
+      }
+
+      MenuButton event_detail_assistant {
+        icon-name: "malachi-assistant-symbolic";
+      }
+    }
+
+    Label event_detail_error {
+      use-markup: false;
+      wrap: true;
+      wrap-mode: word_char;
+      xalign: 0;
+      max-width-chars: 1;
+      visible: false;
+
+      styles [
+        "caption",
+        "error",
+      ]
+    }
+  };
+}

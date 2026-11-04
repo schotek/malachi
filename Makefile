@@ -1,0 +1,390 @@
+# Malachi Mail — build entry points.
+#
+# Targets: build, run-dev (run), run-backend, run-frontend, test, lint, clean,
+# flatpak (plus helpers). `make help` lists them.
+# Everything Go-related is built inside the Toolbx container; `make flatpak`
+# is meant to be run on the host where flatpak-builder lives.
+
+# Windows: GNU make for Windows (winget install ezwinports.make) runs recipes
+# and $(shell ...) with the first sh.exe on PATH and falls back to cmd.exe,
+# which none of the POSIX recipes below survive; from PowerShell there is no
+# sh.exe on PATH. Git for Windows' usr\bin (sh, sed, grep, find, ...) goes
+# first on PATH and sh.exe becomes the shell, so PowerShell and Git Bash
+# behave alike. This has to stay above the first $(shell ...). GIT_USR_BIN
+# overrides the directory, found from `git --exec-path`
+# (<Git>/mingw64/libexec/git-core; usr/bin is beside mingw64). An MSYS2
+# make (MAKE_HOST ends in -msys or -cygwin) has its own POSIX shell and PATH.
+# EXE is the suffix of the Go binaries, empty on Linux and macOS.
+EXE         :=
+ifeq ($(OS),Windows_NT)
+EXE         := .exe
+ifeq ($(MAKE_HOST),Windows32)
+ifndef GIT_USR_BIN
+_empty      :=
+_space      := $(_empty) $(_empty)
+_git_prefix := $(subst /libexec/git-core,,$(shell git --exec-path))
+# $(dir ...) splits at spaces ("Program Files"): they are swapped for a
+# character no Windows path holds while the last element is cut off.
+GIT_USR_BIN := $(if $(_git_prefix),$(subst |,$(_space),$(dir $(subst $(_space),|,$(_git_prefix))))usr/bin,C:/Program Files/Git/usr/bin)
+endif
+export PATH := $(GIT_USR_BIN);$(PATH)
+SHELL       := sh.exe
+endif
+endif
+
+APP_ID      := io.github.schotek.Malachi
+# Release versions are the git tags, "v0.1.0" style; the leading v is cut
+# because AppStream and Flatpak want a bare number. Between tags this is
+# "0.1.0-3-gabc1234", and without any tag the bare commit (see
+# docs/releasing.md).
+# The Flatpak build gets a copy of the tree without .git, so git describe
+# has nothing to read there; it falls back to the .version file that
+# `make flatpak` and the CI workflow write.
+VERSION     ?= $(shell { git describe --tags --always --dirty 2>/dev/null \
+                 || cat .version 2>/dev/null || echo dev; } | sed 's/^v//')
+BUILD_DIR   := build
+GO          ?= go
+GOFLAGS     ?=
+LDFLAGS     := -X main.version=$(VERSION)
+# The package a build is installed from (docs/services.md §2.3); only the
+# package recipes set it (macos-dmg here, the deb, rpm and Flatpak scripts
+# through the environment), and only the daemon gets it. Without it the
+# daemon never checks for updates (docs/plans/update-check.md U5).
+UPDATE_CHANNEL ?=
+LDFLAGS_DAEMON = $(LDFLAGS)$(if $(UPDATE_CHANNEL), -X main.updateChannel=$(UPDATE_CHANNEL))
+
+# Install prefix (scripts/build.sh passes /app for Flatpak). The UI needs the
+# locale directory compiled in to find its .mo files when installed.
+PREFIX      ?= /usr/local
+BINDIR      ?= $(PREFIX)/bin
+LOCALEDIR   ?= $(PREFIX)/share/locale
+LDFLAGS_UI  := $(LDFLAGS) -X main.localeDir=$(LOCALEDIR)
+
+# Translations. po/POTFILES lists the Go sources; Blueprint output,
+# gschema, desktop and metainfo are extracted through gettext's ITS rules.
+# xgettext has no Go mode; C mode handles Go's double-quoted literals.
+PO_DIR      := po
+POT         := $(PO_DIR)/malachi.pot
+LINGUAS     := $(shell grep -v '^\#' $(PO_DIR)/LINGUAS 2>/dev/null)
+PO_FILES    := $(foreach l,$(LINGUAS),$(PO_DIR)/$(l).po)
+LOCALE_DIR  := $(BUILD_DIR)/locale
+MO_OUT      := $(foreach l,$(LINGUAS),$(LOCALE_DIR)/$(l)/LC_MESSAGES/malachi.mo)
+LOCALE_ENV  := MALACHI_LOCALE_DIR=$(CURDIR)/$(LOCALE_DIR)
+ICON_SRC    := ui/data/icons/$(APP_ID).svg
+ICON_ENV    := MALACHI_ICON_DIR=$(CURDIR)/$(dir $(ICON_SRC))
+POTFILES_GO := $(shell grep -v '^\#' $(PO_DIR)/POTFILES 2>/dev/null)
+XGETTEXT    := xgettext --from-code=UTF-8 --package-name=malachi \
+               --msgid-bugs-address=https://github.com/schotek/malachi/issues \
+               --copyright-holder="Vladislav Janeček" --add-comments=TRANSLATORS
+
+BLP_SRC     := $(wildcard ui/data/ui/*.blp)
+BLP_OUT     := $(BLP_SRC:.blp=.ui)
+
+DATA_IN     := $(wildcard data/*.in)
+DATA_OUT    := $(DATA_IN:.in=)
+
+# GSettings schema compiled for uninstalled (development) runs. GLib reads
+# GSETTINGS_SCHEMA_DIR once at process start as a colon-separated list that is
+# searched before the XDG data dirs, so run/test targets export it.
+SCHEMA_SRC  := data/$(APP_ID).gschema.xml
+SCHEMA_DIR  := $(BUILD_DIR)/glib-2.0/schemas
+SCHEMA_OUT  := $(SCHEMA_DIR)/gschemas.compiled
+SCHEMA_ENV  := GSETTINGS_SCHEMA_DIR=$(CURDIR)/$(SCHEMA_DIR)$(if $(GSETTINGS_SCHEMA_DIR),:$(GSETTINGS_SCHEMA_DIR))
+
+# Notification sound needs gsound (gsound-devel). Without it the UI is built
+# with -tags nosound and "Play Sound" does nothing.
+ifeq ($(shell pkg-config --exists gsound 2>/dev/null && echo yes),yes)
+UI_TAGS     :=
+else
+UI_TAGS     := -tags nosound
+$(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
+endif
+
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos macos-dmg macos-notarize macos-go run-macos test-macos run-gtk run-gtk-live windows run-windows test-windows help FORCE
+
+all: build
+
+## build: compile backend daemon, MCP bridge and UI into ./build
+build: backend mcp ui schemas locale
+
+backend: $(BUILD_DIR)/malachid$(EXE)
+
+# The find below also matches cmd/malachi-mcp, so an MCP-only edit relinks
+# malachid; with the Go build cache that is a sub-second no-op.
+$(BUILD_DIR)/malachid$(EXE): $(shell find backend -name '*.go' -o -name '*.sql' -o -name go.mod)
+	@mkdir -p $(BUILD_DIR)
+	cd backend && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS_DAEMON)' -o ../$@ ./cmd/malachid
+
+## mcp: compile the MCP bridge for AI agents into ./build/malachi-mcp (see docs/mcp.md)
+mcp: $(BUILD_DIR)/malachi-mcp$(EXE)
+
+$(BUILD_DIR)/malachi-mcp$(EXE): $(shell find backend/cmd/malachi-mcp backend/pkg/api -name '*.go') backend/go.mod
+	@mkdir -p $(BUILD_DIR)
+	cd backend && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o ../$@ ./cmd/malachi-mcp
+
+ui: blueprint $(BUILD_DIR)/malachi$(EXE)
+
+$(BUILD_DIR)/malachi$(EXE): $(BLP_OUT) $(shell find ui -name '*.go' -o -name go.mod) backend/pkg/api/*.go
+	@mkdir -p $(BUILD_DIR)
+	cd ui && $(GO) build $(GOFLAGS) $(UI_TAGS) -ldflags '$(LDFLAGS_UI)' -o ../$@ .
+
+## blueprint: compile Blueprint (.blp) files to GtkBuilder XML
+blueprint: $(BLP_OUT)
+
+ui/data/ui/%.ui: ui/data/ui/%.blp
+	blueprint-compiler compile --output $@ $<
+
+## data: render desktop/metainfo/service templates (substitutes @APP_ID@, @VERSION@ and @BINDIR@, merges translations)
+data: $(DATA_OUT)
+
+# The D-Bus service file bakes in an absolute path, so it has to be rendered
+# again when PREFIX changes (the Flatpak build uses /app, a local install
+# /usr/local). The stamp records the PREFIX the tree was last rendered with;
+# without it a stale Exec= would ship silently, since flatpak build-export
+# only checks that the file exists.
+$(BUILD_DIR)/prefix.stamp: FORCE
+	@mkdir -p $(BUILD_DIR)
+	@echo '$(BINDIR)' | cmp -s - $@ || echo '$(BINDIR)' > $@
+
+FORCE:
+
+data/%.service: data/%.service.in $(BUILD_DIR)/prefix.stamp
+	sed -e 's|@APP_ID@|$(APP_ID)|g' -e 's|@BINDIR@|$(BINDIR)|g' $< > $@
+
+data/%.desktop: data/%.desktop.in $(PO_FILES) $(PO_DIR)/LINGUAS
+	sed -e 's/@APP_ID@/$(APP_ID)/g' -e 's/@VERSION@/$(VERSION)/g' $< > $@.tmp
+	msgfmt --desktop --template=$@.tmp -d $(PO_DIR) --keyword= --keyword=GenericName --keyword=Comment --keyword=Keywords -o $@
+	rm -f $@.tmp
+
+# The <releases> block is generated from NEWS, which is the single source
+# of the release notes; the template carries none. Descriptions are not
+# marked translatable (-t 0), so a release does not churn the catalogues.
+# msgfmt picks the ITS rules from the template's file name, so every
+# intermediate file must still end in .metainfo.xml (they live in build/).
+data/%.metainfo.xml: data/%.metainfo.xml.in NEWS $(PO_FILES) $(PO_DIR)/LINGUAS
+	@mkdir -p $(BUILD_DIR)/news
+	sed -e 's/@APP_ID@/$(APP_ID)/g' -e 's/@VERSION@/$(VERSION)/g' $< > $(BUILD_DIR)/$(notdir $@)
+	@if command -v appstreamcli >/dev/null 2>&1; then \
+		appstreamcli news-to-metainfo --format=text -t 0 NEWS \
+			$(BUILD_DIR)/$(notdir $@) $(BUILD_DIR)/news/$(notdir $@); \
+	else \
+		echo "$@: appstreamcli not found; building without release notes" >&2; \
+		cp $(BUILD_DIR)/$(notdir $@) $(BUILD_DIR)/news/$(notdir $@); \
+	fi
+	msgfmt --xml --template=$(BUILD_DIR)/news/$(notdir $@) -d $(PO_DIR) -o $@
+
+## locale: compile po/*.po into build/locale (for uninstalled runs and install)
+locale: $(MO_OUT)
+
+$(LOCALE_DIR)/%/LC_MESSAGES/malachi.mo: $(PO_DIR)/%.po
+	@mkdir -p $(dir $@)
+	msgfmt --check -o $@ $<
+
+## pot: regenerate po/malachi.pot from Go, Blueprint, gschema, desktop and metainfo
+pot: blueprint
+	$(XGETTEXT) --language=C --keyword=T --keyword=N:1,2 --keyword=C:1c,2 -o $(POT) $(POTFILES_GO)
+	$(XGETTEXT) -j -o $(POT) $(BLP_OUT) data/$(APP_ID).gschema.xml
+	$(XGETTEXT) -j -o $(POT) --language=Desktop --keyword= --keyword=GenericName --keyword=Comment --keyword=Keywords data/$(APP_ID).desktop.in
+	$(XGETTEXT) -j -o $(POT) --its=/usr/share/gettext/its/metainfo.its data/$(APP_ID).metainfo.xml.in
+
+## po: update every po/*.po from the template (run after pot)
+po: pot
+	@for l in $(LINGUAS); do msgmerge --update --backup=none --quiet $(PO_DIR)/$$l.po $(POT); done
+
+## schemas: compile the GSettings schema into build/glib-2.0/schemas (for uninstalled runs)
+schemas: $(SCHEMA_OUT)
+
+$(SCHEMA_OUT): $(SCHEMA_SRC)
+	@mkdir -p $(SCHEMA_DIR)
+	cp $< $(SCHEMA_DIR)/
+	glib-compile-schemas --strict --targetdir=$(SCHEMA_DIR) $(SCHEMA_DIR)
+
+## run-dev: build everything and start backend + UI together (alias: run)
+run-dev: build
+	./scripts/dev-run.sh
+
+run: run-dev
+
+## run-backend: build and start only the daemon in the foreground (Ctrl+C to stop)
+run-backend: backend
+	./$(BUILD_DIR)/malachid$(EXE) $(ARGS)
+
+## run-frontend: build and start the UI (connects to a running malachid, or starts build/malachid itself; MALACHI_DAEMON=none to only show the banner)
+run-frontend: ui mcp schemas locale
+	$(SCHEMA_ENV) $(LOCALE_ENV) $(ICON_ENV) ./$(BUILD_DIR)/malachi$(EXE) $(ARGS)
+
+## test: run Go tests for both modules
+test: blueprint schemas
+	cd backend && $(GO) test ./...
+	cd ui && $(SCHEMA_ENV) GSETTINGS_BACKEND=memory $(GO) test $(UI_TAGS) ./...
+
+## lint: golangci-lint if installed, otherwise go vet; validate Blueprint, schema and desktop/metainfo files
+lint: blueprint data schemas vet
+	@for l in $(LINGUAS); do msgfmt --check --statistics -o /dev/null $(PO_DIR)/$$l.po; done
+	@# The committed template must match the sources (ignoring the timestamp).
+	@$(MAKE) --no-print-directory POT=$(BUILD_DIR)/malachi.check.pot pot >/dev/null
+	@grep -v POT-Creation-Date $(POT) > $(BUILD_DIR)/malachi.pot.a; \
+	grep -v POT-Creation-Date $(BUILD_DIR)/malachi.check.pot > $(BUILD_DIR)/malachi.pot.b; \
+	if ! diff -q $(BUILD_DIR)/malachi.pot.a $(BUILD_DIR)/malachi.pot.b >/dev/null; then \
+		echo "po/malachi.pot is out of date: run 'make po'"; exit 1; fi
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		(cd backend && golangci-lint run ./...); \
+		(cd ui && golangci-lint run $(UI_TAGS) ./...); \
+	else \
+		echo "golangci-lint not installed; ran go vet only"; \
+	fi
+	@if command -v desktop-file-validate >/dev/null 2>&1; then \
+		desktop-file-validate data/$(APP_ID).desktop; fi
+	@# DBusActivatable without an exported service file fails the Flatpak
+	@# export, which is the last step of a 20-minute build.
+	@if grep -q '^DBusActivatable=true' data/$(APP_ID).desktop; then \
+		test -f data/$(APP_ID).service || { \
+			echo "data/$(APP_ID).desktop is DBusActivatable but data/$(APP_ID).service.in is missing"; exit 1; }; \
+		grep -q '^Name=$(APP_ID)$$' data/$(APP_ID).service || { \
+			echo "data/$(APP_ID).service must own the bus name $(APP_ID)"; exit 1; }; \
+	fi
+	@# The desktop file names this icon and appstreamcli compose insists on
+	@# it; without it the Flatpak build fails late with icon-not-found.
+	@test -f $(ICON_SRC) || { echo "$(ICON_SRC) is missing (data/$(APP_ID).desktop names it as Icon=)"; exit 1; }
+	@if command -v appstreamcli >/dev/null 2>&1; then \
+		appstreamcli validate --no-net data/$(APP_ID).metainfo.xml; fi
+
+vet:
+	cd backend && $(GO) vet ./...
+	cd ui && $(GO) vet $(UI_TAGS) ./...
+
+fmt:
+	cd backend && gofmt -w .
+	cd ui && gofmt -w .
+	blueprint-compiler format --fix $(BLP_SRC)
+
+## clean: remove build output and generated files
+clean:
+	rm -rf $(BUILD_DIR) $(BLP_OUT) $(DATA_OUT)
+	rm -rf .flatpak-builder repo
+
+## vendor: fetch dependencies into backend/vendor and ui/vendor (for offline builds)
+vendor:
+	./scripts/flatpak-vendor.sh
+
+## flatpak: build the Flatpak (run on the host, needs flatpak-builder)
+flatpak: vendor
+	@echo $(VERSION) > .version
+	flatpak-builder --force-clean --user --install-deps-from=flathub \
+		--repo=repo $(BUILD_DIR)/flatpak packaging/flatpak/$(APP_ID).yml
+
+flatpak-run:
+	flatpak-builder --run $(BUILD_DIR)/flatpak packaging/flatpak/$(APP_ID).yml malachi
+
+## deb: build a Debian package for this machine (needs dpkg-dev; libadwaita >= 1.7)
+deb:
+	./scripts/build-deb.sh
+
+## rpm: build an RPM package for this machine (needs rpm-build; libadwaita >= 1.7)
+rpm:
+	./scripts/build-rpm.sh
+
+# The macOS client (macos/, Swift/AppKit) is a separate client of the daemon;
+# these targets only delegate to macos/Makefile and exist on Darwin alone.
+# On Windows uname says MINGW64_NT-… or MSYS_NT-…; it is not asked there.
+ifeq ($(OS),Windows_NT)
+UNAME_S := Windows_NT
+else
+UNAME_S := $(shell uname -s)
+endif
+
+## macos: build the macOS app bundle build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside (macOS only)
+## macos-dmg: build the universal app into build/Malachi-Mail-<version>-macos-universal.dmg; SIGN= a Developer ID for a release (macOS only)
+## macos-notarize: have Apple notarise that DMG and staple the ticket to it (macOS only; docs/releasing.md §8)
+## run-macos: build the macOS app and run it from the terminal so the daemon log stays visible (macOS only)
+## test-macos: run the Swift tests of the macOS client (macOS only)
+## run-gtk: build the GTK client in the Fedora container and run it in an XQuartz window with its own daemon and gnome-keyring there, data in ~/.cache/malachi-gtk/data (macOS only)
+## run-gtk-live: the same against a daemon on the Mac (test-daemon.sh + gtk.sh forward) (macOS only)
+ifeq ($(UNAME_S),Darwin)
+# ARCHS picks the architectures of the bundle. Empty, as for macos, it is
+# this Mac's own, with the Go binaries of the backend and mcp targets; with
+# ARCHS (macos-dmg's default is arm64 x86_64) macos-go builds malachid and
+# malachi-mcp once per architecture and joins them with lipo in
+# build/macos/go. Recursive, so that a target's own ARCHS counts; ARCHS=
+# on the command line gives a DMG of this Mac's architecture alone.
+MACOS_GO_DIR = $(if $(strip $(ARCHS)),$(CURDIR)/$(BUILD_DIR)/macos/go,$(CURDIR)/$(BUILD_DIR))
+MACOS_VARS   = BUILD_DIR=$(CURDIR)/$(BUILD_DIR) GO_DIR=$(MACOS_GO_DIR) VERSION=$(VERSION) APP_ID=$(APP_ID) ARCHS='$(strip $(ARCHS))'
+
+macos: macos-go
+	$(MAKE) -C macos app $(MACOS_VARS)
+
+macos-dmg: ARCHS ?= arm64 x86_64
+macos-dmg: UPDATE_CHANNEL = macos-dmg
+macos-dmg: macos-go
+	$(MAKE) -C macos dmg $(MACOS_VARS)
+
+macos-notarize: ARCHS ?= arm64 x86_64
+macos-notarize:
+	$(MAKE) -C macos notarize $(MACOS_VARS)
+
+# GOARCH calls x86_64 amd64. cgo stays on for every slice, as in the build
+# for this Mac alone.
+macos-go:
+	@set -e; \
+	if [ -z '$(strip $(ARCHS))' ]; then $(MAKE) --no-print-directory backend mcp UPDATE_CHANNEL='$(UPDATE_CHANNEL)'; exit 0; fi; \
+	out='$(BUILD_DIR)/macos/go'; mkdir -p "$$out"; \
+	for bin in malachid malachi-mcp; do \
+		ldflags='$(LDFLAGS)'; [ $$bin = malachid ] && ldflags='$(LDFLAGS_DAEMON)'; \
+		slices=''; \
+		for arch in $(ARCHS); do \
+			case $$arch in x86_64) goarch=amd64 ;; *) goarch=$$arch ;; esac; \
+			echo "go build $$bin ($$arch)"; \
+			(cd backend && CGO_ENABLED=1 GOOS=darwin GOARCH=$$goarch $(GO) build $(GOFLAGS) -ldflags "$$ldflags" -o "../$$out/$$bin-$$arch" ./cmd/$$bin); \
+			slices="$$slices $$out/$$bin-$$arch"; \
+		done; \
+		lipo -create $$slices -output "$$out/$$bin"; \
+	done
+
+run-macos: macos
+	$(MAKE) -C macos run $(MACOS_VARS)
+
+test-macos:
+	$(MAKE) -C macos test
+
+# The GTK client on a Mac (scripts/gtk-container/gtk.sh): the container
+# builds into build/linux by itself; its service is stopped afterwards
+# however the app ends, and the app's exit status is kept.
+run-gtk run-gtk-live:
+	@scripts/gtk-container/gtk.sh make build && scripts/gtk-container/gtk.sh x11 $(if $(filter run-gtk-live,$@),live,dev); \
+	status=$$?; scripts/gtk-container/gtk.sh stop; exit $$status
+else
+macos macos-dmg macos-notarize macos-go run-macos test-macos:
+	@echo "$@ needs macOS (this is $(UNAME_S)); see macos/README.md" >&2; exit 1
+
+run-gtk run-gtk-live:
+	@echo "$@ is the container route for a Mac; on Linux use make run-dev" >&2; exit 1
+endif
+
+# The Windows client (windows/, C#/WinUI 3) is a separate client of the
+# daemon; these targets delegate to windows/build.ps1, which does the work
+# and runs without make as well, and exist on Windows alone.
+## windows: build the Windows app build/windows/<arch>/Malachi Mail with malachid, malachi-mcp and malachi-credentials inside (Windows only)
+## run-windows: build the Windows app and run it from the terminal until its window closes (Windows only)
+## test-windows: run the tests of the Windows client (Windows only)
+ifeq ($(OS),Windows_NT)
+WINDOWS_PS  := powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/build.ps1
+
+windows: backend mcp
+	$(WINDOWS_PS) app -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)"
+
+run-windows: backend mcp
+	$(WINDOWS_PS) run -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)"
+
+test-windows: backend mcp
+	$(WINDOWS_PS) test -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)"
+
+# The installers of a release are built by a tag's CI
+# (.github/workflows/windows.yml), never by hand; build.ps1 installer
+# builds one locally.
+else
+windows run-windows test-windows:
+	@echo "$@ needs Windows (this is $(UNAME_S)); see windows/README.md" >&2; exit 1
+endif
+
+help:
+	@grep -E '^## ' $(MAKEFILE_LIST) | sed -e 's/^## /  /'

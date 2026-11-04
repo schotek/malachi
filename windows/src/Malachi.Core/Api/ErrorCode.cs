@@ -1,0 +1,401 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiCore/API/ErrorCode.swift; Go:
+// backend/pkg/api/errors.go (ErrorCode, codeNames; the address books'
+// 1110, 1111, 1206, 1308 and 1509 of docs/api.md §4.19; the signatures'
+// 1510 of §4.22). RPCError.attachmentTooBig,
+// which the Swift file adds as an extension, is RpcError.AttachmentTooBig.
+
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace Malachi.Core.Api;
+
+/// <summary>
+/// api.ErrorCode: the numeric error enumeration of docs/api.md §2. Codes are
+/// stable, never renumbered, only appended; an unknown one still decodes.
+/// The named codes are const ints, so that a switch over <see cref="Value"/>
+/// can name them (case ErrorCode.AuthFailed:); an int converts to an
+/// ErrorCode implicitly (Swift's integer literals).
+/// </summary>
+[JsonConverter(typeof(ErrorCodeConverter))]
+public readonly record struct ErrorCode(int Value)
+{
+    // JSON-RPC 2.0 reserved codes.
+
+    /// <summary>The line was not valid JSON.</summary>
+    public const int ParseError = -32700;
+
+    /// <summary>Missing <c>jsonrpc</c>/<c>method</c>, wrong version.</summary>
+    public const int InvalidRequest = -32600;
+
+    /// <summary>No such method.</summary>
+    public const int MethodNotFound = -32601;
+
+    /// <summary>The params did not decode into the method's type.</summary>
+    public const int InvalidParams = -32602;
+
+    /// <summary>An unexpected failure; details are logged, not returned.</summary>
+    public const int InternalError = -32603;
+
+    // 1000–1099: general.
+
+    /// <summary>The method is a stub.</summary>
+    public const int NotImplemented = 1000;
+
+    /// <summary>The params decoded but are semantically wrong.</summary>
+    public const int InvalidArgument = 1001;
+
+    /// <summary>
+    /// Optimistic-concurrency conflict (drafts, sending); for an event write
+    /// whose etag is not the server's current one, <c>data</c> is a
+    /// <see cref="ConflictEventData"/> with the current event.
+    /// </summary>
+    public const int Conflict = 1002;
+
+    /// <summary>The request was cancelled by shutdown.</summary>
+    public const int Cancelled = 1003;
+
+    /// <summary>Daemon busy or shutting down.</summary>
+    public const int Unavailable = 1004;
+
+    /// <summary>
+    /// The RPC connection has not completed the handshake (docs/api.md §1.4),
+    /// or the handshake failed; the daemon closes the connection after this
+    /// answer. Not about mail accounts, whose sign-in problems are the 1200s.
+    /// </summary>
+    public const int Unauthenticated = 1005;
+
+    /// <summary>
+    /// The calendar or event cannot be changed by the user (a read-only or
+    /// shared calendar, a birthdays or holidays calendar, a change only the
+    /// organiser may make).
+    /// </summary>
+    public const int ReadOnly = 1006;
+
+    /// <summary>
+    /// The event has attendees, but neither the server schedules nor a mail
+    /// account can send the invitations
+    /// (<see cref="CalDAVConfig.MailAccountId"/> empty or not a compose account).
+    /// </summary>
+    public const int InvitationsUnavailable = 1007;
+
+    // 1100–1199: not found.
+
+    /// <summary>No such account.</summary>
+    public const int AccountNotFound = 1100;
+
+    /// <summary>No such folder.</summary>
+    public const int FolderNotFound = 1101;
+
+    /// <summary>No such message.</summary>
+    public const int MessageNotFound = 1102;
+
+    /// <summary>No such thread.</summary>
+    public const int ThreadNotFound = 1103;
+
+    /// <summary>No such draft.</summary>
+    public const int DraftNotFound = 1104;
+
+    /// <summary>Unknown id, another account's, or bound to a different draft.</summary>
+    public const int AttachmentNotFound = 1105;
+
+    /// <summary>
+    /// No board case with that id (it left the board, its account is gone),
+    /// or for <c>board.setCommitment</c> no such commitment.
+    /// </summary>
+    public const int CaseNotFound = 1106;
+
+    /// <summary>No calendar with that id (removed, its account gone or its sync switched off).</summary>
+    public const int CalendarNotFound = 1107;
+
+    /// <summary>No stored event with that id, or the recurrence id names no occurrence of it.</summary>
+    public const int EventNotFound = 1108;
+
+    /// <summary>
+    /// A CRM item named in <c>crm.save</c> (link, superior) is not an item of
+    /// that CRM account, or the saved message's item is gone from the CRM
+    /// (<c>crm.remove</c>).
+    /// </summary>
+    public const int CrmItemNotFound = 1109;
+
+    /// <summary>No stored contact with that id (deleted, its book gone or its account's contacts switched off).</summary>
+    public const int ContactNotFound = 1110;
+
+    /// <summary>No address book with that id.</summary>
+    public const int AddressBookNotFound = 1111;
+
+    /// <summary>No mail rule with that id (docs/api.md §4.21).</summary>
+    public const int RuleNotFound = 1112;
+
+    // 1200–1299: authentication.
+
+    /// <summary>Credentials missing or token expired; see notify.authRequired.</summary>
+    public const int AuthRequired = 1200;
+
+    /// <summary>The server rejected the credentials.</summary>
+    public const int AuthFailed = 1201;
+
+    /// <summary>Secret storage unavailable.</summary>
+    public const int KeyringError = 1202;
+
+    /// <summary>
+    /// The daemon's own sign-in needs an OAuth client id for the provider and
+    /// none is configured.
+    /// </summary>
+    public const int OAuthClientMissing = 1203;
+
+    /// <summary>
+    /// The account's sign-in does not allow calendar access; <c>data</c> is a
+    /// <see cref="CalendarConsentRequiredData"/>.
+    /// </summary>
+    public const int CalendarConsentRequired = 1204;
+
+    /// <summary>
+    /// The CRM instance cannot be signed in to by this version; <c>data</c>
+    /// is a <see cref="CrmSignInUnsupportedData"/>.
+    /// </summary>
+    public const int CrmSignInUnsupported = 1205;
+
+    /// <summary>
+    /// The account's sign-in does not allow contacts access; <c>data</c> is a
+    /// <see cref="ContactsConsentRequiredData"/>.
+    /// </summary>
+    public const int ContactsConsentRequired = 1206;
+
+    // 1300–1399: network and remote servers.
+
+    /// <summary>The daemon is in offline mode.</summary>
+    public const int Offline = 1300;
+
+    /// <summary>The connection failed.</summary>
+    public const int NetworkError = 1301;
+
+    /// <summary>An IMAP/SMTP server returned an error.</summary>
+    public const int ServerError = 1302;
+
+    /// <summary>Certificate, handshake or STARTTLS problem; <c>data</c> is a TlsErrorData.</summary>
+    public const int TlsError = 1303;
+
+    /// <summary>No answer in time.</summary>
+    public const int ServerTimeout = 1304;
+
+    /// <summary>
+    /// The mail server no longer has the message (another client deleted or
+    /// moved it); the local copy goes with the next sync.
+    /// </summary>
+    public const int MessageGone = 1305;
+
+    /// <summary>
+    /// The server no longer has the event (deleted or moved elsewhere); the
+    /// next pass removes the local copy.
+    /// </summary>
+    public const int EventGone = 1306;
+
+    /// <summary>
+    /// The CRM refused the message as a duplicate of an item the daemon
+    /// cannot find (someone's private item, or one saved without a
+    /// Message-ID).
+    /// </summary>
+    public const int CrmDuplicate = 1307;
+
+    /// <summary>
+    /// The contact changed on the server since the revision the write names;
+    /// <c>data</c> is a <see cref="ContactConflictData"/>.
+    /// </summary>
+    public const int ContactConflict = 1308;
+
+    // 1400–1499: local storage.
+
+    /// <summary>SQLite failure.</summary>
+    public const int StorageError = 1400;
+
+    /// <summary>The store schema could not be upgraded.</summary>
+    public const int MigrationFailed = 1401;
+
+    // 1500–1599: content.
+
+    /// <summary>MIME unparsable even leniently.</summary>
+    public const int MalformedMessage = 1500;
+
+    /// <summary>The sanitiser refused the input; the body is withheld.</summary>
+    public const int SanitizeFailed = 1501;
+
+    /// <summary>Over a documented limit; <c>data</c> is <c>{"limit": n, "size": n}</c>.</summary>
+    public const int AttachmentTooBig = 1502;
+
+    /// <summary><c>message.part</c> named a part the message does not have.</summary>
+    public const int PartNotFound = 1503;
+
+    /// <summary>
+    /// The part's data is not stored on this device
+    /// (<see cref="Attachment.Remote"/>); <c>message.download</c> fetches it.
+    /// </summary>
+    public const int PartNotDownloaded = 1504;
+
+    /// <summary>
+    /// <c>message.unsubscribe</c> reached the sender's server, which refused
+    /// or did not answer the one-click request.
+    /// </summary>
+    public const int UnsubscribeFailed = 1505;
+
+    /// <summary>
+    /// <c>board.annotate</c> or <c>board.commit</c> quoted text the daemon did
+    /// not find verbatim where it must be; <c>data</c> is a
+    /// <see cref="QuoteNotFoundData"/> naming the field.
+    /// </summary>
+    public const int QuoteNotFound = 1506;
+
+    /// <summary>
+    /// An iCalendar object or a server's calendar answer could not be read
+    /// even leniently; the data is withheld.
+    /// </summary>
+    public const int MalformedCalendar = 1507;
+
+    /// <summary>
+    /// The event's recurrence rule is outside what the daemon expands or
+    /// edits; the event shows its first instance only and may be edited with
+    /// scope <c>all</c> only.
+    /// </summary>
+    public const int RecurrenceUnsupported = 1508;
+
+    /// <summary>
+    /// The address book or contact cannot be changed by the user: the recent
+    /// book, a server's read-only collection or folder.
+    /// </summary>
+    public const int AddressBookReadOnly = 1509;
+
+    /// <summary>
+    /// <c>message.signatureRevocation</c> got no answer it trusts from the
+    /// certificate's OCSP responder or CRL (docs/api.md §4.22); <c>data</c> is a
+    /// <see cref="RevocationFailedData"/> with the class, the message is not for
+    /// display.
+    /// </summary>
+    public const int RevocationFailed = 1510;
+
+    private static readonly Dictionary<int, string> Names = new()
+    {
+        [ParseError] = "parseError",
+        [InvalidRequest] = "invalidRequest",
+        [MethodNotFound] = "methodNotFound",
+        [InvalidParams] = "invalidParams",
+        [InternalError] = "internalError",
+        [NotImplemented] = "notImplemented",
+        [InvalidArgument] = "invalidArgument",
+        [Conflict] = "conflict",
+        [Cancelled] = "cancelled",
+        [Unavailable] = "unavailable",
+        [Unauthenticated] = "unauthenticated",
+        [ReadOnly] = "readOnly",
+        [InvitationsUnavailable] = "invitationsUnavailable",
+        [AccountNotFound] = "accountNotFound",
+        [FolderNotFound] = "folderNotFound",
+        [MessageNotFound] = "messageNotFound",
+        [ThreadNotFound] = "threadNotFound",
+        [DraftNotFound] = "draftNotFound",
+        [AttachmentNotFound] = "attachmentNotFound",
+        [CaseNotFound] = "caseNotFound",
+        [CalendarNotFound] = "calendarNotFound",
+        [EventNotFound] = "eventNotFound",
+        [CrmItemNotFound] = "crmItemNotFound",
+        [ContactNotFound] = "contactNotFound",
+        [AddressBookNotFound] = "addressBookNotFound",
+        [RuleNotFound] = "ruleNotFound",
+        [AuthRequired] = "authRequired",
+        [AuthFailed] = "authFailed",
+        [KeyringError] = "keyringError",
+        [OAuthClientMissing] = "oauthClientMissing",
+        [CalendarConsentRequired] = "calendarConsentRequired",
+        [CrmSignInUnsupported] = "crmSignInUnsupported",
+        [ContactsConsentRequired] = "contactsConsentRequired",
+        [Offline] = "offline",
+        [NetworkError] = "networkError",
+        [ServerError] = "serverError",
+        [TlsError] = "tlsError",
+        [ServerTimeout] = "serverTimeout",
+        [MessageGone] = "messageGone",
+        [EventGone] = "eventGone",
+        [CrmDuplicate] = "crmDuplicate",
+        [ContactConflict] = "contactConflict",
+        [StorageError] = "storageError",
+        [MigrationFailed] = "migrationFailed",
+        [MalformedMessage] = "malformedMessage",
+        [SanitizeFailed] = "sanitizeFailed",
+        [AttachmentTooBig] = "attachmentTooBig",
+        [PartNotFound] = "partNotFound",
+        [PartNotDownloaded] = "partNotDownloaded",
+        [UnsubscribeFailed] = "unsubscribeFailed",
+        [QuoteNotFound] = "quoteNotFound",
+        [MalformedCalendar] = "malformedCalendar",
+        [RecurrenceUnsupported] = "recurrenceUnsupported",
+        [AddressBookReadOnly] = "addressBookReadOnly",
+        [RevocationFailed] = "revocationFailed",
+    };
+
+    /// <summary>
+    /// Every code of the contract (protocol version 2), in the order of
+    /// errors.go.
+    /// </summary>
+    public static IReadOnlyList<ErrorCode> All { get; } =
+    [
+        ParseError, InvalidRequest, MethodNotFound, InvalidParams, InternalError,
+        NotImplemented, InvalidArgument, Conflict, Cancelled, Unavailable, Unauthenticated,
+        ReadOnly, InvitationsUnavailable,
+        AccountNotFound, FolderNotFound, MessageNotFound, ThreadNotFound, DraftNotFound, AttachmentNotFound,
+        CaseNotFound, CalendarNotFound, EventNotFound, CrmItemNotFound, ContactNotFound, AddressBookNotFound,
+        RuleNotFound,
+        AuthRequired, AuthFailed, KeyringError, OAuthClientMissing, CalendarConsentRequired, CrmSignInUnsupported,
+        ContactsConsentRequired,
+        Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone, EventGone, CrmDuplicate,
+        ContactConflict,
+        StorageError, MigrationFailed,
+        MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
+        UnsubscribeFailed, QuoteNotFound, MalformedCalendar, RecurrenceUnsupported, AddressBookReadOnly,
+        RevocationFailed,
+    ];
+
+    /// <summary>
+    /// The stable symbolic name (api.ErrorCode.String): <c>"attachmentTooBig"</c>,
+    /// or <c>"unknown(1234)"</c> for a code this client does not know.
+    /// </summary>
+    public string Name => Names.TryGetValue(Value, out var name) ? name : $"unknown({Value})";
+
+    /// <summary>The code of a number.</summary>
+    public static implicit operator ErrorCode(int value) => new(value);
+
+    /// <summary>The name, as Swift's description.</summary>
+    public override string ToString() => Name;
+}
+
+/// <summary>Reads and writes an <see cref="ErrorCode"/> as its JSON number.</summary>
+public sealed class ErrorCodeConverter : JsonConverter<ErrorCode>
+{
+    /// <inheritdoc/>
+    public override ErrorCode Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.Number || !reader.TryGetInt32(out var code))
+        {
+            throw new JsonException($"expected an integer error code, not {reader.TokenType}");
+        }
+        return new ErrorCode(code);
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, ErrorCode value, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        writer.WriteNumberValue(value.Value);
+    }
+}
+
+/// <summary>
+/// The <c>data</c> of an <c>attachmentTooBig</c> error: the cap that was
+/// exceeded and, where the daemon knows it, the offending size
+/// (<c>message.part</c> reports the limit only).
+/// </summary>
+/// <param name="Limit">The cap in bytes.</param>
+/// <param name="Size">The offending size in bytes, when the daemon reports it.</param>
+public readonly record struct SizeLimit(long Limit, long? Size = null);

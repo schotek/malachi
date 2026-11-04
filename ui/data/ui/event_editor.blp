@@ -1,0 +1,570 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The New Event / Edit Event window (docs/calendar.md §5.6, §6.5 G14;
+// window/event_editor.go over calendarctl.EventEditorController): a label
+// column of 110 px and the fields, the inline problems and the footer.
+// Every text comes from ui/internal/calendar through Go, so this file has
+// no translatable strings; every label that shows the server's text has
+// use-markup off.
+Adw.Window event_editor_window {
+  default-width: 760;
+  default-height: 800;
+  width-request: 560;
+  height-request: 520;
+
+  content: Adw.ToolbarView event_editor_page {
+    [top]
+    Adw.HeaderBar event_editor_header {
+      title-widget: Adw.WindowTitle ee_title_widget {};
+
+      [end]
+      MenuButton ee_assistant {
+        icon-name: "malachi-assistant-symbolic";
+      }
+
+      [end]
+      Button ee_attach {
+        icon-name: "mail-attachment-symbolic";
+      }
+    }
+
+    content: ScrolledWindow ee_scroll {
+      hscrollbar-policy: never;
+      vexpand: true;
+
+      child: Grid ee_grid {
+        row-spacing: 10;
+        column-spacing: 10;
+        margin-top: 20;
+        margin-bottom: 16;
+        margin-start: 20;
+        margin-end: 24;
+
+        Entry ee_title {
+          hexpand: true;
+
+          layout {
+            column: 1;
+            row: 0;
+          }
+
+          styles [
+            "event-editor-title",
+          ]
+        }
+
+        Label ee_calendar_label {
+          xalign: 1;
+          width-request: 110;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 1;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Box ee_calendar_line {
+          spacing: 8;
+
+          layout {
+            column: 1;
+            row: 1;
+          }
+
+          DropDown ee_calendar {
+            hexpand: true;
+            halign: start;
+          }
+
+          Label ee_all_day_label {
+            hexpand: true;
+            halign: end;
+            use-markup: false;
+
+            styles [
+              "dim-label",
+            ]
+          }
+
+          Switch ee_all_day {
+            valign: center;
+          }
+        }
+
+        Label ee_start_label {
+          xalign: 1;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 2;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Box ee_start_line {
+          spacing: 8;
+
+          layout {
+            column: 1;
+            row: 2;
+          }
+
+          MenuButton ee_start_date {
+            always-show-arrow: true;
+
+            popover: Popover {
+              child: Calendar ee_start_calendar {};
+            };
+          }
+
+          Box ee_start_time {
+            spacing: 4;
+
+            SpinButton ee_start_hour {
+              numeric: true;
+              wrap: true;
+              width-chars: 2;
+
+              adjustment: Adjustment {
+                lower: 0;
+                upper: 23;
+                step-increment: 1;
+                page-increment: 1;
+              };
+            }
+
+            Label {
+              label: ":";
+            }
+
+            SpinButton ee_start_minute {
+              numeric: true;
+              wrap: true;
+              width-chars: 2;
+
+              adjustment: Adjustment {
+                lower: 0;
+                upper: 59;
+                step-increment: 5;
+                page-increment: 15;
+              };
+            }
+          }
+
+          MenuButton ee_zone {
+            hexpand: true;
+            halign: end;
+            has-frame: false;
+
+            popover: Popover ee_zone_popover {
+              child: Box {
+                orientation: vertical;
+                spacing: 6;
+
+                SearchEntry ee_zone_search {}
+
+                ScrolledWindow {
+                  hscrollbar-policy: never;
+                  min-content-height: 280;
+                  min-content-width: 260;
+
+                  child: ListBox ee_zone_list {
+                    selection-mode: single;
+                    activate-on-single-click: true;
+                  };
+                }
+              };
+            };
+
+            styles [
+              "event-editor-link",
+            ]
+          }
+        }
+
+        Label ee_end_label {
+          xalign: 1;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 3;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Box ee_end_line {
+          spacing: 8;
+
+          layout {
+            column: 1;
+            row: 3;
+          }
+
+          MenuButton ee_end_date {
+            always-show-arrow: true;
+
+            popover: Popover {
+              child: Calendar ee_end_calendar {};
+            };
+          }
+
+          Box ee_end_time {
+            spacing: 4;
+
+            SpinButton ee_end_hour {
+              numeric: true;
+              wrap: true;
+              width-chars: 2;
+
+              adjustment: Adjustment {
+                lower: 0;
+                upper: 23;
+                step-increment: 1;
+                page-increment: 1;
+              };
+            }
+
+            Label {
+              label: ":";
+            }
+
+            SpinButton ee_end_minute {
+              numeric: true;
+              wrap: true;
+              width-chars: 2;
+
+              adjustment: Adjustment {
+                lower: 0;
+                upper: 59;
+                step-increment: 5;
+                page-increment: 15;
+              };
+            }
+          }
+        }
+
+        Label ee_repeat_label {
+          xalign: 1;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 4;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        DropDown ee_repeat {
+          halign: start;
+
+          layout {
+            column: 1;
+            row: 4;
+          }
+        }
+
+        Label ee_location_label {
+          xalign: 1;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 5;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Box ee_location_line {
+          spacing: 8;
+
+          layout {
+            column: 1;
+            row: 5;
+          }
+
+          Entry ee_location {
+            hexpand: true;
+          }
+
+          MenuButton ee_video {
+            always-show-arrow: true;
+          }
+        }
+
+        Label ee_attendees_label {
+          xalign: 1;
+          yalign: 0;
+          valign: start;
+          margin-top: 6;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 6;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Box ee_attendees_frame {
+          hexpand: true;
+
+          layout {
+            column: 1;
+            row: 6;
+          }
+
+          styles [
+            "event-editor-field-frame",
+          ]
+
+          ScrolledWindow ee_attendees_scroll {
+            hexpand: true;
+            focusable: false;
+            hscrollbar-policy: never;
+            vscrollbar-policy: external;
+
+            child: Adw.WrapBox ee_attendees_row {
+              child-spacing: 4;
+              line-spacing: 2;
+              valign: center;
+            };
+          }
+        }
+
+        Label ee_availability_label {
+          xalign: 1;
+          yalign: 0;
+          valign: start;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 7;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Box ee_availability {
+          orientation: vertical;
+          spacing: 4;
+
+          layout {
+            column: 1;
+            row: 7;
+          }
+
+          DrawingArea ee_availability_axis {
+            hexpand: true;
+          }
+
+          Label ee_availability_summary {
+            xalign: 0;
+            wrap: true;
+            use-markup: false;
+
+            styles [
+              "dim-label",
+              "caption",
+            ]
+          }
+
+          Box {
+            spacing: 8;
+
+            Button ee_next_slot {
+              styles [
+                "flat",
+                "event-editor-link",
+                "caption",
+              ]
+            }
+
+            Label ee_free_slot {
+              xalign: 0;
+              hexpand: true;
+              ellipsize: end;
+              use-markup: false;
+
+              styles [
+                "dim-label",
+                "caption",
+              ]
+            }
+          }
+        }
+
+        Label ee_alert_label {
+          xalign: 1;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 8;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        DropDown ee_alert {
+          halign: start;
+
+          layout {
+            column: 1;
+            row: 8;
+          }
+        }
+
+        Label ee_notes_label {
+          xalign: 1;
+          yalign: 0;
+          valign: start;
+          margin-top: 4;
+          use-markup: false;
+
+          layout {
+            column: 0;
+            row: 9;
+          }
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        ScrolledWindow ee_notes_scroll {
+          hexpand: true;
+          vexpand: true;
+          hscrollbar-policy: never;
+          min-content-height: 72;
+
+          layout {
+            column: 1;
+            row: 9;
+          }
+
+          child: TextView ee_notes {
+            wrap-mode: word_char;
+            accepts-tab: false;
+            top-margin: 4;
+            bottom-margin: 4;
+            left-margin: 6;
+            right-margin: 6;
+          };
+
+          styles [
+            "event-editor-field-frame",
+          ]
+        }
+
+        Adw.WrapBox ee_chips {
+          child-spacing: 6;
+          line-spacing: 6;
+
+          layout {
+            column: 1;
+            row: 10;
+          }
+        }
+      };
+    };
+
+    [bottom]
+    Box ee_footer {
+      orientation: vertical;
+      spacing: 8;
+      margin-top: 10;
+      margin-bottom: 14;
+      margin-start: 20;
+      margin-end: 20;
+
+      Box ee_error_row {
+        spacing: 10;
+        visible: false;
+
+        Label ee_error {
+          xalign: 0;
+          hexpand: true;
+          wrap: true;
+          use-markup: false;
+
+          styles [
+            "error",
+          ]
+        }
+
+        Button ee_reload {
+          valign: center;
+        }
+      }
+
+      Box ee_footer_line {
+        spacing: 8;
+
+        Button ee_delete {
+          margin-end: 8;
+          valign: center;
+
+          styles [
+            "destructive-action",
+          ]
+        }
+
+        Label ee_footer_note {
+          xalign: 0;
+          hexpand: true;
+          wrap: true;
+          lines: 2;
+          ellipsize: end;
+          use-markup: false;
+          margin-end: 8;
+
+          styles [
+            "dim-label",
+            "caption",
+          ]
+        }
+
+        Button ee_cancel {
+          valign: center;
+        }
+
+        Button ee_primary {
+          valign: center;
+
+          styles [
+            "suggested-action",
+          ]
+        }
+      }
+    }
+  };
+}

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/AccountWizard/OAuthPageController.swift;
+GTK: account_wizard.blp oauth_page. The three children of oauth_stack,
+one shown at a time: prompt (oauth_prompt: the browser icon, "Sign In
+Through Your Browser", the provider's text and the sign-in button labelled
+by the controller, the suggested action), waiting (oauth_waiting: a
+spinner, the wait's title and description, Open the Browser Again and
+Cancel) and unavailable (oauth_unavailable: the warning icon, "No Sign-In
+Client Configured", the provider's text and Use an App Password Instead
+when the provider has one). Each child's buttons are a column 12 px apart,
+centred. The page has no bottom bar in the Blueprint; the window's close
+button and Escape close the wizard and cancel a sign-in that waits.
+-->
+<UserControl
+    x:Class="Malachi.App.Wizard.OAuthPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:local="using:Malachi.App.Wizard"
+    IsTabStop="False">
+    <Grid x:Name="OAuthStack">
+        <local:StatusPage
+            x:Name="PromptPage"
+            IconName="web-browser-symbolic"
+            Title="{l:T Msgid='Sign In Through Your Browser'}">
+            <StackPanel HorizontalAlignment="Center" Spacing="12">
+                <Button
+                    x:Name="SignInButton"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="OAuthSignIn"
+                    Click="OnSignInClick"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
+        </local:StatusPage>
+
+        <local:StatusPage
+            x:Name="WaitingPage"
+            Title="{l:T Msgid='Waiting for the sign-in in your browser…'}"
+            Description="{l:T Msgid='Finish signing in there; this page continues by itself.'}"
+            Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center" Spacing="12">
+                <Button
+                    x:Name="ReopenButton"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="OAuthReopen"
+                    Click="OnReopenClick"
+                    Content="{l:T Msgid='Open the Browser Again'}" />
+                <Button
+                    x:Name="CancelButton"
+                    HorizontalAlignment="Center"
+                    l:MnemonicLabel.Text="{l:T Msgid='_Cancel'}"
+                    AutomationProperties.AutomationId="OAuthCancel"
+                    Click="OnCancelClick" />
+            </StackPanel>
+        </local:StatusPage>
+
+        <local:StatusPage
+            x:Name="UnavailablePage"
+            IconName="dialog-warning-symbolic"
+            Title="{l:T Msgid='No Sign-In Client Configured'}"
+            Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center" Spacing="12">
+                <Button
+                    x:Name="PasswordButton"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="OAuthAppPassword"
+                    Click="OnPasswordClick"
+                    Content="{l:T Msgid='Use an App Password Instead'}"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Visibility="Collapsed" />
+            </StackPanel>
+        </local:StatusPage>
+    </Grid>
+</UserControl>

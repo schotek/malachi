@@ -1,0 +1,416 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import AppKit
+import MalachiCore
+import os
+
+/// Application lifecycle, the counterpart of ui/main.go: translations,
+/// settings, the attachment sweep, the paths, the daemon, the connection,
+/// the menu bar and the main window; on quit stop the daemon we started.
+/// The application-level actions (`app.*` in GTK) live here too, at the
+/// end of the responder chain, so they work from any window.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private(set) var state: AppState?
+    private var mainWindow: MainWindowController?
+    private var integration: Integration?
+    private var appearance: AppearanceController?
+    private var commandRToken: Settings.ChangeToken?
+    private var assistantMenuToken: AssistantController.Token?
+    private var assistantTargetToken: Settings.ChangeToken?
+    /// `mailto:` URLs AppKit delivered before the shell was wired (the
+    /// open-URL event may arrive before `applicationDidFinishLaunching`
+    /// returns); opened as soon as `hooks.openMailto` exists.
+    private var pendingMailto: [URL] = []
+    /// `applicationShouldTerminate` answered `.terminateLater` and its quit
+    /// is under way.
+    private var quitting = false
+    private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "app")
+
+    func applicationDidFinishLaunching(_ notification: Foundation.Notification) {
+        // Translations first: every string built from here on is localised.
+        L10n.catalogue = Catalogue.default()
+        // Settings() registers the gschema defaults with UserDefaults.standard.
+        let settings = Settings()
+        // The text size of this run, before any view exists; a change in
+        // Settings applies at the next launch (Typo).
+        Typo.size = settings.uiTextSize
+        // Attachments a previous run wrote for opening (docs/security.md §8).
+        purgeOpenDir()
+
+        let paths = Paths.resolve()
+        do {
+            try paths.ensureDirectories()
+        } catch {
+            log.error("data directory: \(String(describing: error), privacy: .public)")
+        }
+        do {
+            try UnixSocketProbe.check(paths.socket)
+        } catch {
+            log.error("socket path: \(String(describing: error), privacy: .public)")
+        }
+
+        // The daemon is ours to run: nothing on the desktop starts malachid.
+        // One that already answers on the socket is used and left alone.
+        var launch: DaemonSupervisor.Launch?
+        do {
+            if let exe = try DaemonSupervisor.locate() {
+                launch = DaemonSupervisor.Launch(
+                    executable: exe, socket: paths.socket, config: paths.config, store: paths.store,
+                    keychainHelper: paths.keychainHelper)
+            }
+        } catch {
+            log.warning("not starting malachid; expecting one to be started by other means: \(String(describing: error), privacy: .public)")
+        }
+        let supervisor = DaemonSupervisor(launch: launch, socket: paths.socket)
+        let client = RPCClient(socketPath: paths.socket)
+        let connection = ConnectionController(client: client, supervisor: supervisor)
+
+        let state = AppState(client: client, connection: connection, settings: settings, paths: paths)
+        self.state = state
+        appearance = AppearanceController(settings: settings)
+
+        NSApp.mainMenu = MainMenu.build(state)
+        commandRToken = settings.onChange(.commandR) {
+            MainMenu.apply(commandR: settings.commandR)
+        }
+        // The Message menu's Assistant follows `AssistantController.shown`
+        // (the setting while the bridge is registered), View ▸ Show
+        // Assistant `panelShown` (that, and In App chosen).
+        let assistant = state.assistant
+        assistantMenuToken = assistant.onChange {
+            MainMenu.apply(assistantMenu: assistant.shown)
+            MainMenu.apply(assistantPanel: assistant.panelShown)
+        }
+        assistantTargetToken = settings.onChange(.assistantTarget) {
+            MainMenu.apply(assistantPanel: assistant.panelShown)
+        }
+        // What the Assistant menu may use: looked up once now, again
+        // whenever one of its menus opens.
+        state.assistant.refresh()
+
+        let wc = MainWindowController(state: state)
+        mainWindow = wc
+        state.mainWindow = wc
+        // The sidebar, the settings window, the wizard and the notifications
+        // plug into the shell before the connection reports anything.
+        integration = Integration(state: state, mainWindow: wc)
+        openPendingMailto()
+        // A login-item launch starts hidden (preferences.blp: "Start hidden
+        // in the background when you log in"); the Dock, a notification or
+        // a reopen brings the window. Only the launch Apple event decides:
+        // a terminal start always shows the window.
+        if LoginItemService.launchedAsLoginItem {
+            log.info("started hidden as a login item")
+        } else {
+            wc.showWindow(nil)
+            NSApp.activate()
+            // Development aid only (MainWindowController+DevStart).
+            wc.applyDevelopmentStart()
+        }
+
+        connection.start()
+        // Automatic triage of the board (off unless turned on in Settings →
+        // AI): the schedule decides from now on.
+        state.autoTriage.start()
+    }
+
+    /// Coming to the front asks the Assistant's state again (the Claude
+    /// apps' link handlers now, the bridge's registration in the
+    /// background): a change made outside, such as Claude Desktop
+    /// rewriting its configuration or `malachi-mcp install` in a terminal,
+    /// shows in the menus and the settings without waiting for a menu to
+    /// open, and a status that failed at launch is asked again.
+    func applicationDidBecomeActive(_ notification: Foundation.Notification) {
+        state?.assistant.refresh()
+    }
+
+    /// Quitting stops the daemon this app started (up to 15 s while its
+    /// syncers log out), off the main thread so the windows stay
+    /// responsive; "Run in Background" keeps everything alive by hiding
+    /// the window instead. The board's inline replies are saved first
+    /// (`BoardReplyEditorHost.finishAll`, bounded): one that could not be
+    /// saved or sent asks before quitting, as text the user typed must not
+    /// go silently, and Cancel keeps the application running with nothing
+    /// else stopped. A changed contact form asks next, in the Contacts
+    /// window ("Discard Changes?"). Then the attachments written for opening go, as
+    /// ui/main.go's shutdown removes them before it stops the daemon, so a
+    /// quit that never completes (a force quit or a logout that gives up
+    /// during the wait) leaves none behind; `applicationWillTerminate`
+    /// takes one whose write was still in flight.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let state else {
+            shutDownSession()
+            return .terminateNow
+        }
+        // Asked again while the first quit waits (a second ⌘Q): that quit
+        // is under way and answers for both.
+        guard !quitting else {
+            return .terminateLater
+        }
+        quitting = true
+        Task { @MainActor in
+            // The board's inline reply editor saves what was typed, while
+            // the connection still stands.
+            if await !BoardReplyEditorHost.finishAll(wait: BoardReplyController.endWait) {
+                state.showMainWindow()
+                let quit = await state.alerts.confirmDestructive(
+                    on: mainWindow?.window, heading: Board.Text.quitHeading(
+                        unsaved: BoardReplyEditorHost.anyUnsaved, sending: BoardReplyEditorHost.anySending),
+                    body: Board.Text.quitUnsavedBody, confirmLabel: Board.Text.quitAnyway)
+                guard quit else {
+                    BoardReplyEditorHost.resumeAll()
+                    quitting = false
+                    sender.reply(toApplicationShouldTerminate: false)
+                    return
+                }
+            }
+            // A changed contact form asks, its window in front; Cancel
+            // keeps the application and the form, as above.
+            if await !state.contacts.confirmQuit() {
+                quitting = false
+                sender.reply(toApplicationShouldTerminate: false)
+                return
+            }
+            shutDownSession()
+            // The board's triage: no new run, and one under way ends with
+            // its board.runEnd answered, bounded, before the connection goes.
+            await state.stopBoardTriage()
+            await state.connection.stop()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    /// What goes with the session as soon as the quit is decided: the
+    /// attachments written for opening, the assistant panel's Claude Code,
+    /// a sign-in of Claude Code nobody waits for any more and a search in
+    /// the user's own words under way.
+    private func shutDownSession() {
+        purgeOpenDir()
+        integration?.assistantPanel.close()
+        state?.claudeCode.cancelSignIn()
+        mainWindow?.cancelSearchInOwnWords()
+    }
+
+    /// The last step before the process exits, whichever way the quit was
+    /// answered: the directory for opening once more, for a file that
+    /// landed while the daemon stopped.
+    func applicationWillTerminate(_ notification: Foundation.Notification) {
+        purgeOpenDir()
+    }
+
+    /// Removes the attachments written for opening or previewing
+    /// (`OpenDir.removeAll`; ui/main.go and attachments.go
+    /// `SweepOpenedAttachments`): at start (what a previous run or a crash
+    /// left) and at quit, whatever the preferences say, so nothing opened
+    /// or previewed outlives the session, which is also what Never Store
+    /// Attachments promises. A failure is logged; its description may name
+    /// the directory, hence private.
+    private func purgeOpenDir() {
+        do {
+            try OpenDir.default.removeAll()
+        } catch {
+            let ns = error as NSError
+            log.warning("removing the attachments written for opening: \(ns.domain, privacy: .public) \(ns.code, privacy: .public): \(String(describing: error), privacy: .private)")
+        }
+    }
+
+    /// Closing the last window quits unless "Run in Background" is on
+    /// (read each time: the setting changes live).
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        !(state?.settings.runInBackground ?? false)
+    }
+
+    /// The Dock icon, or a second launch: the (possibly hidden) main window.
+    /// A click on a notification brings a reopen event as well, right
+    /// after the click opened its own window (a message's, the Calendar):
+    /// that one leaves the main window as it is.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if integration?.notifications.answeredJustNow() == true {
+            return false
+        }
+        showMainWindow()
+        return false
+    }
+
+    /// `mailto:` URLs (CFBundleURLTypes) open a compose window (the GTK
+    /// `open` signal); one that arrives before the shell is wired waits
+    /// for it. Anything else is logged.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard url.scheme?.lowercased() == "mailto" else {
+                log.warning("ignoring non-mailto URL with scheme \(url.scheme ?? "", privacy: .public)")
+                continue
+            }
+            pendingMailto.append(url)
+        }
+        openPendingMailto()
+    }
+
+    /// Hands the queued `mailto:` URLs to compose, once it exists.
+    private func openPendingMailto() {
+        guard let open = state?.hooks.openMailto else { return }
+        let urls = pendingMailto
+        pendingMailto = []
+        for url in urls {
+            open(url)
+        }
+    }
+
+    /// Presents the main window and activates the application (the GTK
+    /// `app.show` action: the Dock, a notification, a second launch).
+    func showMainWindow() {
+        if let state {
+            state.showMainWindow()
+        } else {
+            NSApp.activate()
+        }
+    }
+
+    // MARK: Application actions (ui/main.go `addActions`)
+
+    @objc func newMessage(_ sender: Any?) {
+        state?.hooks.composeNew?()
+    }
+
+    /// The sender's tag picks the assistant: File ▸ Add Jira Account… is
+    /// `AddAccountTag.jira`, everything else the mail account wizard.
+    @objc func addAccount(_ sender: Any?) {
+        if (sender as? NSMenuItem)?.tag == AddAccountTag.jira {
+            state?.hooks.addJiraAccount?(NSApp.keyWindow)
+            return
+        }
+        state?.hooks.addAccount?(NSApp.keyWindow)
+    }
+
+    /// File ▸ Add CalDAV Calendar…, and the Calendar sidebar's Add CalDAV
+    /// Calendar… when its window set no handler: the sheet on the main
+    /// window (docs/calendar.md §5.8).
+    @objc func addCalDAVAccount(_ sender: Any?) {
+        state?.showAddCalDAVCalendar(from: nil)
+    }
+
+    @objc func showPreferences(_ sender: Any?) {
+        state?.hooks.openPreferences?()
+    }
+
+    /// Window ▸ Contacts: the one Contacts window to the front.
+    @objc func showContacts(_ sender: Any?) {
+        state?.contacts.showWindow()
+    }
+
+    @objc func showAbout(_ sender: Any?) {
+        // Built in code from fixed text, never from mail: the one place an
+        // attributed string is made by hand. macOS-only strings but Report
+        // an Issue. The standard panel takes only text, so the website and
+        // the report form (main.go SetWebsite and SetIssueURL) are links,
+        // set apart from the description and the update line by paragraph
+        // spacing.
+        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let credits = NSMutableAttributedString()
+        func paragraph(_ text: String, before: CGFloat, _ attributes: [NSAttributedString.Key: Any]) {
+            let style = NSMutableParagraphStyle()
+            style.alignment = .center
+            style.paragraphSpacingBefore = credits.length == 0 ? 0 : before
+            var a = attributes
+            a[.font] = font
+            a[.paragraphStyle] = style
+            credits.append(NSAttributedString(string: (credits.length == 0 ? "" : "\n") + text, attributes: a))
+        }
+        paragraph("A native mail client.", before: 0, [.foregroundColor: NSColor.labelColor])
+        paragraph("malachimail.app", before: 10, [.link: AppLinks.website])
+        // window.blp's Report an Issue (Adw.AboutDialog words its own).
+        paragraph(L10n.T("Report an Issue"), before: 4, [.link: AppLinks.reportIssue])
+        // The update check's status line (updates.AboutLine), plain text.
+        let line = state.map { Updates.aboutLine($0.updates.status, date: AppState.updateTime) } ?? ""
+        if !line.isEmpty {
+            paragraph(line, before: 10, [.foregroundColor: NSColor.secondaryLabelColor])
+        }
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: MainMenu.appName,
+            .applicationVersion: Version.full,
+            .version: "",
+            .credits: credits,
+        ])
+    }
+
+    /// The Assistant menu's "Open In" choice (the item's tag): the
+    /// `assistant-target` preference, which Settings → AI shows too.
+    @objc func setAssistantTarget(_ sender: Any?) {
+        guard let state, let t = AssistantMenu.target(tag: (sender as? NSMenuItem)?.tag) else { return }
+        state.settings.assistantTarget = t
+    }
+
+    /// The Assistant menu's "Set Up the Assistant…": Settings on the AI
+    /// page, where "Register with Claude" is.
+    @objc func setUpAssistant(_ sender: Any?) {
+        state?.hooks.openAISettings?()
+    }
+
+    /// View ▸ Mail, Board, and the main window's switch, while another
+    /// window is key (a message or compose window): the main window comes
+    /// forward and handles the sender itself (a menu item's tag, a toolbar
+    /// group's selected segment), re-syncing its switches when nothing
+    /// changes. The main window handles them directly while it is key.
+    @objc func setWindowMode(_ sender: Any?) {
+        guard let mainWindow else { return }
+        mainWindow.showMainWindow()
+        mainWindow.setWindowMode(sender)
+    }
+
+    /// View ▸ As List, As Columns, Today, and the main window's style
+    /// segments, while another window is key: the main window comes
+    /// forward with that style, while it shows the board (validation
+    /// disables them otherwise, as `Board.allows` does there); its own
+    /// handler re-syncs the segments either way.
+    @objc func setBoardStyle(_ sender: Any?) {
+        guard let mainWindow else { return }
+        if mainWindow.mode == .board {
+            mainWindow.showMainWindow()
+        }
+        mainWindow.setBoardStyle(sender)
+    }
+
+    @objc func openHelp(_ sender: Any?) {
+        guard let url = MainMenu.helpURL else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
+
+extension AppDelegate: NSUserInterfaceValidations {
+    /// The application actions are enabled once their hook is wired.
+    func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        guard let action = item.action else { return false }
+        switch action {
+        case Action.newMessage: return state?.hooks.composeNew != nil && state?.hooks.canComposeNew?() != false
+        case Action.addAccount:
+            return (item.tag == AddAccountTag.jira ? state?.hooks.addJiraAccount : state?.hooks.addAccount) != nil
+        case Action.showPreferences: return state?.hooks.openPreferences != nil
+        case Action.showContacts: return state != nil
+        case Action.setUpAssistant: return state?.hooks.openAISettings != nil
+        case Action.setWindowMode:
+            // Checked: the main window's mode.
+            guard let mainWindow else { return false }
+            (item as? NSMenuItem)?.state = mainWindow.mode.rawValue == item.tag ? .on : .off
+            return true
+        case Action.setBoardStyle:
+            // Checked: the board's style; only while the main window shows it.
+            guard let mainWindow else { return false }
+            if let menuItem = item as? NSMenuItem {
+                mainWindow.validateBoardStyle(menuItem)
+            }
+            return Board.allows(.boardView, in: mainWindow.mode)
+        case Action.setAssistantTarget:
+            // Checked: the preference; enabled: an app handles the links,
+            // for In App: Claude Code was found (and the bridge is there).
+            guard let state, let t = AssistantMenu.target(tag: (item as? NSMenuItem)?.tag) else { return false }
+            (item as? NSMenuItem)?.state = state.settings.assistantTarget == t ? .on : .off
+            return state.assistant.availability(t).handler
+        default: return true
+        }
+    }
+}
+
+extension AppDelegate: MalachiActions {}

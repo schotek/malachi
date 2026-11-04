@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/EventDetailViews.swift
+(EventDetailAttendeeRow); GTK: the event detail follows (docs/calendar.md
+§6.4), its rows are ui/internal/calendar/detail.go (AttendeeRow). One
+attendee of the event detail: the answer's glyph (✓ accepted green, ?
+no reply grey, ? tentative orange, ✕ declined red, → delegated grey), the
+name (the address when there is none) and the organiser and optional
+labels in grey. The glyphs are one each, shown by the answer, so that
+their colours are theme resources of the window. The name is plain text;
+the address is its tooltip, the answer part of what Narrator reads.
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.EventAttendeeRow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <Grid MinHeight="20" ColumnSpacing="6">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="14" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
+            <!-- Segoe Fluent Icons: CheckMark, Help, Cancel, Forward. -->
+            <FontIcon
+                x:Name="AcceptedIcon"
+                FontSize="10"
+                Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                Glyph="&#xE73E;"
+                Visibility="Collapsed" />
+            <FontIcon
+                x:Name="NoReplyIcon"
+                FontSize="10"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Glyph="&#xE897;"
+                Visibility="Collapsed" />
+            <FontIcon
+                x:Name="TentativeIcon"
+                FontSize="10"
+                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                Glyph="&#xE897;"
+                Visibility="Collapsed" />
+            <FontIcon
+                x:Name="DeclinedIcon"
+                FontSize="10"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                Glyph="&#xE711;"
+                Visibility="Collapsed" />
+            <FontIcon
+                x:Name="DelegatedIcon"
+                FontSize="10"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Glyph="&#xE72A;"
+                Visibility="Collapsed" />
+        </Grid>
+        <TextBlock
+            x:Name="NameText"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            AutomationProperties.AutomationId="EventDetailAttendee"
+            MaxLines="1"
+            Style="{StaticResource BodyLabelStyle}"
+            TextTrimming="CharacterEllipsis"
+            TextWrapping="NoWrap" />
+        <TextBlock
+            x:Name="ExtraText"
+            Grid.Column="2"
+            VerticalAlignment="Center"
+            AutomationProperties.AccessibilityView="Raw"
+            MaxLines="1"
+            Style="{StaticResource DimCaptionLabelStyle}"
+            TextWrapping="NoWrap"
+            Visibility="Collapsed" />
+    </Grid>
+</UserControl>

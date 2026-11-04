@@ -1,0 +1,441 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
+package graph
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net/url"
+	"slices"
+	"sort"
+	"sync"
+	"time"
+
+	"github.com/schotek/malachi/backend/internal/ingest"
+	"github.com/schotek/malachi/backend/internal/mime"
+	"github.com/schotek/malachi/backend/internal/store"
+	"github.com/schotek/malachi/backend/pkg/api"
+)
+
+// syncFolder brings one folder up to date with a delta query and then
+// downloads the bodies it lacks. It returns the remote ids the server
+// reports gone from the folder; the caller deletes them after every folder
+// of the pass ran, so a message that reappears in another folder is moved
+// (MoveByRemoteID) rather than deleted and re-created.
+//
+// Without a stored delta cursor (first pass, a full resync, a cursor the
+// service rejected, a folder no pass has enumerated for reconcileAfter, or
+// an inbox whose count check failed, checkInbox) the query enumerates the
+// whole window; rows the server did not mention are then gone as well.
+func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time, full bool, progress func(float64)) ([]string, error) {
+	initial := full || f.DeltaLink == "" || f.LastSyncAt.IsZero() ||
+		s.now().Sub(f.LastSyncAt) > reconcileAfter || s.forceEnumerate[f.ID]
+	link := f.DeltaLink
+	if initial {
+		link = s.initialDeltaURL(f, since)
+	}
+	knownList, err := s.deps.Store.ListRemoteIDs(ctx, f.ID)
+	if err != nil {
+		return nil, storageError(err)
+	}
+	known := make(map[string]bool, len(knownList))
+	for _, id := range knownList {
+		known[id] = true
+	}
+
+	// A message the user moved or deleted locally whose operation is still
+	// queued (enqueued after this pass pushed the operations) is still
+	// where it was on the server: an enumeration, a resynchronisation or a
+	// change made elsewhere (read on the phone) reports it here, and
+	// MoveByRemoteID would drag its row back — the message would reappear
+	// until the next pass pushed the operation. Such a report is skipped.
+	queued, err := s.deps.Store.PendingSourceRemoteIDs(ctx, s.account.ID)
+	if err != nil {
+		return nil, storageError(err)
+	}
+
+	seen := map[string]bool{}
+	created := map[string]bool{}
+	// removed holds the ids whose last state in the stream is "removed":
+	// Graph may report an item more than once (moved out and back), and the
+	// latest report wins.
+	removed := map[string]bool{}
+	var deltaLink string
+	pages := 0
+	for next := link; next != ""; {
+		var pg page[message]
+		err := s.client.Get(ctx, next, &pg)
+		if err != nil && !initial && isSyncStateError(err) {
+			// The cursor is stale: start over for this folder.
+			s.log.Info("delta cursor rejected, resynchronising folder", "folder", f.ID)
+			initial, pages = true, 0
+			seen, created, removed = map[string]bool{}, map[string]bool{}, map[string]bool{}
+			next = s.initialDeltaURL(f, since)
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		pages++
+		var batch []*store.Message
+		for _, m := range pg.Value {
+			if m.ID == "" {
+				continue
+			}
+			if m.Removed != nil {
+				removed[m.ID] = true
+				delete(seen, m.ID)
+				delete(created, m.ID)
+				continue
+			}
+			delete(removed, m.ID)
+			if queued[m.ID] {
+				continue
+			}
+			seen[m.ID] = true
+			exists := known[m.ID]
+			if !exists {
+				moved, err := s.deps.Store.MoveByRemoteID(ctx, s.account.ID, m.ID, f.ID)
+				if err != nil {
+					return nil, storageError(err)
+				}
+				exists = moved
+			}
+			if exists {
+				if _, err := s.deps.Store.ApplyServerFlagsByRemoteID(ctx, f.ID, m.ID, flagsOf(m), 0); err != nil && !errors.Is(err, store.ErrNotFound) {
+					return nil, storageError(err)
+				}
+				known[m.ID] = true
+				continue
+			}
+			batch = append(batch, s.messageRow(f, m))
+			known[m.ID] = true
+			created[m.ID] = true
+		}
+		if len(batch) > 0 {
+			if err := s.deps.Store.UpsertMessages(ctx, batch); err != nil {
+				return nil, storageError(err)
+			}
+		}
+		if pg.DeltaLink != "" {
+			deltaLink = pg.DeltaLink
+		}
+		next = pg.NextLink
+		progress(0.3 * min(1, float64(pages)/float64(pages+1)))
+	}
+	if initial {
+		// Everything the enumeration did not mention is gone or outside
+		// the window — except a row the user moved here whose move is
+		// still queued: the server does not hold it here yet.
+		for id := range known {
+			if !seen[id] && !queued[id] {
+				removed[id] = true
+			}
+		}
+	} else if !since.IsZero() {
+		old, err := s.deps.Store.ListRemoteIDsOlderThan(ctx, f.ID, since)
+		if err != nil {
+			return nil, storageError(err)
+		}
+		for _, id := range old {
+			removed[id] = true
+		}
+	}
+	tombstones := make([]string, 0, len(removed))
+	for id := range removed {
+		tombstones = append(tombstones, id)
+	}
+	sort.Strings(tombstones)
+	// The counts come from the listing the caller put on f: committing them
+	// here, and only here, is what makes them a baseline a later pass can
+	// compare against (skippable).
+	if err := s.deps.Store.SetFolderSyncState(ctx, f.ID, store.FolderSyncState{
+		DeltaLink: deltaLink, ServerMessages: f.ServerMessages, ServerUnseen: f.ServerUnseen, LastSyncAt: s.now(),
+	}); err != nil && !errors.Is(err, store.ErrNotFound) {
+		return nil, storageError(err)
+	}
+	if initial {
+		delete(s.forceEnumerate, f.ID)
+	} else if f.Role == api.RoleInbox {
+		s.inboxCheck = &f
+	}
+	progress(0.3)
+	// Bodies of messages created before this pass ran the first time are
+	// not "new mail"; on an initial pass nothing is announced.
+	announce := created
+	if initial {
+		announce = nil
+	}
+	if err := s.fetchBodies(ctx, f, announce, func(frac float64) { progress(0.3 + 0.7*frac) }); err != nil {
+		return nil, err
+	}
+	progress(1)
+	return tombstones, nil
+}
+
+// skippable reports a folder the pass can leave alone: the server's item
+// counts are still what the last successful pass recorded, the folder has
+// a usable cursor, and it owes no bodies. listed is the folder as this
+// pass's listing saw it.
+//
+// The inbox is never skipped: its counts can cancel out (one message read,
+// one arrived) and it is the folder the user is looking at. The same hole
+// exists for the others — Graph's mailFolder carries no monotonic counter
+// to close it with, the way IMAP's UIDNEXT does — which is what
+// reconcileAfter is the backstop for the others. For the inbox the count
+// check (checkInbox) is a much shorter one.
+func (s *Syncer) skippable(ctx context.Context, f, listed store.Folder) (bool, error) {
+	if f.Role == api.RoleInbox || f.DeltaLink == "" || f.LastSyncAt.IsZero() {
+		return false, nil
+	}
+	if listed.ServerMessages != f.ServerMessages || listed.ServerUnseen != f.ServerUnseen {
+		return false, nil
+	}
+	// A pass interrupted between the envelopes and the bodies must resume,
+	// however quiet the folder looks. Terminal states (failed, tooBig) are
+	// not listed, so this cannot keep the folder awake forever.
+	owed, err := s.deps.Store.ListUnfetched(ctx, f.ID, 1)
+	if err != nil {
+		return false, storageError(err)
+	}
+	return len(owed) == 0, nil
+}
+
+// initialDeltaURL is the first request of a full enumeration, bounded by
+// the retention window.
+func (s *Syncer) initialDeltaURL(f store.Folder, since time.Time) string {
+	q := url.Values{}
+	q.Set("$select", messageSelect)
+	if !since.IsZero() {
+		q.Set("$filter", "receivedDateTime ge "+since.UTC().Format(time.RFC3339))
+	}
+	return "me/mailFolders/" + url.PathEscape(f.Mailbox) + "/messages/delta?" + q.Encode()
+}
+
+// messageRow is the store row of a listed message (headers only; the body
+// comes later).
+func (s *Syncer) messageRow(f store.Folder, m message) *store.Message {
+	row := &store.Message{
+		AccountID: s.account.ID, FolderID: f.ID, RemoteID: m.ID,
+		Flags:          flagsOf(m),
+		To:             addressesOf(m.ToRecipients),
+		CC:             addressesOf(m.CCRecipients),
+		ReplyTo:        addressesOf(m.ReplyTo),
+		Subject:        mime.CleanHeaderText(m.Subject),
+		Date:           m.SentDateTime,
+		InternalDate:   m.ReceivedDateTime,
+		RFCMessageID:   mime.TrimMessageID(m.InternetMessageID),
+		HasAttachments: m.HasAttachments,
+		ThreadID:       m.ConversationID,
+		BodyState:      store.BodyNone,
+	}
+	if m.From != nil {
+		row.From = addressesOf([]recipient{*m.From})
+	}
+	if row.Date.IsZero() {
+		row.Date = m.ReceivedDateTime
+	}
+	return row
+}
+
+// fetchBodies downloads the bodies the folder still lacks, newest first,
+// bodyConcurrency at a time. A message the server no longer has, or that
+// cannot be parsed, is settled as failed so the loop cannot stall; one
+// over the raw cap is tooBig. Every body is stored under the attachment
+// policy of the preferences as they are when it arrives (fetchBody).
+func (s *Syncer) fetchBodies(ctx context.Context, f store.Folder, announce map[string]bool, progress func(float64)) error {
+	attempted := map[string]bool{}
+	done := 0
+	for {
+		refs, err := s.deps.Store.ListUnfetched(ctx, f.ID, unfetchedBatch)
+		if err != nil {
+			return storageError(err)
+		}
+		var todo []store.MessageRef
+		for _, r := range refs {
+			if r.RemoteID == "" || attempted[r.ID] {
+				if attempted[r.ID] {
+					s.log.Warn("body still unfetched after an attempt", "message", r.ID)
+				}
+				if err := s.settleBody(ctx, f, r, announce, store.BodyFailed); err != nil {
+					return err
+				}
+				continue
+			}
+			attempted[r.ID] = true
+			todo = append(todo, r)
+		}
+		if len(todo) == 0 {
+			break
+		}
+		total := done + len(todo)
+		if err := s.fetchBatch(ctx, f, todo, announce, func(n int) {
+			done += n
+			progress(float64(done) / float64(total))
+		}); err != nil {
+			return err
+		}
+	}
+	progress(1)
+	return nil
+}
+
+// fetchBatch downloads a batch concurrently; the first failure that is
+// not about a single message ends the batch.
+func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.MessageRef, announce map[string]bool, advance func(int)) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+	)
+	sem := make(chan struct{}, bodyConcurrency)
+	for _, ref := range batch {
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			if firstErr != nil {
+				return firstErr
+			}
+			return ctx.Err()
+		}
+		wg.Add(1)
+		go func(ref store.MessageRef) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			err := s.fetchBody(ctx, f, ref, announce)
+			mu.Lock()
+			if err != nil && firstErr == nil {
+				firstErr = err
+				cancel()
+			} else if err == nil {
+				advance(1)
+			}
+			mu.Unlock()
+		}(ref)
+	}
+	wg.Wait()
+	return firstErr
+}
+
+// fetchBody streams one raw message into the store (ingest.Store: the
+// whole message, or its skeleton when the policy leaves its attachments
+// on the server) under the attachment policy of the preferences as they
+// are when the server answers, and tells Deps.Stored which; the size
+// stored is the size downloaded. A body another writer settled meanwhile
+// (message.download, a deletion) is left to it.
+func (s *Syncer) fetchBody(ctx context.Context, f store.Folder, ref store.MessageRef, announce map[string]bool) error {
+	rc, err := s.client.GetRaw(ctx, valuePath(ref.RemoteID))
+	switch {
+	case IsNotFound(err):
+		return s.settleBody(ctx, f, ref, announce, store.BodyFailed)
+	case err != nil:
+		return err
+	}
+	prefs := s.prefs()
+	pol := ingest.Policy{AttachmentOfflineDays: prefs.AttachmentOfflineDays, NeverStore: prefs.NeverStoreAttachments}
+	src := &transferReader{r: rc}
+	_, err = ingest.Store(ctx, s.deps.Store, ingest.Request{
+		Target: ingest.Target{
+			AccountID: s.account.ID, MessageID: ref.ID, Role: f.Role, HasServerCopy: ref.RemoteID != "",
+			InternalDate: ref.InternalDate, Date: ref.Date,
+		},
+		Body:   src,
+		Limit:  ingest.MaxMessageBytes,
+		Policy: pol,
+		Now:    s.now(),
+		Expect: store.RawExpect{BodyState: store.BodyNone},
+	}, s.log)
+	_, _ = io.Copy(io.Discard, io.LimitReader(rc, maxValueDrain))
+	rc.Close()
+	switch {
+	case err == nil:
+		if s.deps.Stored != nil {
+			s.deps.Stored(ctx, ref.ID, pol)
+		}
+		s.notifyNew(ctx, f, ref, announce)
+		return nil
+	case errors.Is(err, ingest.ErrTooBig):
+		return s.settleBody(ctx, f, ref, announce, store.BodyTooBig)
+	case errors.Is(err, ingest.ErrUnparsable):
+		s.log.Warn("message body unparsable", "message", ref.ID)
+		return s.settleBody(ctx, f, ref, announce, store.BodyFailed)
+	case errors.Is(err, store.ErrConflict), errors.Is(err, store.ErrNotFound):
+		return nil
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case src.err != nil:
+		return ToAPIError(src.err)
+	}
+	return storageError(err)
+}
+
+// settleBody records a terminal body state and reports the message.
+func (s *Syncer) settleBody(ctx context.Context, f store.Folder, ref store.MessageRef, announce map[string]bool, state store.BodyState) error {
+	if err := s.deps.Store.MarkBodyState(ctx, ref.ID, state); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return storageError(err)
+	}
+	s.notifyNew(ctx, f, ref, announce)
+	return nil
+}
+
+// notifyNew emits notify.newMessage for a message that arrived in this
+// pass (docs/api.md §5). Folders holding the user's own mail (sent,
+// drafts, trash, junk, outbox) never notify.
+func (s *Syncer) notifyNew(ctx context.Context, f store.Folder, ref store.MessageRef, announce map[string]bool) {
+	if s.deps.Notifier == nil || !announce[ref.RemoteID] {
+		return
+	}
+	switch f.Role {
+	case api.RoleSent, api.RoleDrafts, api.RoleTrash, api.RoleJunk, api.RoleOutbox:
+		return
+	}
+	// Read after Deps.Stored: a message the mail rules moved out of the
+	// folder or marked read there (docs/api.md §4.21), or one that was
+	// read already, is not new mail.
+	m, err := s.deps.Store.GetMessage(ctx, s.account.ID, ref.ID)
+	if err != nil || m.FolderID != f.ID || slices.Contains(m.Flags, api.FlagSeen) {
+		return
+	}
+	s.deps.Notifier.NewMessage(api.NewMessageNotification{
+		AccountID: api.AccountID(s.account.ID),
+		FolderID:  api.FolderID(f.ID),
+		Message:   summaryOf(m),
+	})
+}
+
+// summaryOf is the list-view projection of a stored message.
+func summaryOf(m store.Message) api.MessageSummary {
+	sum := api.MessageSummary{
+		ID:             api.MessageID(m.ID),
+		AccountID:      api.AccountID(m.AccountID),
+		FolderID:       api.FolderID(m.FolderID),
+		ThreadID:       api.ThreadID(m.ThreadID),
+		From:           m.From,
+		To:             m.To,
+		Subject:        m.Subject,
+		Date:           m.Date,
+		Snippet:        m.Snippet,
+		Flags:          m.Flags,
+		HasAttachments: m.HasAttachments,
+		Size:           m.Size,
+	}
+	if sum.From == nil {
+		sum.From = []api.Address{}
+	}
+	if sum.Flags == nil {
+		sum.Flags = []api.Flag{}
+	}
+	if sum.Date.IsZero() {
+		sum.Date = m.InternalDate
+	}
+	sum.Invitation = m.Invitation // the pill and the notification text (docs/calendar.md §4.7)
+	return sum
+}

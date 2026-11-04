@@ -1,0 +1,161 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The Signature Details dialog (docs/plans/signatures.md §6 and §11.3;
+// window/signature_details.go over signature.DetailsFor): the verdict's
+// icon and title, the explanation, a spinner while message.signature
+// runs, the rows and the certificate and signed-header sections (built
+// from Go into signature_rows), the notes, the caveat under a valid
+// verdict, the buttons Check Revocation (with its spinner and the caption
+// under it), Import Key and Confirm Key…, and the line that says why a
+// check or an import failed. Every text is set from Go
+// (ui/internal/signature), so this file has no translatable strings;
+// everything of a certificate or key is plain text. The header bar's own
+// close button closes the dialog.
+Adw.Dialog signature_dialog {
+  content-width: 520;
+  content-height: 600;
+  // The selectable values would otherwise take the first focus and
+  // select all of their text.
+  focus-widget: signature_scroller;
+
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {}
+
+    content: ScrolledWindow signature_scroller {
+      hscrollbar-policy: never;
+      propagate-natural-height: true;
+      focusable: true;
+
+      child: Box {
+        orientation: vertical;
+        spacing: 12;
+        margin-top: 6;
+        margin-bottom: 24;
+        margin-start: 24;
+        margin-end: 24;
+
+        Box {
+          orientation: horizontal;
+          spacing: 10;
+
+          Image signature_status_icon {
+            pixel-size: 24;
+            valign: start;
+          }
+
+          Label signature_status_title {
+            xalign: 0;
+            hexpand: true;
+            wrap: true;
+            wrap-mode: word_char;
+            use-markup: false;
+
+            styles [
+              "title-3",
+            ]
+          }
+        }
+
+        Label signature_explanation {
+          xalign: 0;
+          wrap: true;
+          wrap-mode: word_char;
+          use-markup: false;
+        }
+
+        Adw.Spinner signature_loading {
+          visible: false;
+          halign: center;
+          width-request: 24;
+          height-request: 24;
+        }
+
+        // The rows and sections, rebuilt from Go on every change.
+        Box signature_rows {
+          orientation: vertical;
+          spacing: 18;
+        }
+
+        // The notes, one line each, built from Go.
+        Box signature_notes {
+          orientation: vertical;
+          spacing: 6;
+          visible: false;
+        }
+
+        Label signature_caveat {
+          xalign: 0;
+          wrap: true;
+          wrap-mode: word_char;
+          use-markup: false;
+          visible: false;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        Box signature_buttons {
+          orientation: horizontal;
+          spacing: 6;
+          halign: start;
+          visible: false;
+
+          Button signature_revocation {
+            use-underline: true;
+            can-shrink: true;
+            visible: false;
+          }
+
+          Adw.Spinner signature_revocation_spinner {
+            visible: false;
+            valign: center;
+          }
+
+          Button signature_import {
+            use-underline: true;
+            can-shrink: true;
+            visible: false;
+          }
+
+          Button signature_confirm {
+            use-underline: true;
+            can-shrink: true;
+            visible: false;
+          }
+        }
+
+        // Under Check Revocation: asking tells the issuer.
+        Label signature_revocation_caption {
+          xalign: 0;
+          wrap: true;
+          wrap-mode: word_char;
+          use-markup: false;
+          visible: false;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        // Why the last check or import failed; hidden otherwise.
+        Label signature_problem {
+          xalign: 0;
+          wrap: true;
+          wrap-mode: word_char;
+          use-markup: false;
+          visible: false;
+
+          styles [
+            "error",
+          ]
+        }
+      };
+    };
+  };
+}

@@ -1,0 +1,600 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import AppKit
+import MalachiCore
+import os
+
+/// The AppKit half of the per-message actions: the `win.*` actions of the
+/// main window (window.go `registerActions`, the star and compose buttons)
+/// acting on the selection, and the `msg.*` actions of a message window
+/// (message_window.go), the remote-images bar, the outbox banner, the
+/// attachment chips and the HTML view acting on one message. Everything
+/// that touches the model or the daemon is the `ActionsController`'s; this
+/// only resolves the selection, the window a sheet goes on, and the links
+/// and attachments that need the desktop (remote.go `openLink`,
+/// attachments.go), and the Assistant's hand-off to Claude
+/// (`AssistantActions`, ui/internal/assistant).
+///
+/// It installs itself as the controller's hooks; the application installs
+/// it as `MessageWindows.delegate`, `MainWindowController.messageActions`
+/// and `ListController.onMarkRead`'s target.
+@MainActor
+final class MessageActionsController: MessageActions, MessageActionDelegate {
+    let state: AppState
+    let actions: ActionsController
+    let list: ListController
+    let cache: MessageCache
+    let windows: MessageWindows
+    let attachments: AttachmentActions
+    /// The Assistant menu and the chips' "Ask the Assistant…".
+    let assistant: AssistantActions
+
+    private let mainWindow: @MainActor () -> NSWindow?
+    private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "actions")
+
+    /// - Parameters:
+    ///   - mainWindow: the window the main window's confirmations go on;
+    ///     nil falls back to an application-modal alert.
+    init(
+        state: AppState, actions: ActionsController, list: ListController, cache: MessageCache,
+        windows: MessageWindows, mainWindow: @escaping @MainActor () -> NSWindow?
+    ) {
+        self.state = state
+        self.actions = actions
+        self.list = list
+        self.cache = cache
+        self.windows = windows
+        self.mainWindow = mainWindow
+        attachments = AttachmentActions(state: state, cache: cache)
+        assistant = AssistantActions(state: state, list: list, attachments: attachments)
+        installHooks()
+    }
+
+    /// The controller's AppKit needs: the confirmation sheet, the compose
+    /// window, the message windows and the views showing a star or an
+    /// outbox banner.
+    private func installHooks() {
+        let alerts = state.alerts
+        let mainWindow = mainWindow
+        actions.confirm = { parent, heading, body, label in
+            // A message window closed while its request ran (a forward
+            // waiting for the download): the main window asks instead
+            // (compose_open.go, `Mapped`).
+            var window = parent as? NSWindow
+            if let w = window, !w.isVisible {
+                window = mainWindow()
+            }
+            return await alerts.confirmDestructive(on: window, heading: heading, body: body, confirmLabel: label)
+        }
+        actions.openCompose = { [weak self] params in
+            guard let self, let open = self.state.hooks.openCompose else { return }
+            open(params)
+        }
+        actions.raiseDraft = { [weak self] draft in
+            self?.state.hooks.raiseDraft?(draft) ?? false
+        }
+        actions.openMessageWindow = { [weak self] summary in
+            self?.windows.openMessage(summary)
+        }
+        actions.onWindowsClose = { [weak self] id in
+            self?.windows.closeMessageWindow(id)
+        }
+        actions.onStarChanged = { [weak self] _, _ in
+            guard let self else { return }
+            self.windows.refreshStars()
+            self.mainWindow()?.toolbar?.validateVisibleItems()
+        }
+        actions.onOutboxStateChanged = { [weak self] id in
+            self?.windows.showOutboxState(id)
+        }
+    }
+
+    // MARK: MessageActions (the selection; window.go `registerActions`)
+
+    /// Several rows combine their flags (`Selection.combine`).
+    var flags: ActionFlags {
+        let rows = list.selectedRows
+        return rows.count > 1
+            ? Selection.combineAccounts(rows.map { actions.actionFlags(for: $0) }, accounts: rows.map { $0.message.accountId })
+            : actions.actionFlags(for: rows.first)
+    }
+
+    /// Runs `fn` on the selected row's message (a conversation row's newest
+    /// folder member; window.go `selectedMessage`).
+    private func forSelected(_ fn: (MessageID) -> Void) {
+        if let s = list.selectedRow?.message {
+            fn(s.id)
+        }
+    }
+
+    func reply() {
+        forSelected { actions.openCompose(.reply, $0) }
+    }
+
+    /// One row as activating it does; several each in a window
+    /// (`Selection.maxOpen`).
+    func openSelected() {
+        let rows = list.selectedRows
+        if rows.count > 1 {
+            actions.openMessages(rows.map(\.message))
+        } else if let s = rows.first?.message {
+            actions.openMessage(s)
+        }
+    }
+
+    func printSelected() {
+        let window = mainWindow()
+        let mailbox = list.mailbox
+        let cache = cache
+        let role: @MainActor (MessageSummary) -> FolderRole? = { s in
+            mailbox.model.folderRole(FolderKey(account: s.accountId, folder: s.folderId))
+        }
+        list.selectedIDs { [weak self] rows, _ in
+            guard let self else { return }
+            // The rows' messages with their accounts: a conversation row's
+            // folder members, else the row's message.
+            var messages: [MessageSummary] = []
+            for r in rows {
+                let ids = mailbox.model.rowIDs(r) ?? [r.message.id]
+                for id in ids {
+                    if let s = self.actions.summary(id) {
+                        messages.append(s)
+                    } else if id == r.message.id {
+                        messages.append(r.message)
+                    }
+                }
+            }
+            let layout: Printing.Layout = rows.count > 1 ? .pages : (messages.count > 1 ? .conversation : .single)
+            PrintController.printMessages(messages, layout: layout, cache: cache, role: role, window: window)
+        }
+    }
+
+    func printCalendar(_ calendar: CalendarController) {
+        PrintController.printCalendar(calendar, cache: cache, window: mainWindow())
+    }
+
+    func moveSelected(to folder: FolderID) {
+        list.selectedIDs { [weak self] _, ids in
+            self?.actions.moveTo(ids, folder: folder)
+        }
+    }
+
+    func replyAll() {
+        forSelected { actions.openCompose(.replyAll, $0) }
+    }
+
+    /// "Forward Without Attachments?" goes on the main window. Several
+    /// rows go in one message, each attached whole (`forwardMessages`).
+    func forward() {
+        if list.selectedRows.count > 1 {
+            list.selectedIDs { [weak self] _, ids in
+                self?.actions.forwardMessages(ids)
+            }
+            return
+        }
+        forSelected { actions.openCompose(.forward, $0, from: mainWindow()) }
+    }
+
+    func trash() {
+        list.selectedIDs { [weak self] rows, ids in
+            guard let self else { return }
+            self.actions.trash(ids, subject: self.list.selectionSubject(rows), parent: self.mainWindow())
+        }
+    }
+
+    func junk() {
+        list.selectedIDs { [weak self] rows, ids in
+            guard let self else { return }
+            self.actions.junk(ids, subject: self.list.selectionSubject(rows), parent: self.mainWindow())
+        }
+    }
+
+    func archive() {
+        list.selectedIDs { [weak self] _, ids in
+            self?.actions.archive(ids)
+        }
+    }
+
+    /// On a conversation row the star acts on every member (`flagTarget`).
+    func toggleFlag() {
+        list.selectedIDs { [weak self] rows, ids in
+            guard let self else { return }
+            self.actions.setFlagged(ids, self.list.flagTarget(rows))
+        }
+    }
+
+    func markRead() {
+        list.selectedIDs { [weak self] _, ids in
+            self?.actions.setSeen(ids, true)
+        }
+    }
+
+    func markUnread() {
+        list.selectedIDs { [weak self] _, ids in
+            self?.actions.setSeen(ids, false)
+        }
+    }
+
+    func loadImages() {
+        forSelected { actions.loadImages($0) }
+    }
+
+    func trustSender() {
+        forSelected { actions.trustSender($0) }
+    }
+
+    /// Toasts go over the main window's message pane.
+    func askAssistant(_ action: Assistant.Action) {
+        assistant.ask(action, from: mainWindow())
+    }
+
+    func summarizeUnread() {
+        assistant.summarizeUnread(from: mainWindow())
+    }
+
+    var canSummarizeUnread: Bool {
+        assistant.canSummarizeUnread
+    }
+
+    // MARK: MessageActionDelegate (one message; message_window.go `msg.*`)
+
+    /// The current state of the message, not the summary the window was
+    /// opened with (message_window.go `newMessageWindow` acts on the live
+    /// row through the window's actions: the star and Mark as Read follow
+    /// the model).
+    func flags(for summary: MessageSummary) -> ActionFlags {
+        actions.flags(for: actions.summary(summary.id) ?? summary)
+    }
+
+    func reply(_ id: MessageID) {
+        actions.openCompose(.reply, id)
+    }
+
+    func printMessage(_ summary: MessageSummary, from window: NSWindow?) {
+        let mailbox = list.mailbox
+        let s = actions.summary(summary.id) ?? summary
+        PrintController.printMessages([s], layout: .single, cache: cache, role: { s in
+            mailbox.model.folderRole(FolderKey(account: s.accountId, folder: s.folderId))
+        }, window: window)
+    }
+
+    func replyAll(_ id: MessageID) {
+        actions.openCompose(.replyAll, id)
+    }
+
+    func forward(_ id: MessageID, from window: NSWindow?) {
+        actions.openCompose(.forward, id, from: window)
+    }
+
+    func quickReplyAttribution(_ kind: ComposeKind, _ id: MessageID) -> String {
+        actions.replyAttribution(kind, id)
+    }
+
+    func prepareQuickReply(_ id: MessageID, done: @escaping @MainActor () -> Void) {
+        actions.prepareReply(id, done: done)
+    }
+
+    func openCompose(
+        _ kind: ComposeKind, _ id: MessageID, ownHTML: String, from window: NSWindow?,
+        opened: @escaping @MainActor () -> Void
+    ) {
+        actions.openCompose(kind, id, from: window, ownHTML: ownHTML, opened: opened)
+    }
+
+    func trash(_ id: MessageID, from window: NSWindow?) {
+        actions.trash(id, parent: window)
+    }
+
+    func junk(_ id: MessageID, from window: NSWindow?) {
+        actions.junk(id, parent: window)
+    }
+
+    func archive(_ id: MessageID) {
+        actions.archive([id])
+    }
+
+    func toggleFlag(_ id: MessageID) {
+        actions.toggleFlagged(id)
+    }
+
+    func markRead(_ id: MessageID) {
+        actions.markRead(id)
+    }
+
+    func markUnread(_ id: MessageID) {
+        actions.markUnread(id)
+    }
+
+    func loadImages(_ id: MessageID) {
+        actions.loadImages(id)
+    }
+
+    func trustSender(_ id: MessageID) {
+        actions.trustSender(id)
+    }
+
+    func downloadPictures(_ id: MessageID, from window: NSWindow?) {
+        actions.downloadPictures(id) { [weak self] text in
+            self?.toast(text, in: window)
+        }
+    }
+
+    func retryOutbox(_ id: MessageID) {
+        actions.retryOutbox(id)
+    }
+
+    func isDraft(_ summary: MessageSummary) -> Bool {
+        actions.mailbox.model.inDrafts(summary)
+    }
+
+    func editDraft(_ id: MessageID) {
+        actions.openDraft(id)
+    }
+
+    func editThreadDraft(_ draft: Draft) {
+        actions.editThreadDraft(draft)
+    }
+
+    func discardThreadDraft(_ draft: Draft, from window: NSWindow?) {
+        actions.discardThreadDraft(draft, parent: window)
+    }
+
+    func openMessage(_ summary: MessageSummary) {
+        actions.openMessage(summary)
+    }
+
+    func folderRole(of summary: MessageSummary) -> FolderRole {
+        actions.mailbox.model.folderRole(FolderKey(account: summary.accountId, folder: summary.folderId))
+    }
+
+    // MARK: Signatures (docs/plans/signatures.md §6)
+
+    /// The badge's popover: the verdict of message `s` in detail. The
+    /// confirmation of a key is asked on the badge's window.
+    func showSignature(of s: MessageSummary, relativeTo anchor: NSView) {
+        showSignature(of: s, summary: cache.loaded(s.id)?.msg?.signature, relativeTo: anchor)
+    }
+
+    func showSignature(of s: MessageSummary, summary: SignatureSummary?, relativeTo anchor: NSView) {
+        SignatureDetailsPopover.show(s, summary: summary, relativeTo: anchor, state: state, window: anchor.window)
+    }
+
+    // MARK: Unsubscribing (window/bulk.go)
+
+    /// The bulk strip's button for message `id`: the confirmation first
+    /// (nothing happens without it; the texts are plain text, they come
+    /// from the mail), then the page in the browser for a web-page offer,
+    /// otherwise `message.unsubscribe` through the cache. The answer
+    /// `openUrl` (a one-click offer the daemon could not verify) asks again
+    /// before it opens the sender's page. Toasts go over `window`.
+    func unsubscribe(_ id: MessageID, from window: NSWindow?) {
+        guard let lm = cache.loaded(id), !lm.unsubscribing, let m = lm.msg,
+              let offer = m.unsubscribe, offer.unsubscribedAt == nil,
+              let conf = Bulk.confirm(Bulk.message(m.summary, lm)) else { return }
+        let summary = m.summary
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard await self.askBulk(conf, on: window) else { return }
+            if offer.method == .url {
+                self.openBulkPage(offer.url ?? "", from: window)
+                return
+            }
+            self.callUnsubscribe(summary, method: nil, on: window)
+        }
+    }
+
+    /// window/bulk.go `callUnsubscribe`: `message.unsubscribe` through the
+    /// cache and what to do with the answer. `unverified` asks whether the
+    /// request may go by mail instead (the call again with `.mailto`), or
+    /// only informs when the message offers no such address; `openUrl`
+    /// (a web-page offer, confirmed already) opens the page without a
+    /// second question.
+    private func callUnsubscribe(_ summary: MessageSummary, method: UnsubscribeMethod?, on window: NSWindow?) {
+        cache.unsubscribe(summary, method: method, toast: { [weak self] text in self?.toast(text, in: window) }) { [weak self] outcome, lm in
+            guard let self, case .success(let res) = outcome else { return }
+            switch res.outcome {
+            case .unverified:
+                self.bulkUnverified(summary, lm, res, on: window)
+            case .openUrl:
+                self.openBulkPage(res.url ?? "", from: window)
+            default:
+                break
+            }
+        }
+    }
+
+    /// window/bulk.go `bulkDialog`: Cancel and the suggested confirmation;
+    /// true on confirm only.
+    private func askBulk(_ conf: Bulk.Confirmation, on window: NSWindow?) async -> Bool {
+        await state.alerts.confirm(
+            on: window, heading: conf.heading, body: conf.body, confirmLabel: conf.confirm,
+            declineLabel: L10n.T("_Cancel"))
+    }
+
+    /// window/bulk.go `bulkUnverified`: the daemon sent nothing because it
+    /// could not verify the one-click request. With a mailto: alternative
+    /// the user may confirm sending the request by mail; without, the
+    /// dialog only informs.
+    private func bulkUnverified(
+        _ summary: MessageSummary, _ lm: LoadedMessage, _ res: MessageUnsubscribeResult, on window: NSWindow?
+    ) {
+        let conf = Bulk.unverified(lm.msg, res)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard !conf.confirm.isEmpty else {
+                await self.state.alerts.inform(
+                    on: window, heading: conf.heading, body: conf.body, closeLabel: Bulk.close())
+                return
+            }
+            guard await self.askBulk(conf, on: window), !lm.unsubscribing else { return }
+            self.callUnsubscribe(summary, method: .mailto, on: window)
+        }
+    }
+
+    /// window/bulk.go `openBulkPage`: the sender's unsubscribe page in the
+    /// browser, https only, never anything else the mail carries.
+    private func openBulkPage(_ raw: String, from window: NSWindow?) {
+        guard let uri = Bulk.openableURL(raw) else { return }
+        openInBrowser(uri) { [weak self] text in
+            self?.toast(text, in: window)
+        }
+    }
+
+    // MARK: Links (remote.go `openLink`)
+
+    /// A link the user activated in a message: mailto: opens a new message,
+    /// http(s) is handed to the desktop, after a look at whether the link's
+    /// text pretends to lead elsewhere. `href` is the attribute as written
+    /// (`ActivatedLink.href`) and `links` are the body's links as the
+    /// daemon listed them, text and real target side by side, matched
+    /// exactly (`linkDecision`). Stricter than GTK in one respect: an
+    /// http(s) link the list does not hold is never opened silently, the
+    /// destination is shown first.
+    func openLink(_ href: String, links: [Link], from window: NSWindow?) {
+        switch linkDecision(href, links) {
+        case .refused:
+            return
+        case .mailto(let target):
+            openMailto(target)
+        case .open(let target):
+            launch(target, from: window)
+        case .confirm(let text, let target):
+            let alerts = state.alerts
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let open: Bool
+                if text.isEmpty {
+                    open = await self.openUnlistedLinkQuestion(on: window, href: target)
+                } else {
+                    // The text says one site, the target is another.
+                    open = await alerts.openLinkQuestion(on: window, text: text, href: target)
+                }
+                if open {
+                    self.launch(target, from: window)
+                }
+            }
+        }
+    }
+
+    /// "Open This Link?" for a link the daemon did not list, so nothing is
+    /// known about the text it wore: the destination alone. A sheet on
+    /// `window`, or application-modal without one (as `AppAlerts` does).
+    private func openUnlistedLinkQuestion(on window: NSWindow?, href: String) async -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.T("Open This Link?")
+        // TRANSLATORS: %s is the link's real destination.
+        alert.informativeText = L10n.T("This link leads to %s.", href)
+        let cancel = alert.addButton(withTitle: mn(L10n.T("_Cancel")))
+        cancel.keyEquivalent = "\u{1b}"
+        let open = alert.addButton(withTitle: mn(L10n.T("_Open Link")))
+        open.keyEquivalent = ""
+        let response: NSApplication.ModalResponse
+        if let window, window.isVisible, window.attachedSheet == nil {
+            response = await alert.beginSheetModal(for: window)
+        } else {
+            response = alert.runModal()
+        }
+        return response == .alertSecondButtonReturn
+    }
+
+    /// A mailto: link as a new message (compose.ParseMailto) through the
+    /// compose hook.
+    private func openMailto(_ href: String) {
+        let params: ComposeParams
+        do {
+            params = try parseMailto(href)
+        } catch {
+            log.debug("mailto link refused: \(String(describing: error), privacy: .public)")
+            return
+        }
+        guard let open = state.hooks.openCompose else { return }
+        open(params)
+    }
+
+    /// An address chip's New Message (addresses.go `chip`): a new message
+    /// to that address, from the account of the message it sits on, or
+    /// from the first mail account when that one cannot write (a Jira
+    /// account; `Capabilities.forwardFrom`).
+    func newMessage(to address: Address, account: AccountID) {
+        guard let open = state.hooks.openCompose else { return }
+        let from = Capabilities.forwardFrom(actions.mailbox.model.accounts, from: account)?.id ?? account
+        open(ComposeParams(kind: .new, accountID: from, to: [address]))
+    }
+
+    func account(_ id: AccountID) -> Account? {
+        actions.mailbox.model.account(id)
+    }
+
+    /// Opens `href` with the desktop's handler (remote.go `launchURI`).
+    private func launch(_ href: String, from window: NSWindow?) {
+        guard let url = URL(string: href) else {
+            log.warning("open link: not a URL")
+            // TRANSLATORS: %s is a technical error message.
+            toast(L10n.T("The link could not be opened: %s", "invalid URL"), in: window) // macOS-only string (the technical detail)
+            return
+        }
+        Task { @MainActor [weak self] in
+            do {
+                _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration())
+            } catch {
+                guard let self else { return }
+                // The error names the URL: mail content, private.
+                let ns = error as NSError
+                self.log.warning("open link: \(ns.domain, privacy: .public) \(ns.code, privacy: .public): \(String(describing: error), privacy: .private)")
+                // TRANSLATORS: %s is a technical error message.
+                self.toast(L10n.T("The link could not be opened: %s", error.localizedDescription), in: window)
+            }
+        }
+    }
+
+    // MARK: Attachments (attachments.go)
+
+    func previewAttachment(
+        _ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?,
+        source: @escaping @MainActor (_ partId: String) -> NSView?
+    ) {
+        attachments.preview(attachment, of: summary, remote: remote, from: window, source: source)
+    }
+
+    func openAttachment(_ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
+        attachments.open(attachment, of: summary, remote: remote, from: window)
+    }
+
+    func saveAttachment(_ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
+        attachments.saveAs(attachment, of: summary, remote: remote, from: window)
+    }
+
+    func saveAllAttachments(_ attachments: [Attachment], of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
+        self.attachments.saveAll(attachments, of: summary, remote: remote, from: window)
+    }
+
+    // MARK: Assistant (ui/internal/assistant)
+
+    func askAssistant(_ action: Assistant.Action, about summary: MessageSummary, from window: NSWindow?) {
+        assistant.ask(action, about: summary, from: window)
+    }
+
+    func askAssistant(about attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
+        assistant.ask(about: attachment, of: summary, remote: remote, from: window)
+    }
+
+    // MARK: Helpers
+
+    private func toast(_ text: String, in window: NSWindow?) {
+        windowToast(text, in: window, or: state.toasts)
+    }
+}
+
+/// A toast in the window where the click was, when that window has an
+/// overlay of its own (a message window); otherwise through `fallback`,
+/// wherever toasts go now (window.go `Toast`).
+@MainActor
+func windowToast(_ text: String, in window: NSWindow?, or fallback: any Toasts) {
+    if let host = window?.windowController as? any ToastHosting {
+        host.toasts.show(text)
+    } else {
+        fallback.show(text)
+    }
+}

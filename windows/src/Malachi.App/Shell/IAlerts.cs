@@ -1,0 +1,127 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiMail/App/Contracts.swift (Alerts,
+// SaveDraftAnswer as Core's DraftCloseAnswer); GTK: widget/rpc.go
+// ConfirmDestructive, compose/draft.go (the close question),
+// widget/consent.go (Send Mail to Claude?, through ConfirmAsync),
+// window/remote.go (Open This Link?), accountwizard/trust.go (Trust This
+// Certificate?), and main.go's app.about; the update check's What's New
+// and security question (ui/internal/updates). The dialogs go on the window
+// that owns the action, or the main window when it is null (Windows has no
+// application-modal alert: a hidden main window is shown first). Heading
+// and body are plain text, often hostile input such as a subject.
+// Controllers never create a dialog (docs/windows-port.md §7.5): they get
+// these as hooks (ActionsController.Confirm, the draft controller's
+// SaveDraftQuestion and ConfirmDiscard, the wizard's ConfirmTrust).
+
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Malachi.Core.Api;
+using Malachi.Core.Calendars;
+using Malachi.Core.Controllers;
+using Malachi.Core.Updates;
+using Malachi.Core.Wizard;
+using Microsoft.UI.Xaml;
+
+namespace Malachi.App.Shell;
+
+/// <summary>The confirmation dialogs of the app.</summary>
+public interface IAlerts
+{
+    /// <summary>Cancel / <paramref name="confirmLabel"/> (the action); true when confirmed. Cancel is the default.</summary>
+    Task<bool> ConfirmDestructiveAsync(Window? window, string heading, string body, string confirmLabel);
+
+    /// <summary>
+    /// <see cref="ConfirmDestructiveAsync"/> with a check box between the
+    /// body and the buttons ("Also delete drafts and downloaded data").
+    /// </summary>
+    Task<(bool Confirmed, bool Extra)> ConfirmDestructiveExtraAsync(
+        Window? window, string heading, string body, string confirmLabel, string extraLabel, bool extraDefault);
+
+    /// <summary>
+    /// A question without a destructive answer (macOS Alerts.confirm):
+    /// <paramref name="confirmLabel"/> leads as the default (Return),
+    /// <paramref name="declineLabel"/> takes Escape; true when confirmed. The
+    /// Assistant's "Send Mail to Claude?" (Allow / Cancel) and "Restart
+    /// Claude Desktop?" (Restart Claude Desktop / Later).
+    /// </summary>
+    Task<bool> ConfirmAsync(Window? window, string heading, string body, string confirmLabel, string declineLabel);
+
+    /// <summary>
+    /// A message with a single button, <paramref name="closeLabel"/> (the
+    /// default and Escape): the bulk strip's "The sender could not be
+    /// verified" when there is no alternative to offer.
+    /// </summary>
+    Task InformAsync(Window? window, string heading, string body, string closeLabel);
+
+    /// <summary>
+    /// The Save to eWay-CRM dialog (Crm/CrmSaveDialog), made by
+    /// <paramref name="make"/> when its turn on the window comes (one
+    /// dialog at a time per window); true when it closed with its primary
+    /// button (Save).
+    /// </summary>
+    Task<bool> ShowDialogAsync(Window? window, System.Func<Microsoft.UI.Xaml.Controls.ContentDialog> make);
+
+    /// <summary>"Save changes to this draft?": Save Draft (the default) / Discard / Cancel.</summary>
+    Task<DraftCloseAnswer> SaveDraftQuestionAsync(Window? window);
+
+    /// <summary>
+    /// "Open This Link?" for a link whose text says one site and whose target
+    /// is another, or, with <paramref name="text"/> "", for a link the daemon
+    /// did not list (the destination alone, as on macOS); true opens it.
+    /// </summary>
+    Task<bool> OpenLinkQuestionAsync(Window? window, string text, string href);
+
+    /// <summary>
+    /// "Trust This Certificate?": Cancel / <paramref name="confirmLabel"/>,
+    /// the certificate's details between the body and the buttons as
+    /// selectable plain text, the fingerprints monospaced.
+    /// </summary>
+    Task<bool> ConfirmTrustCertificateAsync(
+        Window? window, string heading, string body, IReadOnlyList<CertificateDetail> details, string confirmLabel);
+
+    /// <summary>
+    /// Asks for a password (a CalDAV account's Replace Password…, macOS's
+    /// alert with a secure field): <paramref name="confirmLabel"/> (the
+    /// default, enabled once something is typed) / Cancel; the password, or
+    /// null for Cancel. The field is emptied once the dialog is over.
+    /// </summary>
+    Task<string?> PasswordAsync(Window? window, string heading, string body, string fieldLabel, string confirmLabel);
+
+    /// <summary>About Malachi Mail (app.about).</summary>
+    Task ShowAboutAsync(Window? window);
+
+    /// <summary>
+    /// The What's New dialog of the offered version (updates.NotesFor):
+    /// Download (the default, only with a package), More Information (only
+    /// with a page) and Close; the notes as plain text. The button chosen, or
+    /// null for Close.
+    /// </summary>
+    Task<BannerAction?> WhatsNewAsync(Window? window, UpdateNotes notes);
+
+    /// <summary>
+    /// The question of a security release (updates.PromptFor): Download (the
+    /// default) and Cancel, with the check box Quit Malachi Mail after the
+    /// download starts, on by default. Whether Download was chosen, and the
+    /// check box.
+    /// </summary>
+    Task<(bool Download, bool Quit)> SecurityUpdateAsync(Window? window, UpdatePrompt prompt);
+
+    /// <summary>
+    /// A question of the calendar (docs/calendar.md §5.5, §5.6): the
+    /// confirmation, the alternative when there is one, and Cancel;
+    /// <paramref name="confirmDefault"/> makes the confirmation the default
+    /// (the editor's close question), else Cancel is.
+    /// </summary>
+    Task<Cal.Answer> CalendarQuestionAsync(Window? window, Cal.Question question, bool confirmDefault);
+
+    /// <summary>The series question: one of its choices, or null for Cancel.</summary>
+    Task<EditScope?> CalendarScopeAsync(Window? window, Cal.ScopeQuestion question);
+
+    /// <summary>The event editor's Paste Link…: the link as typed, or null for Cancel.</summary>
+    Task<string?> VideoLinkAsync(Window? window, string initial);
+
+    /// <summary>Whether one of <paramref name="window"/>'s dialogs is up or waiting.</summary>
+    bool IsShowing(Window window);
+}

@@ -1,0 +1,174 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiMail/Windows/MessageWindowController.swift
+// (init, show, rendered, refreshStar, windowWillClose, the actions and
+// their validation, the eWay-CRM item); GTK: ui/internal/window/message_window.go
+// (newMessageWindow: the msg.* group, the star, the outbox banner's retry,
+// the reply buttons, the single-key shortcuts; setSeen; show) and
+// message_view.go openMessageWindow's close-request. One message in its
+// own top-level window, 820×620, not owned by the main window (the user
+// asked for independent windows): its commands act on its message through
+// the MessageActionRouter and are enabled from the message's live flags;
+// Escape and Ctrl+W close it (the window's CommandRouter, also with the
+// viewer focused), as do Delete, A, J, U and S what they do in the main
+// window. The title follows the subject once the full message is in; the
+// body has the first focus, so the selectable subject is not what has it.
+// A late reply after the close is dropped (the view's controller is
+// closed); the registry forgets the window and closes it, with the windows
+// of its attached messages, when the message leaves its folder.
+
+using System;
+using Malachi.App.Assistants;
+using Malachi.App.Preferences;
+using Malachi.App.Printing;
+using Malachi.App.Reader;
+using Malachi.App.Shell;
+using Malachi.Core;
+using Malachi.Core.Api;
+using Malachi.Core.Assistants;
+using Malachi.Core.I18n;
+using Malachi.Core.Model;
+using Malachi.Core.Presentation;
+using Malachi.Core.Printing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+
+namespace Malachi.App.MessageWindows;
+
+/// <summary>A message in its own window (message_window.blp).</summary>
+public sealed partial class MessageWindow : Window, IMessageWindowHandle
+{
+    private readonly ReaderServices services;
+    private readonly MessageWindowKey key;
+    private readonly IDisposable frame;
+    private MessageSummary summary;
+    private bool focused;
+
+    /// <summary>The window of message <paramref name="s"/>; the registry shows it.</summary>
+    public MessageWindow(ReaderServices services, MessageSummary s)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(s);
+        this.services = services;
+        summary = s;
+        key = new MessageWindowKey.Message(s.Id);
+        InitializeComponent();
+        SetTitle(L10n.T("Message"));
+        frame = WindowFrame.Apply(this, WindowTitleBar, SolidBackground);
+        Tracked = services.State.Windows.Track(this, WindowKind.Message, Root, ToastsHost);
+        View = new MessageView(ReaderMode.Window, services, Tracked.Commands) { HostWindow = this };
+        ViewHost.Content = View;
+        WireCommands();
+        WireAssistant();
+        WireCrm();
+        View.Reader.Rendered += (_, r) => Rendered(r);
+        Activated += (_, e) =>
+        {
+            if (!focused && e.WindowActivationState != WindowActivationState.Deactivated)
+            {
+                focused = true;
+                View.FocusBody();
+            }
+        };
+        Closed += (_, _) =>
+        {
+            services.Windows.Closed(key, this);
+            // The only timer that would outlive the window, and the viewer.
+            View.Close();
+            frame.Dispose();
+        };
+    }
+
+    /// <summary>The window as the shell tracks it (its commands and keys).</summary>
+    public TrackedWindow Tracked { get; }
+
+    /// <summary>The message view.</summary>
+    public MessageView View { get; }
+
+    /// <inheritdoc/>
+    public ReaderController Reader => View.Reader;
+
+    /// <summary>The message the window shows.</summary>
+    public MessageId Id => summary.Id;
+
+    /// <inheritdoc/>
+    public void Present() => WindowPresenter.Present(this);
+
+    /// <inheritdoc/>
+    public void RefreshActions() => Tracked.Commands.Flags = services.Router.FlagsFor(View.Reader.Current ?? summary);
+
+    // The msg.* group: the command row, its menu and the keys act on this
+    // window's message; trash and junk ask over this window.
+    private void WireCommands()
+    {
+        var c = Tracked.Commands;
+        var router = services.Router;
+        c.Reply.Handler = () => router.Reply(Id);
+        c.ReplyAll.Handler = () => router.ReplyAll(Id);
+        c.Forward.Handler = () => router.Forward(Id, this);
+        c.Trash.Handler = () => router.Trash(Id, this);
+        c.Junk.Handler = () => router.Junk(Id, this);
+        c.Archive.Handler = () => router.Archive(Id);
+        c.ToggleFlag.Handler = () => router.ToggleFlag(Id);
+        c.MarkRead.Handler = () => router.MarkRead(Id);
+        c.MarkUnread.Handler = () => router.MarkUnread(Id);
+        c.LoadImages.Handler = () => router.LoadImages(Id);
+        c.TrustSender.Handler = () => router.TrustSender(Id);
+        // msg.change-status: the Change Status menu of this window's card.
+        c.ChangeStatus.Handler = () => View.OpenStatusMenu();
+        // Print (Ctrl+P): this window's message (macOS MessageWindowController printMail:).
+        c.Print.Handler = () => PrintJob.Messages(this, services, [View.Reader.Current ?? summary], Print.Layout.One);
+        RefreshActions();
+    }
+
+    // The eWay-CRM button of this window's command row (macOS
+    // MessageWindowController's CRM item, GTK message_window.blp crm_button):
+    // its own CrmController over this window's message, redrawn on the
+    // application's CRM state and on every render.
+    private void WireCrm()
+    {
+        var c = Crm.CrmWindowSupport.Make(services.State, this, ToastsHost, () => [View.Reader.Current ?? summary]);
+        var refresh = Crm.CrmWindowSupport.Bind(View.CrmButton, c, services.State, this);
+        View.Reader.Rendered += (_, _) => refresh();
+    }
+
+    // assistant.go bindAssistantButton for a message window: the Assistant
+    // menu without Summarize Unread, on this window's message (never an
+    // Outbox message), shown while the Assistant is (MessageWindowController
+    // on macOS).
+    private void WireAssistant()
+    {
+        var state = services.State;
+        var button = View.Assistant;
+        var menu = new AssistantMenu(
+            state,
+            canAsk: () => state.Integration?.List.Mailbox.Model.InOutbox(View.Reader.Current ?? summary) == false,
+            ask: a => state.MainWindow?.AssistantActions?.AskAbout(a, View.Reader.Current ?? summary, this),
+            setUp: () => PreferencesWindow.Show(state)?.ShowAi());
+        button.Flyout = menu.Flyout;
+        button.Label = Assistant.Texts().Assistant;
+        ToolTipService.SetToolTip(button, Assistant.Texts().Assistant);
+        void Sync() => button.Visibility = state.Assistant.Shown ? Visibility.Visible : Visibility.Collapsed;
+        EventHandler changed = (_, _) => Sync();
+        state.Assistant.Changed += changed;
+        Closed += (_, _) => state.Assistant.Changed -= changed;
+        Sync();
+    }
+
+    // The title follows the full message's subject, the commands the flags
+    // (MessageWindowController.rendered).
+    private void Rendered(ReaderRender r)
+    {
+        summary = r.Summary;
+        SetTitle(LoadedMessageText.SubjectText(r.Loaded?.Msg?.Summary.Subject ?? r.Summary.Subject));
+        RefreshActions();
+    }
+
+    private void SetTitle(string subject)
+    {
+        // The subject is shown as plain text by both.
+        Title = subject;
+        WindowTitleBar.Title = subject;
+    }
+}

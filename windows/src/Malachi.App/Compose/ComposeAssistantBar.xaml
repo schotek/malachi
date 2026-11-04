@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Compose/ComposeAssistantBar.swift; GTK:
+ui/data/ui/compose_extras.blp (assistant_bar). The assistant's bar at the
+bottom of a compose window's content (the window layout only; the window
+shows it while the In App target can run, never in comment mode). Top to
+bottom, margins 12, 6, spacing 8: a flat disclosure "Assistant · provider"
+that only hides the contents; the row [Write a Reply] [instruction, Enter
+writes] [spinner while running]; the answer as plain text in a read-only box
+of 100 px that scrolls, shown when there is one; the error line; and, while
+running or with an answer, [Cancel or Discard] [Replace] at the end. Every
+text is set in code (Assistant.WriteTexts, WriteBarTitle); the answer is
+TextBox.Text, never markup.
+-->
+<UserControl
+    x:Class="Malachi.App.Compose.ComposeAssistantBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <StackPanel Margin="12,6,12,6" Spacing="8">
+        <!-- assistant_bar_disclosure: the title with the chevron. -->
+        <Button
+            x:Name="Disclosure"
+            HorizontalAlignment="Left"
+            AutomationProperties.AutomationId="ComposeAssistantDisclosure"
+            Click="OnDisclosureClick"
+            Style="{StaticResource SubtleButtonStyle}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon x:Name="DisclosureIcon" FontSize="12" />
+                <TextBlock x:Name="TitleText" Style="{StaticResource HeadingLabelStyle}" />
+            </StackPanel>
+        </Button>
+
+        <!-- assistant_bar_contents -->
+        <StackPanel x:Name="Contents" Spacing="8">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <!-- assistant_bar_write -->
+                <Button
+                    x:Name="WriteButton"
+                    AutomationProperties.AutomationId="ComposeAssistantWrite"
+                    Click="OnWriteClick" />
+                <!-- assistant_bar_instruction: Enter is the button. -->
+                <TextBox
+                    x:Name="Instruction"
+                    Grid.Column="1"
+                    AutomationProperties.AutomationId="ComposeAssistantInstruction"
+                    KeyDown="OnInstructionKeyDown" />
+                <!-- assistant_bar_spinner -->
+                <ProgressRing
+                    x:Name="Spinner"
+                    Grid.Column="2"
+                    Width="16"
+                    Height="16"
+                    IsActive="False"
+                    Visibility="Collapsed" />
+            </Grid>
+
+            <!-- assistant_bar_preview: plain text, never markup. -->
+            <TextBox
+                x:Name="Preview"
+                Height="100"
+                AutomationProperties.AutomationId="ComposeAssistantPreview"
+                IsReadOnly="True"
+                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+
+            <!-- assistant_bar_error -->
+            <TextBlock
+                x:Name="ErrorText"
+                AutomationProperties.AutomationId="ComposeAssistantError"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+
+            <!-- assistant_bar_buttons: Cancel while running, Discard otherwise; Replace. -->
+            <StackPanel
+                x:Name="ResultButtons"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                Spacing="8"
+                Visibility="Collapsed">
+                <Button
+                    x:Name="DiscardButton"
+                    AutomationProperties.AutomationId="ComposeAssistantDiscard"
+                    Click="OnDiscardClick" />
+                <Button
+                    x:Name="ReplaceButton"
+                    AutomationProperties.AutomationId="ComposeAssistantReplace"
+                    Click="OnReplaceClick"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

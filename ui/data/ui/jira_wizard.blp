@@ -1,0 +1,375 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The Jira account assistant: site (account.detectSite) → credentials
+// (account.listSpaces, which is the sign-in test) → spaces, offline window
+// and "Only Issues Involving Me" (account.add). Editing an account opens on
+// the credentials page to replace its token (account.update). Object IDs
+// are looked up from ui/internal/accountwizard/jira.go; keep them in sync.
+// The flow is jira_flow.go, and every text is set from Go: the texts are
+// the reference in ui/internal/jira (wizard.go), which the macOS client
+// ports as they are. Everything from the site or the daemon is plain text.
+Adw.Dialog jira_wizard {
+  content-width: 520;
+  content-height: 640;
+  focus-widget: site_row;
+
+  child: Adw.ToastOverlay jira_toasts {
+    child: Adw.NavigationView jira_nav {
+      Adw.NavigationPage site_page {
+        tag: "site";
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Box {
+            orientation: vertical;
+
+            Adw.Banner site_banner {
+              revealed: false;
+              use-markup: false;
+            }
+
+            ScrolledWindow {
+              hscrollbar-policy: never;
+              vexpand: true;
+
+              child: Adw.Clamp {
+                maximum-size: 480;
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  margin-top: 24;
+                  margin-bottom: 24;
+                  margin-start: 24;
+                  margin-end: 24;
+
+                  Label site_description {
+                    wrap: true;
+                    xalign: 0;
+                    margin-bottom: 6;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+
+                  ListBox {
+                    selection-mode: none;
+
+                    styles [
+                      "boxed-list",
+                    ]
+
+                    Adw.EntryRow site_row {
+                      use-markup: false;
+                      input-purpose: url;
+                      input-hints: no_spellcheck;
+                    }
+                  }
+
+                  // What is wrong with the address, or what the site turned
+                  // out to be ("Found Acme": the site's title, untrusted);
+                  // hidden while empty. The "error" class marks a problem.
+                  Label site_status {
+                    wrap: true;
+                    wrap-mode: word_char;
+                    xalign: 0;
+                    use-markup: false;
+                    visible: false;
+
+                    styles [
+                      "caption",
+                    ]
+                  }
+                };
+              };
+            }
+          };
+
+          [bottom]
+          CenterBox {
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            // The call under way: a spinner and its progress text.
+            [start]
+            Box site_progress {
+              spacing: 6;
+              visible: false;
+
+              Adw.Spinner {}
+
+              Label site_progress_label {
+                ellipsize: end;
+                use-markup: false;
+
+                styles [
+                  "dim-label",
+                ]
+              }
+            }
+
+            [end]
+            Button site_next_button {
+              use-underline: true;
+              sensitive: false;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+
+      // Jira Cloud asks for the Atlassian account's e-mail address and an
+      // API token ("Create API Token…" opens id.atlassian.com); Data Center
+      // for a personal access token alone. When an account is edited the
+      // address is fixed and the button saves the new token.
+      Adw.NavigationPage credentials_page {
+        tag: "credentials";
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Box {
+            orientation: vertical;
+
+            Adw.Banner credentials_banner {
+              revealed: false;
+              use-markup: false;
+            }
+
+            ScrolledWindow {
+              hscrollbar-policy: never;
+              vexpand: true;
+
+              child: Adw.Clamp {
+                maximum-size: 480;
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  margin-top: 24;
+                  margin-bottom: 24;
+                  margin-start: 24;
+                  margin-end: 24;
+
+                  Label credentials_help {
+                    wrap: true;
+                    xalign: 0;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+
+                  Button credentials_help_button {
+                    halign: start;
+                    margin-bottom: 6;
+                  }
+
+                  ListBox {
+                    selection-mode: none;
+
+                    styles [
+                      "boxed-list",
+                    ]
+
+                    Adw.EntryRow login_row {
+                      use-markup: false;
+                      input-purpose: email;
+                    }
+
+                    Adw.PasswordEntryRow token_row {
+                      use-markup: false;
+                    }
+                  }
+                };
+              };
+            }
+          };
+
+          [bottom]
+          CenterBox {
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            [start]
+            Box credentials_progress {
+              spacing: 6;
+              visible: false;
+
+              Adw.Spinner {}
+
+              Label credentials_progress_label {
+                ellipsize: end;
+                use-markup: false;
+
+                styles [
+                  "dim-label",
+                ]
+              }
+            }
+
+            [end]
+            Button credentials_next_button {
+              use-underline: true;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+
+      // The spaces the token sees, as check rows ("KEY – Name" from the
+      // site and the estimate of their issues in the offline window), why
+      // the account cannot be added yet, the offline window, "Only Issues
+      // Involving Me", and the account's address when a Data Center site
+      // does not reveal it. The rows are built from Go.
+      Adw.NavigationPage spaces_page {
+        tag: "spaces";
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Box {
+            orientation: vertical;
+
+            Adw.Banner spaces_banner {
+              revealed: false;
+              use-markup: false;
+            }
+
+            ScrolledWindow {
+              hscrollbar-policy: never;
+              vexpand: true;
+
+              child: Adw.Clamp {
+                maximum-size: 480;
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  margin-top: 24;
+                  margin-bottom: 24;
+                  margin-start: 24;
+                  margin-end: 24;
+
+                  Label spaces_description {
+                    wrap: true;
+                    xalign: 0;
+                    margin-bottom: 6;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+
+                  // A site may list a thousand spaces: the list scrolls on
+                  // its own (about seven rows), so the options below stay
+                  // in reach.
+                  ScrolledWindow {
+                    hscrollbar-policy: never;
+                    propagate-natural-height: true;
+                    max-content-height: 320;
+
+                    child: ListBox spaces_list {
+                      selection-mode: none;
+
+                      styles [
+                        "boxed-list",
+                      ]
+                    };
+                  }
+
+                  Label spaces_problem {
+                    wrap: true;
+                    xalign: 0;
+                    use-markup: false;
+                    visible: false;
+
+                    styles [
+                      "caption",
+                      "dim-label",
+                    ]
+                  }
+
+                  ListBox {
+                    selection-mode: none;
+                    margin-top: 12;
+
+                    styles [
+                      "boxed-list",
+                    ]
+
+                    Adw.ComboRow offline_row {
+                      use-markup: false;
+                    }
+
+                    Adw.SwitchRow only_mine_row {
+                      use-markup: false;
+                    }
+
+                    Adw.EntryRow email_row {
+                      use-markup: false;
+                      input-purpose: email;
+                      visible: false;
+                    }
+                  }
+                };
+              };
+            }
+          };
+
+          [bottom]
+          CenterBox {
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            [start]
+            Box spaces_progress {
+              spacing: 6;
+              visible: false;
+
+              Adw.Spinner {}
+
+              Label spaces_progress_label {
+                ellipsize: end;
+                use-markup: false;
+
+                styles [
+                  "dim-label",
+                ]
+              }
+            }
+
+            [end]
+            Button spaces_add_button {
+              use-underline: true;
+              sensitive: false;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+    };
+  };
+}

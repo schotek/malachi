@@ -1,0 +1,142 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// The types of ui/internal/compose/prefill.go: what a compose window is
+// opened for, what is known about the original, and what the window is
+// prefilled with.
+
+import Foundation
+
+/// compose.Kind: what the compose window was opened for.
+public enum ComposeKind: Sendable, Hashable, CaseIterable {
+    case new
+    case reply
+    case replyAll
+    case forward
+    /// A draft opened from the Drafts folder (draft.open).
+    case edit
+
+    /// compose.Kind.Mode: the draft.create mode of the kind.
+    public var mode: ComposeMode {
+        switch self {
+        case .new, .edit: return .new
+        case .reply: return .reply
+        case .replyAll: return .replyAll
+        case .forward: return .forward
+        }
+    }
+}
+
+/// compose.Source: what the caller knows about the message being replied
+/// to or forwarded. Every field is hostile input. A nil `date` (or Go's
+/// zero time) is a message without one.
+public struct ComposeSource: Sendable, Equatable {
+    public var id: MessageID
+    public var accountID: AccountID
+    public var from: [Address]
+    /// The Reply-To header; replies go here instead of `from`.
+    public var replyTo: [Address]
+    public var to: [Address]
+    public var cc: [Address]
+    public var subject: String
+    public var date: Date?
+    /// The plain-text body.
+    public var text: String
+
+    public init(
+        id: MessageID = "", accountID: AccountID = "", from: [Address] = [], replyTo: [Address] = [],
+        to: [Address] = [], cc: [Address] = [], subject: String = "", date: Date? = nil, text: String = ""
+    ) {
+        self.id = id
+        self.accountID = accountID
+        self.from = from
+        self.replyTo = replyTo
+        self.to = to
+        self.cc = cc
+        self.subject = subject
+        self.date = date
+        self.text = text
+    }
+}
+
+/// compose.Params: opens a compose window with these fields prefilled.
+public struct ComposeParams: Sendable, Equatable {
+    public var kind: ComposeKind
+    /// Preselects the From identity; nil means the first account.
+    public var accountID: AccountID?
+    public var to: [Address]
+    public var cc: [Address]
+    public var bcc: [Address]
+    public var subject: String
+    /// Inserted into the editor document verbatim and must be safe: only
+    /// the backend's sanitiser (`fromDraft` through
+    /// `ComposeBodyLayout.draftBody`), `prefill` and `parseMailto` produce
+    /// it.
+    public var bodyHTML: String
+    public var inReplyTo: MessageID?
+    public var forwarding: MessageID?
+    /// The issue a comment draft goes to and its visibility, as
+    /// draft.create returned them (`Draft.comment`): the window writes a
+    /// comment then (`Jira.commentCompose`), pinned to `accountID`. nil for
+    /// an e-mail. Set after `init` (`fromDraft`); macOS first, the GTK
+    /// compose.Params follows with its comment mode.
+    public var comment: DraftComment?
+    /// What the backend imported for the draft (the quoted original's
+    /// pictures, a forwarded message's files): not yet bound, the first
+    /// draft.save binds them.
+    public var attachments: [DraftAttachment]
+    /// What the backend's sanitiser removed from the quoted original; the
+    /// window says so once.
+    public var blocked: BlockedContent
+    /// The saved draft the window edits (`.edit` from draft.open); nil for
+    /// a new one. `replaces` is the Drafts message the first save takes
+    /// over (draft.open sets it).
+    public var draftID: DraftID?
+    public var version: Int
+    public var replaces: MessageID?
+    /// How many parts of the original draft.create could not import (over
+    /// a cap, unreadable, or kept on the mail server); the window says so
+    /// once (compose.Params `Skipped`).
+    public var skipped: Int
+    /// The line above the quoted original of a reply or a forward (the
+    /// `attribution` handed to draft.create, `attribution(kind:source:)`),
+    /// "" when not known (a new message, a draft opened from Drafts; GTK
+    /// compose.Params `Attribution`). For the assistant's rewrite
+    /// (ui/internal/assistant): the user's own text is what the editor
+    /// holds above it.
+    public var attribution: String
+    /// The user's own text to start the editor with (compose.Params
+    /// `OwnHTML`): safe HTML from `Conversation.quickReplyHTML` (the chat's
+    /// quick-reply bar), set by the caller after `fromDraft`/`prefill` like
+    /// `attribution`; "" = the editor starts as it would. Only the window
+    /// layout applies it (`ComposeBodyLayout.init(_:)`), in place of the
+    /// empty editor above the original apart (or of a comment's body), and
+    /// the draft is marked as edited once the editor loaded it
+    /// (`ComposeDraftController.editorLoaded(ownText:)`).
+    public var ownHTML = ""
+
+    public init(
+        kind: ComposeKind = .new, accountID: AccountID? = nil, to: [Address] = [], cc: [Address] = [],
+        bcc: [Address] = [], subject: String = "", bodyHTML: String = "", inReplyTo: MessageID? = nil,
+        forwarding: MessageID? = nil, attachments: [DraftAttachment] = [], blocked: BlockedContent = BlockedContent(),
+        draftID: DraftID? = nil, version: Int = 0, replaces: MessageID? = nil, skipped: Int = 0,
+        attribution: String = ""
+    ) {
+        self.kind = kind
+        self.accountID = accountID
+        self.to = to
+        self.cc = cc
+        self.bcc = bcc
+        self.subject = subject
+        self.bodyHTML = bodyHTML
+        self.inReplyTo = inReplyTo
+        self.forwarding = forwarding
+        self.attachments = attachments
+        self.blocked = blocked
+        self.draftID = draftID
+        self.version = version
+        self.replaces = replaces
+        self.skipped = skipped
+        self.attribution = attribution
+    }
+}

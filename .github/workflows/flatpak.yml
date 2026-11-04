@@ -1,0 +1,175 @@
+# Flatpak builds for x86_64 and aarch64.
+#
+# A pushed tag attaches two installable bundles to the GitHub release; a
+# run by hand only builds them. What a tag builds was tested before it was
+# tagged.
+#
+# aarch64 builds on GitHub's native arm64 runner (ubuntu-24.04-arm), which is
+# free for public repositories — no QEMU, so a build takes minutes, not hours.
+# If the repository is ever made private without a paid plan, that runner
+# disappears and the arm job has to fall back to QEMU emulation.
+#
+# The Go dependencies are vendored before the build (the flatpak-builder
+# sandbox has no network); see scripts/flatpak-vendor.sh.
+name: Flatpak
+
+on:
+  push:
+    # Only release tags (v1.2.3); pushes to main build nothing.
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the running build pointless.
+# Tags are kept: their artifacts end up on a release.
+concurrency:
+  group: flatpak-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  APP_ID: io.github.schotek.Malachi
+  MANIFEST: packaging/flatpak/io.github.schotek.Malachi.yml
+
+jobs:
+  build:
+    name: ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # file: the architecture in the bundle's name, as in every
+          # release file's.
+          - arch: x86_64
+            file: x64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            file: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git describe needs the tags, so no shallow clone.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          # Only used for `go mod vendor`; the module cache of the runner is
+          # never seen by the build inside the sandbox.
+          cache: false
+
+      - name: Vendor Go dependencies
+        run: ./scripts/flatpak-vendor.sh
+
+      - name: Record the version for the sandbox
+        # The manifest copies the tree without .git, so the Makefile reads
+        # this file instead of running git describe.
+        run: |
+          git describe --tags --always --dirty | sed 's/^v//' > .version
+          echo "VERSION=$(cat .version)" >> "$GITHUB_ENV"
+          cat .version
+
+      - name: Install flatpak-builder
+        # Both extras are only Recommends, which --no-install-recommends drops:
+        #   elfutils        the debuginfo stage runs eu-strip/eu-elfcompress
+        #                   outside the sandbox and fails the build without them
+        #   librsvg2-common the gdk-pixbuf SVG loader; appstreamcli compose
+        #                   reads our scalable icon through it and reports
+        #                   file-read-error when it is missing
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            flatpak flatpak-builder ccache elfutils librsvg2-common
+
+      - name: Install the GNOME 48 runtime and the Go SDK extension
+        # GNOME 48 is based on freedesktop 24.08, which is the branch the
+        # golang extension follows. Both are pinned in the manifest header;
+        # bump them together with the gotk4 snapshot.
+        run: |
+          flatpak remote-add --user --if-not-exists \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub \
+            org.gnome.Platform//48 \
+            org.gnome.Sdk//48 \
+            org.freedesktop.Sdk.Extension.golang//24.08
+
+      - name: Restore the flatpak-builder cache
+        uses: actions/cache@v4
+        with:
+          # Downloaded module sources (blueprint-compiler) and ccache. The Go
+          # build cache lives inside the sandbox and is not reused, so cgo
+          # (gotk4, WebKit) is recompiled every run — that is most of the
+          # wall clock.
+          path: .flatpak-builder
+          key: flatpak-${{ matrix.arch }}-${{ hashFiles('packaging/flatpak/io.github.schotek.Malachi.yml') }}-${{ github.sha }}
+          restore-keys: |
+            flatpak-${{ matrix.arch }}-${{ hashFiles('packaging/flatpak/io.github.schotek.Malachi.yml') }}-
+            flatpak-${{ matrix.arch }}-
+
+      - name: Download sources
+        # gitlab.gnome.org (blueprint-compiler) occasionally answers 502/503;
+        # a failed clone must not throw away the whole build.
+        run: |
+          for attempt in 1 2 3; do
+            flatpak-builder --user --force-clean --disable-rofiles-fuse \
+              --install-deps-from=flathub \
+              --download-only build/flatpak "$MANIFEST" && exit 0
+            echo "download attempt $attempt failed, retrying in $((attempt * 30))s"
+            sleep $((attempt * 30))
+          done
+          exit 1
+
+      - name: Build
+        # rofiles-fuse is unavailable on the hosted runners. Everything is
+        # downloaded by the previous step, so the build itself stays offline.
+        run: |
+          flatpak-builder --user --force-clean --disable-rofiles-fuse \
+            --disable-download \
+            --repo=repo build/flatpak "$MANIFEST"
+
+      - name: Bundle
+        run: |
+          flatpak build-bundle repo \
+            "Malachi-Mail-${VERSION}-linux-${{ matrix.file }}.flatpak" \
+            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            "$APP_ID"
+
+      - uses: actions/upload-artifact@v4
+        # Only for the release: any signed-in GitHub user can download the
+        # artifacts of a public repository.
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: malachi-${{ matrix.arch }}
+          path: Malachi-Mail-*.flatpak
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach bundles to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: malachi-*
+          merge-multiple: true
+      - name: Upload
+        # The release notes stay a manual step (they come from NEWS);
+        # this only creates a draft if the tag has no
+        # release yet, so the bundles have somewhere to land.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --draft --title "Malachi Mail ${GITHUB_REF_NAME#v}" --notes ''
+          gh release upload "$GITHUB_REF_NAME" ./*.flatpak \
+            --clobber --repo "$GITHUB_REPOSITORY"

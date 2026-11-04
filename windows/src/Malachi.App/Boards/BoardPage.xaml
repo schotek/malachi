@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Board/BoardPageViewController.swift and
+the items of BoardToolbar.swift; GTK: ui/data/ui/board_page.blp
+(board_header, board_panel_split, board_stack) and window/board.go. The
+main window's Board mode, in place of the mail's panes and above the
+status line, under the title bar that holds the Mail/Board switch. Its
+bar: the style switch (List, Columns, Today), the board's name and scope
+("All Accounts · 23 cases"), the account filter, ✦ Triage (wired by the
+triage's port; BoardTriageButton) and "…" (Mail Ctrl+1, Board Ctrl+2, Calendar Ctrl+3, Add Account…,
+Preferences, Quit: the window's sidebar with the primary menu is hidden
+here). Under the bar the notice while the cases are partial or old, and
+BoardTriageStrip, the triage's status (filled by the triage's port). The
+content is the current style's view, the status page while the account
+scope has no case at all, the sliding detail panel over Columns, Today
+and the narrow List, and what Archive did with its Undo. The window's
+toasts lie over it all (ToastLayer). The page's keys: E, D and R on the
+selected case outside text fields (Board.KeyFor), and Escape in two steps
+(Board.EscapeFor).
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:boards="using:Malachi.App.Boards"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:res="using:Malachi.App.Resources"
+    xmlns:toolbars="using:Malachi.App.Toolbars"
+    IsTabStop="False">
+    <Grid x:Name="PageRoot" KeyDown="OnPageKeyDown">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- The board's bar (board_header): the user's toolbar-board-list
+             layout (its Folders and Cases sections) in the List style,
+             toolbar-board-flow in Columns and Today (Toolbars/ToolbarStrip,
+             BoardPage.Toolbar.cs). The title and "…" are Windows' own: the
+             title after the style switch, taking the free room, "…" at the
+             end. -->
+        <Grid
+            x:Name="Bar"
+            Padding="12,6"
+            Background="Transparent"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1">
+            <toolbars:ToolbarStrip x:Name="BarStrip" Spacing="8">
+                <StackPanel
+                    x:Name="StyleSwitch"
+                    toolbars:ToolbarStrip.Item="boardStyle"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="2">
+                    <ToggleButton
+                        x:Name="StyleListButton"
+                        AutomationProperties.AutomationId="BoardStyleList"
+                        Click="OnStyleClick" />
+                    <ToggleButton
+                        x:Name="StyleColumnsButton"
+                        AutomationProperties.AutomationId="BoardStyleColumns"
+                        Click="OnStyleClick" />
+                    <ToggleButton
+                        x:Name="StyleTodayButton"
+                        AutomationProperties.AutomationId="BoardStyleToday"
+                        Click="OnStyleClick" />
+                </StackPanel>
+                <StackPanel
+                    Margin="8,0,0,0"
+                    toolbars:ToolbarStrip.Pin="after:boardStyle"
+                    toolbars:ToolbarStrip.Stretch="True"
+                    VerticalAlignment="Center">
+                    <TextBlock
+                        x:Name="TitleText"
+                        MaxLines="1"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        x:Name="SubtitleText"
+                        AutomationProperties.AutomationId="BoardSubtitle"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        MaxLines="1"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <ComboBox
+                    x:Name="AccountFilter"
+                    MinWidth="160"
+                    MaxWidth="260"
+                    toolbars:ToolbarStrip.Item="boardAccount"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="BoardAccountFilter"
+                    SelectionChanged="OnAccountFilterChanged" />
+                <Button
+                    x:Name="TriageButton"
+                    toolbars:ToolbarStrip.Item="boardTriage"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="BoardTriage"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="MoreButton"
+                    Width="40"
+                    toolbars:ToolbarStrip.Pin="end"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="BoardPageMenu"
+                    AutomationProperties.Name="{l:T Msgid='Main Menu'}"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='Main Menu'}">
+                    <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
+                    <Button.Flyout>
+                        <!-- The sidebar's primary menu (SidebarPane.xaml, window.blp primary_menu). -->
+                        <MenuFlyout x:Name="PageMenu" Placement="BottomEdgeAlignedRight">
+                            <!-- Windows-only strings: the key names beside the items. -->
+                            <MenuFlyoutItem
+                                x:Name="MenuNewMessage"
+                                AutomationProperties.AutomationId="BoardMenuNewMessage"
+                                l:MnemonicLabel.Text="{l:T Msgid='_New Message'}"
+                                KeyboardAcceleratorTextOverride="Ctrl+N" />
+                            <!-- The Contacts window (window.blp primary_menu app.contacts), without a key. -->
+                            <MenuFlyoutItem
+                                x:Name="MenuContacts"
+                                AutomationProperties.AutomationId="BoardMenuContacts"
+                                l:MnemonicLabel.Text="{l:T Msgid='_Contacts'}" />
+                            <MenuFlyoutSeparator />
+                            <!-- Windows-only string: the key name beside the item. -->
+                            <MenuFlyoutItem
+                                x:Name="MenuPreferences"
+                                AutomationProperties.AutomationId="BoardMenuPreferences"
+                                l:MnemonicLabel.Text="{l:T Msgid='_Preferences'}"
+                                KeyboardAcceleratorTextOverride="Ctrl+," />
+                            <MenuFlyoutItem
+                                x:Name="MenuAbout"
+                                AutomationProperties.AutomationId="BoardMenuAbout"
+                                l:MnemonicLabel.Text="{l:T Msgid='_About Malachi Mail'}" />
+                            <MenuFlyoutSeparator />
+                            <!-- Windows-only string: the key name beside the item. -->
+                            <MenuFlyoutItem
+                                x:Name="MenuQuit"
+                                AutomationProperties.AutomationId="BoardMenuQuit"
+                                l:MnemonicLabel.Text="{l:T Msgid='_Quit'}"
+                                KeyboardAcceleratorTextOverride="Ctrl+Q" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </toolbars:ToolbarStrip>
+        </Grid>
+
+        <!-- The notice above the cases, and the triage's strip (stage 5). -->
+        <StackPanel Grid.Row="1">
+            <InfoBar
+                x:Name="Notice"
+                AutomationProperties.AutomationId="BoardNotice"
+                IsClosable="False"
+                IsOpen="False"
+                Severity="Informational" />
+            <ContentControl
+                x:Name="TriageStrip"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="BoardTriageStrip"
+                IsTabStop="False"
+                Visibility="Collapsed" />
+        </StackPanel>
+
+        <Grid
+            x:Name="ContentHost"
+            Grid.Row="2"
+            SizeChanged="OnContentSizeChanged">
+            <ContentControl
+                x:Name="StyleHost"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
+                IsTabStop="False" />
+            <main:PaneStatusPage
+                x:Name="EmptyPage"
+                AutomationProperties.AutomationId="BoardEmpty"
+                Visibility="Collapsed" />
+            <boards:BoardDetailPanel x:Name="Panel" />
+        </Grid>
+
+        <!-- The window's toasts while the board shows (MainWindow.Mode.cs moves them here). -->
+        <Grid
+            x:Name="ToastLayerGrid"
+            Grid.Row="1"
+            Grid.RowSpan="2" />
+    </Grid>
+</UserControl>

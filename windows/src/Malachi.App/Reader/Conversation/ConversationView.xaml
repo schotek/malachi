@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of ui/data/ui/conversation_view.blp (conversation_page,
+conversation_strip, conversation_layouts); macOS:
+MessageView/ConversationHostViewController.swift (loadView) and
+ConversationStripView.swift. The conversation page of the reading pane
+(docs/plans/chat-view.md §6.1): a folded conversation row of the grouped
+list shows the whole conversation here. Above, a fixed strip that does not
+scroll (D8): its content keeps to the column of the cards and bubbles
+under it (900 wide at most, 16 at the sides, 8 above, 6 below), at the
+trailing end: Collapse All / Expand All of the timeline (fold.go
+FoldAllOffer: small, shown only while the timeline shows and two cards or
+more fold) and the layout toggle (D9), always there while a conversation is
+shown: the chat bubbles icon and the name of the layout a click shows, Show
+as Chat or Show as Thread (Conversation.ChatToggleLabel; its tooltip and
+accessible name follow, set in code), pressed in and tinted with the accent
+colour while the chat shows. Its state is the setting
+conversation-chat-layout's; a click only writes the setting. Below the
+strip, filling the rest, the two layouts of the same conversation, of
+which one shows, added in code (ConversationView.xaml.cs): the timeline
+(ConversationTimelineView, the default) and the chat (ConversationChatView).
+Over them, the link under the pointer in any card of the timeline at the
+bottom left (an OSD caption, plain text, cut in the middle) and the spinner
+while the members load. The quick-reply bar under the chat is the reading
+pane's (MessageView, docs/plans/chat-view.md §12), under this page as under
+the page of a single message.
+-->
+<UserControl
+    x:Class="Malachi.App.Reader.Conversation.ConversationView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    AutomationProperties.AutomationId="ConversationPage"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Reader/Conversation/ConversationStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- conversation_strip: Collapse All / Expand All and the layout toggle. -->
+        <Grid
+            x:Name="Strip"
+            MaxWidth="900"
+            Padding="16,8,16,6">
+            <StackPanel
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                Spacing="12">
+                <!-- Collapse All / Expand All; its text is set in code. -->
+                <HyperlinkButton
+                    x:Name="FoldAllButton"
+                    Padding="4,1,4,1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ConversationFoldAll"
+                    Click="OnFoldAllClick"
+                    FontSize="12"
+                    Visibility="Collapsed" />
+                <!-- The layout toggle; its label, tooltip and name are set in
+                     code. Checked, the accent tint (ConversationChatToggle.xaml,
+                     shared with the board's conversation block). -->
+                <ToggleButton
+                    x:Name="ChatToggle"
+                    AutomationProperties.AutomationId="ConversationChatToggle"
+                    Click="OnChatToggleClick"
+                    Style="{StaticResource ConversationChatToggleStyle}">
+                    <ToggleButton.Resources>
+                        <ResourceDictionary>
+                            <ResourceDictionary.MergedDictionaries>
+                                <ResourceDictionary Source="ms-appx:///Reader/Conversation/ConversationChatToggle.xaml" />
+                            </ResourceDictionary.MergedDictionaries>
+                        </ResourceDictionary>
+                    </ToggleButton.Resources>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon
+                            x:Name="ChatToggleGlyph"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="12" />
+                        <TextBlock x:Name="ChatToggleText" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+            </StackPanel>
+        </Grid>
+
+        <!-- conversation_layouts: the timeline and the chat, added in code. -->
+        <Grid x:Name="Layouts" Grid.Row="1" />
+
+        <!-- conversation_status: the link under the pointer. -->
+        <Border
+            x:Name="StatusBox"
+            Grid.Row="1"
+            Margin="6,0,0,6"
+            Padding="6,2,6,2"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Background="#B3000000"
+            CornerRadius="4"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <TextBlock
+                x:Name="StatusText"
+                MaxWidth="560"
+                FontSize="12"
+                Foreground="White"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+        </Border>
+
+        <!-- conversation_spinner. -->
+        <ProgressRing
+            x:Name="Spinner"
+            Grid.Row="1"
+            Width="32"
+            Height="32"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="{l:T Msgid='Loading the message', Context='accessibility'}"
+            IsActive="False"
+            Visibility="Collapsed" />
+    </Grid>
+</UserControl>

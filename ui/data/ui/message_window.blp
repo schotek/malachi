@@ -1,0 +1,649 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// Stand-alone message window, opened by double-clicking (or Enter on) a row
+// in the message list. Object IDs are looked up from
+// ui/internal/window/message_window.go; keep them in sync.
+Adw.Window message_window {
+  default-width: 820;
+  default-height: 620;
+  width-request: 360;
+  height-request: 294;
+  focus-widget: message_scroller;
+
+  // eWay-CRM's button moves into More Actions in a narrow window
+  // (window/crm_actions.go), as in the main window.
+  Adw.Breakpoint {
+    condition ("max-width: 600sp")
+
+    setters {
+      crm_slot.visible: false;
+    }
+  }
+
+  // Capture phase: the HTML view would otherwise take the key first.
+  ShortcutController {
+    propagation-phase: capture;
+
+    Shortcut {
+      trigger: "Escape";
+      action: "action(window.close)";
+    }
+  }
+
+  content: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      title-widget: Adw.WindowTitle window_title {
+        title: _("Message");
+      };
+
+      [start]
+      Button reply_button {
+        icon-name: "mail-reply-sender-symbolic";
+        tooltip-text: _("Reply");
+      }
+
+      [start]
+      Button reply_all_button {
+        icon-name: "mail-reply-all-symbolic";
+        tooltip-text: _("Reply All");
+      }
+
+      [start]
+      Button forward_button {
+        icon-name: "mail-forward-symbolic";
+        tooltip-text: _("Forward");
+      }
+
+      // [end] packs right to left: the first child is rightmost. The
+      // buttons are wired from Go (no win.* actions in this window); the
+      // menu items use the window-local "msg" action group.
+
+      [end]
+      MenuButton message_menu {
+        icon-name: "view-more-symbolic";
+        tooltip-text: _("More Actions");
+        menu-model: message_menu_model;
+      }
+
+      // The Assistant (ui/internal/assistant): icon, tooltip, menu and
+      // visibility come from Go (window/assistant.go).
+      [end]
+      MenuButton assistant_button {
+        visible: false;
+      }
+
+      [end]
+      ToggleButton star_button {
+        icon-name: "non-starred-symbolic";
+        tooltip-text: _("Star");
+      }
+
+      // eWay-CRM (window/crm_actions.go, ui/internal/crm): a group of its
+      // own between Archive/Trash and the Star. crm_button saves (its
+      // spinner while a save runs), crm_menu_button once saved opens Open
+      // in eWay-CRM, Edit Links… and Remove from eWay-CRM; icons, tooltips,
+      // menu and visibility come from Go, the gaps on both sides are the
+      // buttons' margins. Below the narrow breakpoint the slot hides and More
+      // Actions keeps the same items.
+      [end]
+      Box crm_slot {
+        Button crm_button {
+          visible: false;
+          // Flat as the header bar's own buttons: inside the slot's Box the
+          // bar's CSS for its direct children does not reach them.
+          has-frame: false;
+          margin-start: 12;
+          margin-end: 12;
+
+          child: Box {
+            Image crm_button_icon {}
+
+            Adw.Spinner crm_button_spinner {
+              visible: false;
+            }
+          };
+        }
+
+        MenuButton crm_menu_button {
+          visible: false;
+          // Flat as the header bar's own buttons: inside the slot's Box the
+          // bar's CSS for its direct children does not reach them.
+          has-frame: false;
+          margin-start: 12;
+          margin-end: 12;
+
+          child: Box {
+            spacing: 2;
+
+            Image crm_menu_icon {}
+
+            Image {
+              icon-name: "object-select-symbolic";
+            }
+          };
+        }
+      }
+
+      // Archive and Trash, then eWay-CRM's group, then Star, the Assistant and More
+      // Actions: the gap is the trash button's margin. Mark as Junk has no
+      // button (More Actions and the J shortcut).
+      [end]
+      Button trash_button {
+        icon-name: "user-trash-symbolic";
+        tooltip-text: _("Move to Trash");
+        margin-end: 12;
+      }
+
+      [end]
+      Button archive_button {
+        icon-name: "folder-download-symbolic";
+        tooltip-text: _("Archive");
+      }
+    }
+
+    // Delivery state of a message in the outbox (title and button set from
+    // Go, see window/outbox.go); hidden otherwise.
+    [top]
+    Adw.Banner outbox_banner {
+      revealed: false;
+    }
+
+    // Bulk mail strip (window/bulk.go, ui/internal/bulkmail): what kind of
+    // bulk message this is, and the button that unsubscribes. A warning
+    // style in the junk folder. Plain text only.
+    [top]
+    Box bulk_bar {
+      orientation: horizontal;
+      spacing: 12;
+      visible: false;
+
+      styles [
+        "toolbar",
+        "remote-bar",
+        "bulk-bar",
+      ]
+
+      Image bulk_icon {
+        icon-name: "mail-send-symbolic";
+        valign: center;
+      }
+
+      Label bulk_label {
+        xalign: 0;
+        wrap: true;
+        wrap-mode: word_char;
+        hexpand: true;
+      }
+
+      Button bulk_action {
+        use-underline: true;
+        visible: false;
+      }
+    }
+
+    // A message saved in eWay-CRM (window/crm_bar.go, crm.BarFor): the
+    // check mark, "Saved in eWay-CRM", the linked items' names, the
+    // private hint, and Open in eWay-CRM. Plain text only.
+    [top]
+    Box crm_bar {
+      orientation: horizontal;
+      spacing: 12;
+      visible: false;
+
+      styles [
+        "toolbar",
+        "remote-bar",
+        "crm-bar",
+      ]
+
+      Image {
+        icon-name: "object-select-symbolic";
+        valign: center;
+      }
+
+      Box {
+        orientation: vertical;
+        spacing: 1;
+        hexpand: true;
+        valign: center;
+
+        Label crm_bar_title {
+          xalign: 0;
+          wrap: true;
+          wrap-mode: word_char;
+        }
+
+        Label crm_bar_names {
+          xalign: 0;
+          wrap: true;
+          wrap-mode: word_char;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        Label crm_bar_note {
+          xalign: 0;
+          wrap: true;
+          visible: false;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+      }
+
+      Button crm_bar_open {
+        valign: center;
+        visible: false;
+      }
+    }
+
+    // Remote images the sanitiser removed (window/remote.go): the count and
+    // the two ways of loading them; the spinner while they load.
+    [top]
+    Box remote_bar {
+      orientation: horizontal;
+      spacing: 12;
+      visible: false;
+
+      styles [
+        "toolbar",
+        "remote-bar",
+      ]
+
+      Adw.Spinner remote_spinner {
+        visible: false;
+        valign: center;
+      }
+
+      Label remote_label {
+        xalign: 0;
+        wrap: true;
+        hexpand: true;
+      }
+
+      Button remote_load {
+        label: _("Load _Images");
+        use-underline: true;
+      }
+
+      Button remote_trust {
+        label: _("Always From This _Sender");
+        use-underline: true;
+        tooltip-text: _("Load remote images now and whenever this sender writes");
+      }
+    }
+
+    // Pictures the HTML shows that are kept on the mail server only
+    // (window/remote.go): the count and the button that downloads them; the
+    // spinner while they download. Under remote_bar when both apply.
+    [top]
+    Box pictures_bar {
+      orientation: horizontal;
+      spacing: 12;
+      visible: false;
+
+      styles [
+        "toolbar",
+        "remote-bar",
+      ]
+
+      Adw.Spinner pictures_spinner {
+        visible: false;
+        valign: center;
+      }
+
+      Label pictures_label {
+        xalign: 0;
+        wrap: true;
+        hexpand: true;
+      }
+
+      Button pictures_download {
+        label: _("_Download Pictures");
+        use-underline: true;
+      }
+    }
+
+    // The headers stay put; the body below scrolls on its own (a WebKit
+    // view scrolls itself and would have no height inside a scrolled
+    // window).
+    content: Adw.ToastOverlay toast_overlay {
+      child: Box {
+        orientation: vertical;
+
+        Adw.Clamp {
+          maximum-size: 900;
+          // Equal to the maximum: min(width, 900), the width htmlview's
+          // baseCSS gives an HTML body, so its text lines up with these.
+          tightening-threshold: 900;
+
+          child: Box {
+            orientation: vertical;
+            spacing: 12;
+            margin-start: 24;
+            margin-end: 24;
+            margin-top: 24;
+
+            // The invitation card of a message with a calendar part
+            // (window/invitation_card.go), built from Go; hidden without one,
+            // the slot with it (message_view.go).
+            Box invitation_card_slot {
+              orientation: vertical;
+            }
+
+            // The issue card of a Jira message (window/issue_card.go), built
+            // from Go; hidden for mail, the slot with it (message_view.go), so
+            // that it takes no spacing above the subject.
+            Box issue_card_slot {
+              orientation: vertical;
+            }
+
+            Label message_subject {
+              xalign: 0;
+              wrap: true;
+              selectable: true;
+
+              styles [
+                "title-2",
+              ]
+            }
+
+            // Sender and recipients as chips, built from Go
+            // (window/addresses.go); a row without addresses is hidden.
+            Grid message_addresses {
+              column-spacing: 12;
+              row-spacing: 6;
+
+              Label message_from_label {
+                label: _("From");
+                xalign: 0;
+                valign: start;
+
+                layout {
+                  column: 0;
+                  row: 0;
+                }
+
+                styles [
+                  "dim-label",
+                  "address-label",
+                ]
+              }
+
+              Adw.WrapBox message_from {
+                child-spacing: 4;
+                line-spacing: 4;
+                hexpand: true;
+
+                layout {
+                  column: 1;
+                  row: 0;
+                }
+              }
+
+              Label message_to_label {
+                label: _("To");
+                xalign: 0;
+                valign: start;
+                visible: false;
+
+                layout {
+                  column: 0;
+                  row: 1;
+                }
+
+                styles [
+                  "dim-label",
+                  "address-label",
+                ]
+              }
+
+              Adw.WrapBox message_to {
+                child-spacing: 4;
+                line-spacing: 4;
+                hexpand: true;
+                visible: false;
+
+                layout {
+                  column: 1;
+                  row: 1;
+                }
+              }
+
+              Label message_cc_label {
+                label: _("Cc");
+                xalign: 0;
+                valign: start;
+                visible: false;
+
+                layout {
+                  column: 0;
+                  row: 2;
+                }
+
+                styles [
+                  "dim-label",
+                  "address-label",
+                ]
+              }
+
+              Adw.WrapBox message_cc {
+                child-spacing: 4;
+                line-spacing: 4;
+                hexpand: true;
+                visible: false;
+
+                layout {
+                  column: 1;
+                  row: 2;
+                }
+              }
+            }
+
+            Label message_date {
+              xalign: 0;
+
+              styles [
+                "caption",
+                "dim-label",
+              ]
+            }
+
+            // Attachment chips, built from Go (window/attachments.go);
+            // hidden without any.
+            Adw.WrapBox message_attachments {
+              child-spacing: 6;
+              line-spacing: 6;
+              visible: false;
+            }
+
+            // Why only the plain text is shown; hidden otherwise.
+            Label body_hint {
+              xalign: 0;
+              wrap: true;
+              visible: false;
+
+              styles [
+                "caption",
+                "dim-label",
+              ]
+            }
+
+            Separator {}
+          };
+        }
+
+        // "text": the plain-text body; "html": the sanitised HTML in a
+        // WebKit view appended from Go (window/message_view.go).
+        Stack body_stack {
+          vexpand: true;
+          // Each page its own height: the text and HTML pages take what their
+          // body needs while it fits (window/message_view_fit.go).
+          vhomogeneous: false;
+
+          StackPage {
+            name: "text";
+
+            child: ScrolledWindow message_scroller {
+              hscrollbar-policy: never;
+              propagate-natural-height: true;
+              // Receives the initial focus (see focus-widget on the window)
+              // so the selectable subject label is not focused and
+              // select-all'd on open.
+              focusable: true;
+
+              child: Adw.Clamp {
+                maximum-size: 900;
+                tightening-threshold: 900;
+
+                child: Label message_body {
+                  xalign: 0;
+                  yalign: 0;
+                  wrap: true;
+                  wrap-mode: word_char;
+                  selectable: true;
+                  vexpand: true;
+                  margin-start: 24;
+                  margin-end: 24;
+                  margin-top: 12;
+                  margin-bottom: 24;
+                  // Zoom and font come from ui/internal/style.
+                  styles [
+                    "message-body",
+                  ]
+                };
+              };
+            };
+          }
+
+          StackPage {
+            name: "loading";
+
+            child: Adw.Spinner body_spinner {
+              halign: center;
+              valign: center;
+              width-request: 32;
+              height-request: 32;
+
+              accessibility {
+                label: C_("accessibility", "Loading the message");
+              }
+            };
+          }
+
+          StackPage {
+            name: "html";
+
+            // html_scroll holds the view at its document's height while that
+            // fits (no scrollbar of its own, and no minimum height, so the window
+            // may still shrink); html_probe tells Go the room the page has.
+            child: Overlay {
+              child: ScrolledWindow html_scroll {
+                hscrollbar-policy: never;
+                vscrollbar-policy: external;
+                propagate-natural-height: true;
+
+                child: Box html_slot {
+                  orientation: vertical;
+                };
+              };
+
+              [overlay]
+              DrawingArea html_probe {
+                can-target: false;
+              }
+            };
+          }
+        }
+
+        // The "•••" under the body (window/quoted.go): shows or hides the
+        // quoted history the daemon cut from it; hidden while there is
+        // nothing to offer. Right under the body, whose area takes no more
+        // room than the body needs (window/message_view_fit.go): after its
+        // last line, or at the bottom when the body scrolls. Its
+        // face, tooltip and accessible name come from Go.
+        Adw.Clamp quoted_row {
+          maximum-size: 900;
+          tightening-threshold: 900;
+          visible: false;
+
+          child: Box {
+            margin-start: 24;
+            margin-end: 24;
+            margin-top: 4;
+            margin-bottom: 8;
+
+            Button quoted_button {
+              halign: start;
+
+              styles [
+                "quoted-text",
+              ]
+            }
+          };
+        }
+
+        // The room under a body that needs less than the page has; hidden
+        // while the body area takes it all (window/message_view_fit.go).
+        Box body_filler {
+          vexpand: true;
+          visible: false;
+        }
+      };
+    };
+  };
+}
+
+menu message_menu_model {
+  // Mark as Junk has no header button; disabled where the message has no
+  // junk folder to go to (message_window.go).
+  section {
+    item {
+      label: _("Mark as Junk");
+      action: "msg.junk";
+    }
+  }
+
+  section {
+    item {
+      label: _("Mark as _Unread");
+      action: "msg.mark-unread";
+    }
+
+    item {
+      label: _("Mark as _Read");
+      action: "msg.mark-read";
+    }
+  }
+
+  section {
+    item {
+      label: _("Load _Images");
+      action: "msg.load-images";
+    }
+
+    item {
+      label: _("Always Load Images From This _Sender");
+      action: "msg.trust-sender";
+    }
+  }
+
+  // The status of a Jira issue: pops up the Change Status menu of the
+  // issue card (window/issue_card.go); only where the account changes
+  // statuses.
+  section {
+    item {
+      label: _("Change Status");
+      action: "msg.change-status";
+      hidden-when: "action-disabled";
+    }
+  }
+}

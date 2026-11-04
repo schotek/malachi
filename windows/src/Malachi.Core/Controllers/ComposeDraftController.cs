@@ -1,0 +1,1462 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiCore/Controllers/ComposeDraftController.swift
+// (composeRichText, ComposeDraftController); GTK: ui/internal/compose/draft.go
+// (richText, autosaveDelay, editorChanged, markDirty, refreshStatus,
+// draftStatus, build, save, saveFailed, commentSaveFailure, send, queue,
+// queuedText, deleteDraft, discard, closeRequest, cleanup, closesUnasked,
+// emptyComment, deletesOnClose). A comment on an issue
+// (IComposeForm.IsComment) goes through it too, with the differences of
+// GTK's comment branches: a comment with text is kept on close as an
+// e-mail's draft is (the issue's draft card shows it), only an empty one
+// goes with the window.
+//
+// The lifecycle of the draft behind a compose window, without the widgets:
+// the window is reached through IComposeForm, the daemon through the
+// client. Two things macOS keeps in its AppKit window live here, as GTK
+// keeps them in draft.go: the flush echo (flushEcho, editorChanged; the
+// window forwards the editor's Changed to EditorChanged, and the save's
+// flush records what it reported), and the autosave timer on an injected
+// TimeProvider. One more thing is a Windows addition (docs/windows-port.md
+// §0): SaveForQuitAsync, which saves a dirty draft on Quit without asking
+// and says whether that went through, so that the app asks only when it did
+// not. It flushes the editor first, which GTK and macOS never do outside a
+// save, so the echo needs two baselines they do without: what the page
+// reports when it becomes ready (EditorReady; the page serialises the loaded
+// body its own way), and, for Quit's flush, the content the editor had
+// already reported, when the flush reports it unchanged.
+//
+// The window's part (phase E): it forwards the editor's Ready and Changed
+// to EditorReady and EditorChanged, and its paste of Markdown to
+// PasteMarkdown (draft.markdown), runs CloseRequestAsync on a close, and
+// once it really closes (Cleanup has run) calls ComposeController.Remove
+// with its handle, as GTK's cleanup calls Manager.remove.
+//
+// Every call is fired as GTK and Swift fire it, to its end even when the
+// window closes meanwhile (GTK: "a closed window does not cancel a save in
+// flight"): ControllerScope.PerformPastClose, whose outcome is dropped once
+// Cleanup closed the scope (Swift's closed guard).
+//
+// The board's owner (DraftOwner.Board; Swift's owner branches and
+// onLost, discardStored, onSendFailed, lost, finish, settle, abandon,
+// editorReady, refetchVersion, markLost, sendAnswered; GTK draft.go's
+// OwnerBoard branches, closesUnasked, deletesOnClose, discardBoard,
+// editorReady, refetchVersion, markLost, finish, settle, settleLoop,
+// sendAnswered, abandon; the pane is ui/internal/compose/pane_board.go): a
+// board case's suggested reply edited inline. Swift's pane drops the
+// changed of a flush, and the window here forwards every Changed to
+// EditorChanged, so SettleAsync's flush records its report as the echo, as
+// a save's flush does: only the two reads of the editor around it (once
+// EditorReady learned the editor's own rendering) or the body of the last
+// save decide whether there is anything to save, never a draft.save without
+// a real change (the daemon takes every save of a linked suggestion as the
+// user's edit). Swift's finish and settle are FinishAsync and SettleAsync.
+//
+// The user's own text a window starts with (ComposeParams.OwnHtml, the
+// chat's quick-reply bar; Swift's ownTextPending and
+// editorLoaded(ownText:), GTK pane.go's loadEditor and editorLoaded):
+// the form sets OwnTextPending before it loads the editor, and its Ready
+// goes to EditorLoaded, which is EditorReady and, the first time with own
+// text, marks the draft dirty behind the same flush, so that the autosave
+// and the question on close apply as after typing.
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Malachi.Core.Api;
+using Malachi.Core.Compose;
+using Malachi.Core.Controllers.Infrastructure;
+using Malachi.Core.Html;
+using Malachi.Core.I18n;
+using Malachi.Core.IssueTrackers;
+using Malachi.Core.Settings;
+using Malachi.Core.Text;
+using Malachi.Core.Transport;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Malachi.Core.Controllers;
+
+/// <summary>
+/// compose/draft.go: autosave, <see cref="Build"/>, <see cref="Save"/>,
+/// <see cref="SaveFailed"/>, <see cref="Send"/>, <see cref="Discard"/>,
+/// <see cref="CloseRequestAsync"/> and <see cref="Cleanup"/> over an
+/// <see cref="IComposeForm"/>. Created by its window on the UI thread and
+/// UI-thread-affine (docs/windows-port.md §7.1).
+/// </summary>
+public sealed partial class ComposeDraftController : ObservableObject, IDisposable
+{
+    /// <summary>
+    /// compose.richText: whether the editor's HTML is transmitted with the
+    /// draft. The backend sanitises it in compose mode and derives the text
+    /// alternative, so the formatting toolbar and inline images are on.
+    /// </summary>
+    public const bool RichText = true;
+
+    /// <summary>
+    /// compose.autosaveDelay: how long after the first unsaved edit a dirty
+    /// draft is saved (a second edit does not restart the timer).
+    /// </summary>
+    public static readonly TimeSpan AutosaveDelay = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How long <see cref="SaveForQuitAsync"/> waits for the editor to
+    /// report its content, and for each save on top of <c>draft.save</c>'s
+    /// own timeout: a renderer that hangs, rather than crashes, never answers
+    /// a flush, and Quit must not wait for it for ever.
+    /// </summary>
+    public static readonly TimeSpan QuitFlushTimeout = TimeSpan.FromSeconds(5);
+
+    private readonly RpcClient client;
+    private readonly SettingsStore settings;
+    private readonly Func<bool> placeholder;
+    private readonly CidRegistry registry;
+    private readonly TimeProvider time;
+    private readonly ILogger logger;
+    private readonly ControllerScope scope;
+
+    // What the last save's flush reported (draftState.flushed).
+    private readonly FlushEcho flushed = new();
+
+    // Runs when the in-flight save finishes (pendingAfterSave).
+    private readonly List<Action<Exception?>> pendingAfterSave = [];
+
+    // Settle waiting for a send under way to answer (sendWaiters).
+    private readonly List<TaskCompletionSource> sendWaiters = [];
+
+    // The armed autosave timer; null when none is (Go autosave == 0).
+    private CancellationTokenSource? autosave;
+
+    // Board: the draft.get after a conflict, while it runs (refetch).
+    private Task? refetch;
+
+    // Board: the body of the last draft.save that went through, so
+    // FinishAsync sees an edit the editor reported only with its flush
+    // (lastSavedBody).
+    private string? lastSavedBody;
+
+    // Board: Discard is deleting the stored draft (discarding).
+    private bool discarding;
+
+    // Board: the editor's own rendering of the loaded draft is known
+    // (EditorReady), so what it reports from now on is comparable
+    // (editorRendered).
+    private bool editorRendered;
+
+    // A send is under way and has not answered (sendPending): Draft.Sending
+    // stays set after a success, while the form closes.
+    private bool sendPending;
+
+    // EditorLoaded marked the user's own text (ComposeParams.OwnHtml) as an
+    // edit already (Swift's ownTextMarked): a later Ready (a crash's reload)
+    // does not mark it again, as Go clears Params.OwnHTML.
+    private bool ownTextMarked;
+
+    /// <param name="client">The transport.</param>
+    /// <param name="settings"><c>ConfirmDelete</c> decides whether Discard asks.</param>
+    /// <param name="placeholder">
+    /// Manager.Placeholder: whether the From row lists the placeholder
+    /// identity (the status line says so).
+    /// </param>
+    /// <param name="registry">The <c>cid:</c> registry the inline pictures live in; <see cref="CidRegistry.Shared"/> by default.</param>
+    /// <param name="time">The clock of the autosave and of "Draft saved"; the system's by default.</param>
+    /// <param name="pending">Where the background work is counted (tests wait on it); a tracker of its own by default.</param>
+    /// <param name="logger">Method names and errors only, never mail content.</param>
+    /// <param name="owner">Who keeps the draft (<see cref="DraftOwner"/>); the compose window by default.</param>
+    public ComposeDraftController(
+        RpcClient client,
+        SettingsStore settings,
+        Func<bool> placeholder,
+        CidRegistry? registry = null,
+        TimeProvider? time = null,
+        PendingWork? pending = null,
+        ILogger<ComposeDraftController>? logger = null,
+        DraftOwner owner = DraftOwner.Window)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(placeholder);
+        Owner = owner;
+        this.client = client;
+        this.settings = settings;
+        this.placeholder = placeholder;
+        this.registry = registry ?? CidRegistry.Shared;
+        this.time = time ?? TimeProvider.System;
+        this.logger = logger ?? (ILogger)NullLogger.Instance;
+        scope = new ControllerScope(pending);
+    }
+
+    /// <summary>
+    /// Manager.OnSent: raised with a short message when the window queued a
+    /// message (the window hands it on to <see cref="ComposeController.ReportSent"/>).
+    /// </summary>
+    public event EventHandler<string>? Sent;
+
+    /// <summary>The state of the draft; replaced whole on every change.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCloseWithoutAsking))]
+    public partial DraftState Draft { get; private set; } = new();
+
+    /// <summary>Whether the autosave timer is armed (Go <c>autosave != 0</c>).</summary>
+    [ObservableProperty]
+    public partial bool AutosaveArmed { get; private set; }
+
+    /// <summary>The window; set by the window, which owns the controller.</summary>
+    public IComposeForm? Form { get; set; }
+
+    /// <summary>
+    /// widget.ConfirmDestructive for Discard: heading, body, label, true when
+    /// confirmed. The default confirms, for a window without dialogs.
+    /// </summary>
+    public Func<string, string, string, Task<bool>> ConfirmDiscard { get; set; } = static (_, _, _) => Task.FromResult(true);
+
+    /// <summary>
+    /// The "Save changes to this draft?" question. The default cancels, so a
+    /// window without dialogs stays open.
+    /// </summary>
+    public Func<Task<DraftCloseAnswer>> SaveDraftQuestion { get; set; } = static () => Task.FromResult(DraftCloseAnswer.Cancel);
+
+    /// <summary>Who keeps the draft (<see cref="DraftOwner"/>).</summary>
+    public DraftOwner Owner { get; }
+
+    /// <summary>
+    /// <see cref="DraftOwner.Board"/>: the draft went (<c>draftNotFound</c>
+    /// on a save or a send, or on the <c>draft.get</c> after a conflict). The
+    /// controller has already abandoned itself (<see cref="Abandon"/>); no
+    /// new draft is made.
+    /// </summary>
+    public Action? OnLost { get; set; }
+
+    /// <summary>
+    /// <see cref="DraftOwner.Board"/>: Discard deletes the stored draft
+    /// through this (the host passes <c>board.discardDraft</c>, which also
+    /// unlinks it from the case); null = <c>draft.delete</c>. A failure keeps
+    /// the form open with a toast; <c>draftNotFound</c> is what Discard
+    /// wanted.
+    /// </summary>
+    public Func<AccountId, DraftId, Task>? DiscardStored { get; set; }
+
+    /// <summary>
+    /// Called once a send failed and Send is back (after the form's toast
+    /// saying why); not when the draft was lost (<see cref="OnLost"/>). Null
+    /// for a window, which shows only the toast.
+    /// </summary>
+    public Action? OnSendFailed { get; set; }
+
+    /// <summary><see cref="DraftOwner.Board"/>: the draft was deleted elsewhere.</summary>
+    public bool Lost { get; private set; }
+
+    /// <summary>
+    /// closeRequest's first branch (<see cref="ClosesUnasked"/>): the window
+    /// may go without a question. The board keeps its draft: whoever closes
+    /// it calls <see cref="FinishAsync"/>.
+    /// </summary>
+    public bool CanCloseWithoutAsking => ClosesUnasked(Draft, Owner, IsComment, Form?.EditorText() ?? "");
+
+    /// <summary>The window writes a comment (<see cref="IComposeForm.IsComment"/>).</summary>
+    public bool IsComment => Form?.IsComment ?? false;
+
+    /// <summary>
+    /// The editor is loading the user's own text
+    /// (<see cref="ComposeParams.OwnHtml"/>) and <see cref="EditorLoaded"/>
+    /// has not marked it dirty yet (<see cref="DraftState.OwnTextPending"/>):
+    /// closing asks, so a window closed before its editor reported ready does
+    /// not lose the text the quick-reply bar let go once the window opened.
+    /// The form sets it before it loads the editor (compose/pane.go
+    /// <c>loadEditor</c>); <see cref="EditorLoaded"/> clears it after
+    /// <see cref="MarkDirty"/>.
+    /// </summary>
+    public bool OwnTextPending
+    {
+        get => Draft.OwnTextPending;
+        set
+        {
+            scope.VerifyAccess();
+            Draft = Draft with { OwnTextPending = value };
+        }
+    }
+
+    // The comment holds more than white space and invisible characters (the
+    // editor's last reported text).
+    private bool HasCommentText => !EmptyComment(Form?.EditorText() ?? "");
+
+    /// <summary>
+    /// draft.go <c>closesUnasked</c>, <see cref="CanCloseWithoutAsking"/>'s
+    /// pure core: the board keeps its draft (never asks), a comment with
+    /// nothing in it (<see cref="EmptyComment"/> on <paramref name="text"/>,
+    /// the editor's last reported text) goes unasked unless own text is
+    /// still to be marked (<see cref="DraftState.OwnTextPending"/>), and
+    /// otherwise a comment is kept as an e-mail is: unasked without unsaved
+    /// edits, a save under way or own text still to be marked, its draft card
+    /// in the issue's conversation showing it
+    /// (<see cref="Model.ConversationDraftCard"/>); with them the close asks
+    /// to save it.
+    /// </summary>
+    public static bool ClosesUnasked(DraftState d, DraftOwner owner, bool comment, string text)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        if (d.Discard || owner == DraftOwner.Board)
+        {
+            return true;
+        }
+        if (comment && EmptyComment(text) && !d.OwnTextPending)
+        {
+            return true;
+        }
+        return !d.Dirty && !d.Saving && !d.OwnTextPending;
+    }
+
+    /// <summary>draft.go <c>emptyComment</c>: a comment with nothing in it to post (<see cref="Jira.SendProblem"/>).</summary>
+    public static bool EmptyComment(string? text) => Jira.SendProblem(text ?? "").Length > 0;
+
+    /// <summary>
+    /// draft.go <c>deletesOnClose</c>: whether <see cref="Cleanup"/> deletes
+    /// the saved draft: a window-owned comment's copy goes with the window
+    /// only when nothing is in it (<paramref name="empty"/>, the editor's
+    /// last reported text) and it was not sent or deleted already; otherwise
+    /// it stays as the issue's draft card, as an e-mail's draft stays in
+    /// Drafts. The board keeps its draft always.
+    /// </summary>
+    public static bool DeletesOnClose(DraftState d, DraftOwner owner, bool comment, bool empty)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        return owner == DraftOwner.Window && comment && empty && !d.Discard && d.DraftId is not null;
+    }
+
+    /// <summary>
+    /// The original a reply or forward refers to (compose.go <c>newWindow</c>:
+    /// <c>Params.InReplyTo</c> / <c>Params.Forwarding</c>), and for a comment
+    /// the issue it goes to (<see cref="Compose.ComposeParams.Comment"/>).
+    /// </summary>
+    public void SetOriginal(MessageId? inReplyTo, MessageId? forwarding, DraftComment? comment = null)
+    {
+        scope.VerifyAccess();
+        Draft = Draft with { InReplyTo = inReplyTo, Forwarding = forwarding, Comment = comment };
+    }
+
+    /// <summary>
+    /// The saved draft the window edits (compose.go <c>newWindow</c>:
+    /// <c>Params.DraftID</c>, <c>Version</c>, <c>Replaces</c>): its id and
+    /// version make the saves updates, and a draft opened from the Drafts
+    /// folder is never deleted by closing the window.
+    /// </summary>
+    public void SetOpened(DraftId? draftId, int version, MessageId? replaces, bool fromDrafts)
+    {
+        scope.VerifyAccess();
+        Draft = Draft with { DraftId = draftId, Version = version, Replaces = replaces, ExplicitSave = fromDrafts };
+    }
+
+    // Dirty state and status
+
+    /// <summary>
+    /// editorChanged: the editor's <c>Changed</c>. The one a save's flush
+    /// produces reports what is being saved; only other content is an edit.
+    /// Correct in either order of the flush's answers together with
+    /// <see cref="EditorChannel"/>, which raises <c>Changed</c> only after
+    /// the flush's done has recorded (docs/windows-port.md §6.5).
+    /// </summary>
+    public void EditorChanged()
+    {
+        scope.VerifyAccess();
+        if (Draft.Closed || Form is not { } form || flushed.Echo(form.EditorHtml()))
+        {
+            return;
+        }
+        MarkDirty();
+    }
+
+    /// <summary>
+    /// The editor's <c>Ready</c> (the window forwards it, as it forwards
+    /// <c>Changed</c>), again after every reload of the editor. The page is
+    /// asked for the document it was given, and what it reports is recorded
+    /// as the flush echo: its serialisation of the loaded body need not match
+    /// that body character for character (<c>&amp;#39;</c> comes back as an
+    /// apostrophe), and Quit's flush (<see cref="SaveForQuitAsync"/>, a
+    /// Windows addition) must not take the page's first report of untouched
+    /// content for an edit. GTK and macOS need no such baseline for a window,
+    /// since their pages report only after an input or for a save. An edit
+    /// typed in the few milliseconds before this flush reaches the page would
+    /// be taken for the baseline; the next edit marks the draft dirty with it
+    /// all the same. For the board's owner it is Swift's
+    /// <c>editorReady</c> as well: once this flush answered, the editor's own
+    /// rendering of the loaded draft is known, so <see cref="SettleAsync"/>
+    /// can tell an edit the editor reported only with its flush from that
+    /// normalisation; nothing is saved for it.
+    /// </summary>
+    public void EditorReady() => EditorLoaded(ownText: false);
+
+    /// <summary>
+    /// compose/pane.go <c>editorLoaded</c>: the editor's <c>Ready</c> for
+    /// what it loaded (the window forwards every one, after a crash's reload
+    /// too), <see cref="EditorReady"/>'s flush for every owner.
+    /// <paramref name="ownText"/> says the window started with
+    /// <see cref="ComposeParams.OwnHtml"/>, text the user wrote before the
+    /// window opened (the chat's quick-reply bar; the form passes it only for
+    /// the window layout): the user's edit, not a prefill, so behind the same
+    /// flush the draft is marked dirty as after typing, and the autosave and
+    /// the question on close apply (closing unasked would lose the text,
+    /// which the bar let go once the window opened), and
+    /// <see cref="OwnTextPending"/> is cleared. The flush makes the editor's
+    /// own text known first (a comment whose editor never reported any counts
+    /// as empty and would close unasked), and its report is the echo
+    /// recorded before its <c>Changed</c>, so it is not taken for another
+    /// edit. Once: a later <c>Ready</c> (a crash's reload) does not mark it
+    /// again, as Go clears <c>Params.OwnHTML</c>. Swift calls its
+    /// <c>editorReady</c> for the board's owner only; the Windows window has
+    /// always recorded this baseline for every owner (see
+    /// <see cref="SaveForQuitAsync"/>).
+    /// </summary>
+    public void EditorLoaded(bool ownText)
+    {
+        scope.VerifyAccess();
+        if (Draft.Closed || Form is not { } form)
+        {
+            return;
+        }
+        var mark = ownText && !ownTextMarked;
+        if (mark)
+        {
+            ownTextMarked = true;
+        }
+        editorRendered = false;
+        form.FlushEditor(() =>
+        {
+            // Runs before the Changed of the same report (EditorChannel).
+            if (Draft.Closed)
+            {
+                return;
+            }
+            flushed.Record(form.EditorHtml());
+            editorRendered = true;
+            if (mark)
+            {
+                MarkDirty();
+                Draft = Draft with { OwnTextPending = false };
+            }
+        });
+    }
+
+    /// <summary>
+    /// The editor's <c>paste</c> (<see cref="EditorChannel.PasteRequested"/>):
+    /// plain text that looks like Markdown, which the page holds. The daemon
+    /// renders it (<c>draft.markdown</c>) and <paramref name="done"/> gets
+    /// its sanitised HTML on the UI thread, or null for the text as it is:
+    /// no Markdown after all, too long to ask (<see cref="EditorBridge.AsksForMarkdown"/>),
+    /// refused, a method an older daemon does not know, no daemon. The
+    /// window hands the answer to the page (<see cref="EditorChannel.PastedScript"/>),
+    /// which reports it as typing; nothing is answered once the window closed.
+    /// </summary>
+    public void PasteMarkdown(string text, Action<string?> done)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(done);
+        scope.VerifyAccess();
+        if (Draft.Closed)
+        {
+            return;
+        }
+        if (!EditorBridge.AsksForMarkdown(text))
+        {
+            done(null);
+            return;
+        }
+        scope.Perform(client, API.DraftMarkdown, new DraftMarkdownParams { Text = text }, outcome =>
+        {
+            if (!outcome.TryGetValue(out var result, out var error))
+            {
+                LogCallFailed(logger, API.DraftMarkdown.Name, error!);
+                done(null);
+                return;
+            }
+            done(EditorBridge.PastedHtml(result));
+        });
+    }
+
+    /// <summary>markDirty records an edit and arms the autosave timer.</summary>
+    public void MarkDirty()
+    {
+        scope.VerifyAccess();
+        if (Draft.Closed)
+        {
+            return; // a late report of a window already gone
+        }
+        Draft = Draft with { Dirty = true };
+        RefreshStatus();
+        if (autosave is not null)
+        {
+            return;
+        }
+        var timer = new CancellationTokenSource();
+        var cancelled = timer.Token;
+        autosave = timer;
+        AutosaveArmed = true;
+        scope.RunDetached(async lifetime =>
+        {
+            using var wait = CancellationTokenSource.CreateLinkedTokenSource(lifetime, cancelled);
+            try
+            {
+                await Task.Delay(AutosaveDelay, time, wait.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return; // disarmed, or the window closed
+            }
+            if (cancelled.IsCancellationRequested || !ReferenceEquals(autosave, timer))
+            {
+                return;
+            }
+            autosave = null;
+            AutosaveArmed = false;
+            if (Draft.Dirty && !Draft.Saving)
+            {
+                Save(SaveReason.Autosave);
+            }
+        });
+    }
+
+    private void CancelAutosave()
+    {
+        autosave?.Cancel();
+        autosave = null;
+        AutosaveArmed = false;
+    }
+
+    /// <summary>The status line under the window.</summary>
+    public void RefreshStatus()
+    {
+        scope.VerifyAccess();
+        if (Form is not { } form)
+        {
+            return;
+        }
+        var d = Draft;
+        if (d.Sending)
+        {
+            form.SetStatus(L10n.T("Sending…"));
+        }
+        else if (form.IsComment)
+        {
+            // A comment is saved only against a crash, not as a draft the
+            // user keeps: nothing to say about it (draft.go draftStatus).
+            form.SetStatus("");
+        }
+        else if (d.Saving)
+        {
+            form.SetStatus(L10n.T("Saving draft…"));
+        }
+        else if (d.Dirty)
+        {
+            form.SetStatus(L10n.T("Unsaved changes"));
+        }
+        else if (d.LastSaved is { } saved)
+        {
+            form.SetStatus(L10n.T("Draft saved %s", Format.FormatTime(saved, timeZone: time.LocalTimeZone)));
+        }
+        else if (placeholder())
+        {
+            form.SetStatus(L10n.T("Using placeholder account"));
+        }
+        else
+        {
+            form.SetStatus("");
+        }
+    }
+
+    // Building and saving
+
+    /// <summary>
+    /// build assembles the wire draft from the rows and the editor's last
+    /// content. Call after the editor's flush. Null without a form.
+    /// </summary>
+    public Api.Draft? Build()
+    {
+        scope.VerifyAccess();
+        if (Form is not { } form)
+        {
+            return null;
+        }
+        var (to, cc, bcc, _) = form.Recipients();
+        var d = new Api.Draft
+        {
+            Id = Draft.DraftId,
+            AccountId = form.Account.Id,
+            Version = Draft.Version,
+            To = to,
+            Cc = cc.Count == 0 ? null : cc,
+            Bcc = bcc.Count == 0 ? null : bcc,
+            Subject = form.Subject,
+            TextBody = form.EditorText(),
+            InReplyTo = Draft.InReplyTo,
+            Forwarding = Draft.Forwarding,
+            Replaces = Draft.Replaces,
+        };
+        if (RichText)
+        {
+            d = d with { HtmlBody = form.EditorHtml() };
+        }
+        // A comment has no recipients; of it draft.save reads only the
+        // visibility, and the issue goes back as it came.
+        if (form.IsComment && Draft.Comment is { } comment)
+        {
+            d = d with { Comment = comment with { Visibility = form.CommentVisibility } };
+        }
+        // In draft.save params only the id of an attachment is read.
+        DraftAttachment[] attachments =
+        [
+            .. form.Attachments.Select(a => new DraftAttachment { Id = a.Id, Filename = "", ContentType = "", Size = 0, Inline = false }),
+        ];
+        return d with { Attachments = attachments.Length == 0 ? null : attachments };
+    }
+
+    /// <summary>
+    /// save persists the draft; <paramref name="done"/> (optional) runs with
+    /// the failure, null for a success. A save already in flight queues
+    /// <paramref name="done"/> behind it.
+    /// </summary>
+    public void Save(SaveReason reason, Action<Exception?>? done = null)
+    {
+        scope.VerifyAccess();
+        if (done is not null)
+        {
+            pendingAfterSave.Add(done);
+        }
+        if (Draft.Saving)
+        {
+            return;
+        }
+        CancelAutosave();
+        Draft = Draft with { Saving = true, Dirty = false }; // edits during the call set it again
+        RefreshStatus();
+        if (Form is not { } form)
+        {
+            return;
+        }
+        form.FlushEditor(() =>
+        {
+            // Runs before the Changed of the same report (EditorChannel).
+            flushed.Record(form.EditorHtml());
+            if (Draft.Closed || Build() is not { } wire)
+            {
+                return;
+            }
+            scope.PerformPastClose(
+                async () =>
+                {
+                    var res = await client.CallAsync(API.DraftSave, new DraftSaveParams { Draft = wire }, API.DraftSave.Timeout, CancellationToken.None);
+                    if (Draft.Closed && wire.Comment is not null && Owner == DraftOwner.Window && Draft.ForgetLate)
+                    {
+                        // The window went while a comment was being saved,
+                        // and what it saved is not to be kept (discarded, or
+                        // nothing in it): the copy goes too. The board's copy
+                        // is the case's suggested reply: it stays.
+                        FireOnTheWayOut(API.DraftDelete, new DraftDeleteParams { AccountId = wire.AccountId, DraftId = res.DraftId });
+                    }
+                    return res;
+                },
+                outcome =>
+                {
+                    if (Draft.Closed)
+                    {
+                        return;
+                    }
+                    if (outcome.IsSuccess)
+                    {
+                        lastSavedBody = Body(wire);
+                    }
+                    Saved(reason, outcome);
+                });
+        });
+    }
+
+    private void Saved(SaveReason reason, Outcome<DraftSaveResult> outcome)
+    {
+        Draft = Draft with { Saving = false };
+        Exception? failure = null;
+        if (!outcome.TryGetValue(out var res, out var error))
+        {
+            failure = error!;
+            Draft = Draft with { Dirty = true };
+            SaveFailed(reason, failure);
+        }
+        else
+        {
+            Draft = Draft with
+            {
+                DraftId = res.DraftId,
+                Version = res.Version,
+                Replaces = null,
+                ExplicitSave = Draft.ExplicitSave || reason == SaveReason.Explicit,
+                LastSaved = time.GetUtcNow(),
+                LastError = "",
+            };
+            if (Form is { } form)
+            {
+                var kept = res.Attachments ?? [];
+                if (kept.Count != form.Attachments.Count)
+                {
+                    form.SetAttachments(kept);
+                }
+                var message = BlockedSummary.Text(res.Blocked);
+                if (message.Length > 0)
+                {
+                    form.Toast(message);
+                }
+            }
+        }
+        RefreshStatus();
+        if (Draft.Dirty && autosave is null && failure is null)
+        {
+            MarkDirty(); // edits arrived during the save
+        }
+        RunPending(failure);
+    }
+
+    /// <summary>
+    /// saveFailed: a conflict, or a draft deleted meanwhile, starts over with
+    /// a fresh draft (local wins); a Drafts message to take over that is gone
+    /// is dropped from the next save; an autosave does not nag with the same
+    /// failure every 30 s. The board's owner keeps its draft: a conflict
+    /// saves our text over the stored version (<c>draft.get</c>), a draft
+    /// deleted meanwhile is lost (<see cref="OnLost"/>).
+    /// </summary>
+    public void SaveFailed(SaveReason reason, Exception error)
+    {
+        scope.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(error);
+        if (Owner == DraftOwner.Board && error is RpcException b)
+        {
+            switch (b.Code.Value)
+            {
+                case ErrorCode.Conflict:
+                    // Changed elsewhere: our text wins in the same draft.
+                    RefetchVersion();
+                    return;
+                case ErrorCode.DraftNotFound:
+                    MarkLost();
+                    return;
+            }
+        }
+        if (error is RpcException e)
+        {
+            switch (e.Code.Value)
+            {
+                case ErrorCode.Conflict:
+                    // Local wins: the next save creates a fresh draft with our text.
+                    Draft = Draft with { DraftId = null, Version = 0, Replaces = null };
+                    Form?.Toast(L10n.T("This draft was changed elsewhere; your text will be saved as a new draft"));
+                    return;
+                case ErrorCode.DraftNotFound:
+                    // Deleted meanwhile (its copy went to the Trash): the text
+                    // survives as a new draft, its attachments with it.
+                    Draft = Draft with { DraftId = null, Version = 0, Replaces = null };
+                    Form?.Toast(L10n.T("This draft was removed elsewhere; your text will be saved as a new draft"));
+                    return;
+                case ErrorCode.MessageNotFound when Draft.Replaces is not null:
+                    // The Drafts message it was to take over is gone: save
+                    // without it.
+                    Draft = Draft with { Replaces = null };
+                    MarkDirty();
+                    return;
+            }
+        }
+        if (IsComment)
+        {
+            // A comment is saved to be sent (Send), and otherwise only
+            // against a crash: a failed autosave says nothing and tries again
+            // (draft.go commentSaveFailure).
+            if (reason == SaveReason.Autosave)
+            {
+                LogCommentAutosaveFailed(logger, error);
+                if (autosave is null)
+                {
+                    MarkDirty();
+                }
+                return;
+            }
+            Form?.Toast(RpcErrorText.Text(L10n.T("Sending"), error));
+            return;
+        }
+        var text = RpcErrorText.Text(L10n.T("Saving the draft"), error);
+        if (reason == SaveReason.Autosave)
+        {
+            // Do not nag every 30 s with the same failure (e.g. no backend).
+            if (string.Equals(text, Draft.LastError, StringComparison.Ordinal))
+            {
+                LogAutosaveFailedAgain(logger, error);
+                return;
+            }
+            Draft = Draft with { LastError = text };
+        }
+        Form?.Toast(text);
+        // Retry later.
+        if (autosave is null)
+        {
+            MarkDirty();
+        }
+    }
+
+    // Sending
+
+    /// <summary>
+    /// send validates, saves if needed and queues the message. A comment has
+    /// no recipients; it needs text (<see cref="Jira.SendProblem"/>, checked
+    /// on the editor's current content).
+    /// </summary>
+    public void Send()
+    {
+        scope.VerifyAccess();
+        if (Draft.Sending || Form is not { } form)
+        {
+            return;
+        }
+        var comment = form.IsComment;
+        if (!comment)
+        {
+            var (to, cc, bcc, ok) = form.Recipients();
+            if (!ok)
+            {
+                form.Toast(L10n.T("Fix the highlighted recipients"));
+                return;
+            }
+            if (to.Count + cc.Count + bcc.Count == 0)
+            {
+                form.Toast(L10n.T("Add at least one recipient"));
+                return;
+            }
+        }
+        Draft = Draft with { Sending = true };
+        sendPending = true;
+        form.SetSendEnabled(false);
+        RefreshStatus();
+        if (!comment)
+        {
+            Queue();
+            return;
+        }
+        form.FlushEditor(() =>
+        {
+            // Runs before the Changed of the same report (EditorChannel):
+            // what it reports is the content being sent, not an edit.
+            flushed.Record(form.EditorHtml());
+            if (Draft.Closed)
+            {
+                return;
+            }
+            var problem = Jira.SendProblem(form.EditorText());
+            if (problem.Length > 0)
+            {
+                form.Toast(problem);
+                SendFailed();
+                return;
+            }
+            Queue();
+        });
+    }
+
+    // send's second half (draft.go queue): the explicit save, then
+    // message.send; a failure gives Send back.
+    private void Queue()
+    {
+        Save(SaveReason.Explicit, error =>
+        {
+            if (error is not null || Form is not { } current || Draft.DraftId is not { } draftId)
+            {
+                SendFailed();
+                return;
+            }
+            var parameters = new MessageSendParams { AccountId = current.Account.Id, DraftId = draftId, Version = Draft.Version };
+            scope.PerformPastClose(client, API.MessageSend, parameters, outcome =>
+            {
+                if (Draft.Closed)
+                {
+                    return;
+                }
+                if (!outcome.TryGetValue(out _, out var failure))
+                {
+                    if (Owner == DraftOwner.Board && failure is RpcException { Code.Value: ErrorCode.DraftNotFound })
+                    {
+                        MarkLost();
+                        return;
+                    }
+                    if (failure is RpcException { Code.Value: ErrorCode.Conflict })
+                    {
+                        if (Owner == DraftOwner.Board)
+                        {
+                            Draft = Draft with { Dirty = true };
+                            RefetchVersion();
+                        }
+                        else
+                        {
+                            Draft = Draft with { DraftId = null, Version = 0, Dirty = true };
+                        }
+                    }
+                    Form?.Toast(RpcErrorText.Text(L10n.T("Sending"), failure));
+                    SendFailed();
+                    return;
+                }
+                var comment = IsComment;
+                Draft = Draft with { Discard = true };
+                Sent?.Invoke(this, comment ? Jira.CommentQueued() : L10n.T("Message queued for sending"));
+                Form?.CloseWindow();
+                SendAnswered();
+            });
+        });
+    }
+
+    // send's fail: the button back, the status line with it; the host hears
+    // it (OnSendFailed), and SettleAsync goes on.
+    private void SendFailed()
+    {
+        Draft = Draft with { Sending = false };
+        Form?.SetSendEnabled(true);
+        RefreshStatus();
+        OnSendFailed?.Invoke();
+        SendAnswered();
+    }
+
+    // Discarding and closing
+
+    /// <summary>
+    /// discard drops the draft (after confirmation when the setting is on). A
+    /// draft never saved has no id, but may hold attachments the backend
+    /// imported for it (the template's pictures and files); those are
+    /// released rather than left for the sweep.
+    /// </summary>
+    public void Discard()
+    {
+        scope.VerifyAccess();
+        if (Form is null)
+        {
+            return;
+        }
+        if (!settings.ConfirmDelete || (!Draft.Dirty && Draft.DraftId is null))
+        {
+            DiscardNow();
+            return;
+        }
+        scope.Perform(
+            _ => ConfirmDiscard(L10n.T("Discard this message?"), "", L10n.T("_Discard")),
+            outcome =>
+            {
+                if (!outcome.TryGetValue(out var confirmed, out var error))
+                {
+                    // The dialog could not be shown (another one is open);
+                    // nothing is discarded unasked.
+                    LogConfirmationFailed(logger, error!);
+                    return;
+                }
+                if (confirmed && !Draft.Closed)
+                {
+                    DiscardNow();
+                }
+            });
+    }
+
+    // deleteDraft deletes the stored draft (and with it its copy in the
+    // Drafts folder); the window is closing, so a failure is only logged.
+    private void DeleteDraft()
+    {
+        if (Form is not { } form || Draft.DraftId is not { } id)
+        {
+            return;
+        }
+        FireOnTheWayOut(API.DraftDelete, new DraftDeleteParams { AccountId = form.Account.Id, DraftId = id });
+    }
+
+    private void DiscardNow()
+    {
+        if (Form is not { } form)
+        {
+            return;
+        }
+        if (Owner == DraftOwner.Board && Draft.DraftId is { } stored)
+        {
+            DiscardBoard(form.Account.Id, stored);
+            return;
+        }
+        var accountId = form.Account.Id;
+        if (Draft.DraftId is not null)
+        {
+            DeleteDraft();
+        }
+        else
+        {
+            foreach (var a in form.Attachments)
+            {
+                FireOnTheWayOut(API.AttachmentRemove, new AttachmentRemoveParams { AccountId = accountId, AttachmentId = a.Id });
+            }
+        }
+        Draft = Draft with { Discard = true };
+        form.CloseWindow();
+    }
+
+    /// <summary>
+    /// closeRequest keeps the window open while there are unsaved edits and
+    /// asks what to do with them (<see cref="SaveDraftQuestion"/>). True when
+    /// the window may close now (<see cref="Cleanup"/> has run); false when it
+    /// stays. A comment asks as an e-mail does: its saved draft is the
+    /// issue's draft card (<see cref="Model.ConversationDraftCard"/>).
+    /// </summary>
+    public async Task<bool> CloseRequestAsync()
+    {
+        scope.VerifyAccess();
+        if (CanCloseWithoutAsking)
+        {
+            Cleanup();
+            return true;
+        }
+        switch (await SaveDraftQuestion())
+        {
+            case DraftCloseAnswer.Discard:
+                Draft = Draft with { Discard = true };
+                if (!Draft.ExplicitSave && Draft.DraftId is not null)
+                {
+                    DeleteDraft();
+                }
+                Cleanup();
+                return true;
+            case DraftCloseAnswer.Save:
+                var error = await SaveAsync(SaveReason.Explicit);
+                // On failure the toast is shown and the window stays.
+                if (error is not null || Draft.Closed)
+                {
+                    return false;
+                }
+                Draft = Draft with { Discard = true };
+                Cleanup();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Windows addition (docs/windows-port.md §0, "dirty drafts saved on
+    /// Quit"): saves what the window holds without asking, as the close
+    /// question's Save Draft would, and says whether nothing unsaved is left.
+    /// An edit the editor has not reported yet (its <c>changed</c> is
+    /// debounced) is fetched with a flush first, also while a save is in
+    /// flight (that save's flush may have come before the keystroke); what
+    /// the flush reports unchanged is no edit. A save in flight is waited
+    /// for, and edits that arrived meanwhile are saved after it. True when
+    /// everything is saved, there was nothing to save, or the window is gone
+    /// or being discarded; false when a save failed (its toast is shown) or
+    /// the editor did not answer within <see cref="QuitFlushTimeout"/>: the
+    /// app then asks that window's question (<see cref="CloseRequestAsync"/>),
+    /// and only then. The window stays open either way; closing it is the
+    /// app's next step.
+    /// </summary>
+    public async Task<bool> SaveForQuitAsync()
+    {
+        scope.VerifyAccess();
+        if (Draft.Closed || Draft.Discard || Form is not { } form)
+        {
+            return true;
+        }
+        if (form.IsComment && !HasCommentText)
+        {
+            // Nothing in it: it goes with the window (Cleanup). A comment
+            // with text is saved as an e-mail is, the issue's draft card.
+            return true;
+        }
+        if (!Draft.Dirty)
+        {
+            // Content the editor reports unchanged since its last report (or
+            // since the baseline of EditorReady) is recorded as this flush's
+            // echo before the Changed of the same report arrives
+            // (EditorChannel); new content is an edit and is saved below.
+            // Recording every flush, as a save does, would lose exactly the
+            // edit this flush is for.
+            var before = form.EditorHtml();
+            // The continuation runs after the turn that raised the Changed.
+            var (reported, _) = await WithinAsync<bool>(
+                answer => form.FlushEditor(() =>
+                {
+                    if (!Draft.Closed && string.Equals(form.EditorHtml(), before, StringComparison.Ordinal))
+                    {
+                        flushed.Record(before);
+                    }
+                    answer(true);
+                }),
+                QuitFlushTimeout);
+            if (!reported)
+            {
+                LogQuitTimedOut(logger, "editor flush");
+                return Draft.Closed || Draft.Discard;
+            }
+        }
+        while (!Draft.Closed && !Draft.Discard && (Draft.Dirty || Draft.Saving))
+        {
+            var (saved, error) = await WithinAsync<Exception?>(answer => Save(SaveReason.Explicit, answer), QuitFlushTimeout + API.DraftSave.Timeout);
+            if (!saved)
+            {
+                LogQuitTimedOut(logger, API.DraftSave.Name);
+                return Draft.Closed || Draft.Discard;
+            }
+            if (error is not null)
+            {
+                return Draft.Closed;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// cleanup runs when the window really closes: late replies are dropped,
+    /// the autosave is disarmed, the inline pictures forgotten. Idempotent. A
+    /// save whose outcome is still awaited (the close question's) is answered
+    /// with a cancellation so nobody waits for ever. A window-owned comment's
+    /// saved copy goes with the window only when nothing is in it
+    /// (<see cref="DeletesOnClose"/>); otherwise it stays, the issue's draft
+    /// card. The board keeps its draft always. A <see cref="SettleAsync"/>
+    /// waiting for a send goes on.
+    /// </summary>
+    public void Cleanup()
+    {
+        scope.VerifyAccess();
+        if (Draft.Closed)
+        {
+            return;
+        }
+        var comment = IsComment;
+        var empty = comment && !HasCommentText;
+        var forgetLate = Owner == DraftOwner.Window && comment && (empty || (Draft.Discard && !Draft.ExplicitSave));
+        if (DeletesOnClose(Draft, Owner, comment, empty))
+        {
+            DeleteDraft();
+        }
+        Draft = Draft with { Closed = true, ForgetLate = forgetLate };
+        CancelAutosave();
+        foreach (var a in Form?.Attachments ?? [])
+        {
+            if (a.Inline && a.ContentId is { } cid)
+            {
+                registry.Unregister(cid);
+            }
+        }
+        scope.Close();
+        RunPending(new OperationCanceledException("the compose window closed"));
+        SendAnswered();
+    }
+
+    /// <summary>The window is gone: <see cref="Cleanup"/>.</summary>
+    public void Dispose() => Cleanup();
+
+    // The board's draft
+
+    /// <summary>
+    /// <see cref="DraftOwner.Board"/>: the form goes (another case selected,
+    /// the board left, the app quits): what was typed is saved first
+    /// (<see cref="SettleAsync"/>), then the controller cleans up. True when
+    /// nothing typed was lost; false when a save failed (the controller stays
+    /// usable, its autosave armed, so the host may keep the form and call
+    /// again) or the draft was lost. Never asks, never deletes. Waits for the
+    /// editor and the daemon without a limit of its own: the caller bounds it.
+    /// </summary>
+    public async Task<bool> FinishAsync()
+    {
+        scope.VerifyAccess();
+        if (Draft.Closed)
+        {
+            return !Draft.Dirty && !Lost;
+        }
+        if (Form is null)
+        {
+            Cleanup();
+            return !Draft.Dirty;
+        }
+        var ok = await SettleAsync();
+        if (ok && !Draft.Closed)
+        {
+            Cleanup();
+        }
+        return ok;
+    }
+
+    /// <summary>
+    /// <see cref="DraftOwner.Board"/>: saves everything typed and leaves the
+    /// controller open (the board's panes decide when it closes). Waits for a
+    /// send under way to answer; flushes the editor and saves while there are
+    /// unsaved edits or a save is under way (a conflict's <c>draft.get</c> is
+    /// awaited and the save retried). True when nothing typed is unsaved (or
+    /// the draft was sent); false when a save failed (the autosave stays
+    /// armed) or the draft was lost. No limit of its own.
+    /// </summary>
+    public async Task<bool> SettleAsync()
+    {
+        scope.VerifyAccess();
+        if (sendPending && !Draft.Closed)
+        {
+            var answered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            sendWaiters.Add(answered);
+            await answered.Task;
+        }
+        if (Draft.Closed)
+        {
+            return !Draft.Dirty && !Lost;
+        }
+        if (Form is not { } form)
+        {
+            return !Draft.Dirty;
+        }
+        // What the editor reported last; the flush may report more. Its
+        // report is recorded as the echo, so its Changed does not mark the
+        // draft dirty (Swift's pane drops it), and the difference is looked
+        // at here: two reads of the editor's own rendering, once EditorReady
+        // learned it (before that EditorHtml is the HTML the editor was
+        // given, which it writes back differently: never an edit).
+        var before = form.EditorHtml();
+        var comparable = editorRendered;
+        var reported = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        form.FlushEditor(() =>
+        {
+            // Runs before the Changed of the same report (EditorChannel).
+            if (!Draft.Closed)
+            {
+                flushed.Record(form.EditorHtml());
+            }
+            reported.TrySetResult();
+        });
+        await reported.Task;
+        if (Draft.Closed)
+        {
+            return !Draft.Dirty && !Lost;
+        }
+        if (comparable && !string.Equals(form.EditorHtml(), before, StringComparison.Ordinal))
+        {
+            // An edit the editor reported only with the flush.
+            Draft = Draft with { Dirty = true };
+        }
+        else if (lastSavedBody is { } saved && Build() is { } wire && !string.Equals(Body(wire), saved, StringComparison.Ordinal))
+        {
+            // Reported by an earlier flush whose save did not carry it.
+            Draft = Draft with { Dirty = true };
+        }
+        for (var i = 0; i < 4; i++)
+        {
+            if (Draft.Closed)
+            {
+                return !Draft.Dirty && !Lost;
+            }
+            if (refetch is { } running)
+            {
+                await running;
+                continue;
+            }
+            if (!Draft.Dirty && !Draft.Saving)
+            {
+                return true;
+            }
+            var error = await SaveAsync(SaveReason.Explicit);
+            if (error is not null && refetch is null)
+            {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Forgets the form without saving or deleting anything: Discard was
+    /// handled by the host, or the draft is gone. Idempotent.
+    /// </summary>
+    public void Abandon()
+    {
+        scope.VerifyAccess();
+        if (Draft.Closed)
+        {
+            return;
+        }
+        Draft = Draft with { Discard = true };
+        // Closing the scope ends a draft.get under way (Swift's
+        // refetch?.cancel()).
+        Cleanup();
+    }
+
+    // The body a save sent: what SettleAsync compares the editor with.
+    private static string Body(Api.Draft d) => d.HtmlBody is { Length: > 0 } html ? html : d.TextBody;
+
+    // Board after a conflict: the stored version from draft.get, then our
+    // text is saved over it (local wins in place). A draft gone meanwhile is
+    // lost; another failure retries with the autosave.
+    private void RefetchVersion()
+    {
+        Draft = Draft with { Dirty = true };
+        if (refetch is not null || Form is not { } form || Draft.DraftId is not { } id)
+        {
+            return;
+        }
+        CancelAutosave();
+        var parameters = new DraftGetParams { AccountId = form.Account.Id, DraftId = id };
+        refetch = scope.Perform(client, API.DraftGet, parameters, outcome =>
+        {
+            refetch = null;
+            if (Draft.Closed)
+            {
+                return;
+            }
+            if (outcome.TryGetValue(out var result, out var error))
+            {
+                Draft = Draft with { Version = result.Draft.Version };
+            }
+            else if (error is RpcException { Code.Value: ErrorCode.DraftNotFound })
+            {
+                MarkLost();
+                return;
+            }
+            else
+            {
+                LogCallFailed(logger, API.DraftGet.Name, error!);
+            }
+            MarkDirty();
+        });
+    }
+
+    // Board: the draft was deleted elsewhere. Nothing is saved again (that
+    // would make a draft no case links); the host hears it.
+    private void MarkLost()
+    {
+        if (Lost || Draft.Closed)
+        {
+            return;
+        }
+        Lost = true;
+        Abandon();
+        OnLost?.Invoke();
+    }
+
+    // Board Discard: the stored draft goes through DiscardStored (or
+    // draft.delete); only then does the form close. A failure says so and
+    // keeps the form, its text and the autosave.
+    private void DiscardBoard(AccountId accountId, DraftId draftId)
+    {
+        if (discarding)
+        {
+            return;
+        }
+        discarding = true;
+        CancelAutosave();
+        var stored = DiscardStored;
+        scope.PerformPastClose(
+            async () =>
+            {
+                try
+                {
+                    if (stored is not null)
+                    {
+                        await stored(accountId, draftId);
+                    }
+                    else
+                    {
+                        await client.CallAsync(API.DraftDelete, new DraftDeleteParams { AccountId = accountId, DraftId = draftId });
+                    }
+                }
+                catch (RpcException e) when (e.Code.Value == ErrorCode.DraftNotFound)
+                {
+                    // Gone already: what Discard wanted.
+                }
+                return true;
+            },
+            outcome =>
+            {
+                discarding = false;
+                if (Draft.Closed)
+                {
+                    return;
+                }
+                if (!outcome.TryGetValue(out _, out var failure))
+                {
+                    Form?.Toast(RpcErrorText.Text(L10n.T("Discarding the draft"), failure));
+                    if (Draft.Dirty && autosave is null)
+                    {
+                        MarkDirty();
+                    }
+                    return;
+                }
+                Draft = Draft with { Discard = true };
+                Form?.CloseWindow();
+            });
+    }
+
+    // The send answered (or the form went): SettleAsync goes on.
+    private void SendAnswered()
+    {
+        sendPending = false;
+        var waiters = sendWaiters.ToArray();
+        sendWaiters.Clear();
+        foreach (var waiter in waiters)
+        {
+            waiter.TrySetResult();
+        }
+    }
+
+    // save with its outcome awaited (Swift's withCheckedContinuation).
+    private Task<Exception?> SaveAsync(SaveReason reason)
+    {
+        var done = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Save(reason, failure => done.TrySetResult(failure));
+        return done.Task;
+    }
+
+    // Starts work, which calls its answer once (on the UI thread), and
+    // waits for that answer or for limit on the controller's clock,
+    // whichever comes first: (true, the answer) or (false, default). What
+    // the work started is left to finish whenever it does. One completion
+    // source for both, whose continuation is posted to the UI thread when
+    // it completes (Task.WaitAsync would add a hop through the thread pool
+    // that nothing tracks).
+    private async Task<(bool Answered, T Value)> WithinAsync<T>(Action<Action<T>> work, TimeSpan limit)
+    {
+        var done = new TaskCompletionSource<(bool, T)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var timer = time.CreateTimer(_ => done.TrySetResult((false, default!)), null, limit, Timeout.InfiniteTimeSpan);
+        work(value => done.TrySetResult((true, value)));
+        return await done.Task;
+    }
+
+    private void RunPending(Exception? failure)
+    {
+        var pending = pendingAfterSave.ToArray();
+        pendingAfterSave.Clear();
+        foreach (var f in pending)
+        {
+            f(failure);
+        }
+    }
+
+    // A mutation fired while the window closes (Swift's detached Task): sent
+    // whatever the window does next, its failure only logged.
+    private void FireOnTheWayOut<TParams, TResult>(RpcMethod<TParams, TResult> method, TParams parameters) =>
+        scope.PerformPastClose(async () =>
+        {
+            try
+            {
+                await client.CallAsync(method, parameters);
+            }
+#pragma warning disable CA1031 // The window is gone; there is nobody left to tell.
+            catch (Exception e)
+#pragma warning restore CA1031
+            {
+                LogCallFailed(logger, method.Name, e);
+            }
+            return true;
+        });
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "comment autosave failed")]
+    private static partial void LogCommentAutosaveFailed(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "autosave failed again")]
+    private static partial void LogAutosaveFailedAgain(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Method} failed")]
+    private static partial void LogCallFailed(ILogger logger, string method, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the discard confirmation failed; nothing was discarded")]
+    private static partial void LogConfirmationFailed(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "saving for quit: {Step} did not finish in time")]
+    private static partial void LogQuitTimedOut(ILogger logger, string step);
+}

@@ -1,0 +1,311 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiMail/Preferences/PreferencesWindowController.swift
+// (show, the pages built at once, windowWillClose); GTK:
+// ui/internal/window/preferences.go (NewPreferences, the closed handler
+// that undoes every binding) and ui/main.go (app.preferences, Ctrl+,).
+//
+// Windows (docs/windows-port.md §0 and §11.3, windows/README.md): one
+// window for the whole app (Show brings it to the front), named
+// Preferences as GTK names it, with no search field; the pages are built
+// when it opens, as GTK builds them, so the General page asks the daemon
+// at once, and the AI page asks the bridge whenever it comes up; the
+// Calendar page (after General, as on macOS) binds this window's calendar
+// source at once, as macOS attaches it, and draws it again whenever it
+// comes up; the Contacts page (after Calendar) lists the accounts and the
+// books whenever it comes up, the Security page (after Contacts) the stored
+// OpenPGP keys. On the
+// General page Windows decides some things (the Run value and the
+// default mail app): the page reads them again whenever it comes up and
+// whenever the window is activated (after a visit to Settings). The
+// Integrations page (after Accounts, as GTK and macOS have it) lists the
+// accounts that are not mail accounts and the services that can be added;
+// a CalDAV row's Edit shows the Calendar page (ShowCalendar). The Rules
+// page (right after it, docs/plans/rules.md R14) lists the mail rules and
+// asks the daemon again whenever it comes up. Ctrl+Up and
+// Ctrl+Down are the window's MoveUp and MoveDown commands, which move the
+// selected account or rule while the Accounts, the Integrations or the
+// Rules list has the focus. Closing the window ends every binding and drops every late reply.
+
+using System;
+using System.IO;
+using Malachi.App.Shell;
+using Malachi.Core.I18n;
+using Malachi.Core.Presentation;
+using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Windows.Graphics;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+
+namespace Malachi.App.Preferences;
+
+/// <summary>The Preferences window.</summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The bindings are disposed when the window closes (Closed).")]
+public sealed partial class PreferencesWindow : Window
+{
+    /// <summary>The window's width the first time it opens, in effective pixels.</summary>
+    public const int DefaultWidth = 880;
+
+    /// <summary>Its height the first time it opens.</summary>
+    public const int DefaultHeight = 680;
+
+    /// <summary>
+    /// The narrowest it gets: the pane shows its icons only below 720, the
+    /// settings cards and the account rows wrap.
+    /// </summary>
+    public const int MinWidth = 480;
+
+    /// <summary>The lowest it gets.</summary>
+    public const int MinHeight = 400;
+
+    private static PreferencesWindow? open;
+
+    private readonly SettingBindings bindings;
+    private readonly AccountsPage accounts;
+    private readonly IntegrationsPage integrations;
+    private readonly RulesPage rules;
+    private readonly GeneralPage general;
+    private readonly CalendarPreferencesPage calendar;
+    private readonly ContactsPreferencesPage contactsPage;
+    private readonly SecurityPage security;
+    private readonly AppearancePage appearance;
+    private readonly AiPage ai;
+
+    private PreferencesWindow(AppState state)
+    {
+        InitializeComponent();
+        Title = L10n.T("Preferences");
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(Header);
+        var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "Malachi.ico");
+        if (File.Exists(icon))
+        {
+            AppWindow.SetIcon(icon);
+        }
+        if (!MicaController.IsSupported())
+        {
+            SolidBackground.Visibility = Visibility.Visible;
+        }
+        bindings = new SettingBindings(state.Settings);
+        Tracked = state.Windows.Track(this, WindowKind.Preferences, Root, ToastsHost);
+
+        // Every page at once, as GTK builds them.
+        accounts = new AccountsPage(state, this, ToastsHost);
+        integrations = new IntegrationsPage(state, this, ToastsHost);
+        rules = new RulesPage(state, this, ToastsHost);
+        general = new GeneralPage(state, bindings, ToastsHost) { HostWindow = this };
+        calendar = new CalendarPreferencesPage(state, this, ToastsHost);
+        contactsPage = new ContactsPreferencesPage(state, this, ToastsHost);
+        security = new SecurityPage(state, this, ToastsHost);
+        appearance = new AppearancePage(state, bindings);
+        ai = new AiPage(state, bindings, ToastsHost, () => this);
+
+        var commands = Tracked.Commands;
+        commands.MoveUp.Handler = () => MoveSelected(-1);
+        commands.MoveUp.CanExecute = CanMove;
+        commands.MoveDown.Handler = () => MoveSelected(1);
+        commands.MoveDown.CanExecute = CanMove;
+
+        Activated += (_, e) =>
+        {
+            if (e.WindowActivationState != WindowActivationState.Deactivated && ReferenceEquals(PageHost.Content, general))
+            {
+                general.Refresh();
+            }
+        };
+        Closed += (_, _) =>
+        {
+            if (ReferenceEquals(open, this))
+            {
+                open = null;
+            }
+            bindings.Dispose();
+            accounts.Close();
+            integrations.Close();
+            rules.Close();
+            general.Close();
+            calendar.Close();
+            contactsPage.Close();
+            security.Close();
+            ai.Close();
+        };
+        // The calendar page works over this window's calendar source from
+        // the start, as macOS attaches it (AppState.StartedCalendarSourceFor).
+        calendar.Refresh();
+        Navigation.SelectedItem = AccountsItem;
+    }
+
+    /// <summary>The window as the shell tracks it.</summary>
+    public TrackedWindow Tracked { get; }
+
+    /// <summary>The Accounts page.</summary>
+    public AccountsPage Accounts => accounts;
+
+    /// <summary>The Integrations page.</summary>
+    public IntegrationsPage Integrations => integrations;
+
+    /// <summary>Shows the AI page (the Assistant menu's "Set Up the Assistant…", app.assistant-setup).</summary>
+    public void ShowAi() => Navigation.SelectedItem = AiItem;
+
+    /// <summary>Shows the Accounts page (the calendar's empty state, Open Preferences).</summary>
+    public void ShowAccounts() => Navigation.SelectedItem = AccountsItem;
+
+    /// <summary>Shows the Integrations page (Jira and CalDAV accounts, the services that can be added).</summary>
+    public void ShowIntegrations() => Navigation.SelectedItem = IntegrationsItem;
+
+    /// <summary>Shows the Rules page (after Integrations; the dev start's prefs-rules).</summary>
+    public void ShowRules() => Navigation.SelectedItem = RulesItem;
+
+    /// <summary>
+    /// Shows the Calendar page (macOS <c>select(.calendar)</c>: the calendar
+    /// page's empty state, the sidebar's Sync a Microsoft 365 Account's
+    /// Calendars…, AppState.ShowCalendarPreferences).
+    /// </summary>
+    public void ShowCalendar() => Navigation.SelectedItem = CalendarItem;
+
+    /// <summary>Shows the Contacts page (the Contacts window's No Address Books, Open Preferences…).</summary>
+    public void ShowContacts() => Navigation.SelectedItem = ContactsItem;
+
+    /// <summary>Shows the Security page (the OpenPGP keys of signed mail).</summary>
+    public void ShowSecurity() => Navigation.SelectedItem = SecurityItem;
+
+    /// <summary>
+    /// Opens the Preferences, or brings the open window to the front
+    /// (app.preferences). Null past Quit's point of no return.
+    /// </summary>
+    public static PreferencesWindow? Show(AppState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (open is { } w)
+        {
+            WindowPresenter.Present(w);
+            return w;
+        }
+        if (state.IsStopping)
+        {
+            return null;
+        }
+        var created = new PreferencesWindow(state);
+        open = created;
+        created.Place(state.Windows.Active?.Window ?? state.MainWindow);
+        WindowPresenter.Present(created);
+        return created;
+    }
+
+    // The default size at the display's scale, centred in the work area of
+    // the display the window it was opened from is on; never smaller than
+    // the minimum.
+    private void Place(Window? near)
+    {
+        var from = near ?? this;
+        var dpi = PInvoke.GetDpiForWindow((HWND)WindowPresenter.Handle(from));
+        var scale = dpi == 0 ? 1.0 : dpi / 96.0;
+        if (AppWindow.Presenter is OverlappedPresenter overlapped)
+        {
+            overlapped.PreferredMinimumWidth = (int)Math.Round(MinWidth * scale);
+            overlapped.PreferredMinimumHeight = (int)Math.Round(MinHeight * scale);
+        }
+        var area = DisplayArea.GetFromWindowId(from.AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var size = new SizeInt32(
+            Math.Min((int)Math.Round(DefaultWidth * scale), area.Width),
+            Math.Min((int)Math.Round(DefaultHeight * scale), area.Height));
+        AppWindow.MoveAndResize(new RectInt32(
+            area.X + ((area.Width - size.Width) / 2), area.Y + ((area.Height - size.Height) / 2), size.Width, size.Height));
+    }
+
+    // Ctrl+Up and Ctrl+Down: the selected row of the shown account page
+    // moves, while its list has the focus.
+    private bool CanMove() =>
+        (ReferenceEquals(PageHost.Content, accounts) && accounts.CanMove)
+        || (ReferenceEquals(PageHost.Content, integrations) && integrations.CanMove)
+        || (ReferenceEquals(PageHost.Content, rules) && rules.CanMove);
+
+    private void MoveSelected(int delta)
+    {
+        if (ReferenceEquals(PageHost.Content, rules))
+        {
+            rules.MoveSelected(delta);
+        }
+        else if (ReferenceEquals(PageHost.Content, integrations))
+        {
+            integrations.MoveSelected(delta);
+        }
+        else
+        {
+            accounts.MoveSelected(delta);
+        }
+    }
+
+    // The pane is its icons only (Auto below 720 px): its button opens it
+    // over the page with the labels. Expanded, the pane has no button and
+    // is open, also after it was closed over the page while compact (the
+    // NavigationView would keep it closed then, measured), once the view
+    // has applied the mode.
+    private void OnNavigationDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
+    {
+        var expanded = args.DisplayMode == NavigationViewDisplayMode.Expanded;
+        Navigation.IsPaneToggleButtonVisible = !expanded;
+        if (expanded)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (Navigation.DisplayMode == NavigationViewDisplayMode.Expanded)
+                {
+                    Navigation.IsPaneOpen = true;
+                }
+            });
+        }
+    }
+
+    private void OnNavigationSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    {
+        UIElement page = ((args.SelectedItem as NavigationViewItem)?.Tag as string) switch
+        {
+            "integrations" => integrations,
+            "rules" => rules,
+            "general" => general,
+            "calendar" => calendar,
+            "contacts" => contactsPage,
+            "security" => security,
+            "appearance" => appearance,
+            "ai" => ai,
+            _ => accounts,
+        };
+        if (ReferenceEquals(PageHost.Content, page))
+        {
+            return;
+        }
+        PageHost.Content = page;
+        if (ReferenceEquals(page, general))
+        {
+            general.Refresh();
+        }
+        else if (ReferenceEquals(page, rules))
+        {
+            // The rules are asked again whenever the page comes up.
+            rules.Refresh();
+        }
+        else if (ReferenceEquals(page, calendar))
+        {
+            calendar.Refresh();
+        }
+        else if (ReferenceEquals(page, contactsPage))
+        {
+            contactsPage.Refresh();
+        }
+        else if (ReferenceEquals(page, security))
+        {
+            // The keys are read whenever the page comes up.
+            security.Refresh();
+        }
+        else if (ReferenceEquals(page, ai))
+        {
+            // The status is asked whenever the page comes up.
+            ai.Refresh();
+        }
+    }
+}

@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Windows-only file (docs/plans/toolbar-customization.md T13, §17.2): the
+content of the Customize Toolbar dialog, the view of Core's ToolbarEditor
+(ui/internal/toolbaredit); GTK: its toolbar editor dialog. The toolbar
+chooser (Mail, Board – List, Board – Columns and Today, Calendar); the
+list of the chosen toolbar's sections, each heading followed by its rows
+(the drag handle, the item's label over "Hidden while unavailable" for an
+item whose feature is missing); under it Remove, Add Item… (the items the
+selected row's section may take, then Space and Flexible Space) and
+Restore Defaults, which asks in its flyout first. A row is dragged by its
+handle (ListView's own insertion gap) or moved with Ctrl+Up and Ctrl+Down,
+only where the toolbar allows it (a refused drop puts it back); Delete
+removes the selected row. Every change is written at once.
+-->
+<UserControl
+    x:Class="Malachi.App.Toolbars.ToolbarEditorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:res="using:Malachi.App.Resources"
+    xmlns:toolbars="using:Malachi.App.Toolbars"
+    IsTabStop="False">
+    <Grid Width="440" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ComboBox
+            x:Name="BarChooser"
+            HorizontalAlignment="Stretch"
+            AutomationProperties.AutomationId="ToolbarEditorBar"
+            SelectionChanged="OnBarChosen" />
+
+        <ListView
+            x:Name="RowList"
+            Grid.Row="1"
+            Height="380"
+            AllowDrop="True"
+            AutomationProperties.AutomationId="ToolbarEditorRows"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CanDragItems="True"
+            CanReorderItems="True"
+            CornerRadius="{ThemeResource ControlCornerRadius}"
+            DragItemsCompleted="OnDragItemsCompleted"
+            DragItemsStarting="OnDragItemsStarting"
+            ItemsSource="{x:Bind Entries}"
+            PreviewKeyDown="OnListPreviewKeyDown"
+            SelectionChanged="OnSelectionChanged"
+            SelectionMode="Single">
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="MinHeight" Value="36" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="toolbars:ToolbarEditorEntry">
+                    <Grid AutomationProperties.Name="{x:Bind Title}" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Grid.ColumnSpan="2"
+                            Margin="0,8,0,2"
+                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                            Text="{x:Bind Title}"
+                            Visibility="{x:Bind HeaderVisibility}" />
+                        <Border
+                            Padding="2,8"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            Tag="DragHandle"
+                            ToolTipService.ToolTip="{l:T Msgid='Drag to reorder, or press Ctrl+Up and Ctrl+Down'}"
+                            Visibility="{x:Bind HandleVisibility}">
+                            <FontIcon
+                                FontSize="16"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="{x:Bind res:Icons.Glyph('list-drag-handle')}" />
+                        </Border>
+                        <StackPanel
+                            Grid.Column="1"
+                            Padding="0,6"
+                            VerticalAlignment="Center"
+                            Visibility="{x:Bind RowVisibility}">
+                            <TextBlock
+                                MaxLines="1"
+                                Style="{StaticResource BodyLabelStyle}"
+                                Text="{x:Bind Title}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                MaxLines="1"
+                                Style="{StaticResource DimCaptionLabelStyle}"
+                                Text="{x:Bind Subtitle}"
+                                TextTrimming="CharacterEllipsis"
+                                Visibility="{x:Bind SubtitleVisibility}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <StackPanel
+            Grid.Row="2"
+            Orientation="Horizontal"
+            Spacing="8">
+            <Button
+                x:Name="RemoveButton"
+                AutomationProperties.AutomationId="ToolbarEditorRemove"
+                Click="OnRemoveClick" />
+            <Button x:Name="AddButton" AutomationProperties.AutomationId="ToolbarEditorAdd">
+                <Button.Flyout>
+                    <MenuFlyout
+                        x:Name="AddMenu"
+                        Opening="OnAddOpening"
+                        Placement="BottomEdgeAlignedLeft" />
+                </Button.Flyout>
+            </Button>
+            <Button x:Name="RestoreButton" AutomationProperties.AutomationId="ToolbarEditorRestore">
+                <Button.Flyout>
+                    <Flyout x:Name="RestoreFlyout">
+                        <StackPanel MaxWidth="320" Spacing="12">
+                            <TextBlock
+                                x:Name="RestoreQuestionText"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                TextWrapping="Wrap" />
+                            <TextBlock x:Name="RestoreBodyText" TextWrapping="Wrap" />
+                            <StackPanel
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <Button
+                                    x:Name="RestoreConfirmButton"
+                                    AutomationProperties.AutomationId="ToolbarEditorRestoreConfirm"
+                                    Click="OnRestoreConfirmClick"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                                <Button
+                                    x:Name="RestoreCancelButton"
+                                    AutomationProperties.AutomationId="ToolbarEditorRestoreCancel"
+                                    Click="OnRestoreCancelClick" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </StackPanel>
+    </Grid>
+</UserControl>

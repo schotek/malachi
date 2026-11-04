@@ -1,0 +1,1672 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiCore/Controllers/ActionsController.swift
+// (ActionsController); GTK: ui/internal/window/actions.go (markRead,
+// markUnread, setSeenIDs, toggleFlagged, setFlaggedIDs, trashFrom, trashIDs,
+// confirmTrash, trackMoves, archiveIDs, junkFrom, junkIDs, moveIDsToRole,
+// moveIDsTo, movable, moveListTo, call, callThen), context_menus.go
+// (markFolderRead, emptyFolder), outbox.go (retryOutbox, cancelSendFrom),
+// remote.go (loadRemoteImages, trustSender, ensureKnownSendersPolicy,
+// downloadPictures), compose_open.go (openCompose, openComposeFrom,
+// openComposeWith, openWith, and the quick-reply bar's halves of openCompose:
+// replyAttribution, prepareReply),
+// drafts.go (openDraft), assistant_panel.go (openSavedDraft, findDraft),
+// selection.go (cancelSends, forwardMessages, openSelection) and
+// conversation_draft.go (editThreadDraft, discardThreadDraft; a Windows
+// addition ahead of Swift); the recording of the moves Undo takes back is
+// undo.go's (ActionsController.Undo.cs).
+//
+// The per-message actions of the main window and the message windows,
+// minus the widgets: an optimistic change in the model and the rows,
+// message.flag / message.move / message.delete in the background, and the
+// change put back on failure. Every action takes a list of messages: one
+// from a message window or a plain row, all the folder members from a
+// conversation row of the grouped list, every message of a selection of
+// several rows (one account, possibly several of its folders in a search:
+// each folder's counts follow its own messages).
+//
+// Swift holds the mailbox, list and cache controllers; here they are the
+// members the actions use (IActionsMailbox, IActionsList, IActionsCache),
+// which those controllers implement. Every RPC runs through the mailbox's
+// ControllerScope, so it starts after the caller's turn and its outcome
+// comes back on the UI thread unless the mailbox closed (Swift
+// mailbox.perform). What needs WinUI is a hook or an event the application
+// installs: the confirmation dialog (Confirm), the compose window
+// (OpenComposeRequested, RaiseDraft), the message windows that follow a
+// removed message (WindowsClose, OpenMessageWindowRequested) and the views
+// that show a star, the seen state or an outbox banner (StarChanged,
+// SeenChanged, OutboxStateChanged). SeenChanged is GTK's refreshSeen, which
+// macOS leaves to AppKit's menu validation; WinUI commands are not asked
+// when a menu opens, so Windows follows GTK (docs/windows-port.md §3). Log
+// lines carry method names and errors only, never subjects or addresses.
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Malachi.Core.Api;
+using Malachi.Core.Compose;
+using Malachi.Core.ContextMenus;
+using Malachi.Core.Controllers.Infrastructure;
+using Malachi.Core.I18n;
+using Malachi.Core.Model;
+using Malachi.Core.Platform;
+using Malachi.Core.Selections;
+using Malachi.Core.Settings;
+using Malachi.Core.Text;
+using Malachi.Core.Transport;
+using Malachi.Core.Undos;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Malachi.Core.Controllers;
+
+/// <summary>
+/// The per-message actions (actions.go and the RPC halves of outbox.go,
+/// remote.go, compose_open.go and drafts.go). Lives and dies with the
+/// mailbox it acts on; UI-thread-affine (docs/windows-port.md §7.1).
+/// </summary>
+public sealed partial class ActionsController
+{
+    /// <summary>The page size of the <c>draft.list</c> calls of <see cref="OpenSavedDraft"/>.</summary>
+    public const int DraftListPageLimit = 500;
+
+    /// <summary>The most pages of <c>draft.list</c> one <see cref="OpenSavedDraft"/> reads.</summary>
+    public const int DraftListMaxPages = 20;
+
+    private readonly Action<string> toast;
+    private readonly ILogger logger;
+
+    // The messages a draft.create or draft.open is being prepared for
+    // (compose_open.go composing): a second click while it runs does
+    // nothing.
+    private readonly HashSet<MessageId> composing = [];
+
+    // The drafts the assistant panel's Open Draft is looking up
+    // (assistant_panel.go findingDrafts).
+    private readonly HashSet<DraftId> findingDrafts = [];
+
+    // The forward of several messages is being prepared (selection.go
+    // forwardingMany): one request at a time.
+    private bool forwardingMany;
+
+    /// <param name="mailbox">The folder half (the model, the badges, the RPC plumbing).</param>
+    /// <param name="list">The list half (the rows).</param>
+    /// <param name="cache">The loaded messages (outbox state, remote images, the compose source).</param>
+    /// <param name="settings"><c>ConfirmDelete</c>.</param>
+    /// <param name="toast">Shows a transient message (the window's toast overlay).</param>
+    /// <param name="logger">Method names and errors only, never mail content.</param>
+    public ActionsController(
+        IActionsMailbox mailbox, IActionsList list, IActionsCache cache, SettingsStore settings, Action<string> toast, ILogger<ActionsController>? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox);
+        ArgumentNullException.ThrowIfNull(list);
+        ArgumentNullException.ThrowIfNull(cache);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(toast);
+        Mailbox = mailbox;
+        List = list;
+        Cache = cache;
+        Settings = settings;
+        this.toast = toast;
+        this.logger = logger ?? (ILogger)NullLogger.Instance;
+    }
+
+    // Hooks and events (the WinUI half)
+
+    /// <summary>
+    /// Swift <c>openCompose</c>: opens a compose window with the prepared
+    /// parameters (compose/manager.go <c>Open</c>).
+    /// </summary>
+    public event EventHandler<ComposeParams>? OpenComposeRequested;
+
+    /// <summary>
+    /// Swift <c>openMessageWindow</c>: opens a message in its own window
+    /// (message_view.go <c>openMessageWindow</c>), a draft when the daemon
+    /// cannot open drafts.
+    /// </summary>
+    public event EventHandler<MessageSummary>? OpenMessageWindowRequested;
+
+    /// <summary>
+    /// Swift <c>onWindowsClose</c>: a message left its folder, its window
+    /// closes (message_view.go <c>closeMessageWindow</c>).
+    /// </summary>
+    public event EventHandler<MessageId>? WindowsClose;
+
+    /// <summary>
+    /// Swift <c>onStarChanged</c>: the flagged state of a message changed,
+    /// every star showing it follows (actions.go <c>refreshStars</c>).
+    /// </summary>
+    public event EventHandler<(MessageId Id, bool Flagged)>? StarChanged;
+
+    /// <summary>
+    /// GTK <c>refreshSeen</c> (actions.go): the seen flag of a message
+    /// changed (from the list, the mark-as-read timer or a message window,
+    /// or back after a refused change), the actions of its message window
+    /// follow (Mark as Read / Mark as Unread, the U key; message_window.go
+    /// <c>setSeen</c>). macOS has no such callback: AppKit asks
+    /// <c>flags(for:)</c> whenever a menu opens, which WinUI commands do not.
+    /// </summary>
+    public event EventHandler<(MessageId Id, bool Seen)>? SeenChanged;
+
+    /// <summary>
+    /// Swift <c>onOutboxStateChanged</c>: the cached delivery state of an
+    /// outbox message changed, every banner showing it follows (outbox.go
+    /// <c>showOutboxState</c>).
+    /// </summary>
+    public event EventHandler<MessageId>? OutboxStateChanged;
+
+    /// <summary>The folder half.</summary>
+    public IActionsMailbox Mailbox { get; }
+
+    /// <summary>The list half.</summary>
+    public IActionsList List { get; }
+
+    /// <summary>The loaded messages.</summary>
+    public IActionsCache Cache { get; }
+
+    /// <summary>The settings (<c>ConfirmDelete</c>).</summary>
+    public SettingsStore Settings { get; }
+
+    /// <summary>
+    /// The confirmation dialog. Without one a destructive action that must
+    /// ask is refused (and logged), never run unasked.
+    /// </summary>
+    public ConfirmDestructive? Confirm { get; set; }
+
+    /// <summary>
+    /// Raises the compose window already editing the draft, if any
+    /// (compose/manager.go <c>FindDraft</c>); true when there was one.
+    /// </summary>
+    public Func<Draft, bool>? RaiseDraft { get; set; }
+
+    // Lookup
+
+    /// <summary>
+    /// What the window knows of message <paramref name="id"/>
+    /// (message_view.go <c>summary</c>): the list's summary, or the cached
+    /// full message's for a message window outliving the folder it was
+    /// opened from, or the user's reply in Sent that a conversation shows
+    /// (<see cref="MailModel.SentMessage"/>; its card's reply and forward).
+    /// </summary>
+    public MessageSummary? Summary(MessageId id) =>
+        Mailbox.Model.Message(id)?.Summary ?? Cache.Summary(id) ?? Mailbox.Model.SentMessage(id);
+
+    // The known ones of the given messages, in order (actions.go summaries).
+    private List<MessageSummary> Summaries(IEnumerable<MessageId> ids) => [.. ids.Select(Summary).OfType<MessageSummary>()];
+
+    // The ids split by their messages' accounts when they belong to more than
+    // one (a selection of the All Inboxes list, decision U2: every message
+    // method takes one account, so the action runs one call per account,
+    // Unified.GroupByAccount); null for the ids of a single account, which
+    // the callers handle as before.
+    private List<List<MessageId>>? SplitByAccount(IReadOnlyList<MessageId> ids)
+    {
+        var known = Summaries(ids);
+        if (!Unified.Mixed(known, s => s.AccountId))
+        {
+            return null;
+        }
+        return [.. Unified.GroupByAccount(known, s => s.AccountId).Select(g => g.Items.Select(s => s.Id).ToList())];
+    }
+
+    /// <summary>
+    /// Swift <c>actionFlags(for:)</c>: what the per-message buttons and
+    /// commands allow for the selected row (actions.go
+    /// <c>setMessageActionsSensitive</c>).
+    /// </summary>
+    public ActionFlags ActionFlagsFor(ListRow? row) =>
+        ActionRules.MessageActionState(row, Mailbox.Model);
+
+    /// <summary>Swift <c>flags(for:)</c>: <see cref="ActionFlagsFor"/> for a single message (a message window's commands).</summary>
+    public ActionFlags FlagsFor(MessageSummary s)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return ActionFlagsFor(new ListRow { Key = new ListKey(Message: s.Id), Message = s });
+    }
+
+    // Seen
+
+    /// <summary>
+    /// Sets the seen flag on message <paramref name="id"/> (actions.go
+    /// <c>markRead</c>; the mark-as-read timer's target). A message read
+    /// already is left alone.
+    /// </summary>
+    public void MarkRead(MessageId id) => SetSeen([id], true);
+
+    /// <summary>Clears the seen flag on message <paramref name="id"/> (actions.go <c>markUnread</c>).</summary>
+    public void MarkUnread(MessageId id) => SetSeen([id], false);
+
+    /// <summary>
+    /// Changes the seen flag of the messages that do not have it so yet,
+    /// optimistically (rows, unread badge of the folder, commands, the
+    /// message windows through <see cref="SeenChanged"/>), and sends one
+    /// <c>message.flag</c>; a failure puts everything back, success in
+    /// marking read withdraws their desktop notifications (actions.go
+    /// <c>setSeenIDs</c>). The messages are of one account (a selection is),
+    /// possibly of several of its folders (a search): each folder's count
+    /// follows its own.
+    /// </summary>
+    public void SetSeen(IReadOnlyList<MessageId> ids, bool seen)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        Mailbox.Scope.VerifyAccess();
+        if (SplitByAccount(ids) is { } groups)
+        {
+            foreach (var group in groups)
+            {
+                SetSeen(group, seen);
+            }
+            return;
+        }
+        var todo = new List<MessageId>();
+        FolderKey? key = null;
+        var folderOf = new Dictionary<MessageId, FolderKey>();
+        foreach (var id in ids)
+        {
+            if (Summary(id) is not { } s || FolderTree.HasFlag(s.Flags, Flag.Seen) == seen || Mailbox.Model.InOutbox(s))
+            {
+                continue; // accelerators bypass the disabled commands
+            }
+            todo.Add(id);
+            var folder = new FolderKey(s.AccountId, s.FolderId);
+            key = folder;
+            folderOf[id] = folder;
+        }
+        if (key is not { } k || todo.Count == 0)
+        {
+            return;
+        }
+        MessageId[] changing = [.. todo];
+        void Apply(bool on)
+        {
+            var (set, clear) = ActionRules.FlagChange(Flag.Seen, on);
+            var changed = List.ApplyFlags(changing, set, clear);
+            if (changed.Count == 0)
+            {
+                return;
+            }
+            foreach (var id in changed)
+            {
+                SeenChanged?.Invoke(this, (id, on));
+            }
+            // Marking unread raises the unread count of each message's
+            // folder.
+            var perFolder = new Dictionary<FolderKey, int>();
+            var order = new List<FolderKey>();
+            foreach (var id in changed)
+            {
+                var f = folderOf.TryGetValue(id, out var known) ? known : k;
+                if (perFolder.TryGetValue(f, out var count))
+                {
+                    perFolder[f] = count + 1;
+                }
+                else
+                {
+                    perFolder[f] = 1;
+                    order.Add(f);
+                }
+            }
+            foreach (var f in order)
+            {
+                Mailbox.AdjustCounts(f, on ? -perFolder[f] : perFolder[f], 0);
+            }
+        }
+        Apply(seen);
+
+        var n = changing.Length;
+        var what = (seen, n) switch
+        {
+            (true, 1) => L10n.T("Marking the message as read"),
+            (true, _) => L10n.N("Marking %d message as read", "Marking %d messages as read", n),
+            (false, 1) => L10n.T("Marking the message as unread"),
+            (false, _) => L10n.N("Marking %d message as unread", "Marking %d messages as unread", n),
+        };
+        var change = ActionRules.FlagChange(Flag.Seen, seen);
+        Call(
+            API.MessageFlag,
+            new MessageFlagParams { AccountId = k.Account, MessageIds = changing, Set = change.Set, Clear = change.Clear },
+            what,
+            onError: _ => Apply(!seen),
+            onOk: _ =>
+            {
+                if (seen)
+                {
+                    Mailbox.WithdrawNotifications(changing);
+                }
+            });
+    }
+
+    // Flagged
+
+    /// <summary>Stars or unstars message <paramref name="id"/> (actions.go <c>toggleFlagged</c>).</summary>
+    public void ToggleFlagged(MessageId id)
+    {
+        if (Summary(id) is not { } s)
+        {
+            return;
+        }
+        SetFlagged([id], !FolderTree.HasFlag(s.Flags, Flag.Flagged));
+    }
+
+    /// <summary>
+    /// Stars or unstars the messages that are not so yet, like
+    /// <see cref="SetSeen"/> (actions.go <c>setFlaggedIDs</c>); every star
+    /// showing a changed message hears about it through
+    /// <see cref="StarChanged"/>.
+    /// </summary>
+    public void SetFlagged(IReadOnlyList<MessageId> ids, bool on)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        Mailbox.Scope.VerifyAccess();
+        if (SplitByAccount(ids) is { } groups)
+        {
+            foreach (var group in groups)
+            {
+                SetFlagged(group, on);
+            }
+            return;
+        }
+        var todo = new List<MessageId>();
+        AccountId? account = null;
+        foreach (var id in ids)
+        {
+            if (Summary(id) is not { } s || FolderTree.HasFlag(s.Flags, Flag.Flagged) == on || Mailbox.Model.InOutbox(s))
+            {
+                continue; // accelerators bypass the disabled commands
+            }
+            todo.Add(id);
+            account = s.AccountId;
+        }
+        if (account is not { } acc || todo.Count == 0)
+        {
+            return;
+        }
+        MessageId[] changing = [.. todo];
+        void Apply(bool flagged)
+        {
+            var (set, clear) = ActionRules.FlagChange(Flag.Flagged, flagged);
+            foreach (var id in List.ApplyFlags(changing, set, clear))
+            {
+                StarChanged?.Invoke(this, (id, flagged));
+            }
+        }
+        Apply(on);
+
+        var n = changing.Length;
+        var what = (on, n) switch
+        {
+            (true, 1) => L10n.T("Starring the message"),
+            (true, _) => L10n.N("Starring %d message", "Starring %d messages", n),
+            (false, 1) => L10n.T("Removing the star"),
+            (false, _) => L10n.N("Removing the star from %d message", "Removing the star from %d messages", n),
+        };
+        var change = ActionRules.FlagChange(Flag.Flagged, on);
+        Call(
+            API.MessageFlag,
+            new MessageFlagParams { AccountId = acc, MessageIds = changing, Set = change.Set, Clear = change.Clear },
+            what,
+            onError: _ => Apply(!on));
+    }
+
+    // Trash
+
+    /// <summary>
+    /// Moves message <paramref name="id"/> to Trash after the optional
+    /// confirmation shown over <paramref name="parent"/> (actions.go
+    /// <c>trashFrom</c>); its subject is the question's body.
+    /// </summary>
+    public void Trash(MessageId id, object? parent = null)
+    {
+        if (Summary(id) is not { } s)
+        {
+            return;
+        }
+        Trash([id], LoadedMessageText.SubjectText(s.Subject), parent);
+    }
+
+    /// <summary>
+    /// Moves messages to Trash (<c>message.delete</c>) after the optional
+    /// confirmation shown over <paramref name="parent"/>, with
+    /// <paramref name="subject"/> as its body (actions.go <c>trashIDs</c>;
+    /// "" for several rows, whose heading counts them). For a single outbox
+    /// message it cancels the send instead (<see cref="CancelSend"/>), for
+    /// several queued ones the sending of them all after one question
+    /// (selection.go <c>cancelSends</c>). A message already in Trash is
+    /// expunged.
+    /// </summary>
+    public void Trash(IReadOnlyList<MessageId> ids, string subject, object? parent = null)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(subject);
+        Mailbox.Scope.VerifyAccess();
+        if (ids.Count == 1 && Summary(ids[0]) is { } single && Mailbox.Model.InOutbox(single))
+        {
+            CancelSend(ids[0], parent);
+            return;
+        }
+        var msgs = Summaries(ids);
+        if (msgs.Count == 0)
+        {
+            return;
+        }
+        List<MessageSummary> queued = [.. msgs.Where(Mailbox.Model.InOutbox)];
+        if (queued.Count == msgs.Count)
+        {
+            CancelSends(queued, parent);
+            return;
+        }
+        if (queued.Count > 0)
+        {
+            return; // a selection is one folder's; outbox rows never mix in
+        }
+        ConfirmTrash(parent, msgs.Count, subject, () => MoveToTrash(msgs));
+    }
+
+    // Asks before moving n messages to Trash when the setting is on, then
+    // runs proceed (actions.go confirmTrash).
+    private void ConfirmTrash(object? parent, int n, string subject, Action proceed)
+    {
+        if (!Settings.ConfirmDelete)
+        {
+            proceed();
+            return;
+        }
+        var heading = L10n.T("Move to Trash?");
+        if (n > 1)
+        {
+            // TRANSLATORS: %d is the number of messages of a conversation.
+            heading = L10n.N("Move %d message to Trash?", "Move %d messages to Trash?", n);
+        }
+        Ask(parent, heading, subject, L10n.T("Move to _Trash"), proceed);
+    }
+
+    // The confirmed half of Trash: the rows go at once, the windows close,
+    // the folder counts follow, message.delete runs, a failure puts
+    // everything back and success withdraws the desktop notifications.
+    private void MoveToTrash(List<MessageSummary> msgs, int undoGroup = 0)
+    {
+        // The rows of several accounts (the All Inboxes list): one call each.
+        if (Unified.Mixed(msgs, s => s.AccountId))
+        {
+            var action = NextUndoGroup();
+            foreach (var group in Unified.GroupByAccount(msgs, s => s.AccountId))
+            {
+                MoveToTrash([.. group.Items], action);
+            }
+            return;
+        }
+        MessageId[] ids = [.. msgs.Select(s => s.Id)];
+        var restore = List.RemoveRows(ids);
+        foreach (var s in msgs)
+        {
+            WindowsClose?.Invoke(this, s.Id);
+        }
+        var acc = msgs[0].AccountId;
+        // message.delete moves to the Trash role folder; a message already
+        // there is expunged instead (no target count to credit).
+        var trash = Mailbox.Model.FolderByRole(acc, FolderRole.Trash);
+        FolderKey? target = trash is null ? null : new FolderKey(acc, trash.Id);
+        var undoMoves = TrackMoves([.. msgs.Where(s => trash is null || s.FolderId != trash.Id)], target);
+        var undoExpunged = TrackMoves([.. msgs.Where(s => trash is not null && s.FolderId == trash.Id)], null);
+        void Revert()
+        {
+            undoExpunged();
+            undoMoves();
+        }
+        var n = msgs.Count;
+        var what = n == 1
+            ? L10n.T("Moving the message to Trash")
+            : L10n.N("Moving %d message to Trash", "Moving %d messages to Trash", n);
+        Call(
+            API.MessageDelete,
+            new MessageDeleteParams { AccountId = acc, MessageIds = ids },
+            what,
+            onError: _ =>
+            {
+                restore();
+                Revert();
+            },
+            onOk: _ =>
+            {
+                Mailbox.WithdrawNotifications(ids);
+                // Undo takes back the move to Trash (ActionsController.Undo.cs);
+                // a message expunged from Trash is gone for good.
+                if (trash is not null)
+                {
+                    RecordUndo(Undo.Kind.Trash, trash.Id, msgs, undoGroup);
+                }
+            });
+    }
+
+    /// <summary>
+    /// Adjusts the cached folder counts (the unread badges, the counts under
+    /// the list title) for messages leaving their folders for
+    /// <paramref name="target"/> (null: leaving the store) and returns the
+    /// reverse, for a failed move (actions.go <c>trackMoves</c>), per source
+    /// folder: a selection of a search may come from several. Read messages
+    /// move only the totals; <see cref="MailModel.MoveCounts"/> says where
+    /// even those stay put. Public for the tests (Swift's is internal).
+    /// </summary>
+    public Action TrackMoves(IReadOnlyList<MessageSummary> msgs, FolderKey? target)
+    {
+        ArgumentNullException.ThrowIfNull(msgs);
+        if (msgs.Count == 0)
+        {
+            return static () => { };
+        }
+        var order = new List<FolderKey>();
+        var counts = new Dictionary<FolderKey, (int Unread, int Total)>();
+        foreach (var s in msgs)
+        {
+            var src = new FolderKey(s.AccountId, s.FolderId);
+            if (!counts.TryGetValue(src, out var c))
+            {
+                order.Add(src);
+            }
+            counts[src] = (c.Unread + (FolderTree.HasFlag(s.Flags, Flag.Seen) ? 0 : 1), c.Total + 1);
+        }
+        void Shift(int sign)
+        {
+            foreach (var src in order)
+            {
+                var c = counts[src];
+                Mailbox.MoveCounts(src, target, sign * c.Unread, sign * c.Total);
+            }
+        }
+        Shift(1);
+        return () => Shift(-1);
+    }
+
+    // Archive and junk
+
+    /// <summary>Moves messages to the account's Archive folder (actions.go <c>archiveIDs</c>).</summary>
+    public void Archive(IReadOnlyList<MessageId> ids) =>
+        MoveToRole(ids, FolderRole.Archive, L10n.T("This account has no archive folder"), n => n == 1
+            ? L10n.T("Archiving the message")
+            : L10n.N("Archiving %d message", "Archiving %d messages", n));
+
+    /// <summary>
+    /// Moves message <paramref name="id"/> to the account's Junk folder after
+    /// a confirmation shown over <paramref name="parent"/> (actions.go
+    /// <c>junkFrom</c>).
+    /// </summary>
+    public void Junk(MessageId id, object? parent = null)
+    {
+        if (Summary(id) is not { } s)
+        {
+            return;
+        }
+        Junk([id], LoadedMessageText.SubjectText(s.Subject), parent);
+    }
+
+    /// <summary>
+    /// Moves messages to the account's Junk folder after a confirmation shown
+    /// over <paramref name="parent"/> (actions.go <c>junkIDs</c>). Unlike
+    /// Trash the question is always asked: the move feeds the server's spam
+    /// filter and is not undone by moving back.
+    /// </summary>
+    public void Junk(IReadOnlyList<MessageId> ids, string subject, object? parent = null)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(subject);
+        Mailbox.Scope.VerifyAccess();
+        var all = Summaries(ids);
+        if (all.Count == 0)
+        {
+            return;
+        }
+        var missing = L10n.T("This account has no junk folder");
+        // The All Inboxes list mixes accounts: messages of accounts without
+        // a junk folder are skipped (as macOS and GTK); the toast only when
+        // none has one.
+        List<MessageSummary> msgs = [.. all.Where(s => Mailbox.Model.FolderByRole(s.AccountId, FolderRole.Junk) is not null)];
+        if (msgs.Count == 0)
+        {
+            toast(missing);
+            return;
+        }
+        var heading = L10n.T("Mark as junk?");
+        if (msgs.Count > 1)
+        {
+            // TRANSLATORS: %d is the number of messages of a conversation.
+            heading = L10n.N("Mark %d message as junk?", "Mark %d messages as junk?", msgs.Count);
+        }
+        MessageId[] moving = [.. msgs.Select(s => s.Id)];
+        Ask(parent, heading, subject, L10n.T("Mark as _Junk"), () =>
+            MoveToRole(moving, FolderRole.Junk, missing, n => n == 1
+                ? L10n.T("Marking the message as junk")
+                : L10n.N("Marking %d message as junk", "Marking %d messages as junk", n)));
+    }
+
+    /// <summary>
+    /// Moves messages to their account's folder with the given role
+    /// (<c>message.move</c>; actions.go <c>moveIDsToRole</c>).
+    /// <paramref name="what"/> names the action in progressive form for the
+    /// error toast, for the number moved; <paramref name="missing"/> is the
+    /// toast when the account has no such folder. The rows go at once and
+    /// come back on failure; the folder counts follow the messages to the
+    /// target (<see cref="TrackMoves"/>), and success withdraws their desktop
+    /// notifications. Outbox messages are left out (the daemon refuses moves
+    /// on them), and a message already in the target folder is a no-op.
+    /// </summary>
+    public void MoveToRole(IReadOnlyList<MessageId> ids, FolderRole role, string missing, Func<int, string> what)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(missing);
+        ArgumentNullException.ThrowIfNull(what);
+        Mailbox.Scope.VerifyAccess();
+        var msgs = Movable(ids);
+        if (msgs.Count == 0)
+        {
+            return;
+        }
+        // One move per account: the target is each account's own role folder.
+        // An account without the folder is skipped; the toast says so only
+        // when none of them has it (as macOS and GTK).
+        var moves = new List<(List<MessageSummary> Items, FolderId Target)>();
+        foreach (var group in Unified.GroupByAccount(msgs, s => s.AccountId))
+        {
+            if (Mailbox.Model.FolderByRole(group.Account, role) is { } target)
+            {
+                moves.Add(([.. group.Items], target.Id));
+            }
+        }
+        if (moves.Count == 0)
+        {
+            toast(missing);
+            return;
+        }
+        var action = moves.Count > 1 ? NextUndoGroup() : 0;
+        foreach (var (items, target) in moves)
+        {
+            MoveList(items, target, UndoKindOf(role), what, action);
+        }
+    }
+
+    /// <summary>
+    /// Moves messages to another folder of their account, <paramref name="folder"/>
+    /// (Move To in a message's context menu; actions.go <c>moveIDsTo</c>),
+    /// as <see cref="MoveToRole"/> does: the rows go at once and come back on
+    /// failure, the counts follow, the windows of the messages close, and
+    /// success withdraws their desktop notifications. Outbox messages are
+    /// left out, and a move into the folder they are in is a no-op.
+    /// </summary>
+    public void MoveTo(IReadOnlyList<MessageId> ids, FolderId folder)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        Mailbox.Scope.VerifyAccess();
+        var movable = Movable(ids);
+        if (Unified.Mixed(movable, s => s.AccountId))
+        {
+            return; // the folder is one account's; Move To is off for a selection of several
+        }
+        MoveList(movable, folder, Undo.Kind.Move, ContextMenu.MovingText);
+    }
+
+    // actions.go movable: the known ones of ids a move takes, not the
+    // outbox's (accelerators and menus bypass the disabled commands).
+    private List<MessageSummary> Movable(IEnumerable<MessageId> ids) =>
+        [.. Summaries(ids).Where(s => !Mailbox.Model.InOutbox(s))];
+
+    // actions.go moveListTo: the move itself. The messages are of one
+    // account (a conversation row's members, a selection), possibly of
+    // several of its folders (a search); the ones already in the target stay
+    // where they are. Once the daemon took it, Undo can take it back as
+    // kind (ActionsController.Undo.cs), unless the target is a folder the
+    // daemon does not keep (Gmail's All Mail drops the rows).
+    private void MoveList(List<MessageSummary> all, FolderId target, Undo.Kind kind, Func<int, string> what, int undoGroup = 0)
+    {
+        List<MessageSummary> msgs = [.. all.Where(s => s.FolderId != target)];
+        if (msgs.Count == 0)
+        {
+            return;
+        }
+        var acc = msgs[0].AccountId;
+        MessageId[] moving = [.. msgs.Select(s => s.Id)];
+        var restore = List.RemoveRows(moving);
+        foreach (var s in msgs)
+        {
+            WindowsClose?.Invoke(this, s.Id);
+        }
+        var undo = TrackMoves(msgs, new FolderKey(acc, target));
+        Call(
+            API.MessageMove,
+            new MessageMoveParams { AccountId = acc, MessageIds = moving, TargetFolderId = target },
+            what(msgs.Count),
+            onError: _ =>
+            {
+                restore();
+                undo();
+            },
+            onOk: _ =>
+            {
+                Mailbox.WithdrawNotifications(moving);
+                if (Mailbox.Model.Folder(new FolderKey(acc, target)) is not { Synced: false })
+                {
+                    RecordUndo(kind, target, msgs, undoGroup);
+                }
+            });
+    }
+
+    // Folders (context_menus.go)
+
+    /// <summary>
+    /// Mark All as Read in a folder's context menu (<c>folder.markRead</c>;
+    /// context_menus.go <c>markFolderRead</c>). Nothing changes here: the
+    /// daemon's <c>notify.messagesChanged</c> brings the counts and the list
+    /// up to date; a failure is a toast.
+    /// </summary>
+    public void MarkFolderRead(FolderKey k)
+    {
+        Mailbox.Scope.VerifyAccess();
+        Call(API.FolderMarkRead, new FolderMarkReadParams { AccountId = k.Account, FolderId = k.Folder }, ContextMenu.MarkingReadText());
+    }
+
+    /// <summary>
+    /// Empty Trash or Empty Junk in a folder's context menu
+    /// (<c>folder.empty</c>; context_menus.go <c>emptyFolder</c>), always
+    /// after the question (<see cref="ContextMenu.EmptyQuestion"/>, the
+    /// folder's own total) shown over <paramref name="parent"/>; the
+    /// daemon's <c>notify.messagesChanged</c> brings the folder up to date.
+    /// A folder the model does not know is left alone.
+    /// </summary>
+    public void EmptyFolder(FolderKey k, object? parent = null)
+    {
+        Mailbox.Scope.VerifyAccess();
+        if (Mailbox.Model.Folder(k) is not { } f)
+        {
+            return;
+        }
+        var junk = f.Role == FolderRole.Junk;
+        var q = ContextMenu.EmptyQuestion(junk, f.Total);
+        Ask(parent, q.Heading, q.Body, q.Confirm, () =>
+        {
+            // The moves into the folder cannot be taken back any more.
+            UndoHistory.ForgetFolder(k.Account, k.Folder);
+            Call(API.FolderEmpty, new FolderEmptyParams { AccountId = k.Account, FolderId = k.Folder }, ContextMenu.EmptyingText(junk));
+        });
+    }
+
+    // Outbox
+
+    /// <summary>
+    /// Asks (always: there is no Trash to get the message back from) and then
+    /// removes the outbox message <paramref name="id"/> for good with
+    /// <c>message.delete</c>; the confirmation is shown over
+    /// <paramref name="parent"/> (outbox.go <c>cancelSendFrom</c>). The row
+    /// goes at once and comes back when the daemon refuses.
+    /// </summary>
+    public void CancelSend(MessageId id, object? parent = null)
+    {
+        Mailbox.Scope.VerifyAccess();
+        if (Summary(id) is not { } s)
+        {
+            return;
+        }
+        // The subject isolated inside the sentence, so that a right-to-left
+        // one keeps its quotes and the sentence its order (DisplayText).
+        // TRANSLATORS: %s is the subject of the message.
+        var body = L10n.T("“%s” will be removed from the outbox and not sent.", DisplayText.Isolate(LoadedMessageText.SubjectText(s.Subject)));
+        Ask(parent, L10n.T("Cancel sending this message?"), body, L10n.T("Do Not _Send"), () =>
+        {
+            var restore = List.RemoveRows([id]);
+            WindowsClose?.Invoke(this, id);
+            var undo = TrackMoves([s], null);
+            // The drop is ours, not a delivery (trackOutbox). It is counted
+            // before the call: removing a queued or failed message moves
+            // pendingOutbox or failedOutbox, and the notify.syncState that
+            // follows reloads the folders, possibly before this reply
+            // arrives.
+            Mailbox.NoteOutboxCancelled(s.AccountId);
+            Call(
+                API.MessageDelete,
+                new MessageDeleteParams { AccountId = s.AccountId, MessageIds = [id] },
+                L10n.T("Cancelling the send"),
+                onError: _ =>
+                {
+                    // Nothing was dropped after all.
+                    Mailbox.NoteOutboxCancelFailed(s.AccountId);
+                    restore();
+                    undo();
+                },
+                onOk: _ =>
+                {
+                    // The sidebar is refreshed here as well (an empty outbox
+                    // disappears), for a daemon that sends no
+                    // notify.syncState on the change; a second reload finds
+                    // nothing left to count.
+                    Mailbox.OnOutboxChanged(s.AccountId);
+                });
+        });
+    }
+
+    // Trash on several queued messages (selection.go cancelSends): one
+    // question, then the sending of them all is cancelled with one
+    // message.delete, as CancelSend does for one; the rows come back when
+    // the daemon refuses.
+    private void CancelSends(List<MessageSummary> msgs, object? parent)
+    {
+        if (msgs.Count == 1)
+        {
+            CancelSend(msgs[0].Id, parent);
+            return;
+        }
+        Ask(parent, Selection.CancelSendingQuestion(msgs.Count), "", L10n.T("Do Not _Send"), () =>
+        {
+            MessageId[] ids = [.. msgs.Select(s => s.Id)];
+            var acc = msgs[0].AccountId;
+            var restore = List.RemoveRows(ids);
+            foreach (var id in ids)
+            {
+                WindowsClose?.Invoke(this, id);
+            }
+            var undo = TrackMoves(msgs, null);
+            // Counted before the call, as CancelSend does (trackOutbox).
+            for (var i = 0; i < msgs.Count; i++)
+            {
+                Mailbox.NoteOutboxCancelled(acc);
+            }
+            Call(
+                API.MessageDelete,
+                new MessageDeleteParams { AccountId = acc, MessageIds = ids },
+                L10n.T("Cancelling the send"),
+                onError: _ =>
+                {
+                    for (var i = 0; i < msgs.Count; i++)
+                    {
+                        Mailbox.NoteOutboxCancelFailed(acc);
+                    }
+                    restore();
+                    undo();
+                },
+                onOk: _ => Mailbox.OnOutboxChanged(acc));
+        });
+    }
+
+    /// <summary>
+    /// Re-queues the failed message <paramref name="id"/>
+    /// (<c>outbox.retry</c>; outbox.go <c>retryOutbox</c>). The banner shows
+    /// "queued" at once; a refused retry fetches the real state back.
+    /// </summary>
+    public void RetryOutbox(MessageId id)
+    {
+        Mailbox.Scope.VerifyAccess();
+        if (Summary(id) is not { } s)
+        {
+            return;
+        }
+        if (Cache.Loaded(id) is { Msg: { Summary.Outbox: { } cached } msg } lm)
+        {
+            lm.Msg = msg with { Summary = msg.Summary with { Outbox = Queued(cached) } };
+        }
+        if (Mailbox.Model.Message(id) is { Summary.Outbox: { } listed })
+        {
+            Mailbox.Model.SetOutbox(id, Queued(listed));
+        }
+        OutboxStateChanged?.Invoke(this, id);
+        Call(
+            API.OutboxRetry,
+            new OutboxRetryParams { AccountId = s.AccountId, MessageId = id },
+            L10n.T("Retrying the send"),
+            onError: _ => Cache.Refetch(s, _ => OutboxStateChanged?.Invoke(this, id)));
+
+        static OutboxInfo Queued(OutboxInfo o) => o with { State = OutboxState.Queued, Error = null };
+    }
+
+    // Remote content
+
+    /// <summary>
+    /// Fetches the body of <paramref name="id"/> again with remote images
+    /// allowed for this one call and shows the result wherever the message
+    /// is on display (remote.go <c>loadRemoteImages</c>, through the cache:
+    /// the bar shows the wait from the click on, a request already running
+    /// is left alone, a failure is a toast with the bar back as it was).
+    /// </summary>
+    public void LoadImages(MessageId id)
+    {
+        if (Summary(id) is not { } s)
+        {
+            return;
+        }
+        Cache.LoadImages(s, static _ => { });
+    }
+
+    /// <summary>
+    /// Downloads the pictures of <paramref name="id"/> kept on the mail server
+    /// only and shows the message again wherever it is on display (remote.go
+    /// <c>downloadPictures</c>, through the cache: the bars show the wait from
+    /// the click on, a request already running is left alone, a failure is a
+    /// toast through <paramref name="say"/>, or the controller's own when
+    /// null, with the bar back as it was).
+    /// </summary>
+    public void DownloadPictures(MessageId id, Action<string>? say = null)
+    {
+        if (Summary(id) is not { } s)
+        {
+            return;
+        }
+        Cache.DownloadPictures(s, say ?? toast, static _ => { });
+    }
+
+    /// <summary>
+    /// Puts the sender of <paramref name="id"/> on the daemon's known-senders
+    /// list (<c>sender.add</c>), switches the stored remote-content preference
+    /// to "from known senders" when it was "never" (otherwise the list would
+    /// change nothing), and loads this message's images now (remote.go
+    /// <c>trustSender</c>). The bar shows the wait from the click on, through
+    /// all three calls.
+    /// </summary>
+    public void TrustSender(MessageId id)
+    {
+        Mailbox.Scope.VerifyAccess();
+        if (Summary(id) is not { } s || s.From.Count == 0)
+        {
+            return;
+        }
+        var address = s.From[0].Email.Trim();
+        if (address.Length == 0 || Cache.BeginLoadingImages(id) is not { } lm)
+        {
+            return;
+        }
+        Call(
+            API.SenderAdd,
+            new SenderAddParams { Address = address },
+            L10n.T("Trusting the sender"),
+            onError: _ => Cache.ImagesDone(id, lm),
+            onOk: _ => EnsureKnownSendersPolicy(() => Cache.FetchRemoteImages(s, lm, static _ => { })));
+    }
+
+    /// <summary>
+    /// Raises the stored remote-content preference from "block" to
+    /// "knownSenders" (<c>config.get</c>, then <c>config.set</c> with the
+    /// whole set echoed back) and runs <paramref name="done"/> afterwards, or
+    /// at once when nothing needs changing (remote.go
+    /// <c>ensureKnownSendersPolicy</c>). A failure is toasted and
+    /// <paramref name="done"/> still runs: the sender is trusted either way.
+    /// </summary>
+    public void EnsureKnownSendersPolicy(Action done)
+    {
+        ArgumentNullException.ThrowIfNull(done);
+        Mailbox.Scope.Perform(Mailbox.Client, API.ConfigGet, new EmptyParams(), outcome =>
+        {
+            if (!outcome.TryGetValue(out var got, out var error))
+            {
+                PolicyChangeFailed(error!);
+                done();
+                return;
+            }
+            if (got.Preferences.RemoteContent.Value != RemoteContentPolicy.Block)
+            {
+                done();
+                return;
+            }
+            var want = got.Preferences with { RemoteContent = RemoteContentPolicy.KnownSenders };
+            Mailbox.Scope.Perform(Mailbox.Client, API.ConfigSet, new ConfigSetParams { Preferences = want }, set =>
+            {
+                if (!set.IsSuccess)
+                {
+                    PolicyChangeFailed(set.Error!);
+                }
+                done();
+            });
+        });
+    }
+
+    private void PolicyChangeFailed(Exception error)
+    {
+        LogPolicyChangeFailed(logger, error);
+        toast(RpcErrorText.Text(L10n.T("Changing the remote content preference"), error));
+    }
+
+    // Compose
+
+    /// <summary>
+    /// Opens a reply or forward of message <paramref name="id"/>
+    /// (compose_open.go <c>openCompose</c> / <c>openComposeFrom</c>). The
+    /// template comes from the backend (<c>draft.create</c>: recipients,
+    /// subject, the original quoted formatted with its pictures copied into
+    /// the attachment store); a second click while it is being prepared does
+    /// nothing (one window will appear). Only when the backend cannot answer
+    /// does the window open from what the pane knows
+    /// (<see cref="Prefill.Create"/>), with a toast unless the fallback is the
+    /// normal course (<see cref="ComposeSources.ComposeFallbackText"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A forward of a message with parts kept on the mail server (or a body
+    /// not downloaded yet, or one the cache does not hold) downloads it first
+    /// (<see cref="ComposeSources.ForwardNeedsDownload"/>), since
+    /// <c>draft.create</c> imports only what is stored. When the download
+    /// fails the user is asked over <paramref name="parent"/> whether to
+    /// forward without them ("Forward Without Attachments?", the error as the
+    /// body), unless asking would change nothing: no daemon, one without
+    /// <c>message.download</c>, or a message over its cap
+    /// (<see cref="ComposeSources.AskForwardWithout"/>). The question has no
+    /// answer for Cancel: the request ends when it is asked, and a
+    /// confirmation starts it again (unless another one for the message runs
+    /// by then).
+    /// </para>
+    /// <para>
+    /// A reply or reply to all of a message whose pictures are kept on the
+    /// mail server only downloads it first as well
+    /// (<see cref="ComposeSources.ReplyNeedsDownload"/>), so the quote has
+    /// them; a failure is only logged and the reply goes on (the compose
+    /// window says what <c>draft.create</c> left out). A comment (a reply on
+    /// an account that comments) quotes nothing and downloads nothing.
+    /// </para>
+    /// </remarks>
+    public void OpenCompose(ComposeKind kind, MessageId id, object? parent = null) =>
+        OpenCompose(kind, id, parent, "", null);
+
+    /// <summary>
+    /// <see cref="OpenCompose(ComposeKind, MessageId, object?)"/> with
+    /// <paramref name="ownHtml"/> in the window's editor as the user's own
+    /// text (compose_open.go <c>openComposeWith</c>;
+    /// <see cref="ComposeParams.OwnHtml"/>, safe HTML from
+    /// <see cref="Conversation.QuickReplyHtml"/>), the comment's as well, and
+    /// on the fallback's params too. <paramref name="opened"/> is called right
+    /// after a window was asked for (<see cref="OpenComposeRequested"/>
+    /// raised with a handler; compose_open.go <c>openWith</c>), and never when
+    /// none is: the message is unknown, one is being prepared for it already,
+    /// a forward was refused or found no mail account, or a comment's
+    /// <c>draft.create</c> failed. The chat's quick-reply bar clears its text
+    /// then.
+    /// </summary>
+    public void OpenCompose(ComposeKind kind, MessageId id, object? parent, string ownHtml, Action? opened)
+    {
+        ArgumentNullException.ThrowIfNull(ownHtml);
+        Mailbox.Scope.VerifyAccess();
+        if (Summary(id) is not { } s || composing.Contains(id))
+        {
+            return;
+        }
+        composing.Add(id);
+        if (kind == ComposeKind.Reply && Mailbox.Model.Account(s.AccountId)?.Can(Capability.Comment) == true)
+        {
+            CreateDraft(kind, s, ownHtml, opened);
+            return;
+        }
+        var lm = Cache.Loaded(id);
+        if ((kind is ComposeKind.Reply or ComposeKind.ReplyAll) && ComposeSources.ReplyNeedsDownload(lm))
+        {
+            Mailbox.Scope.Run(async _ =>
+            {
+                // The cache logs a failure; the reply goes on without.
+                await DownloadQuietlyAsync(s);
+                if (!Mailbox.Scope.IsClosed)
+                {
+                    CreateDraft(kind, s, ownHtml, opened);
+                }
+            });
+            return;
+        }
+        if (kind != ComposeKind.Forward || !ComposeSources.ForwardNeedsDownload(lm))
+        {
+            CreateDraft(kind, s, ownHtml, opened);
+            return;
+        }
+        Mailbox.Scope.Run(async _ =>
+        {
+            var failure = await DownloadQuietlyAsync(s);
+            if (Mailbox.Scope.IsClosed)
+            {
+                return;
+            }
+            if (!ComposeSources.AskForwardWithout(failure))
+            {
+                CreateDraft(kind, s, ownHtml, opened);
+                return;
+            }
+            composing.Remove(id);
+            Ask(
+                parent,
+                L10n.T("Forward Without Attachments?"),
+                RpcErrorText.Text(L10n.T("Downloading the attachments"), failure),
+                L10n.T("_Forward Without Attachments"),
+                () =>
+                {
+                    if (composing.Add(id))
+                    {
+                        CreateDraft(kind, s, ownHtml, opened);
+                    }
+                });
+        });
+    }
+
+    /// <summary>
+    /// The line the compose window puts above the quote of a reply (or
+    /// forward, <paramref name="kind"/>) to message <paramref name="id"/>:
+    /// <see cref="Prefill.Attribution"/> over
+    /// <see cref="ComposeSources.ComposeSource"/> of what the window knows of
+    /// it, as <see cref="OpenCompose(ComposeKind, MessageId, object?)"/>
+    /// computes it; "" for an unknown message. The chat's quick-reply bar
+    /// hands it to <c>draft.create</c> (<see cref="IQuickReplyHost.Attribution"/>).
+    /// </summary>
+    public string ReplyAttribution(ComposeKind kind, MessageId id)
+    {
+        Mailbox.Scope.VerifyAccess();
+        return Summary(id) is { } s ? Prefill.Attribution(kind, ComposeSources.ComposeSource(s, Cache.Loaded(id))) : "";
+    }
+
+    /// <summary>
+    /// What <see cref="OpenCompose(ComposeKind, MessageId, object?)"/> does
+    /// before <c>draft.create</c> of a reply, for the chat's quick-reply bar
+    /// (<see cref="IQuickReplyHost.BeforeCreate"/>): message
+    /// <paramref name="id"/> is downloaded first when its pictures are kept
+    /// on the mail server only (<see cref="ComposeSources.ReplyNeedsDownload"/>),
+    /// the outcome ignored (the cache logs a failure), then
+    /// <paramref name="done"/> runs on the UI thread; at once otherwise, and
+    /// for an unknown message. Not once the mailbox closed.
+    /// </summary>
+    public void PrepareReply(MessageId id, Action done)
+    {
+        ArgumentNullException.ThrowIfNull(done);
+        Mailbox.Scope.VerifyAccess();
+        if (Summary(id) is not { } s || !ComposeSources.ReplyNeedsDownload(Cache.Loaded(id)))
+        {
+            done();
+            return;
+        }
+        Mailbox.Scope.Run(async _ =>
+        {
+            await DownloadQuietlyAsync(s);
+            if (!Mailbox.Scope.IsClosed)
+            {
+                done();
+            }
+        });
+    }
+
+    // message.download of s through the cache: its failure, or null.
+    private async Task<Exception?> DownloadQuietlyAsync(MessageSummary s)
+    {
+        try
+        {
+            await Cache.DownloadAsync(s.AccountId, s.Id);
+            return null;
+        }
+#pragma warning disable CA1031 // The failure is the caller's to judge (AskForwardWithout); the cache logged it.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            return e;
+        }
+    }
+
+    // compose_open.go create: the draft.create half of OpenCompose for
+    // message s, whose id is in composing: the template from the backend
+    // with what it could not import (Skipped), or the fallback. A reply on
+    // an account that comments (an issue) is a comment (CreateComment); a
+    // forward of a message whose account writes no mail is written in a
+    // mail account (ForwardAccount), and draft.create finds the message by
+    // MessageAccountId. ownHtml and opened: OpenCompose's.
+    private void CreateDraft(ComposeKind kind, MessageSummary s, string ownHtml, Action? opened)
+    {
+        var id = s.Id;
+        var own = Mailbox.Model.Account(s.AccountId);
+        if (kind == ComposeKind.Reply && own?.Can(Capability.Comment) == true)
+        {
+            CreateComment(s, ownHtml, opened);
+            return;
+        }
+        // The account the draft is written in.
+        var from = s.AccountId;
+        AccountId? messageAccount = null;
+        if (kind == ComposeKind.Forward && own is not null && !own.Can(Capability.Compose))
+        {
+            if (ForwardAccount() is not { } target)
+            {
+                // Forward is off without such an account; an accelerator
+                // bypasses that.
+                composing.Remove(id);
+                LogNoForwardAccount(logger);
+                return;
+            }
+            from = target.Id;
+            messageAccount = s.AccountId;
+        }
+        var src = ComposeSources.ComposeSource(s, Cache.Loaded(id));
+        // The account's own address, for Reply All exclusion; the first
+        // mail account's when the message's is unknown (compose.Manager
+        // SelfAddress).
+        var me = Mailbox.Model.Account(from) is { } account
+            ? FolderTree.SelfAddress(account)
+            : Mailbox.Model.MailSidebarAccounts is { Count: > 0 } enabled
+                ? FolderTree.SelfAddress(enabled[0])
+                : new Address { Email = "" };
+        // The line above the quote, which the window keeps for the
+        // assistant's rewrite (the user's own text is what is above it).
+        var attribution = Prefill.Attribution(kind, src);
+        void Fallback() => OpenWith(Prefill.Create(kind, src, me) with
+        {
+            AccountId = from,
+            Attribution = attribution,
+            OwnHtml = ownHtml,
+        }, opened);
+
+        var parameters = new DraftCreateParams
+        {
+            AccountId = from,
+            Mode = kind.Mode,
+            MessageId = id,
+            Attribution = attribution.Length == 0 ? null : attribution,
+            MessageAccountId = messageAccount,
+        };
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftCreate, parameters, outcome =>
+        {
+            composing.Remove(id);
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogDraftCreateFailed(logger, parameters.Mode.ToString(), error!);
+                var text = ComposeSources.ComposeFallbackText(ComposeSources.ComposeWhat(kind), error);
+                if (text.Length > 0)
+                {
+                    toast(text);
+                }
+                Fallback();
+                return;
+            }
+            OpenWith(Prefill.FromDraft(kind, res.Draft, res.Blocked) with
+            {
+                AccountId = from,
+                Skipped = res.Skipped?.Count ?? 0,
+                Attribution = attribution,
+                OwnHtml = ownHtml,
+            }, opened);
+        }, RpcTimeouts.Compose);
+    }
+
+    // compose_open.go openWith: asks for the compose window with p, then
+    // calls opened (null for none), which tells the chat's quick-reply bar
+    // that a window holds its text now; never when no window can open (no
+    // handler of OpenComposeRequested).
+    private void OpenWith(ComposeParams p, Action? opened)
+    {
+        if (OpenComposeRequested is not { } open)
+        {
+            return;
+        }
+        open(this, p);
+        opened?.Invoke();
+    }
+
+    // The mail account a message of an account that writes no mail (an
+    // issue) is forwarded from (Capabilities.ForwardFrom): the account of the
+    // folder selected in the sidebar when it writes mail (an issue a search
+    // found from a mailbox), else the first enabled one that does; null when
+    // none does (Forward is off then).
+    private Account? ForwardAccount()
+    {
+        var m = Mailbox.Model;
+        return Capabilities.ForwardFrom(m.Accounts, m.Selected?.Account ?? new AccountId(""));
+    }
+
+    // A comment on the issue of message s, whose account comments
+    // (draft.create reply there): the compose window in comment mode
+    // (ComposeParams.Comment). Nothing is quoted, so there is no attribution,
+    // and no fallback either: without a comment draft from the daemon there
+    // is nothing to write, only the toast (and no opened).
+    private void CreateComment(MessageSummary s, string ownHtml, Action? opened)
+    {
+        var id = s.Id;
+        var parameters = new DraftCreateParams { AccountId = s.AccountId, Mode = ComposeMode.Reply, MessageId = id };
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftCreate, parameters, outcome =>
+        {
+            composing.Remove(id);
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogDraftCreateFailed(logger, "comment", error!);
+                toast(RpcErrorText.Text(ComposeSources.ComposeWhat(ComposeKind.Reply), error));
+                return;
+            }
+            OpenWith(Prefill.FromDraft(ComposeKind.Reply, res.Draft, res.Blocked) with { AccountId = s.AccountId, OwnHtml = ownHtml }, opened);
+        }, RpcTimeouts.Compose);
+    }
+
+    /// <summary>
+    /// Opens message <paramref name="s"/> as a double click does, on its row
+    /// in the list or on the header of its card in a conversation
+    /// (message_view.go <c>openMessage</c>): a message of a Drafts folder in
+    /// the compose window, any other in a window of its own.
+    /// </summary>
+    public void OpenMessage(MessageSummary s)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        Mailbox.Scope.VerifyAccess();
+        if (Mailbox.Model.InDrafts(s))
+        {
+            OpenDraft(s.Id);
+            return;
+        }
+        OpenMessageWindowRequested?.Invoke(this, s);
+    }
+
+    /// <summary>
+    /// Open in New Window on several rows (selection.go
+    /// <c>openSelection</c>): each message in a window of its own, a draft
+    /// in the compose window, as <see cref="OpenMessage"/> does; nothing over
+    /// <see cref="Selection.MaxOpen"/> (the item is off then; this is the
+    /// guard).
+    /// </summary>
+    public void OpenMessages(IReadOnlyList<MessageSummary> msgs)
+    {
+        ArgumentNullException.ThrowIfNull(msgs);
+        Mailbox.Scope.VerifyAccess();
+        if (msgs.Count > Selection.MaxOpen)
+        {
+            return;
+        }
+        foreach (var s in msgs)
+        {
+            OpenMessage(s);
+        }
+    }
+
+    /// <summary>
+    /// Forwards several messages in one new message (selection.go
+    /// <c>forwardMessages</c>: <c>draft.create</c> forward with
+    /// <see cref="DraftCreateParams.MessageIds"/>, at most
+    /// <see cref="Selection.MaxForward"/>): the daemon attaches each whole;
+    /// one it could not attach is counted in the compose window's note
+    /// (<see cref="ComposeParams.Skipped"/>). From their account, or from a
+    /// mail account for an issue tracker's (<c>ForwardAccount</c>), as one
+    /// message is forwarded. One request at a time; fewer than two messages
+    /// do nothing (one goes through <see cref="OpenCompose"/>).
+    /// </summary>
+    public void ForwardMessages(IReadOnlyList<MessageId> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        Mailbox.Scope.VerifyAccess();
+        if (ids.Count < 2 || forwardingMany || Summary(ids[0]) is not { } s || Unified.Mixed(Summaries(ids), x => x.AccountId))
+        {
+            return; // several accounts' messages are not forwarded in one (the All Inboxes list)
+        }
+        var from = s.AccountId;
+        AccountId? messageAccount = null;
+        if (Mailbox.Model.Account(s.AccountId) is { } own && !own.Can(Capability.Compose))
+        {
+            if (ForwardAccount() is not { } target)
+            {
+                // Forward is off without such an account; an accelerator
+                // bypasses that.
+                LogNoForwardAccount(logger);
+                return;
+            }
+            from = target.Id;
+            messageAccount = s.AccountId;
+        }
+        var parameters = new DraftCreateParams
+        {
+            AccountId = from,
+            Mode = ComposeMode.Forward,
+            MessageIds = [.. ids.Take(Selection.MaxForward)],
+            MessageAccountId = messageAccount,
+        };
+        forwardingMany = true;
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftCreate, parameters, outcome =>
+        {
+            forwardingMany = false;
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogForwardManyFailed(logger, ids.Count, error!);
+                toast(RpcErrorText.Text(ComposeSources.ComposeWhat(ComposeKind.Forward), error));
+                return;
+            }
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Forward, res.Draft, res.Blocked) with
+            {
+                AccountId = from,
+                Skipped = res.Skipped?.Count ?? 0,
+            });
+        }, RpcTimeouts.Compose);
+    }
+
+    /// <summary>
+    /// Opens message <paramref name="id"/> of a Drafts folder in the compose
+    /// window, or raises the window already editing it (drafts.go
+    /// <c>openDraft</c>). A second request while the first is on its way does
+    /// nothing; a daemon without <c>draft.open</c> shows the message instead.
+    /// </summary>
+    public void OpenDraft(MessageId id)
+    {
+        Mailbox.Scope.VerifyAccess();
+        if (Summary(id) is not { } s || composing.Contains(id))
+        {
+            return;
+        }
+        composing.Add(id);
+        var parameters = new DraftOpenParams { AccountId = s.AccountId, MessageId = id };
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftOpen, parameters, outcome =>
+        {
+            composing.Remove(id);
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogCallFailed(logger, API.DraftOpen.Name, error!);
+                if (DraftOpen.DraftOpenUnsupported(error))
+                {
+                    OpenMessageWindowRequested?.Invoke(this, s);
+                    return;
+                }
+                toast(DraftOpen.DraftOpenErrorText(error));
+                return;
+            }
+            if (RaiseDraft?.Invoke(res.Draft) == true)
+            {
+                return;
+            }
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Edit, res.Draft, res.Blocked));
+            if (res.Skipped is { Count: > 0 } skipped)
+            {
+                toast(DraftOpen.DraftSkippedText(skipped.Count));
+            }
+        }, RpcTimeouts.Compose);
+    }
+
+    // The assistant panel
+
+    /// <summary>
+    /// The assistant panel's Open Draft (ui/internal/assistant, the In App
+    /// target; assistant_panel.go <c>openSavedDraft</c>): the draft
+    /// <paramref name="draftId"/> of account <paramref name="accountId"/>,
+    /// which Claude Code saved through the bridge's create_draft, opens in the
+    /// compose window, or the window already editing it comes to the front
+    /// (<see cref="RaiseDraft"/>). The ids come from the bridge's own line of
+    /// the tool result, so the draft is looked up with <c>draft.list</c>
+    /// first (pages of <see cref="DraftListPageLimit"/>, the cursor followed,
+    /// at most <see cref="DraftListMaxPages"/> pages), and only a draft the
+    /// daemon lists is opened; one that is gone (sent, deleted, or never
+    /// there) says so. A second request for the draft while one runs does
+    /// nothing.
+    /// </summary>
+    public void OpenSavedDraft(AccountId accountId, DraftId draftId)
+    {
+        Mailbox.Scope.VerifyAccess();
+        if (string.IsNullOrEmpty(draftId.Value) || !findingDrafts.Add(draftId))
+        {
+            return;
+        }
+        FindDraft(accountId, draftId, null, 0, outcome =>
+        {
+            findingDrafts.Remove(draftId);
+            if (!outcome.TryGetValue(out var draft, out var error))
+            {
+                LogCallFailed(logger, API.DraftList.Name, error!);
+                toast(RpcErrorText.Text(L10n.T("Opening the draft"), error));
+                return;
+            }
+            if (draft is null)
+            {
+                toast(Assistants.Assistant.PanelTexts().DraftGone);
+                return;
+            }
+            if (RaiseDraft?.Invoke(draft) == true)
+            {
+                return;
+            }
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Edit, draft, new BlockedContent()));
+        });
+    }
+
+    // assistant_panel.go findDraft: pages draft.list of account for draft
+    // id: the draft, null when the last page (or the page limit) came
+    // without it, or the error.
+    private void FindDraft(AccountId account, DraftId id, string? cursor, int page, Action<Outcome<Draft?>> done)
+    {
+        var parameters = new DraftListParams { AccountId = account, Page = new Page { Cursor = cursor, Limit = DraftListPageLimit } };
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftList, parameters, outcome =>
+        {
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                done(Outcome.Failure<Draft?>(error!));
+                return;
+            }
+            if (res.Drafts.FirstOrDefault(d => d.Id == id) is { } found)
+            {
+                done(Outcome.Success<Draft?>(found));
+            }
+            else if (res.Page.NextCursor is { Length: > 0 } next && next != cursor && page + 1 < DraftListMaxPages)
+            {
+                FindDraft(account, id, next, page + 1, done);
+            }
+            else
+            {
+                done(Outcome.Success<Draft?>(null));
+            }
+        });
+    }
+
+    // The draft cards of a conversation (conversation_draft.go)
+
+    /// <summary>
+    /// A draft card's Edit (conversation_draft.go <c>editThreadDraft</c>):
+    /// the window that edits <paramref name="draft"/> already comes to the
+    /// front (<see cref="RaiseDraft"/>); otherwise the draft as
+    /// <c>draft.get</c> has it now (the card may show an older version) opens
+    /// in a compose window, a comment window for a comment draft
+    /// (<see cref="Prefill.FromDraft"/>). A draft that is gone (sent or
+    /// deleted meanwhile) says so (<see cref="Conversation.DraftGone"/>). A
+    /// second request for the draft while one runs does nothing.
+    /// </summary>
+    public void EditThreadDraft(Draft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        Mailbox.Scope.VerifyAccess();
+        if (RaiseDraft?.Invoke(draft) == true)
+        {
+            return;
+        }
+        if (draft.Id is not { } id || string.IsNullOrEmpty(id.Value) || !findingDrafts.Add(id))
+        {
+            return;
+        }
+        var parameters = new DraftGetParams { AccountId = draft.AccountId, DraftId = id };
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftGet, parameters, outcome =>
+        {
+            findingDrafts.Remove(id);
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogCallFailed(logger, API.DraftGet.Name, error!);
+                toast(error is RpcException { Code.Value: ErrorCode.DraftNotFound }
+                    ? Conversation.DraftGone()
+                    : RpcErrorText.Text(L10n.T("Opening the draft"), error));
+                return;
+            }
+            if (RaiseDraft?.Invoke(res.Draft) == true)
+            {
+                return;
+            }
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Edit, res.Draft, new BlockedContent()));
+        });
+    }
+
+    /// <summary>
+    /// A draft card's Discard (conversation_draft.go
+    /// <c>discardThreadDraft</c>): a draft a compose window edits is that
+    /// window's to discard (it comes to the front, <see cref="RaiseDraft"/>);
+    /// otherwise, after the question (<see cref="Conversation.DiscardQuestion"/>
+    /// over <paramref name="parent"/>, whatever the confirm-delete setting),
+    /// <c>draft.delete</c>. notify.draftsChanged takes the card away; a
+    /// failure is a toast.
+    /// </summary>
+    public void DiscardThreadDraft(Draft draft, object? parent = null)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        Mailbox.Scope.VerifyAccess();
+        if (RaiseDraft?.Invoke(draft) == true || draft.Id is not { } id || string.IsNullOrEmpty(id.Value))
+        {
+            return;
+        }
+        Ask(parent, Conversation.DiscardQuestion(), "", Conversation.DraftDiscardLabel(), () =>
+            Call(API.DraftDelete, new DraftDeleteParams { AccountId = draft.AccountId, DraftId = id }, L10n.T("Discarding the draft")));
+    }
+
+    // Plumbing
+
+    // The window's callThen (actions.go): on failure the error is logged,
+    // toasted as RpcErrorText.Text(what, err) and handed to onError (which
+    // reverts the optimistic change); on success onOk runs with the result.
+    // Either callback may be null. Nothing runs once the mailbox closed.
+    private void Call<TParams, TResult>(
+        RpcMethod<TParams, TResult> method, TParams parameters, string what, Action<Exception>? onError = null, Action<TResult>? onOk = null)
+    {
+        Mailbox.Scope.Perform(Mailbox.Client, method, parameters, outcome =>
+        {
+            if (outcome.TryGetValue(out var res, out var error))
+            {
+                onOk?.Invoke(res);
+                return;
+            }
+            LogCallFailed(logger, method.Name, error!);
+            toast(RpcErrorText.Text(what, error));
+            onError?.Invoke(error!);
+        });
+    }
+
+    // Shows the destructive confirmation over parent and runs proceed when
+    // the user confirms. Without a hook the action is refused: a destructive
+    // step the user asked to be questioned about never runs unasked.
+    private void Ask(object? parent, string heading, string body, string label, Action proceed)
+    {
+        if (Confirm is not { } confirm)
+        {
+            LogNoConfirmationHook(logger);
+            return;
+        }
+        Mailbox.Scope.Perform(_ => confirm(parent, heading, body, label), outcome =>
+        {
+            if (!outcome.TryGetValue(out var confirmed, out var error))
+            {
+                // The dialog could not be shown (another one is open): the
+                // action is not run, and the reason is not lost.
+                LogConfirmationFailed(logger, error!);
+                return;
+            }
+            if (confirmed)
+            {
+                proceed();
+            }
+        });
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Method} failed")]
+    private static partial void LogCallFailed(ILogger logger, string method, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "forward: no account writes mail")]
+    private static partial void LogNoForwardAccount(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "draft.create {Mode} failed")]
+    private static partial void LogDraftCreateFailed(ILogger logger, string mode, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "draft.create forward of {Count} messages failed")]
+    private static partial void LogForwardManyFailed(ILogger logger, int count, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "remote content preference not changed")]
+    private static partial void LogPolicyChangeFailed(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "no confirmation hook is installed; the action was refused")]
+    private static partial void LogNoConfirmationHook(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the confirmation failed; the action was not run")]
+    private static partial void LogConfirmationFailed(ILogger logger, Exception error);
+}

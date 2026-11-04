@@ -1,0 +1,234 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// Compose window: the chrome around a compose pane (compose_pane.blp,
+// ui/internal/compose pane.go, built from its own compose_pane.ui and
+// appended to pane_slot by compose.go). The window keeps its toolbar
+// (Attach, Send, the draft menu), its title, the close question, Escape
+// and the assistant's rewrite (rewrite.go; rewrite_popover below is
+// parented to rewrite_button from Go); everything else — the header
+// fields, the formatting bar, the editor, the attachment chips, the
+// status line and the draft logic behind them — is the pane's.
+Adw.Window compose_window {
+  title: _("New Message");
+  default-width: 760;
+  default-height: 640;
+  width-request: 360;
+  height-request: 420;
+  // Capture phase: these must win over the WebKit view, which otherwise
+  // claims the key events.
+  ShortcutController {
+    propagation-phase: capture;
+
+    Shortcut {
+      trigger: "<Control>Return";
+      action: "action(compose.send)";
+    }
+
+    Shortcut {
+      trigger: "<Control>s";
+      action: "action(compose.save)";
+    }
+  }
+
+  // Bubble phase, as in message_window.blp, so in-window dialogs and
+  // popovers see Escape first.
+  ShortcutController {
+    Shortcut {
+      trigger: "Escape";
+      action: "action(window.close)";
+    }
+  }
+
+  content: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      title-widget: Adw.WindowTitle window_title {
+        title: _("New Message");
+      };
+
+      [start]
+      Button attach_button {
+        icon-name: "mail-attachment-symbolic";
+        tooltip-text: _("Attach Files");
+        action-name: "compose.attach";
+      }
+
+      [end]
+      Button send_button {
+        action-name: "compose.send";
+        tooltip-text: _("Send (Ctrl+Enter)");
+
+        child: Adw.ButtonContent {
+          icon-name: "mail-send-symbolic";
+          label: _("_Send");
+          use-underline: true;
+        };
+
+        styles [
+          "suggested-action",
+        ]
+      }
+
+      [end]
+      MenuButton {
+        icon-name: "view-more-symbolic";
+        menu-model: compose_menu;
+        tooltip-text: _("Draft Menu");
+      }
+
+      // The assistant's rewrite (ui/internal/assistant, the In App
+      // target): icon, tooltip, visibility and rewrite_popover come from
+      // Go (compose/rewrite.go).
+      [end]
+      Button rewrite_button {
+        visible: false;
+      }
+    }
+
+    // The pane's root widget (pane.Widget()) is appended here from Go
+    // (compose.go newWindow); pane_slot carries no styling of its own.
+    content: Adw.ToastOverlay toast_overlay {
+      child: Box pane_slot {
+        orientation: vertical;
+        vexpand: true;
+      };
+    };
+  };
+}
+
+menu compose_menu {
+  section {
+    // Disabled in comment mode, and then hidden.
+    item {
+      label: _("_Save Draft");
+      action: "compose.save";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("Attach _Files…");
+      action: "compose.attach";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("Insert _Image…");
+      action: "compose.insert-image";
+      hidden-when: "action-disabled";
+    }
+  }
+
+  section {
+    item {
+      label: _("_Discard");
+      action: "compose.discard";
+    }
+  }
+}
+
+// block_menu and align_menu (the format toolbar's paragraph style and
+// alignment MenuButtons) are in compose_pane.blp: the toolbar moved there
+// with the rest of the pane's content, and Blueprint resolves a
+// menu-model's object within its own file only.
+
+// The rewrite's popover, parented to rewrite_button from Go: the presets
+// and the user's own instruction, the answer as plain text (never markup)
+// while it arrives and when it is there, and what to do with it. Every
+// text comes from ui/internal/assistant, set in Go.
+Popover rewrite_popover {
+  child: Box {
+    orientation: vertical;
+    spacing: 10;
+    width-request: 380;
+    margin-top: 8;
+    margin-bottom: 8;
+    margin-start: 8;
+    margin-end: 8;
+
+    Label rewrite_title {
+      use-markup: false;
+      xalign: 0;
+
+      styles [
+        "heading",
+      ]
+    }
+
+    Adw.WrapBox rewrite_presets {
+      child-spacing: 6;
+      line-spacing: 6;
+    }
+
+    Entry rewrite_custom {}
+
+    Box rewrite_status {
+      spacing: 6;
+      visible: false;
+
+      Adw.Spinner {}
+
+      Label rewrite_status_label {
+        use-markup: false;
+        xalign: 0;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+    }
+
+    ScrolledWindow rewrite_result_scroll {
+      height-request: 140;
+      hscrollbar-policy: never;
+      visible: false;
+
+      styles [
+        "card",
+      ]
+
+      child: TextView rewrite_result {
+        editable: false;
+        cursor-visible: false;
+        wrap-mode: word_char;
+        top-margin: 6;
+        bottom-margin: 6;
+        left-margin: 8;
+        right-margin: 8;
+      };
+    }
+
+    Label rewrite_error {
+      use-markup: false;
+      wrap: true;
+      xalign: 0;
+      visible: false;
+
+      styles [
+        "error",
+      ]
+    }
+
+    Box {
+      spacing: 8;
+
+      Button rewrite_discard {
+        use-underline: true;
+      }
+
+      Box {
+        hexpand: true;
+      }
+
+      Button rewrite_insert {}
+
+      Button rewrite_replace {
+        styles [
+          "suggested-action",
+        ]
+      }
+    }
+  };
+}

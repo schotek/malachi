@@ -1,0 +1,234 @@
+# The Windows installers of a release.
+#
+# Two jobs on the windows-2025 image, side by side, and one that attaches
+# their installers to the release of the tag:
+#
+#   client   the x64 app folder (the daemon, the MCP bridge and the
+#            NativeAOT keyring helper inside) and its installer (Inno Setup)
+#   arm64    the same cross-built for ARM64 and its installer; nothing of
+#            it runs here
+#   release  both installers onto the tag's GitHub release
+#
+# Every step is a target of windows/build.ps1, run as make runs it, so what
+# CI does is what `make windows` does on a desktop. The image is named, not
+# windows-latest, so the move to the next Windows Server is an edit here.
+# It has what the build needs beyond the SDKs set up below: Git for
+# describing the version, Visual Studio 2022 with the MSVC build tools for
+# x64 and ARM64 (the NativeAOT keyring helper links with them) and the
+# WebView2 runtime.
+#
+# pwsh runs the steps and judges a step by the exit status of the last
+# program it ran, so no step runs more than one. What a tag builds was
+# tested before it was tagged; this workflow only builds and publishes.
+name: Windows
+
+on:
+  push:
+    # Only release tags (v1.2.3); pushes to main build nothing.
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  client:
+    name: client (x64)
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git describe needs the tags, so no shallow clone.
+          fetch-depth: 0
+
+      - name: Read the Go version of backend/go.mod
+        # Its minor version, set up at the newest patch release: the
+        # binaries built here go into the installers, which must carry the
+        # patch releases' security fixes.
+        id: go
+        run: |
+          $minor = [regex]::Match([System.IO.File]::ReadAllText('backend/go.mod'), '(?m)^go (\d+\.\d+)').Groups[1].Value
+          if (-not $minor) { throw 'backend/go.mod has no go directive' }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$minor`n")
+          Write-Output "Go $minor"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          # Two binaries for one architecture; restoring a Go cache on
+          # Windows takes about as long as building them.
+          cache: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          # The SDK global.json asks for (10.0.4xx, or a later feature band).
+          global-json-file: windows/global.json
+
+      - name: Restore the NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          # The lock files hold every package and its content hash, so a
+          # partial hit is safe: the locked restore checks what it takes.
+          key: nuget-x64-${{ hashFiles('windows/**/packages.lock.json', 'windows/Directory.Packages.props') }}
+          restore-keys: |
+            nuget-x64-
+
+      - name: Record the version
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 version
+
+      - name: Restore, locked to the lock files
+        # CI=true on the runner makes every later restore locked as well
+        # (Directory.Build.props); this one fails first and says why when a
+        # lock file does not match the packages.
+        working-directory: windows
+        run: dotnet restore Malachi.slnx -p:Platform=x64 --locked-mode
+
+      - name: Set up Inno Setup
+        # The installer's compiler, unless the image has it: Chocolatey's
+        # package, then ISCC for build-installer.ps1 wherever it went.
+        run: |
+          $iscc = @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue)
+          if ($iscc.Count -eq 0) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $iscc = @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue)
+          }
+          if ($iscc.Count -eq 0) { throw 'ISCC.exe was not found after installing Inno Setup' }
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "ISCC=$($iscc[0].FullName)`n")
+          Write-Output "ISCC $($iscc[0].FullName)"
+
+      - name: Installer
+        # The Release app folder (the daemon, the MCP bridge and the
+        # NativeAOT keyring helper inside), checked for completeness, its
+        # licences checked, and its installer:
+        # build\windows\Malachi-Mail-<version>-windows-x64-setup.exe.
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 installer -Arch x64
+
+      - uses: actions/upload-artifact@v4
+        # Only for the release (see the release job): any signed-in GitHub
+        # user can download the artifacts of a public repository.
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: malachi-windows-x64
+          path: build/windows/Malachi-Mail-*-windows-x64-setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  arm64:
+    name: client (ARM64, cross-built)
+    # An x64 runner: the build, the Go cross-compiler and NativeAOT (with the
+    # image's MSVC ARM64 build tools) all target ARM64 from x64. Nothing
+    # ARM64 is run here. A job of its own, not steps
+    # after the x64 installer (which the build tree allows: every project
+    # built for an architecture has output folders of its own,
+    # windows/Directory.Build.props): it runs beside the client job instead
+    # of after it, has a NuGet cache of its own, and when the ARM64 link
+    # fails (an image without the ARM64 build tools) the x64 results stay
+    # green and apart.
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read the Go version of backend/go.mod
+        # As in the client job.
+        id: go
+        run: |
+          $minor = [regex]::Match([System.IO.File]::ReadAllText('backend/go.mod'), '(?m)^go (\d+\.\d+)').Groups[1].Value
+          if (-not $minor) { throw 'backend/go.mod has no go directive' }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$minor`n")
+          Write-Output "Go $minor"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: windows/global.json
+
+      - name: Restore the NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-arm64-${{ hashFiles('windows/**/packages.lock.json', 'windows/Directory.Packages.props') }}
+          restore-keys: |
+            nuget-arm64-
+
+      - name: Record the version
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 version
+
+      - name: Restore, locked to the lock files
+        working-directory: windows
+        run: dotnet restore Malachi.slnx -p:Platform=ARM64 --locked-mode
+
+      - name: Set up Inno Setup
+        # The installer's compiler, unless the image has it: Chocolatey's
+        # package, then ISCC for build-installer.ps1 wherever it went.
+        run: |
+          $iscc = @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue)
+          if ($iscc.Count -eq 0) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $iscc = @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue)
+          }
+          if ($iscc.Count -eq 0) { throw 'ISCC.exe was not found after installing Inno Setup' }
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "ISCC=$($iscc[0].FullName)`n")
+          Write-Output "ISCC $($iscc[0].FullName)"
+
+      - name: Installer
+        # malachi-credentials.exe is NativeAOT for ARM64, linked with the
+        # image's MSVC ARM64 build tools (Visual Studio 2022's
+        # Microsoft.VisualStudio.Component.VC.Tools.ARM64). An image without
+        # them fails here with build.ps1's hint; the helper is never
+        # published without NativeAOT.
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 installer -Arch arm64
+
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: malachi-windows-arm64
+          path: build/windows/Malachi-Mail-*-windows-arm64-setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach the installers to the release
+    needs: [client, arm64]
+    # Both installers or none: a tag whose build of either failed attaches
+    # nothing. They are unsigned until there is a
+    # code-signing certificate, and the ARM64 one is cross-built and has not
+    # run here.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: malachi-windows-*
+          merge-multiple: true
+      - name: Upload
+        # As in the Flatpak, Debian and RPM workflows: the release notes stay
+        # manual, this only creates a draft if the tag has no release yet.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --draft --title "Malachi Mail ${GITHUB_REF_NAME#v}" --notes ''
+          gh release upload "$GITHUB_REF_NAME" ./*-setup.exe \
+            --clobber --repo "$GITHUB_REPOSITORY"

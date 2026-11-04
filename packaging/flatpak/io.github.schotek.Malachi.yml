@@ -1,0 +1,143 @@
+# Flatpak manifest for Malachi Mail.
+#
+# Build on the host, not inside Toolbx:
+#   scripts/flatpak-vendor.sh   (once per dependency change; needs network)
+#   make flatpak                (flatpak-builder --user --install-deps-from=flathub …)
+# `make flatpak` runs the vendor script for you. CI does the same on every
+# version tag, for x86_64 and aarch64 (.github/workflows/flatpak.yml), and
+# attaches the bundles to the tag's GitHub release.
+#
+# Runtime version: GNOME 48 matches the GTK 4.18 / libadwaita 1.7 / GLib 2.84
+# stack the project is developed against in the Fedora 42 Toolbx, and the
+# gotk4 snapshot pinned in ui/go.mod is generated for that stack. GNOME 50 is
+# the current stable runtime (51 due 2026-09-16); bump together with the
+# gotk4 bindings, not independently.
+
+app-id: io.github.schotek.Malachi
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.golang
+command: malachi
+
+finish-args:
+  # IMAP/SMTP/OAuth2 need the network.
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # libsecret: passwords and OAuth2 refresh tokens live in the keyring.
+  # Without this the daemon cannot store or read credentials at all.
+  - --talk-name=org.freedesktop.secrets
+  # New-mail notifications.
+  - --talk-name=org.freedesktop.Notifications
+  # GNOME Online Accounts: tokens of Microsoft 365 accounts (no portal
+  # exists for it; Geary and Evolution grant the same name).
+  - --talk-name=org.gnome.OnlineAccounts
+  # Opening Settings → Online Accounts from the wizard and the sign-in
+  # banner (org.freedesktop.Application.ActivateAction "launch-panel").
+  - --talk-name=org.gnome.Settings
+  # Evolution Data Server: recipient completion reads the system address
+  # books (no portal exists; Geary and Evolution grant the same names).
+  # The registry, the address-book factory, and the per-backend names an
+  # older EDS answers book calls from. Read-only by our code; the bus
+  # itself cannot enforce that (docs/security.md §9).
+  - --talk-name=org.gnome.evolution.dataserver.Sources5
+  - --talk-name=org.gnome.evolution.dataserver.AddressBook10
+  - --talk-name=org.gnome.evolution.dataserver.Subprocess.Backend.*
+  # Previewing an attachment on click: Sushi, the previewer Files uses
+  # (org.gnome.NautilusPreviewer2.ShowFile; no portal exists for it). It
+  # runs on the host and reads the file from $XDG_RUNTIME_DIR/app/<app-id>/
+  # (ui/internal/window/attachments.go openDir); it renders and never runs
+  # anything. Without Sushi the UI opens the file through OpenURI instead.
+  - --talk-name=org.gnome.NautilusPreviewer
+  # The UI starts malachid itself (ui/internal/daemon), so both processes
+  # run inside the same sandbox instance. The unix socket sits in
+  # $XDG_RUNTIME_DIR/app/<app-id>/ (api.SocketBase), which flatpak shares
+  # between every instance of the app and the host, so a UI started after
+  # a crash still finds the daemon; no extra hole is needed for it.
+
+  # Deliberately NOT granted:
+  #   --filesystem=home       attachments are opened/saved through the
+  #                           FileChooser portal, which needs no static access.
+  #   --talk-name=org.freedesktop.Flatpak
+  #                           never; that is a full sandbox escape.
+  #
+  # Portals used instead of direct access (all go through xdg-desktop-portal
+  # automatically when the app uses the GTK/Gio APIs):
+  #   - Autostart of the daemon: org.freedesktop.portal.Background
+  #     (request via Gio/libportal), never by writing ~/.config/autostart.
+  #   - Opening links from mail: org.freedesktop.portal.OpenURI
+  #     (gtk_uri_launcher / Gtk.UriLauncher), never xdg-open directly.
+  #     The UI shows the real destination before launching.
+  #   - mailto: handling is declared with MimeType=x-scheme-handler/mailto
+  #     in the .desktop file; the portal routes mailto: URIs to us.
+
+build-options:
+  append-path: /usr/lib/sdk/golang/bin
+  env:
+    # The build runs WITHOUT network access, so the dependencies come from
+    # the vendor/ trees that scripts/flatpak-vendor.sh generates next to
+    # the sources. GOWORK=off because a build in workspace mode ignores
+    # per-module vendor/ directories (go.work is in the copied tree).
+    #
+    # The alternative Flathub reviewers also accept is a generated
+    # `go-modules.json` sources list (flatpak-builder-tools, tree "go");
+    # vendoring keeps it to one script and no generated JSON in review.
+    GOFLAGS: -mod=vendor
+    GOWORK: 'off'
+    GOPROXY: 'off'
+    GOMODCACHE: /run/build/malachi/go-mod-cache
+    CGO_ENABLED: '1'
+
+modules:
+  # blueprint-compiler is not part of the GNOME SDK; build it from source.
+  - name: blueprint-compiler
+    buildsystem: meson
+    cleanup:
+      - '*'
+    sources:
+      - type: git
+        url: https://gitlab.gnome.org/GNOME/blueprint-compiler.git
+        tag: v0.16.0
+
+  # The UI links WebKitGTK 6.0 (compose editor, later rendering); the GNOME
+  # runtime ships libwebkitgtk-6.0 and the Sdk its headers and typelib.
+  # Verify on the host before a release build:
+  #   flatpak run --command=sh org.gnome.Sdk//48 -c 'pkg-config --modversion webkitgtk-6.0'
+  # The UI links gsound for the new-mail sound. org.gnome.Platform ships
+  # libgsound; if a future runtime drops it, add a module here:
+  #   - name: gsound  (meson; https://gitlab.gnome.org/GNOME/gsound.git, tag 1.0.3)
+  - name: malachi
+    buildsystem: simple
+    # build.sh installs LICENSE, the daemon's LICENSE-backend, LICENSING.md
+    # and THIRD-PARTY-NOTICES.md (the notices of the code inside malachi-mcp)
+    # into /app/share/licenses/io.github.schotek.Malachi. flatpak-builder
+    # 1.4.5+ also records the module's top-level LICENSE and LICENSING.md in
+    # the malachi/ directory beside them; those two are copies.
+    # UPDATE_CHANNEL: the daemon of this Flatpak checks for updates of the
+    # .flatpak bundle (docs/services.md §2.3). A Flathub build must leave
+    # it out: Flathub updates the app itself (docs/plans/update-check.md U6).
+    build-commands:
+      - UPDATE_CHANNEL=linux-flatpak-$(case "$FLATPAK_ARCH" in aarch64) echo arm64 ;; *) echo x64 ;; esac) PREFIX=/app ./scripts/build.sh install
+    sources:
+      # The working tree, for local testing. A published build must take
+      # the tag instead, so the version compiled in is the released one
+      # and not "<commit>-dirty" (docs/releasing.md §4):
+      #   - type: git
+      #     url: https://github.com/schotek/malachi.git
+      #     tag: v0.1.0
+      #     commit: <the tag's commit sha>
+      #
+      # .git is skipped, so `git describe` cannot run in the sandbox; the
+      # Makefile falls back to the .version file that `make flatpak` (and
+      # CI) writes beside it.
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - .flatpak-builder
+          - build
+          - repo

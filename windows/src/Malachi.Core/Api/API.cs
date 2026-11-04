@@ -1,0 +1,1178 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiCore/API/API.swift (and EmptyParams of
+// macos/Sources/MalachiCore/Transport/JSONRPC.swift); Go:
+// backend/pkg/api/methods.go (Method*, Notify*, AllMethods,
+// AllNotifications), backend/pkg/api/types.go (the limits); contract:
+// docs/api.md §4, §5. The board methods (board.go, §4.13) have no Swift
+// descriptors yet; the calendar's (calendar.go, §4.1, §4.14 to §4.16) are
+// the Windows mirror written beside the Swift one.
+//
+// backend/pkg/api re-declared in C#: the method table of methods.go with the
+// params and result type of each, the notification names, the limits. The
+// contract is docs/api.md; the numbers and names here must follow it.
+//
+// The table is the static class API, the Swift name kept: a class named Api
+// would sit in the namespace Malachi.Core.Api, and every other Malachi.Core.*
+// namespace would read Api.MessageList as that namespace, not the class.
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json.Serialization.Metadata;
+using Malachi.Core.Platform;
+
+namespace Malachi.Core.Api;
+
+/// <summary>
+/// One RPC method, whatever its types (Swift <c>any RPCMethod.Type</c>): its
+/// wire name and how long the client waits for it by default.
+/// </summary>
+public interface IRpcMethod
+{
+    /// <summary>The wire name, e.g. <c>message.list</c>.</summary>
+    string Name { get; }
+
+    /// <summary>The default timeout of a call (<see cref="RpcTimeouts"/>).</summary>
+    TimeSpan Timeout { get; }
+}
+
+/// <summary>
+/// One RPC method (Swift protocol <c>RPCMethod</c>): its wire name, the type
+/// of its params object, the type of its result, and how long the client
+/// waits for it by default. The descriptors of <see cref="API"/> are the only
+/// ones there are, so a method name cannot be mistyped at a call site; a test
+/// may make its own for a method the contract does not have.
+/// </summary>
+/// <typeparam name="TParams">The params object.</typeparam>
+/// <typeparam name="TResult">The result.</typeparam>
+public sealed class RpcMethod<TParams, TResult> : IRpcMethod
+{
+    /// <summary>A method with its name, default timeout and the metadata of its two types.</summary>
+    public RpcMethod(string name, TimeSpan timeout, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(paramsInfo);
+        ArgumentNullException.ThrowIfNull(resultInfo);
+        Name = name;
+        Timeout = timeout;
+        ParamsInfo = paramsInfo;
+        ResultInfo = resultInfo;
+    }
+
+    /// <inheritdoc/>
+    public string Name { get; }
+
+    /// <inheritdoc/>
+    public TimeSpan Timeout { get; }
+
+    /// <summary>How the params are written (the wire options of <see cref="ApiJsonContext"/>).</summary>
+    public JsonTypeInfo<TParams> ParamsInfo { get; }
+
+    /// <summary>How the result is read (the wire options of <see cref="ApiJsonContext"/>).</summary>
+    public JsonTypeInfo<TResult> ResultInfo { get; }
+
+    /// <summary>The wire name.</summary>
+    public override string ToString() => Name;
+}
+
+/// <summary>Encodes as <c>{}</c>, for methods that take no parameters.</summary>
+public sealed record EmptyParams;
+
+/// <summary>Decodes from <c>{}</c>, for methods whose result carries nothing.</summary>
+public sealed record EmptyResult;
+
+/// <summary>The contract's methods, notifications and limits (backend/pkg/api).</summary>
+public static class API
+{
+    /// <summary>
+    /// api.ProtocolVersion. A daemon whose <c>system.hello</c> answer carries
+    /// another value is refused before the key is read; <c>system.info</c>
+    /// reports the same value.
+    /// </summary>
+    public const int ProtocolVersion = 2;
+
+    /// <summary>
+    /// The name of <c>system.info</c>, for a call by name (Swift
+    /// <c>API.systemInfo</c>, renamed because the descriptor
+    /// <see cref="SystemInfo"/> has the name).
+    /// </summary>
+    public const string SystemInfoName = "system.info";
+
+    private static ApiJsonContext Wire => ApiJsonContext.Wire;
+
+    // System
+
+    /// <summary><c>system.info</c>: health check and daemon details.</summary>
+    public static readonly RpcMethod<EmptyParams, SystemInfoResult> SystemInfo =
+        new(SystemInfoName, RpcTimeouts.SystemInfo, Wire.EmptyParams, Wire.SystemInfoResult);
+
+    /// <summary>
+    /// <c>system.hello</c>: the first line of every connection (docs/api.md
+    /// §1.4). The transport sends it itself when it connects, never as a call,
+    /// which it refuses until the handshake is done.
+    /// </summary>
+    public static readonly RpcMethod<SystemHelloParams, SystemHelloResult> SystemHello =
+        new("system.hello", RpcTimeouts.Handshake, Wire.SystemHelloParams, Wire.SystemHelloResult);
+
+    /// <summary>
+    /// <c>system.authenticate</c>: the second line of every connection
+    /// (docs/api.md §1.4), sent by the transport as well; once it is answered
+    /// the connection is usable.
+    /// </summary>
+    public static readonly RpcMethod<SystemAuthenticateParams, EmptyResult> SystemAuthenticate =
+        new("system.authenticate", RpcTimeouts.Handshake, Wire.SystemAuthenticateParams, Wire.EmptyResult);
+
+    /// <summary>
+    /// <c>system.storage</c>: how much disk the mail store uses; cheap enough
+    /// to ask every few seconds while the preferences are open.
+    /// </summary>
+    public static readonly RpcMethod<EmptyParams, SystemStorageResult> SystemStorage =
+        new("system.storage", RpcTimeouts.Default, Wire.EmptyParams, Wire.SystemStorageResult);
+
+    // Accounts
+
+    /// <summary><c>account.list</c>.</summary>
+    public static readonly RpcMethod<EmptyParams, AccountListResult> AccountList =
+        new("account.list", RpcTimeouts.Default, Wire.EmptyParams, Wire.AccountListResult);
+
+    /// <summary><c>account.add</c>.</summary>
+    public static readonly RpcMethod<AccountAddParams, AccountAddResult> AccountAdd =
+        new("account.add", RpcTimeouts.Save, Wire.AccountAddParams, Wire.AccountAddResult);
+
+    /// <summary><c>account.remove</c>.</summary>
+    public static readonly RpcMethod<AccountRemoveParams, EmptyResult> AccountRemove =
+        new("account.remove", RpcTimeouts.Default, Wire.AccountRemoveParams, Wire.EmptyResult);
+
+    /// <summary><c>account.setEnabled</c>.</summary>
+    public static readonly RpcMethod<AccountSetEnabledParams, EmptyResult> AccountSetEnabled =
+        new("account.setEnabled", RpcTimeouts.Default, Wire.AccountSetEnabledParams, Wire.EmptyResult);
+
+    /// <summary><c>account.update</c>.</summary>
+    public static readonly RpcMethod<AccountUpdateParams, EmptyResult> AccountUpdate =
+        new("account.update", RpcTimeouts.Save, Wire.AccountUpdateParams, Wire.EmptyResult);
+
+    /// <summary><c>account.discover</c>.</summary>
+    public static readonly RpcMethod<AccountDiscoverParams, AccountDiscoverResult> AccountDiscover =
+        new("account.discover", RpcTimeouts.Discover, Wire.AccountDiscoverParams, Wire.AccountDiscoverResult);
+
+    /// <summary><c>account.test</c>.</summary>
+    public static readonly RpcMethod<AccountTestParams, AccountTestResult> AccountTest =
+        new("account.test", RpcTimeouts.Test, Wire.AccountTestParams, Wire.AccountTestResult);
+
+    /// <summary><c>account.linked</c>.</summary>
+    public static readonly RpcMethod<EmptyParams, AccountLinkedResult> AccountLinked =
+        new("account.linked", RpcTimeouts.Default, Wire.EmptyParams, Wire.AccountLinkedResult);
+
+    /// <summary><c>account.reorder</c>.</summary>
+    public static readonly RpcMethod<AccountReorderParams, EmptyResult> AccountReorder =
+        new("account.reorder", RpcTimeouts.Default, Wire.AccountReorderParams, Wire.EmptyResult);
+
+    /// <summary><c>account.oauthStart</c>.</summary>
+    public static readonly RpcMethod<AccountOAuthStartParams, AccountOAuthStartResult> AccountOAuthStart =
+        new("account.oauthStart", RpcTimeouts.OAuthStart, Wire.AccountOAuthStartParams, Wire.AccountOAuthStartResult);
+
+    /// <summary><c>account.oauthWait</c>: blocks up to 60 s in the daemon and answers <c>pending</c>; call again.</summary>
+    public static readonly RpcMethod<AccountOAuthWaitParams, AccountOAuthWaitResult> AccountOAuthWait =
+        new("account.oauthWait", RpcTimeouts.OAuthWaitCall, Wire.AccountOAuthWaitParams, Wire.AccountOAuthWaitResult);
+
+    /// <summary><c>account.oauthCancel</c>.</summary>
+    public static readonly RpcMethod<AccountOAuthCancelParams, EmptyResult> AccountOAuthCancel =
+        new("account.oauthCancel", RpcTimeouts.Default, Wire.AccountOAuthCancelParams, Wire.EmptyResult);
+
+    /// <summary><c>account.detectSite</c>: what kind of Jira site an address names, anonymously.</summary>
+    public static readonly RpcMethod<AccountDetectSiteParams, AccountDetectSiteResult> AccountDetectSite =
+        new("account.detectSite", RpcTimeouts.DetectSite, Wire.AccountDetectSiteParams, Wire.AccountDetectSiteResult);
+
+    /// <summary><c>account.listSpaces</c>: signs in to a Jira site and lists its spaces and statuses.</summary>
+    public static readonly RpcMethod<AccountListSpacesParams, AccountListSpacesResult> AccountListSpaces =
+        new("account.listSpaces", RpcTimeouts.ListSpaces, Wire.AccountListSpacesParams, Wire.AccountListSpacesResult);
+
+    // Folders
+
+    /// <summary><c>folder.list</c>.</summary>
+    public static readonly RpcMethod<FolderListParams, FolderListResult> FolderList =
+        new("folder.list", RpcTimeouts.Default, Wire.FolderListParams, Wire.FolderListResult);
+
+    /// <summary><c>folder.subscribe</c>; the daemon answers notImplemented so far.</summary>
+    public static readonly RpcMethod<FolderSubscribeParams, EmptyResult> FolderSubscribe =
+        new("folder.subscribe", RpcTimeouts.Default, Wire.FolderSubscribeParams, Wire.EmptyResult);
+
+    /// <summary>
+    /// <c>folder.markRead</c>: every stored, unhidden unread message of a
+    /// folder read (Mark All as Read in its context menu).
+    /// </summary>
+    public static readonly RpcMethod<FolderMarkReadParams, FolderMarkReadResult> FolderMarkRead =
+        new("folder.markRead", RpcTimeouts.Default, Wire.FolderMarkReadParams, Wire.FolderMarkReadResult);
+
+    /// <summary>
+    /// <c>folder.empty</c>: every stored message of a Trash or Junk folder
+    /// deleted for good (Empty Trash and Empty Junk in its context menu).
+    /// </summary>
+    public static readonly RpcMethod<FolderEmptyParams, FolderEmptyResult> FolderEmpty =
+        new("folder.empty", RpcTimeouts.Default, Wire.FolderEmptyParams, Wire.FolderEmptyResult);
+
+    // Messages
+
+    /// <summary><c>message.list</c>.</summary>
+    public static readonly RpcMethod<MessageListParams, MessageListResult> MessageList =
+        new("message.list", RpcTimeouts.Default, Wire.MessageListParams, Wire.MessageListResult);
+
+    /// <summary><c>message.get</c>.</summary>
+    public static readonly RpcMethod<MessageGetParams, MessageGetResult> MessageGet =
+        new("message.get", RpcTimeouts.Default, Wire.MessageGetParams, Wire.MessageGetResult);
+
+    /// <summary>
+    /// <c>message.body</c>: the remote timeout even without an override, since
+    /// a stored <c>allow</c> or a known sender lets the daemon fetch the images
+    /// before it answers.
+    /// </summary>
+    public static readonly RpcMethod<MessageBodyParams, MessageBodyResult> MessageBody =
+        new("message.body", RpcTimeouts.Remote, Wire.MessageBodyParams, Wire.MessageBodyResult);
+
+    /// <summary><c>message.part</c>.</summary>
+    public static readonly RpcMethod<MessagePartParams, MessagePartResult> MessagePart =
+        new("message.part", RpcTimeouts.Part, Wire.MessagePartParams, Wire.MessagePartResult);
+
+    /// <summary><c>message.embedded</c>.</summary>
+    public static readonly RpcMethod<MessageEmbeddedParams, MessageEmbeddedResult> MessageEmbedded =
+        new("message.embedded", RpcTimeouts.Remote, Wire.MessageEmbeddedParams, Wire.MessageEmbeddedResult);
+
+    /// <summary>
+    /// <c>message.download</c>: fetches the parts of a message kept on the
+    /// server (and a body not downloaded yet); the daemon's budget is 4
+    /// minutes, one download per message shared by every caller.
+    /// </summary>
+    public static readonly RpcMethod<MessageDownloadParams, MessageDownloadResult> MessageDownload =
+        new("message.download", RpcTimeouts.Download, Wire.MessageDownloadParams, Wire.MessageDownloadResult);
+
+    /// <summary>
+    /// <c>message.unsubscribe</c>: acts on the sender's unsubscribe offer
+    /// (the daemon may verify the message and ask the sender's server, 15 s,
+    /// first).
+    /// </summary>
+    public static readonly RpcMethod<MessageUnsubscribeParams, MessageUnsubscribeResult> MessageUnsubscribe =
+        new("message.unsubscribe", RpcTimeouts.Unsubscribe, Wire.MessageUnsubscribeParams, Wire.MessageUnsubscribeResult);
+
+    /// <summary><c>message.flag</c>.</summary>
+    public static readonly RpcMethod<MessageFlagParams, EmptyResult> MessageFlag =
+        new("message.flag", RpcTimeouts.Default, Wire.MessageFlagParams, Wire.EmptyResult);
+
+    /// <summary><c>message.move</c>.</summary>
+    public static readonly RpcMethod<MessageMoveParams, EmptyResult> MessageMove =
+        new("message.move", RpcTimeouts.Default, Wire.MessageMoveParams, Wire.EmptyResult);
+
+    /// <summary><c>message.delete</c>.</summary>
+    public static readonly RpcMethod<MessageDeleteParams, EmptyResult> MessageDelete =
+        new("message.delete", RpcTimeouts.Default, Wire.MessageDeleteParams, Wire.EmptyResult);
+
+    /// <summary><c>message.send</c>.</summary>
+    public static readonly RpcMethod<MessageSendParams, MessageSendResult> MessageSend =
+        new("message.send", RpcTimeouts.Default, Wire.MessageSendParams, Wire.MessageSendResult);
+
+    // Outbox
+
+    /// <summary><c>outbox.retry</c>.</summary>
+    public static readonly RpcMethod<OutboxRetryParams, EmptyResult> OutboxRetry =
+        new("outbox.retry", RpcTimeouts.Default, Wire.OutboxRetryParams, Wire.EmptyResult);
+
+    // Threads
+
+    /// <summary><c>thread.list</c>.</summary>
+    public static readonly RpcMethod<ThreadListParams, ThreadListResult> ThreadList =
+        new("thread.list", RpcTimeouts.Default, Wire.ThreadListParams, Wire.ThreadListResult);
+
+    /// <summary><c>thread.get</c>.</summary>
+    public static readonly RpcMethod<ThreadGetParams, ThreadGetResult> ThreadGet =
+        new("thread.get", RpcTimeouts.Default, Wire.ThreadGetParams, Wire.ThreadGetResult);
+
+    // Drafts
+
+    /// <summary><c>draft.save</c>.</summary>
+    public static readonly RpcMethod<DraftSaveParams, DraftSaveResult> DraftSave =
+        new("draft.save", RpcTimeouts.Default, Wire.DraftSaveParams, Wire.DraftSaveResult);
+
+    /// <summary><c>draft.list</c>.</summary>
+    public static readonly RpcMethod<DraftListParams, DraftListResult> DraftList =
+        new("draft.list", RpcTimeouts.Default, Wire.DraftListParams, Wire.DraftListResult);
+
+    /// <summary><c>draft.delete</c>.</summary>
+    public static readonly RpcMethod<DraftDeleteParams, EmptyResult> DraftDelete =
+        new("draft.delete", RpcTimeouts.Default, Wire.DraftDeleteParams, Wire.EmptyResult);
+
+    /// <summary><c>draft.create</c>.</summary>
+    public static readonly RpcMethod<DraftCreateParams, DraftCreateResult> DraftCreate =
+        new("draft.create", RpcTimeouts.Compose, Wire.DraftCreateParams, Wire.DraftCreateResult);
+
+    /// <summary><c>draft.open</c>.</summary>
+    public static readonly RpcMethod<DraftOpenParams, DraftOpenResult> DraftOpen =
+        new("draft.open", RpcTimeouts.Compose, Wire.DraftOpenParams, Wire.DraftOpenResult);
+
+    /// <summary><c>draft.markdown</c>: pasted text rendered as sanitised HTML when it reads as Markdown.</summary>
+    public static readonly RpcMethod<DraftMarkdownParams, DraftMarkdownResult> DraftMarkdown =
+        new("draft.markdown", RpcTimeouts.Default, Wire.DraftMarkdownParams, Wire.DraftMarkdownResult);
+
+    /// <summary><c>draft.get</c>: one stored draft by id, as <c>draft.list</c> lists it.</summary>
+    public static readonly RpcMethod<DraftGetParams, DraftGetResult> DraftGet =
+        new("draft.get", RpcTimeouts.Default, Wire.DraftGetParams, Wire.DraftGetResult);
+
+    // Attachments
+
+    /// <summary><c>attachment.import</c>.</summary>
+    public static readonly RpcMethod<AttachmentImportParams, AttachmentImportResult> AttachmentImport =
+        new("attachment.import", RpcTimeouts.Default, Wire.AttachmentImportParams, Wire.AttachmentImportResult);
+
+    /// <summary><c>attachment.remove</c>.</summary>
+    public static readonly RpcMethod<AttachmentRemoveParams, EmptyResult> AttachmentRemove =
+        new("attachment.remove", RpcTimeouts.Default, Wire.AttachmentRemoveParams, Wire.EmptyResult);
+
+    /// <summary><c>attachment.get</c>.</summary>
+    public static readonly RpcMethod<AttachmentGetParams, AttachmentGetResult> AttachmentGet =
+        new("attachment.get", RpcTimeouts.Part, Wire.AttachmentGetParams, Wire.AttachmentGetResult);
+
+    // Search
+
+    /// <summary><c>search.query</c>.</summary>
+    public static readonly RpcMethod<SearchQueryParams, SearchQueryResult> SearchQuery =
+        new("search.query", RpcTimeouts.Default, Wire.SearchQueryParams, Wire.SearchQueryResult);
+
+    // Sync
+
+    /// <summary><c>sync.status</c>.</summary>
+    public static readonly RpcMethod<SyncStatusParams, SyncStatusResult> SyncStatus =
+        new("sync.status", RpcTimeouts.Default, Wire.SyncStatusParams, Wire.SyncStatusResult);
+
+    /// <summary><c>sync.trigger</c>.</summary>
+    public static readonly RpcMethod<SyncTriggerParams, EmptyResult> SyncTrigger =
+        new("sync.trigger", RpcTimeouts.Default, Wire.SyncTriggerParams, Wire.EmptyResult);
+
+    // Config
+
+    /// <summary><c>config.get</c>.</summary>
+    public static readonly RpcMethod<EmptyParams, ConfigGetResult> ConfigGet =
+        new("config.get", RpcTimeouts.Default, Wire.EmptyParams, Wire.ConfigGetResult);
+
+    /// <summary><c>config.set</c>.</summary>
+    public static readonly RpcMethod<ConfigSetParams, ConfigSetResult> ConfigSet =
+        new("config.set", RpcTimeouts.Default, Wire.ConfigSetParams, Wire.ConfigSetResult);
+
+    // Known senders
+
+    /// <summary><c>sender.list</c>.</summary>
+    public static readonly RpcMethod<EmptyParams, SenderListResult> SenderList =
+        new("sender.list", RpcTimeouts.Default, Wire.EmptyParams, Wire.SenderListResult);
+
+    /// <summary><c>sender.add</c>.</summary>
+    public static readonly RpcMethod<SenderAddParams, EmptyResult> SenderAdd =
+        new("sender.add", RpcTimeouts.Default, Wire.SenderAddParams, Wire.EmptyResult);
+
+    /// <summary><c>sender.remove</c>.</summary>
+    public static readonly RpcMethod<SenderRemoveParams, EmptyResult> SenderRemove =
+        new("sender.remove", RpcTimeouts.Default, Wire.SenderRemoveParams, Wire.EmptyResult);
+
+    // Contacts
+
+    /// <summary><c>contact.search</c>.</summary>
+    public static readonly RpcMethod<ContactSearchParams, ContactSearchResult> ContactSearch =
+        new("contact.search", RpcTimeouts.Default, Wire.ContactSearchParams, Wire.ContactSearchResult);
+
+    // Issues
+
+    /// <summary><c>issue.transitions</c>: the status changes the site offers the user on an issue.</summary>
+    public static readonly RpcMethod<IssueTransitionsParams, IssueTransitionsResult> IssueTransitions =
+        new("issue.transitions", RpcTimeouts.Transitions, Wire.IssueTransitionsParams, Wire.IssueTransitionsResult);
+
+    /// <summary><c>issue.transition</c>: performs one; the issue is refreshed before the answer.</summary>
+    public static readonly RpcMethod<IssueTransitionParams, IssueTransitionResult> IssueTransition =
+        new("issue.transition", RpcTimeouts.Transition, Wire.IssueTransitionParams, Wire.IssueTransitionResult);
+
+    // Board (docs/api.md §4.13)
+
+    /// <summary><c>board.list</c>: the cases, the open commitments of the live ones and the state of triage.</summary>
+    public static readonly RpcMethod<BoardListParams, BoardListResult> BoardList =
+        new("board.list", RpcTimeouts.Default, Wire.BoardListParams, Wire.BoardListResult);
+
+    /// <summary><c>board.get</c>: one case with the members that count, as plain text.</summary>
+    public static readonly RpcMethod<BoardGetParams, BoardGetResult> BoardGet =
+        new("board.get", RpcTimeouts.Default, Wire.BoardGetParams, Wire.BoardGetResult);
+
+    /// <summary><c>board.setState</c>: the user's own state of a case, or back to automatic.</summary>
+    public static readonly RpcMethod<BoardSetStateParams, BoardSetStateResult> BoardSetState =
+        new("board.setState", RpcTimeouts.Default, Wire.BoardSetStateParams, Wire.BoardSetStateResult);
+
+    /// <summary><c>board.setDone</c>.</summary>
+    public static readonly RpcMethod<BoardSetDoneParams, BoardSetDoneResult> BoardSetDone =
+        new("board.setDone", RpcTimeouts.Default, Wire.BoardSetDoneParams, Wire.BoardSetDoneResult);
+
+    /// <summary><c>board.remind</c>: snoozes a case until a time, or ends the remind.</summary>
+    public static readonly RpcMethod<BoardRemindParams, BoardRemindResult> BoardRemind =
+        new("board.remind", RpcTimeouts.Default, Wire.BoardRemindParams, Wire.BoardRemindResult);
+
+    /// <summary><c>board.archive</c>: moves the case's inbox members to the archive (local first) and marks it done.</summary>
+    public static readonly RpcMethod<BoardArchiveParams, BoardArchiveResult> BoardArchive =
+        new("board.archive", RpcTimeouts.Default, Wire.BoardArchiveParams, Wire.BoardArchiveResult);
+
+    /// <summary><c>board.trash</c>: moves the case's received members to the trash (local first) and marks it done.</summary>
+    public static readonly RpcMethod<BoardTrashParams, BoardTrashResult> BoardTrash =
+        new("board.trash", RpcTimeouts.Default, Wire.BoardTrashParams, Wire.BoardTrashResult);
+
+    /// <summary><c>board.unflag</c>: clears the flag of every copy that makes the case <c>hot.flagged</c>.</summary>
+    public static readonly RpcMethod<BoardUnflagParams, BoardUnflagResult> BoardUnflag =
+        new("board.unflag", RpcTimeouts.Default, Wire.BoardUnflagParams, Wire.BoardUnflagResult);
+
+    /// <summary><c>board.discardDraft</c>: deletes the draft linked to a case.</summary>
+    public static readonly RpcMethod<BoardDiscardDraftParams, BoardDiscardDraftResult> BoardDiscardDraft =
+        new("board.discardDraft", RpcTimeouts.Default, Wire.BoardDiscardDraftParams, Wire.BoardDiscardDraftResult);
+
+    /// <summary><c>board.setDraft</c>: links a reply draft to a case on the user's request.</summary>
+    public static readonly RpcMethod<BoardSetDraftParams, BoardSetDraftResult> BoardSetDraft =
+        new("board.setDraft", RpcTimeouts.Default, Wire.BoardSetDraftParams, Wire.BoardSetDraftResult);
+
+    /// <summary><c>board.queue</c>: the cases an assistant should triage, with their text (the MCP bridge's).</summary>
+    public static readonly RpcMethod<BoardQueueParams, BoardQueueResult> BoardQueue =
+        new("board.queue", RpcTimeouts.Default, Wire.BoardQueueParams, Wire.BoardQueueResult);
+
+    /// <summary><c>board.annotate</c>: an assistant's annotation of a case (the MCP bridge's).</summary>
+    public static readonly RpcMethod<BoardAnnotateParams, BoardAnnotateResult> BoardAnnotate =
+        new("board.annotate", RpcTimeouts.Default, Wire.BoardAnnotateParams, Wire.BoardAnnotateResult);
+
+    /// <summary><c>board.commit</c>: a commitment an assistant found in the user's message (the MCP bridge's).</summary>
+    public static readonly RpcMethod<BoardCommitParams, BoardCommitResult> BoardCommit =
+        new("board.commit", RpcTimeouts.Default, Wire.BoardCommitParams, Wire.BoardCommitResult);
+
+    /// <summary><c>board.setCommitment</c>: ticks a commitment off or reopens it.</summary>
+    public static readonly RpcMethod<BoardSetCommitmentParams, BoardSetCommitmentResult> BoardSetCommitment =
+        new("board.setCommitment", RpcTimeouts.Default, Wire.BoardSetCommitmentParams, Wire.BoardSetCommitmentResult);
+
+    /// <summary><c>board.preferences</c>.</summary>
+    public static readonly RpcMethod<EmptyParams, BoardPreferencesResult> BoardPreferences =
+        new("board.preferences", RpcTimeouts.Default, Wire.EmptyParams, Wire.BoardPreferencesResult);
+
+    /// <summary><c>board.setPreferences</c>: replaces every preference.</summary>
+    public static readonly RpcMethod<BoardSetPreferencesParams, BoardSetPreferencesResult> BoardSetPreferences =
+        new("board.setPreferences", RpcTimeouts.Default, Wire.BoardSetPreferencesParams, Wire.BoardSetPreferencesResult);
+
+    /// <summary><c>board.runStart</c>: starts a triage run.</summary>
+    public static readonly RpcMethod<BoardRunStartParams, BoardRunStartResult> BoardRunStart =
+        new("board.runStart", RpcTimeouts.Default, Wire.BoardRunStartParams, Wire.BoardRunStartResult);
+
+    /// <summary><c>board.runEnd</c>: ends a triage run, with the class of its failure if any.</summary>
+    public static readonly RpcMethod<BoardRunEndParams, EmptyResult> BoardRunEnd =
+        new("board.runEnd", RpcTimeouts.Default, Wire.BoardRunEndParams, Wire.EmptyResult);
+
+    // Calendar accounts (docs/api.md §4.1)
+
+    /// <summary><c>account.discoverCalDAV</c>: finds the CalDAV server a URL names; nothing is stored.</summary>
+    public static readonly RpcMethod<AccountDiscoverCalDAVParams, AccountDiscoverCalDAVResult> AccountDiscoverCalDAV =
+        new("account.discoverCalDAV", CalendarTimeouts.Discover, Wire.AccountDiscoverCalDAVParams, Wire.AccountDiscoverCalDAVResult);
+
+    /// <summary><c>account.listCalDAVCalendars</c>: signs in to a CalDAV server and lists what the account settings choose from.</summary>
+    public static readonly RpcMethod<AccountListCalDAVCalendarsParams, AccountListCalDAVCalendarsResult> AccountListCalDAVCalendars =
+        new("account.listCalDAVCalendars", CalendarTimeouts.ListCalendars, Wire.AccountListCalDAVCalendarsParams, Wire.AccountListCalDAVCalendarsResult);
+
+    // Calendars (docs/api.md §4.14)
+
+    /// <summary><c>calendar.list</c>: the calendars of the accounts with the calendar capability, their state, and the count of unanswered invitations.</summary>
+    public static readonly RpcMethod<CalendarListParams, CalendarListResult> CalendarList =
+        new("calendar.list", RpcTimeouts.Default, Wire.CalendarListParams, Wire.CalendarListResult);
+
+    /// <summary><c>calendar.update</c>: the user's own settings of one calendar (visibility, colour).</summary>
+    public static readonly RpcMethod<CalendarUpdateParams, CalendarUpdateResult> CalendarUpdate =
+        new("calendar.update", RpcTimeouts.Default, Wire.CalendarUpdateParams, Wire.CalendarUpdateResult);
+
+    /// <summary><c>calendar.sync</c>: starts a pass in the background; <c>notify.calendarState</c> follows.</summary>
+    public static readonly RpcMethod<CalendarSyncParams, EmptyResult> CalendarSync =
+        new("calendar.sync", RpcTimeouts.Default, Wire.CalendarSyncParams, Wire.EmptyResult);
+
+    /// <summary><c>calendar.preferences</c>.</summary>
+    public static readonly RpcMethod<EmptyParams, CalendarPreferencesResult> CalendarPreferences =
+        new("calendar.preferences", RpcTimeouts.Default, Wire.EmptyParams, Wire.CalendarPreferencesResult);
+
+    /// <summary><c>calendar.setPreferences</c>: a member left out keeps its value.</summary>
+    public static readonly RpcMethod<CalendarSetPreferencesParams, CalendarSetPreferencesResult> CalendarSetPreferences =
+        new("calendar.setPreferences", RpcTimeouts.Default, Wire.CalendarSetPreferencesParams, Wire.CalendarSetPreferencesResult);
+
+    /// <summary><c>calendar.freeBusy</c>: who is busy when.</summary>
+    public static readonly RpcMethod<CalendarFreeBusyParams, CalendarFreeBusyResult> CalendarFreeBusy =
+        new("calendar.freeBusy", CalendarTimeouts.FreeBusy, Wire.CalendarFreeBusyParams, Wire.CalendarFreeBusyResult);
+
+    /// <summary><c>calendar.findFreeTime</c>: slots in which the user and the known attendees are free.</summary>
+    public static readonly RpcMethod<CalendarFindFreeTimeParams, CalendarFindFreeTimeResult> CalendarFindFreeTime =
+        new("calendar.findFreeTime", CalendarTimeouts.FreeBusy, Wire.CalendarFindFreeTimeParams, Wire.CalendarFindFreeTimeResult);
+
+    // Events (docs/api.md §4.15)
+
+    /// <summary><c>event.list</c>: the occurrences of a range.</summary>
+    public static readonly RpcMethod<EventListParams, EventListResult> EventList =
+        new("event.list", CalendarTimeouts.EventList, Wire.EventListParams, Wire.EventListResult);
+
+    /// <summary><c>event.get</c>: one event, or one instance of a series.</summary>
+    public static readonly RpcMethod<EventGetParams, EventGetResult> EventGet =
+        new("event.get", RpcTimeouts.Default, Wire.EventGetParams, Wire.EventGetResult);
+
+    /// <summary><c>event.search</c>: over title, location, notes and people of the stored events.</summary>
+    public static readonly RpcMethod<EventSearchParams, EventSearchResult> EventSearch =
+        new("event.search", RpcTimeouts.Default, Wire.EventSearchParams, Wire.EventSearchResult);
+
+    /// <summary><c>event.create</c>: server first; offline is an error.</summary>
+    public static readonly RpcMethod<EventCreateParams, EventCreateResult> EventCreate =
+        new("event.create", CalendarTimeouts.Write, Wire.EventCreateParams, Wire.EventCreateResult);
+
+    /// <summary><c>event.update</c>: replaces every member of the scope's target.</summary>
+    public static readonly RpcMethod<EventUpdateParams, EventUpdateResult> EventUpdate =
+        new("event.update", CalendarTimeouts.Write, Wire.EventUpdateParams, Wire.EventUpdateResult);
+
+    /// <summary><c>event.delete</c>: removes an event, or cancels it for its attendees.</summary>
+    public static readonly RpcMethod<EventDeleteParams, EventDeleteResult> EventDelete =
+        new("event.delete", CalendarTimeouts.Write, Wire.EventDeleteParams, Wire.EventDeleteResult);
+
+    /// <summary><c>event.respond</c>: the user's answer as an attendee of a stored event.</summary>
+    public static readonly RpcMethod<EventRespondParams, EventRespondResult> EventRespond =
+        new("event.respond", CalendarTimeouts.Write, Wire.EventRespondParams, Wire.EventRespondResult);
+
+    /// <summary><c>event.snoozeAlert</c>: the alert fires again after the minutes.</summary>
+    public static readonly RpcMethod<EventSnoozeAlertParams, EmptyResult> EventSnoozeAlert =
+        new("event.snoozeAlert", RpcTimeouts.Default, Wire.EventSnoozeAlertParams, Wire.EmptyResult);
+
+    /// <summary><c>event.dismissAlert</c>: every client gets <c>notify.eventAlert</c> dismissed.</summary>
+    public static readonly RpcMethod<EventDismissAlertParams, EmptyResult> EventDismissAlert =
+        new("event.dismissAlert", RpcTimeouts.Default, Wire.EventDismissAlertParams, Wire.EmptyResult);
+
+    // Invitations (docs/api.md §4.16)
+
+    /// <summary><c>invitation.list</c>: one per UID, the newest message of it.</summary>
+    public static readonly RpcMethod<InvitationListParams, InvitationListResult> InvitationList =
+        new("invitation.list", RpcTimeouts.Default, Wire.InvitationListParams, Wire.InvitationListResult);
+
+    /// <summary><c>invitation.respond</c>: answers an invitation where its event lives.</summary>
+    public static readonly RpcMethod<InvitationRespondParams, InvitationRespondResult> InvitationRespond =
+        new("invitation.respond", CalendarTimeouts.Write, Wire.InvitationRespondParams, Wire.InvitationRespondResult);
+
+    /// <summary><c>invitation.applyCancel</c>: removes from the user's calendar the event a cancellation names.</summary>
+    public static readonly RpcMethod<InvitationApplyCancelParams, InvitationApplyCancelResult> InvitationApplyCancel =
+        new("invitation.applyCancel", CalendarTimeouts.Write, Wire.InvitationApplyCancelParams, Wire.InvitationApplyCancelResult);
+
+    // CRM accounts (docs/api.md §4.1)
+
+    /// <summary><c>account.detectEway</c>: asks an eWay-CRM instance anonymously whether it can be signed in to; nothing is stored.</summary>
+    public static readonly RpcMethod<AccountDetectEwayParams, AccountDetectEwayResult> AccountDetectEway =
+        new("account.detectEway", RpcTimeouts.DetectSite, Wire.AccountDetectEwayParams, Wire.AccountDetectEwayResult);
+
+    // CRM (docs/api.md §4.17)
+
+    /// <summary><c>crm.lookup</c>: what the messages are linked to in the CRM and what they could be linked to.</summary>
+    public static readonly RpcMethod<CrmLookupParams, CrmLookupResult> CrmLookup =
+        new("crm.lookup", CrmTimeouts.Lookup, Wire.CrmLookupParams, Wire.CrmLookupResult);
+
+    /// <summary><c>crm.search</c>: the CRM's items by name.</summary>
+    public static readonly RpcMethod<CrmSearchParams, CrmSearchResult> CrmSearch =
+        new("crm.search", CrmTimeouts.Lookup, Wire.CrmSearchParams, Wire.CrmSearchResult);
+
+    /// <summary><c>crm.save</c>: saves messages to the CRM, or changes a saved one's links; up to 20 uploads one after the other.</summary>
+    public static readonly RpcMethod<CrmSaveParams, CrmSaveResult> CrmSave =
+        new("crm.save", CrmTimeouts.Save, Wire.CrmSaveParams, Wire.CrmSaveResult);
+
+    /// <summary><c>crm.remove</c>: deletes a saved message's item from the CRM, for every user of it.</summary>
+    public static readonly RpcMethod<CrmRemoveParams, EmptyResult> CrmRemove =
+        new("crm.remove", RpcTimeouts.Remote, Wire.CrmRemoveParams, Wire.EmptyResult);
+
+    // Assistant profile (docs/api.md §4.18)
+
+    /// <summary><c>assistant.profileGet</c>: the profile, the pending proposals and the limits.</summary>
+    public static readonly RpcMethod<EmptyParams, AssistantProfileGetResult> AssistantProfileGet =
+        new("assistant.profileGet", RpcTimeouts.Default, Wire.EmptyParams, Wire.AssistantProfileGetResult);
+
+    /// <summary><c>assistant.profileSet</c>: changes the fields it carries.</summary>
+    public static readonly RpcMethod<AssistantProfileSetParams, AssistantProfileSetResult> AssistantProfileSet =
+        new("assistant.profileSet", RpcTimeouts.Default, Wire.AssistantProfileSetParams, Wire.AssistantProfileSetResult);
+
+    /// <summary><c>assistant.profilePropose</c>: stores a proposal (the bridge's; clients do not call it).</summary>
+    public static readonly RpcMethod<AssistantProfileProposeParams, AssistantProfileProposeResult> AssistantProfilePropose =
+        new("assistant.profilePropose", RpcTimeouts.Default, Wire.AssistantProfileProposeParams, Wire.AssistantProfileProposeResult);
+
+    /// <summary><c>assistant.profileResolve</c>: accepts or dismisses a pending proposal.</summary>
+    public static readonly RpcMethod<AssistantProfileResolveParams, AssistantProfileResolveResult> AssistantProfileResolve =
+        new("assistant.profileResolve", RpcTimeouts.Default, Wire.AssistantProfileResolveParams, Wire.AssistantProfileResolveResult);
+
+    // Address books and contacts (docs/api.md §4.19; ContactsBook.cs)
+
+    /// <summary><c>addressBook.list</c>: the books (hidden ones too); with an account, its books or contactsConsentRequired.</summary>
+    public static readonly RpcMethod<AddressBookListParams, AddressBookListResult> AddressBookList =
+        new("addressBook.list", RpcTimeouts.Default, Wire.AddressBookListParams, Wire.AddressBookListResult);
+
+    /// <summary><c>addressBook.set</c>: shows or hides a book.</summary>
+    public static readonly RpcMethod<AddressBookSetParams, AddressBookSetResult> AddressBookSet =
+        new("addressBook.set", RpcTimeouts.Default, Wire.AddressBookSetParams, Wire.AddressBookSetResult);
+
+    /// <summary><c>contact.list</c>: a page of a book's (or every visible book's) contacts.</summary>
+    public static readonly RpcMethod<ContactListParams, ContactListResult> ContactList =
+        new("contact.list", RpcTimeouts.Default, Wire.ContactListParams, Wire.ContactListResult);
+
+    /// <summary><c>contact.get</c>: a whole contact with its revision.</summary>
+    public static readonly RpcMethod<ContactGetParams, ContactGetResult> ContactGet =
+        new("contact.get", RpcTimeouts.Default, Wire.ContactGetParams, Wire.ContactGetResult);
+
+    /// <summary><c>contact.lookup</c>: which addresses a visible book has exactly.</summary>
+    public static readonly RpcMethod<ContactLookupParams, ContactLookupResult> ContactLookup =
+        new("contact.lookup", RpcTimeouts.Default, Wire.ContactLookupParams, Wire.ContactLookupResult);
+
+    /// <summary><c>contact.create</c>: written to the server first (contactsctl WriteTimeout).</summary>
+    public static readonly RpcMethod<ContactCreateParams, ContactCreateResult> ContactCreate =
+        new("contact.create", RpcTimeouts.ContactWrite, Wire.ContactCreateParams, Wire.ContactCreateResult);
+
+    /// <summary><c>contact.update</c>: the revision of the last <c>contact.get</c>, else contactConflict.</summary>
+    public static readonly RpcMethod<ContactUpdateParams, ContactUpdateResult> ContactUpdate =
+        new("contact.update", RpcTimeouts.ContactWrite, Wire.ContactUpdateParams, Wire.ContactUpdateResult);
+
+    /// <summary><c>contact.delete</c>: deleting a deleted contact answers <c>{}</c>.</summary>
+    public static readonly RpcMethod<ContactDeleteParams, EmptyResult> ContactDelete =
+        new("contact.delete", RpcTimeouts.ContactWrite, Wire.ContactDeleteParams, Wire.EmptyResult);
+
+    /// <summary><c>contact.photo</c>: a contact's photo; a Microsoft 365 one is downloaded first (contactsctl PhotoTimeout).</summary>
+    public static readonly RpcMethod<ContactPhotoParams, ContactPhotoResult> ContactPhoto =
+        new("contact.photo", RpcTimeouts.ContactPhoto, Wire.ContactPhotoParams, Wire.ContactPhotoResult);
+
+    // Update check (docs/api.md §4.20; Update.cs)
+
+    /// <summary><c>update.status</c>: the status, its texts in the locale.</summary>
+    public static readonly RpcMethod<UpdateStatusParams, UpdateStatus> UpdateStatus =
+        new("update.status", RpcTimeouts.Default, Wire.UpdateStatusParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.check</c>: checks now (Check Now); within a minute of the last one returns the status as it is.</summary>
+    public static readonly RpcMethod<UpdateCheckParams, UpdateStatus> UpdateCheck =
+        new("update.check", RpcTimeouts.UpdateCheck, Wire.UpdateCheckParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.setPrefs</c>: turns the daily check on or off.</summary>
+    public static readonly RpcMethod<UpdateSetPrefsParams, UpdateStatus> UpdateSetPrefs =
+        new("update.setPrefs", RpcTimeouts.Default, Wire.UpdateSetPrefsParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.dismiss</c>: skips, puts off or records the question of the offered version.</summary>
+    public static readonly RpcMethod<UpdateDismissParams, UpdateStatus> UpdateDismiss =
+        new("update.dismiss", RpcTimeouts.Default, Wire.UpdateDismissParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.dismissNotice</c>: hides a notice for good.</summary>
+    public static readonly RpcMethod<UpdateDismissNoticeParams, UpdateStatus> UpdateDismissNotice =
+        new("update.dismissNotice", RpcTimeouts.Default, Wire.UpdateDismissNoticeParams, Wire.UpdateStatus);
+
+    // Mail rules (docs/api.md §4.21; Rules.cs)
+
+    /// <summary><c>rules.list</c>: every rule in its order.</summary>
+    public static readonly RpcMethod<EmptyParams, RulesListResult> RulesList =
+        new("rules.list", RpcTimeouts.Default, Wire.EmptyParams, Wire.RulesListResult);
+
+    /// <summary><c>rules.create</c>: adds a rule at the end; confirmOutgoing when it is enabled with an outgoing action.</summary>
+    public static readonly RpcMethod<RulesCreateParams, RulesCreateResult> RulesCreate =
+        new("rules.create", RpcTimeouts.Default, Wire.RulesCreateParams, Wire.RulesCreateResult);
+
+    /// <summary><c>rules.update</c>: replaces a rule's input.</summary>
+    public static readonly RpcMethod<RulesUpdateParams, RulesUpdateResult> RulesUpdate =
+        new("rules.update", RpcTimeouts.Default, Wire.RulesUpdateParams, Wire.RulesUpdateResult);
+
+    /// <summary><c>rules.delete</c>: ruleNotFound for an unknown id.</summary>
+    public static readonly RpcMethod<RulesDeleteParams, EmptyResult> RulesDelete =
+        new("rules.delete", RpcTimeouts.Default, Wire.RulesDeleteParams, Wire.EmptyResult);
+
+    /// <summary><c>rules.reorder</c>: every rule's id once, in the new order.</summary>
+    public static readonly RpcMethod<RulesReorderParams, RulesReorderResult> RulesReorder =
+        new("rules.reorder", RpcTimeouts.Default, Wire.RulesReorderParams, Wire.RulesReorderResult);
+
+    /// <summary><c>rules.test</c>: which stored messages of a folder a rule, as edited, matches.</summary>
+    public static readonly RpcMethod<RulesTestParams, RulesTestResult> RulesTest =
+        new("rules.test", RpcTimeouts.RulesTest, Wire.RulesTestParams, Wire.RulesTestResult);
+
+    /// <summary><c>rules.apply</c>: runs rules by hand on stored mail, local actions only.</summary>
+    public static readonly RpcMethod<RulesApplyParams, RulesApplyResult> RulesApply =
+        new("rules.apply", RpcTimeouts.RulesApply, Wire.RulesApplyParams, Wire.RulesApplyResult);
+
+    // Signatures and OpenPGP keys (docs/api.md §4.22; Signature.cs)
+
+    /// <summary><c>message.signature</c>: the details of a message's verdict; a null signature is no verdict.</summary>
+    public static readonly RpcMethod<MessageSignatureParams, MessageSignatureResult> MessageSignature =
+        new("message.signature", RpcTimeouts.Default, Wire.MessageSignatureParams, Wire.MessageSignatureResult);
+
+    /// <summary>
+    /// <c>message.signatureRevocation</c>: checks whether the signer's S/MIME
+    /// certificate was revoked (Check Revocation); the daemon gives up after
+    /// api.RevocationTimeout (15 s), the client after 20 s.
+    /// </summary>
+    public static readonly RpcMethod<MessageSignatureRevocationParams, MessageSignatureResult> MessageSignatureRevocation =
+        new("message.signatureRevocation", RpcTimeouts.SignatureRevocation, Wire.MessageSignatureRevocationParams, Wire.MessageSignatureResult);
+
+    /// <summary><c>pgp.keyImport</c>: stores OpenPGP public keys as seen.</summary>
+    public static readonly RpcMethod<PgpKeyImportParams, PgpKeyImportResult> PgpKeyImport =
+        new("pgp.keyImport", RpcTimeouts.Default, Wire.PgpKeyImportParams, Wire.PgpKeyImportResult);
+
+    /// <summary><c>pgp.keyVerify</c>: confirms a key, or takes the confirmation back.</summary>
+    public static readonly RpcMethod<PgpKeyVerifyParams, PgpKeyVerifyResult> PgpKeyVerify =
+        new("pgp.keyVerify", RpcTimeouts.Default, Wire.PgpKeyVerifyParams, Wire.PgpKeyVerifyResult);
+
+    /// <summary><c>pgp.keyList</c>: every stored key.</summary>
+    public static readonly RpcMethod<EmptyParams, PgpKeyListResult> PgpKeyList =
+        new("pgp.keyList", RpcTimeouts.Default, Wire.EmptyParams, Wire.PgpKeyListResult);
+
+    /// <summary><c>pgp.keyRemove</c>: removes a stored key.</summary>
+    public static readonly RpcMethod<PgpKeyRemoveParams, EmptyResult> PgpKeyRemove =
+        new("pgp.keyRemove", RpcTimeouts.Default, Wire.PgpKeyRemoveParams, Wire.EmptyResult);
+
+    // Tables
+
+    /// <summary>Every method, in the order of methods.go.</summary>
+    public static IReadOnlyList<IRpcMethod> Methods { get; } =
+    [
+        SystemInfo, SystemHello, SystemAuthenticate, SystemStorage,
+        AccountList, AccountAdd, AccountRemove, AccountSetEnabled,
+        AccountUpdate, AccountDiscover, AccountTest, AccountLinked,
+        AccountReorder, AccountOAuthStart, AccountOAuthWait, AccountOAuthCancel,
+        AccountDetectSite, AccountListSpaces,
+        FolderList, FolderSubscribe, FolderMarkRead, FolderEmpty,
+        MessageList, MessageGet, MessageBody, MessagePart,
+        MessageEmbedded, MessageDownload, MessageFlag, MessageMove, MessageDelete,
+        MessageSend, MessageUnsubscribe,
+        OutboxRetry,
+        ThreadList, ThreadGet,
+        DraftSave, DraftList, DraftDelete, DraftCreate, DraftOpen,
+        DraftMarkdown, DraftGet,
+        AttachmentImport, AttachmentRemove, AttachmentGet,
+        SearchQuery,
+        SyncStatus, SyncTrigger,
+        ConfigGet, ConfigSet,
+        SenderList, SenderAdd, SenderRemove,
+        ContactSearch,
+        IssueTransitions, IssueTransition,
+        BoardList, BoardGet, BoardSetState, BoardSetDone, BoardRemind,
+        BoardArchive, BoardTrash, BoardUnflag, BoardDiscardDraft, BoardSetDraft, BoardQueue, BoardAnnotate,
+        BoardCommit, BoardSetCommitment, BoardPreferences, BoardSetPreferences,
+        BoardRunStart, BoardRunEnd,
+        AccountDiscoverCalDAV, AccountListCalDAVCalendars,
+        CalendarList, CalendarUpdate, CalendarSync, CalendarPreferences,
+        CalendarSetPreferences, CalendarFreeBusy, CalendarFindFreeTime,
+        EventList, EventGet, EventSearch, EventCreate, EventUpdate,
+        EventDelete, EventRespond, EventSnoozeAlert, EventDismissAlert,
+        InvitationList, InvitationRespond, InvitationApplyCancel,
+        AccountDetectEway,
+        CrmLookup, CrmSearch, CrmSave, CrmRemove,
+        AssistantProfileGet, AssistantProfileSet, AssistantProfilePropose, AssistantProfileResolve,
+        AddressBookList, AddressBookSet,
+        ContactList, ContactGet, ContactLookup,
+        ContactCreate, ContactUpdate, ContactDelete,
+        ContactPhoto,
+        UpdateStatus, UpdateCheck, UpdateSetPrefs, UpdateDismiss, UpdateDismissNotice,
+        RulesList, RulesCreate, RulesUpdate, RulesDelete, RulesReorder, RulesTest, RulesApply,
+        MessageSignature, MessageSignatureRevocation,
+        PgpKeyImport, PgpKeyVerify, PgpKeyList, PgpKeyRemove,
+    ];
+
+    /// <summary>api.AllMethods: every callable method name.</summary>
+    public static IReadOnlyList<string> AllMethods { get; } = [.. Methods.Select(m => m.Name)];
+
+    /// <summary>The notification names (api.Notify*).</summary>
+    public static class Notify
+    {
+        /// <summary>api.NotifyNewMessage.</summary>
+        public const string NewMessage = "notify.newMessage";
+
+        /// <summary>api.NotifySyncState.</summary>
+        public const string SyncState = "notify.syncState";
+
+        /// <summary>api.NotifyAuthRequired.</summary>
+        public const string AuthRequired = "notify.authRequired";
+
+        /// <summary>api.NotifyAccountsChanged.</summary>
+        public const string AccountsChanged = "notify.accountsChanged";
+
+        /// <summary>api.NotifyMessagesChanged.</summary>
+        public const string MessagesChanged = "notify.messagesChanged";
+
+        /// <summary>api.NotifyBoardChanged.</summary>
+        public const string BoardChanged = "notify.boardChanged";
+
+        /// <summary>api.NotifyDraftsChanged.</summary>
+        public const string DraftsChanged = "notify.draftsChanged";
+
+        /// <summary>api.NotifyCalendarChanged.</summary>
+        public const string CalendarChanged = "notify.calendarChanged";
+
+        /// <summary>api.NotifyCalendarState.</summary>
+        public const string CalendarState = "notify.calendarState";
+
+        /// <summary>api.NotifyEventAlert.</summary>
+        public const string EventAlert = "notify.eventAlert";
+
+        /// <summary>api.NotifyInvitationsChanged.</summary>
+        public const string InvitationsChanged = "notify.invitationsChanged";
+
+        /// <summary>api.NotifyAssistantProfileChanged: the profile or its proposals changed; no params.</summary>
+        public const string AssistantProfileChanged = "notify.assistantProfileChanged";
+
+        /// <summary>
+        /// api.NotifyContactsChanged (<see cref="ContactsChangedNotification"/>):
+        /// the contacts of these books changed; the Contacts window,
+        /// Preferences → Contacts and the address chips' lookup read them again.
+        /// </summary>
+        public const string ContactsChanged = "notify.contactsChanged";
+
+        /// <summary>api.NotifyUpdateChanged: the update status changed; no params, clients call <c>update.status</c>.</summary>
+        public const string UpdateChanged = "notify.updateChanged";
+
+        /// <summary>api.NotifyRulesChanged: a rule was added, changed, reordered, deleted or disabled by the daemon, or its counts moved; no params, clients call <c>rules.list</c>.</summary>
+        public const string RulesChanged = "notify.rulesChanged";
+
+        /// <summary>
+        /// api.NotifySignaturesChanged: trust changed (a key imported, confirmed
+        /// or removed, a revocation check); no params, clients read the
+        /// messages they show, an open details dialog and the key list again.
+        /// </summary>
+        public const string SignaturesChanged = "notify.signaturesChanged";
+    }
+
+    /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
+    public static IReadOnlyList<string> AllNotifications { get; } =
+    [
+        Notify.NewMessage, Notify.SyncState, Notify.AuthRequired, Notify.AccountsChanged, Notify.MessagesChanged,
+        Notify.BoardChanged, Notify.DraftsChanged,
+        Notify.CalendarChanged, Notify.CalendarState, Notify.EventAlert, Notify.InvitationsChanged,
+        Notify.AssistantProfileChanged,
+        Notify.ContactsChanged,
+        Notify.UpdateChanged,
+        Notify.RulesChanged,
+        Notify.SignaturesChanged,
+    ];
+
+    /// <summary>
+    /// api.MailCapabilities: what an IMAP or Graph account can do, and every
+    /// account of a daemon that sends no <c>capabilities</c>.
+    /// </summary>
+    public static IReadOnlyList<Capability> MailCapabilities { get; } =
+        [Capability.Compose, Capability.Reply, Capability.ReplyAll, Capability.Forward, Capability.Move, Capability.Delete];
+
+    /// <summary>The limits the daemon enforces (types.go constants), for pre-checks.</summary>
+    public static class Limits
+    {
+        /// <summary>api.DefaultPageLimit.</summary>
+        public const int DefaultPageLimit = 50;
+
+        /// <summary>api.MaxPageLimit.</summary>
+        public const int MaxPageLimit = 500;
+
+        /// <summary>The built RFC 5322 message (<c>message.send</c>).</summary>
+        public const int MaxOutgoingMessageBytes = 36 << 20;
+
+        /// <summary><c>textBody</c> and <c>htmlBody</c>, each.</summary>
+        public const int MaxDraftBodyBytes = 1 << 20;
+
+        /// <summary>api.MaxDraftSubjectBytes.</summary>
+        public const int MaxDraftSubjectBytes = 1024;
+
+        /// <summary>to + cc + bcc.</summary>
+        public const int MaxDraftRecipients = 500;
+
+        /// <summary>api.MaxDraftAttachments.</summary>
+        public const int MaxDraftAttachments = 100;
+
+        /// <summary>One file (<c>attachment.import</c>).</summary>
+        public const int MaxAttachmentBytes = 25 << 20;
+
+        /// <summary>The sum over a draft (<c>draft.save</c>).</summary>
+        public const int MaxDraftAttachmentBytes = 25 << 20;
+
+        /// <summary>Inline base64 payloads (<c>message.part</c>, <c>attachment.get</c>, <c>attachment.import</c> data).</summary>
+        public const int MaxAttachmentDataBytes = 16 << 20;
+
+        /// <summary>api.MaxThreadMessages.</summary>
+        public const int MaxThreadMessages = 500;
+
+        /// <summary>api.MaxThreadParticipants.</summary>
+        public const int MaxThreadParticipants = 8;
+
+        /// <summary>
+        /// api.MaxThreadDrafts: the most drafts thread.get returns (the
+        /// newest); <see cref="ThreadSummary.DraftCount"/> still counts them all.
+        /// </summary>
+        public const int MaxThreadDrafts = 20;
+
+        /// <summary>api.MaxDraftAttributionBytes.</summary>
+        public const int MaxDraftAttributionBytes = 2048;
+
+        /// <summary>api.MaxDraftAttributionLines.</summary>
+        public const int MaxDraftAttributionLines = 16;
+
+        /// <summary>The smallest non-zero <see cref="Preferences.SyncIntervalSeconds"/>.</summary>
+        public const int SyncIntervalMin = 60;
+
+        /// <summary>api.OfflineDaysMax.</summary>
+        public const int OfflineDaysMax = 3650;
+
+        /// <summary>The largest <see cref="Preferences.AttachmentOfflineDays"/> (api.AttachmentOfflineDaysMax).</summary>
+        public const int AttachmentOfflineDaysMax = 3650;
+
+        /// <summary>
+        /// <see cref="Preferences.AttachmentOfflineDays"/> that keeps no large
+        /// attachment locally: Small Attachments Only (api.AttachmentOfflineNone).
+        /// </summary>
+        public const int AttachmentOfflineNone = -1;
+
+        /// <summary><c>messageIds</c> in message.flag, message.move and message.delete.</summary>
+        public const int MaxMessageIdsPerCall = 1000;
+
+        /// <summary>api.DefaultContactLimit.</summary>
+        public const int DefaultContactLimit = 10;
+
+        /// <summary>api.MaxContactLimit.</summary>
+        public const int MaxContactLimit = 50;
+
+        /// <summary>api.MaxContactQueryBytes.</summary>
+        public const int MaxContactQueryBytes = 256;
+
+        /// <summary>
+        /// search.query: the query's length, its terms and filters, and the
+        /// matches <c>page.total</c> counts exactly (-1 beyond).
+        /// </summary>
+        public const int MaxSearchQueryBytes = 1024;
+
+        /// <summary>api.MaxSearchTerms.</summary>
+        public const int MaxSearchTerms = 32;
+
+        /// <summary>api.MaxSearchTotal.</summary>
+        public const int MaxSearchTotal = 1000;
+
+        /// <summary>JiraConfig.Spaces.</summary>
+        public const int MaxJiraSpaces = 200;
+
+        /// <summary>JiraConfig.ClosedStatuses.</summary>
+        public const int MaxJiraStatuses = 64;
+
+        /// <summary>NotificationSenders, BotNames, MetadataFilters, AuthorPrefixes, each.</summary>
+        public const int MaxJiraListEntries = 32;
+
+        /// <summary>One entry of those lists, in bytes.</summary>
+        public const int MaxJiraPatternBytes = 512;
+
+        /// <summary>JiraConfig.OfflineDays.</summary>
+        public const int MaxJiraOfflineDays = 365;
+
+        /// <summary>What JiraConfig.OfflineDays 0 means.</summary>
+        public const int DefaultJiraOfflineDays = 30;
+
+        /// <summary>The transitions <c>issue.transitions</c> returns at most.</summary>
+        public const int MaxIssueTransitions = 100;
+
+        /// <summary>
+        /// The messages one <c>draft.create</c> forward takes at most
+        /// (<see cref="DraftCreateParams.MessageIds"/>).
+        /// </summary>
+        public const int MaxForwardMessages = 20;
+
+        /// <summary>api.MaxICSBytes: one iCalendar object or calendar part.</summary>
+        public const int MaxICSBytes = 1 << 20;
+
+        /// <summary>api.MaxEventTitleBytes: <see cref="EventInput.Title"/>, after cleaning.</summary>
+        public const int MaxEventTitleBytes = 1024;
+
+        /// <summary>api.MaxEventLocationBytes: <see cref="EventInput.Location"/>.</summary>
+        public const int MaxEventLocationBytes = 1024;
+
+        /// <summary>api.MaxEventNotesBytes: <see cref="EventInput.Notes"/>.</summary>
+        public const int MaxEventNotesBytes = 32 << 10;
+
+        /// <summary>api.MaxMailTextBytes: <see cref="MailText.Subject"/> and <see cref="MailText.Text"/>, each.</summary>
+        public const int MaxMailTextBytes = 4 << 10;
+
+        /// <summary>api.MaxCommentBytes: a comment of a response or a delete.</summary>
+        public const int MaxCommentBytes = 2 << 10;
+
+        /// <summary>api.MaxEventAttendeesIn: <see cref="EventInput.Attendees"/>.</summary>
+        public const int MaxEventAttendeesIn = 100;
+
+        /// <summary>api.MaxEventAttendeesStored: <see cref="CalendarEvent.Attendees"/> (the attendee count counts all).</summary>
+        public const int MaxEventAttendeesStored = 500;
+
+        /// <summary>api.MaxInvitationAttendees: <see cref="InvitationCard.Attendees"/>.</summary>
+        public const int MaxInvitationAttendees = 50;
+
+        /// <summary>api.MaxEventAlerts: the alerts of one event.</summary>
+        public const int MaxEventAlerts = 4;
+
+        /// <summary>api.MaxAlertMinutes: the longest lead of an alert, 4 weeks.</summary>
+        public const int MaxAlertMinutes = 40320;
+
+        /// <summary>api.MaxEventAttachments: the attachments of one event.</summary>
+        public const int MaxEventAttachments = 10;
+
+        /// <summary>api.MaxEventAttachmentBytes: one attachment of an event.</summary>
+        public const int MaxEventAttachmentBytes = 3 << 20;
+
+        /// <summary>api.MaxEventListDays: the longest range of <c>event.list</c>.</summary>
+        public const int MaxEventListDays = 400;
+
+        /// <summary>api.MaxEventListResults: the largest limit of <c>event.list</c>.</summary>
+        public const int MaxEventListResults = 5000;
+
+        /// <summary>api.DefaultEventListResults: the limit of <c>event.list</c> when none is given.</summary>
+        public const int DefaultEventListResults = 2000;
+
+        /// <summary>api.MaxEventSearchResults: the largest limit of <c>event.search</c>.</summary>
+        public const int MaxEventSearchResults = 200;
+
+        /// <summary>api.MaxSeriesOccurrences: per series per query window.</summary>
+        public const int MaxSeriesOccurrences = 1000;
+
+        /// <summary>api.MaxCalendarsPerAccount: the calendars of one account.</summary>
+        public const int MaxCalendarsPerAccount = 200;
+
+        /// <summary>api.MaxEventsPerCalendar: the events of one calendar.</summary>
+        public const int MaxEventsPerCalendar = 50000;
+
+        /// <summary>api.MaxFreeBusyAttendees: the attendees of <c>calendar.freeBusy</c>.</summary>
+        public const int MaxFreeBusyAttendees = 20;
+
+        /// <summary>api.MaxFreeBusyDays: the longest range of <c>calendar.freeBusy</c>.</summary>
+        public const int MaxFreeBusyDays = 62;
+
+        /// <summary>api.MaxFreeSlots: the largest limit of <c>calendar.findFreeTime</c>.</summary>
+        public const int MaxFreeSlots = 50;
+
+        /// <summary>api.MaxInvitationList: the largest limit of <c>invitation.list</c>.</summary>
+        public const int MaxInvitationList = 500;
+
+        /// <summary>api.CalendarFutureDays: the window's forward edge (docs/calendar.md §2.3).</summary>
+        public const int CalendarFutureDays = 400;
+
+        /// <summary>api.DefaultCalendarKeepDays: what <see cref="CalendarConfig.KeepDays"/> 0 means.</summary>
+        public const int DefaultCalendarKeepDays = 365;
+
+        /// <summary>api.MaxRecurrenceInterval: <see cref="Recurrence.Interval"/> in input.</summary>
+        public const int MaxRecurrenceInterval = 99;
+
+        /// <summary>api.MaxRecurrenceCount: <see cref="Recurrence.Count"/> in input.</summary>
+        public const int MaxRecurrenceCount = 999;
+
+        // crm.go (docs/eway.md D16); exceeding an input limit is invalidArgument.
+
+        /// <summary>api.MaxCrmMessages: <see cref="CrmLookupParams.MessageIds"/>, <see cref="CrmSaveParams.MessageIds"/>.</summary>
+        public const int MaxCrmMessages = 20;
+
+        /// <summary>api.MaxCrmItems: <see cref="CrmSaveParams"/> link, unlink and superior together.</summary>
+        public const int MaxCrmItems = 50;
+
+        /// <summary>api.MaxCrmSuggestions: <see cref="CrmLookupResult.Suggestions"/>.</summary>
+        public const int MaxCrmSuggestions = 50;
+
+        /// <summary>api.MaxCrmSearchResults: <see cref="CrmSearchResult.Items"/>.</summary>
+        public const int MaxCrmSearchResults = 50;
+
+        /// <summary>api.MinCrmQueryBytes: <see cref="CrmSearchParams.Query"/>, after trimming.</summary>
+        public const int MinCrmQueryBytes = 2;
+
+        /// <summary>api.MaxCrmQueryBytes: <see cref="CrmSearchParams.Query"/>.</summary>
+        public const int MaxCrmQueryBytes = 200;
+
+        /// <summary>api.MaxCrmLookupAddresses: the addresses <c>crm.lookup</c> searches for.</summary>
+        public const int MaxCrmLookupAddresses = 20;
+
+        /// <summary>api.MaxCrmNoteBytes: the plain text sent with a saved message.</summary>
+        public const int MaxCrmNoteBytes = 32 << 10;
+
+        /// <summary>api.MaxCrmNameBytes: <see cref="CrmItem.Name"/>.</summary>
+        public const int MaxCrmNameBytes = 256;
+
+        /// <summary>api.MaxCrmDetailBytes: <see cref="CrmItem.Detail"/>.</summary>
+        public const int MaxCrmDetailBytes = 512;
+
+        /// <summary>api.MaxProfileText: <see cref="AssistantProfile.Text"/>, in characters.</summary>
+        public const int MaxProfileText = 2000;
+
+        /// <summary>api.MaxProfileAccountNote: <see cref="ProfileAccountNote.Note"/>, in characters.</summary>
+        public const int MaxProfileAccountNote = 500;
+
+        /// <summary>api.MaxProfileProposal: <see cref="ProfileProposal.Text"/>, in characters.</summary>
+        public const int MaxProfileProposal = 300;
+
+        /// <summary>api.MaxProfileProposals: the pending proposals; the oldest goes.</summary>
+        public const int MaxProfileProposals = 20;
+
+        // contacts_book.go (docs/plans/address-book.md §4.2); exceeding an
+        // input limit is invalidArgument.
+
+        /// <summary>api.DefaultContactListLimit: <see cref="ContactListParams.Limit"/> when absent.</summary>
+        public const int DefaultContactListLimit = 100;
+
+        /// <summary>api.MaxContactListLimit: the largest <see cref="ContactListParams.Limit"/>.</summary>
+        public const int MaxContactListLimit = 500;
+
+        /// <summary>api.MaxVCardBytes: one vCard as stored or sent.</summary>
+        public const int MaxVCardBytes = 1 << 20;
+
+        /// <summary>api.MaxVCardProperties: the properties of one vCard.</summary>
+        public const int MaxVCardProperties = 500;
+
+        /// <summary>api.MaxContactLookupAddresses: <see cref="ContactLookupParams.Addresses"/>.</summary>
+        public const int MaxContactLookupAddresses = 200;
+
+        /// <summary>api.MaxAddressBooksPerAccount: the books of one account.</summary>
+        public const int MaxAddressBooksPerAccount = 200;
+
+        /// <summary>api.MaxContactsPerBook: the contacts of one book.</summary>
+        public const int MaxContactsPerBook = 50000;
+
+        /// <summary>api.MaxContactNameBytes: each name part, the display name, the nickname.</summary>
+        public const int MaxContactNameBytes = 256;
+
+        /// <summary>api.MaxContactFieldBytes: a company, title, address, number or URL.</summary>
+        public const int MaxContactFieldBytes = 1024;
+
+        /// <summary>api.MaxContactLabelBytes: a server's own label.</summary>
+        public const int MaxContactLabelBytes = 64;
+
+        /// <summary>api.MaxContactNoteBytes: <see cref="ContactCard.Note"/>.</summary>
+        public const int MaxContactNoteBytes = 32 << 10;
+
+        /// <summary>api.MaxContactEmails: <see cref="ContactCard.Emails"/>.</summary>
+        public const int MaxContactEmails = 50;
+
+        /// <summary>api.MaxContactPhones: <see cref="ContactCard.Phones"/>.</summary>
+        public const int MaxContactPhones = 50;
+
+        /// <summary>api.MaxContactAddresses: <see cref="ContactCard.Addresses"/>.</summary>
+        public const int MaxContactAddresses = 20;
+
+        /// <summary>api.MaxContactURLs: <see cref="ContactCard.Urls"/>.</summary>
+        public const int MaxContactURLs = 20;
+
+        /// <summary>api.MaxContactPhotoBytes: <see cref="ContactPhotoResult.Data"/>.</summary>
+        public const int MaxContactPhotoBytes = 64 << 10;
+
+        /// <summary>api.MaxContactPhotoPixels: a side of the photo's square.</summary>
+        public const int MaxContactPhotoPixels = 256;
+
+        // signature.go (docs/api.md §4.22); exceeding an input limit is
+        // invalidArgument.
+
+        /// <summary>api.MaxSignatureTextBytes: every string from a certificate or key.</summary>
+        public const int MaxSignatureTextBytes = 256;
+
+        /// <summary>api.MaxSignatureChain: <see cref="SmimeDetails.Chain"/>.</summary>
+        public const int MaxSignatureChain = 16;
+
+        /// <summary>api.MaxSignatureEmails: <see cref="SignatureCertificate.Emails"/> and <see cref="PgpKey.Emails"/>.</summary>
+        public const int MaxSignatureEmails = 16;
+
+        /// <summary>api.MaxSignatureUserIDs: <see cref="PgpDetails.UserIds"/> and <see cref="PgpKey.UserIds"/>.</summary>
+        public const int MaxSignatureUserIDs = 32;
+
+        /// <summary>api.MaxProtectedHeaders: <see cref="SignatureDetails.ProtectedHeaders"/>.</summary>
+        public const int MaxProtectedHeaders = 6;
+
+        /// <summary>api.MaxPGPKeyBytes: the key data of <c>pgp.keyImport</c>.</summary>
+        public const int MaxPGPKeyBytes = 1 << 20;
+
+        /// <summary>api.MaxPGPImportKeys: the keys one <c>pgp.keyImport</c> may carry.</summary>
+        public const int MaxPGPImportKeys = 20;
+
+        /// <summary>api.MaxPGPStoredKeys: the stored keys; an import over it is refused.</summary>
+        public const int MaxPGPStoredKeys = 5000;
+
+        /// <summary>api.MaxRevocationResponseBytes: an OCSP response or a CRL.</summary>
+        public const int MaxRevocationResponseBytes = 1 << 20;
+    }
+}

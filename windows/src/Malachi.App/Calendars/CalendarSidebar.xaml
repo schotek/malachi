@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/CalendarSidebarViewController.swift;
+GTK: the calendar's sidebar follows (docs/calendar.md §6.4). The
+Calendar's sidebar (docs/calendar.md §5.3), 240 wide: the mini month,
+the Invitations heading with the Unanswered row and its count, then per
+account a heading with the kind capsule (M365, GOOGLE, CALDAV) and its
+calendars, each with a checkbox and its colour, a state row with Sign In…
+when the account's state needs it, and at the bottom Add Calendar… with
+its menu (Add CalDAV Calendar…, Sync a Microsoft 365 account's
+calendars…). The rows are made in code from CalendarController.Sidebar;
+every name is plain text.
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.CalendarSidebar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:calendars="using:Malachi.App.Calendars"
+    xmlns:res="using:Malachi.App.Resources"
+    AutomationProperties.AutomationId="CalendarSidebar"
+    IsTabStop="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <ScrollViewer
+            x:Name="Scroller"
+            HorizontalScrollMode="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel Padding="12,8,12,12" Spacing="2">
+                <calendars:MiniMonthView x:Name="MiniMonth" Margin="0,0,0,10" />
+                <StackPanel x:Name="Rows" Spacing="2" />
+            </StackPanel>
+        </ScrollViewer>
+        <Button
+            x:Name="AddCalendarButton"
+            Grid.Row="1"
+            Margin="8,0,8,8"
+            HorizontalAlignment="Left"
+            AutomationProperties.AutomationId="CalendarAddCalendar"
+            Style="{StaticResource SubtleButtonStyle}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <FontIcon
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="{x:Bind res:Icons.Glyph('list-add')}" />
+                <TextBlock
+                    x:Name="AddCalendarText"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}" />
+            </StackPanel>
+            <Button.Flyout>
+                <MenuFlyout Placement="TopEdgeAlignedLeft">
+                    <MenuFlyoutItem
+                        x:Name="AddCalDAVItem"
+                        AutomationProperties.AutomationId="CalendarAddCalDAV"
+                        Click="OnAddCalDAVClick" />
+                    <MenuFlyoutItem
+                        x:Name="SyncMicrosoftItem"
+                        AutomationProperties.AutomationId="CalendarSyncMicrosoft"
+                        Click="OnSyncMicrosoftClick" />
+                </MenuFlyout>
+            </Button.Flyout>
+        </Button>
+    </Grid>
+</UserControl>

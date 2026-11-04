@@ -1,0 +1,252 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import Foundation
+
+/// api.ErrorCode: the numeric error enumeration of docs/api.md §2. Codes are
+/// stable, never renumbered, only appended; an unknown one still decodes.
+public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, ExpressibleByIntegerLiteral,
+    CustomStringConvertible {
+    public let rawValue: Int
+
+    public init(rawValue: Int) { self.rawValue = rawValue }
+    public init(integerLiteral value: Int) { self.rawValue = value }
+
+    // JSON-RPC 2.0 reserved codes.
+    public static let parseError: ErrorCode = -32700
+    public static let invalidRequest: ErrorCode = -32600
+    public static let methodNotFound: ErrorCode = -32601
+    public static let invalidParams: ErrorCode = -32602
+    public static let internalError: ErrorCode = -32603
+
+    // 1000–1099: general.
+    public static let notImplemented: ErrorCode = 1000
+    public static let invalidArgument: ErrorCode = 1001
+    /// Optimistic-concurrency conflict (drafts, sending).
+    public static let conflict: ErrorCode = 1002
+    public static let cancelled: ErrorCode = 1003
+    /// Daemon busy or shutting down.
+    public static let unavailable: ErrorCode = 1004
+    /// The RPC connection has not completed the handshake (docs/api.md
+    /// §1.4), or the handshake failed; the daemon closes the connection
+    /// after this answer. Not about mail accounts, whose sign-in problems
+    /// are the 1200s.
+    public static let unauthenticated: ErrorCode = 1005
+    /// The calendar or event cannot be changed by the user (a read-only or
+    /// shared calendar, a birthdays/holidays calendar, a change only the
+    /// organiser may make).
+    public static let readOnly: ErrorCode = 1006
+    /// The event has attendees, but neither the server schedules nor a mail
+    /// account can send the invitations.
+    public static let invitationsUnavailable: ErrorCode = 1007
+
+    // 1100–1199: not found.
+    public static let accountNotFound: ErrorCode = 1100
+    public static let folderNotFound: ErrorCode = 1101
+    public static let messageNotFound: ErrorCode = 1102
+    public static let threadNotFound: ErrorCode = 1103
+    public static let draftNotFound: ErrorCode = 1104
+    /// Unknown id, another account's, or bound to a different draft.
+    public static let attachmentNotFound: ErrorCode = 1105
+    /// No board case with that id (it left the board, its account is
+    /// gone), or for `board.setCommitment` no such commitment.
+    public static let caseNotFound: ErrorCode = 1106
+    /// No calendar with that id (removed, its account gone or its sync
+    /// switched off).
+    public static let calendarNotFound: ErrorCode = 1107
+    /// No stored event with that id, or the recurrence id names no
+    /// occurrence of it.
+    public static let eventNotFound: ErrorCode = 1108
+    /// A CRM item named in crm.save (link, superior) is not an item of that
+    /// CRM account, or for crm.remove the saved message's item is gone.
+    public static let crmItemNotFound: ErrorCode = 1109
+    /// No stored contact with that id (deleted, its book gone or its
+    /// account's contacts switched off).
+    public static let contactNotFound: ErrorCode = 1110
+    /// No address book with that id.
+    public static let addressBookNotFound: ErrorCode = 1111
+    /// No mail rule with that id (docs/api.md §4.21).
+    public static let ruleNotFound: ErrorCode = 1112
+
+    // 1200–1299: authentication.
+    /// Credentials missing or token expired; see notify.authRequired.
+    public static let authRequired: ErrorCode = 1200
+    /// The server rejected the credentials.
+    public static let authFailed: ErrorCode = 1201
+    /// Secret storage unavailable.
+    public static let keyringError: ErrorCode = 1202
+    /// The daemon's own sign-in needs an OAuth client id for the provider
+    /// and none is configured.
+    public static let oauthClientMissing: ErrorCode = 1203
+    /// The account's sign-in does not allow calendar access; `data` is
+    /// `CalendarConsentRequiredData` (`RPCError.calendarConsentRequired`).
+    public static let calendarConsentRequired: ErrorCode = 1204
+    /// The CRM instance cannot be signed in to by this version; `data` is
+    /// `CrmSignInUnsupportedData` (`RPCError.crmSignInUnsupported`).
+    public static let crmSignInUnsupported: ErrorCode = 1205
+    /// The account's sign-in does not allow contacts access; `data` is
+    /// `ContactsConsentRequiredData` (`RPCError.contactsConsentRequired`).
+    public static let contactsConsentRequired: ErrorCode = 1206
+
+    // 1300–1399: network and remote servers.
+    public static let offline: ErrorCode = 1300
+    public static let networkError: ErrorCode = 1301
+    public static let serverError: ErrorCode = 1302
+    public static let tlsError: ErrorCode = 1303
+    public static let serverTimeout: ErrorCode = 1304
+    /// The mail server no longer has the message (another client deleted
+    /// or moved it); the local copy goes with the next sync.
+    public static let messageGone: ErrorCode = 1305
+    /// The server no longer has the event (deleted or moved elsewhere); the
+    /// next pass removes the local copy.
+    public static let eventGone: ErrorCode = 1306
+    /// The CRM refused the message as a duplicate of an item the daemon
+    /// cannot find.
+    public static let crmDuplicate: ErrorCode = 1307
+    /// The contact changed on the server since the revision the write
+    /// names; `data` is `ContactConflictData` (`RPCError.contactConflict`).
+    public static let contactConflict: ErrorCode = 1308
+
+    // 1400–1499: local storage.
+    public static let storageError: ErrorCode = 1400
+    public static let migrationFailed: ErrorCode = 1401
+
+    // 1500–1599: content.
+    public static let malformedMessage: ErrorCode = 1500
+    /// The sanitiser refused the input; the body is withheld.
+    public static let sanitizeFailed: ErrorCode = 1501
+    /// Over a documented limit; `data` is `{"limit": n, "size": n}`.
+    public static let attachmentTooBig: ErrorCode = 1502
+    public static let partNotFound: ErrorCode = 1503
+    /// The part's data is not stored on this device (`Attachment.remote`);
+    /// `message.download` fetches it.
+    public static let partNotDownloaded: ErrorCode = 1504
+    /// `message.unsubscribe` reached the sender's server, which refused or
+    /// did not answer the one-click request (`message` carries the status,
+    /// never shown verbatim).
+    public static let unsubscribeFailed: ErrorCode = 1505
+    /// `board.annotate` or `board.commit` quoted text the daemon did not
+    /// find verbatim where it must be; `data` is `QuoteNotFoundData`
+    /// (`RPCError.quoteNotFound`).
+    public static let quoteNotFound: ErrorCode = 1506
+    /// An iCalendar object or a server's calendar answer could not be read
+    /// even leniently; the data is withheld.
+    public static let malformedCalendar: ErrorCode = 1507
+    /// The event's recurrence rule is outside what the daemon expands or
+    /// edits; the event shows its first instance only and may be edited with
+    /// scope `all` only.
+    public static let recurrenceUnsupported: ErrorCode = 1508
+    /// The address book or contact cannot be changed by the user: the
+    /// recent book, a server's read-only collection or folder.
+    public static let addressBookReadOnly: ErrorCode = 1509
+    /// `message.signatureRevocation` could not get an answer from the
+    /// certificate's issuer; `data` is `RevocationFailedData`
+    /// (`RPCError.revocationFailedData`). `message` is never shown.
+    public static let revocationFailed: ErrorCode = 1510
+
+    /// The stable symbolic name (api.ErrorCode.String): `"attachmentTooBig"`,
+    /// or `"unknown(1234)"` for a code this client does not know.
+    public var name: String {
+        ErrorCode.names[self] ?? "unknown(\(rawValue))"
+    }
+
+    public var description: String { name }
+
+    /// Every code of the contract (protocol version 2), in the order of
+    /// errors.go.
+    public static let all: [ErrorCode] = [
+        .parseError, .invalidRequest, .methodNotFound, .invalidParams, .internalError,
+        .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable, .unauthenticated,
+        .readOnly, .invitationsUnavailable,
+        .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
+        .caseNotFound, .calendarNotFound, .eventNotFound, .crmItemNotFound, .contactNotFound, .addressBookNotFound,
+        .ruleNotFound,
+        .authRequired, .authFailed, .keyringError, .oauthClientMissing, .calendarConsentRequired,
+        .crmSignInUnsupported, .contactsConsentRequired,
+        .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone, .eventGone, .crmDuplicate,
+        .contactConflict,
+        .storageError, .migrationFailed,
+        .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
+        .unsubscribeFailed, .quoteNotFound, .malformedCalendar, .recurrenceUnsupported, .addressBookReadOnly, .revocationFailed,
+    ]
+
+    private static let names: [ErrorCode: String] = [
+        .parseError: "parseError",
+        .invalidRequest: "invalidRequest",
+        .methodNotFound: "methodNotFound",
+        .invalidParams: "invalidParams",
+        .internalError: "internalError",
+        .notImplemented: "notImplemented",
+        .invalidArgument: "invalidArgument",
+        .conflict: "conflict",
+        .cancelled: "cancelled",
+        .unavailable: "unavailable",
+        .unauthenticated: "unauthenticated",
+        .readOnly: "readOnly",
+        .invitationsUnavailable: "invitationsUnavailable",
+        .accountNotFound: "accountNotFound",
+        .folderNotFound: "folderNotFound",
+        .messageNotFound: "messageNotFound",
+        .threadNotFound: "threadNotFound",
+        .draftNotFound: "draftNotFound",
+        .attachmentNotFound: "attachmentNotFound",
+        .caseNotFound: "caseNotFound",
+        .calendarNotFound: "calendarNotFound",
+        .eventNotFound: "eventNotFound",
+        .crmItemNotFound: "crmItemNotFound",
+        .contactNotFound: "contactNotFound",
+        .addressBookNotFound: "addressBookNotFound",
+        .ruleNotFound: "ruleNotFound",
+        .authRequired: "authRequired",
+        .authFailed: "authFailed",
+        .keyringError: "keyringError",
+        .oauthClientMissing: "oauthClientMissing",
+        .calendarConsentRequired: "calendarConsentRequired",
+        .crmSignInUnsupported: "crmSignInUnsupported",
+        .contactsConsentRequired: "contactsConsentRequired",
+        .offline: "offline",
+        .networkError: "networkError",
+        .serverError: "serverError",
+        .tlsError: "tlsError",
+        .serverTimeout: "serverTimeout",
+        .messageGone: "messageGone",
+        .eventGone: "eventGone",
+        .crmDuplicate: "crmDuplicate",
+        .contactConflict: "contactConflict",
+        .storageError: "storageError",
+        .migrationFailed: "migrationFailed",
+        .malformedMessage: "malformedMessage",
+        .sanitizeFailed: "sanitizeFailed",
+        .attachmentTooBig: "attachmentTooBig",
+        .partNotFound: "partNotFound",
+        .partNotDownloaded: "partNotDownloaded",
+        .unsubscribeFailed: "unsubscribeFailed",
+        .quoteNotFound: "quoteNotFound",
+        .malformedCalendar: "malformedCalendar",
+        .recurrenceUnsupported: "recurrenceUnsupported",
+        .addressBookReadOnly: "addressBookReadOnly",
+        .revocationFailed: "revocationFailed",
+    ]
+}
+
+/// The `data` of an `attachmentTooBig` error: the cap that was exceeded and,
+/// where the daemon knows it, the offending size (`message.part` reports the
+/// limit only).
+public struct SizeLimit: Sendable, Equatable {
+    public let limit: Int
+    public let size: Int?
+
+    public init(limit: Int, size: Int? = nil) {
+        self.limit = limit
+        self.size = size
+    }
+}
+
+extension RPCError {
+    /// The structured detail of an `attachmentTooBig` error; nil for any
+    /// other code or when `data` has not the documented shape.
+    public var attachmentTooBig: SizeLimit? {
+        guard code == .attachmentTooBig, let limit = data?["limit"]?.intValue else { return nil }
+        return SizeLimit(limit: limit, size: data?["size"]?.intValue)
+    }
+}

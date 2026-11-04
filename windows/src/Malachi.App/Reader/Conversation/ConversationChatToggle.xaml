@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Windows-only file: the checked look of the chat layout's toggle
+(docs/plans/chat-view.md D9; GTK conversation_view.blp
+conversation_chat_toggle and board_conversation_chat.go, macOS
+ConversationStripView.swift), shared by the strip of Mail's conversation
+view (ConversationView.xaml) and the heading row of the board's
+conversation block (BoardConversationBlock.cs), so that both look the same:
+checked, the accent colour's tint under the accent text and border (not the
+subtle fill the conversation view's other toggles have,
+ConversationStyles.xaml; high contrast keeps WinUI's own). Lightweight
+styling lives in an element's resources, which a Style cannot set, so the
+toggle merges this dictionary into its own Resources; its size and type are
+ConversationStyles.xaml's ConversationChatToggleStyle.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Opacity="0.16" Color="{ThemeResource SystemAccentColorLight2}" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Opacity="0.22" Color="{ThemeResource SystemAccentColorLight2}" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Opacity="0.28" Color="{ThemeResource SystemAccentColorLight2}" />
+            <StaticResource x:Key="ToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
+            <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
+            <StaticResource x:Key="ToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrushChecked" ResourceKey="AccentFillColorDefaultBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="AccentFillColorDefaultBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="AccentFillColorDefaultBrush" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Opacity="0.12" Color="{ThemeResource SystemAccentColorDark1}" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Opacity="0.18" Color="{ThemeResource SystemAccentColorDark1}" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Opacity="0.24" Color="{ThemeResource SystemAccentColorDark1}" />
+            <StaticResource x:Key="ToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
+            <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
+            <StaticResource x:Key="ToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrushChecked" ResourceKey="AccentFillColorDefaultBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="AccentFillColorDefaultBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="AccentFillColorDefaultBrush" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast" />
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

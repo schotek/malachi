@@ -1,0 +1,235 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiMail/App/Actions.swift (the MalachiActions
+// a window implements) and of the validation of MainWindowController and
+// MessageWindowController (flags → enabled items); GTK: the app.* actions
+// of ui/main.go, the win.* of window/actions.go and message_window.go's
+// msg.*. Every window has one set: the application's commands (New
+// Message, Preferences, Add Account, About, Quit), the per-message ones
+// (enabled from the ActionFlags of what the window shows,
+// actions.go setMessageActionsSensitive), the main window's (Check for
+// New Mail, Search, the primary menu's F10), Close for a secondary
+// window, Send and Save Draft of a compose window, the Preferences'
+// reordering. The screens bind their buttons and menu items to these and
+// set the handlers of their own; the CommandRouter runs the ones with keys
+// (docs/windows-port.md §11.5).
+
+using System.Collections.Generic;
+using Malachi.Core.Model;
+using Malachi.Core.Presentation;
+
+namespace Malachi.App.Commands;
+
+/// <summary>The commands of one window, by name.</summary>
+public sealed class WindowCommands
+{
+    private readonly Dictionary<ShortcutCommand, AppCommand> byShortcut;
+    private ActionFlags flags;
+
+    /// <summary>A set whose commands are all disabled until their handlers are set.</summary>
+    public WindowCommands()
+    {
+        byShortcut = new()
+        {
+            [ShortcutCommand.NewMessage] = NewMessage,
+            [ShortcutCommand.Preferences] = Preferences,
+            [ShortcutCommand.Quit] = Quit,
+            [ShortcutCommand.CheckForNewMail] = CheckForNewMail,
+            [ShortcutCommand.Search] = Search,
+            [ShortcutCommand.ShowMail] = ShowMail,
+            [ShortcutCommand.ShowBoard] = ShowBoard,
+            [ShortcutCommand.ShowCalendar] = ShowCalendar,
+            [ShortcutCommand.NewEvent] = NewEvent,
+            [ShortcutCommand.MainMenu] = MainMenu,
+            [ShortcutCommand.Undo] = Undo,
+            [ShortcutCommand.Reply] = Reply,
+            [ShortcutCommand.ReplyAll] = ReplyAll,
+            [ShortcutCommand.Forward] = Forward,
+            [ShortcutCommand.Trash] = Trash,
+            [ShortcutCommand.Archive] = Archive,
+            [ShortcutCommand.Junk] = Junk,
+            [ShortcutCommand.MarkUnread] = MarkUnread,
+            [ShortcutCommand.ToggleFlag] = ToggleFlag,
+            [ShortcutCommand.CloseWindow] = CloseWindow,
+            [ShortcutCommand.Send] = Send,
+            [ShortcutCommand.SaveDraft] = SaveDraft,
+            [ShortcutCommand.MoveUp] = MoveUp,
+            [ShortcutCommand.MoveDown] = MoveDown,
+            [ShortcutCommand.Print] = Print,
+        };
+        // The per-message commands follow Flags unless a screen says otherwise.
+        Reply.CanExecute = () => flags.Reply;
+        ReplyAll.CanExecute = () => flags.ReplyAll;
+        Forward.CanExecute = () => flags.Forward;
+        Trash.CanExecute = () => flags.Trash;
+        Archive.CanExecute = () => flags.Archive;
+        Junk.CanExecute = () => flags.Junk;
+        MarkRead.CanExecute = () => flags.MarkRead;
+        MarkUnread.CanExecute = () => flags.MarkUnread;
+        ToggleFlag.CanExecute = () => flags.ToggleFlag;
+        LoadImages.CanExecute = () => flags.LoadImages;
+        TrustSender.CanExecute = () => flags.TrustSender;
+        ChangeStatus.CanExecute = () => flags.ChangeStatus;
+        // Print takes one row, or several up to Print.MaxMessages (macOS's
+        // validation of printMail:); the Calendar's screen says otherwise.
+        Print.CanExecute = () => flags.On && flags.Count <= Core.Printing.Print.MaxMessages;
+    }
+
+    /// <summary>app.compose (Ctrl+N).</summary>
+    public AppCommand NewMessage { get; } = new(nameof(NewMessage));
+
+    /// <summary>app.preferences (Ctrl+,).</summary>
+    public AppCommand Preferences { get; } = new(nameof(Preferences));
+
+    /// <summary>app.add-account.</summary>
+    public AppCommand AddAccount { get; } = new(nameof(AddAccount));
+
+    /// <summary>app.add-jira-account: the Jira account assistant.</summary>
+    public AppCommand AddJiraAccount { get; } = new(nameof(AddJiraAccount));
+
+    /// <summary>Add CalDAV Calendar… (macOS addCalDAVAccount:, docs/calendar.md §5.8): the Add CalDAV Calendar window.</summary>
+    public AppCommand AddCalDAVCalendar { get; } = new(nameof(AddCalDAVCalendar));
+
+    /// <summary>app.contacts: the Contacts window (the "…" menus, no key; contacts_window.go).</summary>
+    public AppCommand Contacts { get; } = new(nameof(Contacts));
+
+    /// <summary>app.about.</summary>
+    public AppCommand About { get; } = new(nameof(About));
+
+    /// <summary>app.quit (Ctrl+Q).</summary>
+    public AppCommand Quit { get; } = new(nameof(Quit));
+
+    /// <summary>win.refresh (F5; Ctrl+R with ctrl-r = refresh).</summary>
+    public AppCommand CheckForNewMail { get; } = new(nameof(CheckForNewMail));
+
+    /// <summary>win.search (Ctrl+F, Ctrl+E): the search box.</summary>
+    public AppCommand Search { get; } = new(nameof(Search));
+
+    /// <summary>The main window's Mail mode (the title bar's switch, the menus' Mail, Ctrl+1).</summary>
+    public AppCommand ShowMail { get; } = new(nameof(ShowMail));
+
+    /// <summary>The main window's Board mode (the title bar's switch, the menus' Board, Ctrl+2).</summary>
+    public AppCommand ShowBoard { get; } = new(nameof(ShowBoard));
+
+    /// <summary>The main window's Calendar mode (the title bar's switch, the menus' Calendar, Ctrl+3).</summary>
+    public AppCommand ShowCalendar { get; } = new(nameof(ShowCalendar));
+
+    /// <summary>
+    /// New Event (Board.Command.NewEvent: the Mail and Calendar modes;
+    /// Ctrl+Shift+N, and the calendar's "+" and "…" menu, wired with the
+    /// calendar's page).
+    /// </summary>
+    public AppCommand NewEvent { get; } = new(nameof(NewEvent));
+
+    /// <summary>The main window's primary menu (F10), while its button is shown.</summary>
+    public AppCommand MainMenu { get; } = new(nameof(MainMenu));
+
+    /// <summary>
+    /// win.undo (Ctrl+Z; window/undo.go undoLast): takes back the newest
+    /// move of mail. The main window's, gated to Mail and Board.
+    /// </summary>
+    public AppCommand Undo { get; } = new(nameof(Undo));
+
+    /// <summary>Reply (Ctrl+R).</summary>
+    public AppCommand Reply { get; } = new(nameof(Reply));
+
+    /// <summary>Reply All (Ctrl+Shift+R).</summary>
+    public AppCommand ReplyAll { get; } = new(nameof(ReplyAll));
+
+    /// <summary>Forward (Ctrl+Shift+F).</summary>
+    public AppCommand Forward { get; } = new(nameof(Forward));
+
+    /// <summary>win.trash (Delete): Move to Trash, or Cancel Sending in the outbox.</summary>
+    public AppCommand Trash { get; } = new(nameof(Trash));
+
+    /// <summary>win.archive (A).</summary>
+    public AppCommand Archive { get; } = new(nameof(Archive));
+
+    /// <summary>win.junk (J).</summary>
+    public AppCommand Junk { get; } = new(nameof(Junk));
+
+    /// <summary>win.mark-read (menu only).</summary>
+    public AppCommand MarkRead { get; } = new(nameof(MarkRead));
+
+    /// <summary>win.mark-unread (U).</summary>
+    public AppCommand MarkUnread { get; } = new(nameof(MarkUnread));
+
+    /// <summary>win.toggle-flag (S).</summary>
+    public AppCommand ToggleFlag { get; } = new(nameof(ToggleFlag));
+
+    /// <summary>win.load-images (menu).</summary>
+    public AppCommand LoadImages { get; } = new(nameof(LoadImages));
+
+    /// <summary>win.trust-sender (menu).</summary>
+    public AppCommand TrustSender { get; } = new(nameof(TrustSender));
+
+    /// <summary>
+    /// win.change-status (menu, hidden while disabled): pops up the Change
+    /// Status menu of the issue card on display, where the row's account
+    /// changes the statuses of its issues.
+    /// </summary>
+    public AppCommand ChangeStatus { get; } = new(nameof(ChangeStatus));
+
+    /// <summary>Closes a secondary window (Escape, Ctrl+W); the window may veto it with CanExecute.</summary>
+    public AppCommand CloseWindow { get; } = new(nameof(CloseWindow));
+
+    /// <summary>compose.send (Ctrl+Enter).</summary>
+    public AppCommand Send { get; } = new(nameof(Send));
+
+    /// <summary>compose.save (Ctrl+S).</summary>
+    public AppCommand SaveDraft { get; } = new(nameof(SaveDraft));
+
+    /// <summary>Moves the selected account up (Ctrl+Up).</summary>
+    public AppCommand MoveUp { get; } = new(nameof(MoveUp));
+
+    /// <summary>Moves the selected account down (Ctrl+Down).</summary>
+    public AppCommand MoveDown { get; } = new(nameof(MoveDown));
+
+    /// <summary>
+    /// Print (Ctrl+P; docs/plans/toolbar-customization.md §8, macOS
+    /// printMail:): the main window's selection, or the Calendar's event or
+    /// day, and a message window's message.
+    /// </summary>
+    public AppCommand Print { get; } = new(nameof(Print));
+
+    /// <summary>
+    /// What the window's current message allows (the list's selection in
+    /// the main window, the message of a message window); the per-message
+    /// commands are re-validated when it changes.
+    /// </summary>
+    public ActionFlags Flags
+    {
+        get => flags;
+        set
+        {
+            if (flags == value)
+            {
+                return;
+            }
+            flags = value;
+            foreach (var c in (AppCommand[])[Reply, ReplyAll, Forward, Trash, Archive, Junk, MarkRead, MarkUnread, ToggleFlag, LoadImages, TrustSender, ChangeStatus, Print])
+            {
+                c.Refresh();
+            }
+        }
+    }
+
+    /// <summary>The command of a keyboard shortcut.</summary>
+    public AppCommand For(ShortcutCommand command) => byShortcut[command];
+
+    /// <summary>Every command, for re-validating them all (a hook was wired).</summary>
+    public IEnumerable<AppCommand> All =>
+    [
+        .. byShortcut.Values, AddAccount, AddJiraAccount, AddCalDAVCalendar, Contacts, About, MarkRead, LoadImages, TrustSender, ChangeStatus
+    ];
+
+    /// <summary>Re-validates every command.</summary>
+    public void RefreshAll()
+    {
+        foreach (var c in All)
+        {
+            c.Refresh();
+        }
+    }
+}

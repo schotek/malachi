@@ -1,0 +1,1296 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiMail/MessageList/MessageListViewController.swift
+// (the callbacks it installs, the banners, apply(rows:hint:), refreshRows,
+// syncSelection, applyAppearance, show(state), showLoadMore, focus(key),
+// rowDoubleClicked, activateSelected, foldSelected, the scroll edge,
+// menuForRow), MessageContextMenu.swift and SearchScopeBar.swift; inbox
+// headers: MailDateHeaderView.swift; GTK: ui/internal/window/window.go (the list's
+// date_groups.go and row-selected and row-activated handlers, refreshListTitle,
+// showConnectionState's banner), messages.go (showListState, showLoadMore,
+// applyListAppearance), threads.go (syncRows, addThreadShortcuts),
+// context_menus.go (showMessageMenu, commonFolder, moveToMenu), search.go
+// (the scope toggles, the filter hidden while searching, refreshSearchScope's
+// tooltips) and selection.go (setupSelection, onSelectionChanged,
+// restrictSelection, selectOnly, openSelection).
+//
+// The view mirrors ListController.Rows by key into MessageRows updated in
+// place (KeyedListSync's view overload) and selects SelectedKeys after every
+// apply with its own handler suppressed; a click goes back as SelectKeys,
+// and never a deselection the collection caused (docs/windows-port.md
+// §7.5).
+//
+// Several rows (selection.go; MessageListViewController.swift's
+// allowsMultipleSelection, selectionIndexesForProposedSelection,
+// clearSeveral): the ListView's Extended selection, so Ctrl-click toggles a
+// row, Shift-click and Shift+arrows extend, Ctrl+A selects every row shown;
+// the date headings are the groups' headers, never items. The selection
+// stays within one account: the rows of another account than the row the
+// user added last (the focused one when it is selected, else the first this
+// change added) leave it (ListController.Restrict). Escape lets go of
+// several rows; with one it goes on as before. Several rows never take a
+// folded window to the message page (MessageChosen is for one), and Enter,
+// Left, Right and Space do what they do for one row only.
+// Paging is Core's (MailboxController.Paging.cs): the view reports the
+// viewport after every change of the rows' extent or the pane's size and on
+// every scroll, and shows Load More for retries or while inbox sections are collapsed.
+//
+// The context menu of a message (context_menus.go showMessageMenu and
+// moveToMenu; what it offers is Core's ContextMenu, the port of
+// ui/internal/contextmenu): a right click, Shift+F10 or the Menu key on a
+// row outside the selection selects that row alone first (without showing
+// the message in a folded window, where the list stays in sight under the
+// menu; a click on the row selected so shows it there, as a click on any
+// other row does), on a row of a selection of several rows keeps it (the
+// keyboard on a row outside it: the selection's menu at its first row), and
+// the items act on the selection through the window's commands, enabled as
+// the command row's are; Open in New Window (Edit for a draft) opens it as
+// activating its row does (several rows: a window each, up to
+// Selection.MaxOpen), Move To lists the account's folders as the sidebar
+// orders them (the current folder disabled when every row is in it), and
+// the Assistant's submenu is the ✦ menu's items for that many rows.
+//
+// The keyboard goes to the list on request (the end of a search, the back
+// button): the request waits until rows are shown and their containers are
+// realised, since after a search the folder's rows come with the daemon's
+// reply, and a container that is not there yet cannot take the focus. It
+// lapses when the focus is placed, when the user selects a row or takes the
+// keyboard elsewhere, when a new search starts, and when the list ends on a
+// status page instead of rows.
+
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Globalization;
+using System.Linq;
+using Malachi.App.Assistants;
+using Malachi.App.Commands;
+using Malachi.App.Controls;
+using Malachi.App.Localization;
+using Malachi.Core.Api;
+using Malachi.Core.ContextMenus;
+using Malachi.Core.Controllers;
+using Malachi.Core.I18n;
+using Malachi.Core.Model;
+using Malachi.Core.Presentation;
+using Malachi.Core.Rules;
+using Malachi.Core.Settings;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using WinKey = Windows.System.VirtualKey;
+
+namespace Malachi.App.Main;
+
+/// <summary>The message list pane.</summary>
+public sealed partial class MessageListPane : UserControl
+{
+    private static readonly MessageFilter[] Filters = [MessageFilter.All, MessageFilter.Unread, MessageFilter.Flagged];
+    private static readonly SearchScope[] Scopes = [SearchScope.Folder, SearchScope.Account, SearchScope.All];
+
+    // Layout passes a waiting focus request survives without its container.
+    private const int MaxFocusAttempts = 8;
+
+    private readonly Button retryButton;
+    private readonly AfterRelease afterRelease;
+    private readonly MailDateList dateList = new();
+    private readonly CollectionViewSource groupedSource;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer calendarTimer;
+    private (DateTime Day, TimeSpan Offset, DayOfWeek FirstDay) calendarStamp;
+    private ListController? list;
+
+    // The toolbar-mail layout has the filter (Windows draws it as the row
+    // under the header, so only its presence counts; W.2).
+    private bool filterShown = true;
+    private MailboxController? mailbox;
+    private ActionsController? actions;
+    private SettingsStore? settings;
+    private WindowCommands? commands;
+    private ScrollViewer? scroller;
+    private bool reselecting;
+    private bool settingFilter;
+    private bool selectingForMenu;
+    private bool focusPending;
+    private bool focusWaitsForLayout;
+    private int focusAttempts;
+    private DependencyObject? focusFrom;
+
+    /// <summary>An empty list; <see cref="Attach"/> connects it.</summary>
+    public MessageListPane()
+    {
+        InitializeComponent();
+        groupedSource = new CollectionViewSource
+        {
+            Source = dateList.Sections,
+            IsSourceGrouped = true,
+            ItemsPath = new PropertyPath(nameof(MailDateSectionRow.Rows)),
+        };
+        MessageList.ItemsSource = Rows;
+        calendarTimer = DispatcherQueue.CreateTimer();
+        calendarTimer.Interval = TimeSpan.FromSeconds(30);
+        calendarTimer.Tick += (_, _) =>
+        {
+            if (dateList.Enabled && calendarStamp != CalendarStamp())
+            {
+                ApplyRows();
+            }
+        };
+        Loaded += (_, _) =>
+        {
+            ApplyRows();
+            calendarTimer.Start();
+        };
+        Unloaded += (_, _) => calendarTimer.Stop();
+        NameSelectorList(FilterBar);
+        NameSelectorList(ScopeBar);
+        MessageList.AddHandler(TappedEvent, new TappedEventHandler(OnRowTapped), handledEventsToo: true);
+        afterRelease = new AfterRelease(MessageList);
+        // list_retry_button: a pill under the status page's texts.
+        retryButton = new Button
+        {
+            Content = L10n.T("Try Again"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            CornerRadius = new CornerRadius(16),
+            Padding = new Thickness(20, 6, 20, 6),
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(retryButton, "ListRetryButton");
+        retryButton.Click += (_, _) => list?.Retry();
+        ListStatusPage.Child = retryButton;
+        LoadMoreButton.Click += (_, _) => list?.RetryLoadMore();
+        // The list's viewer exists once its template is applied, which a
+        // list collapsed under a status page has not had yet.
+        MessageList.Loaded += (_, _) => HookScroller();
+        MessageList.SizeChanged += (_, _) =>
+        {
+            HookScroller();
+            ReportViewport();
+        };
+    }
+
+    /// <summary>
+    /// The user selected a message (window.go onMessageRowSelected:
+    /// innerSplit.SetShowContent); never for several rows, which stay in
+    /// the list.
+    /// </summary>
+    public event EventHandler? MessageChosen;
+
+    /// <summary>The sign-in banner's button (sync.go onAuthBannerButton).</summary>
+    public event EventHandler? AuthBannerInvoked;
+
+    /// <summary>The certificate banner's Edit Account… (sync.go onCertBannerButton).</summary>
+    public event EventHandler? CertBannerInvoked;
+
+    /// <summary>The backend banner's Retry (window.go reconnect).</summary>
+    public event EventHandler? ReconnectRequested;
+
+    /// <summary>The rows, in the list's order.</summary>
+    public ObservableCollection<MessageRow> Rows => dateList.Rows;
+
+    /// <summary>The header's strip: the Message List section of the user's toolbar-mail layout (MainWindow.Toolbars.cs).</summary>
+    internal Toolbars.ToolbarStrip ToolbarStrip => HeaderStrip;
+
+    /// <summary>The header bar (a right click on an empty spot offers Customize Toolbar…).</summary>
+    internal FrameworkElement ToolbarBar => HeaderRow;
+
+    /// <summary>The header's Check for New Mail button (the display mode shows its label).</summary>
+    internal Button Refresh => RefreshButton;
+
+    /// <summary>Whether the layout has the filter: the row of All, Unread and Flagged shows (outside a search).</summary>
+    internal void SetFilterShown(bool shown)
+    {
+        if (filterShown == shown)
+        {
+            return;
+        }
+        filterShown = shown;
+        ShowFilter();
+    }
+
+    /// <summary>
+    /// The toolbar's Move To (and More Actions'): the folders of the
+    /// selection's account, as the list's context menu has them; nothing
+    /// without a selection that may move.
+    /// </summary>
+    internal void FillSelectionMoveTargets(IList<MenuFlyoutItemBase> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (list is not { } l || commands is not { } c || !c.Flags.Move)
+        {
+            return;
+        }
+        var rows = l.SelectedRows;
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        FillMoveTargets(items, rows[0].Message.AccountId, CommonFolder(rows));
+    }
+
+    // The title stays centred: the balance is as wide as the strip.
+    private void OnHeaderStripSizeChanged(object sender, SizeChangedEventArgs e) => HeaderBalance.Width = Math.Max(0, e.NewSize.Width);
+
+    /// <summary>
+    /// Installs the view-facing callbacks of the list half, the mailbox's
+    /// title and the sync controller's banners, and shows what they hold
+    /// already; <paramref name="actionsController"/> opens and moves the
+    /// selection from the context menu.
+    /// </summary>
+    public void Attach(ListController listController, SyncController sync, ActionsController actionsController, WindowCommands windowCommands)
+    {
+        ArgumentNullException.ThrowIfNull(listController);
+        ArgumentNullException.ThrowIfNull(sync);
+        ArgumentNullException.ThrowIfNull(actionsController);
+        ArgumentNullException.ThrowIfNull(windowCommands);
+        list = listController;
+        mailbox = listController.Mailbox;
+        actions = actionsController;
+        settings = listController.Settings;
+        commands = windowCommands;
+        CommandBinding.Bind(RefreshButton, windowCommands.CheckForNewMail);
+        BackendRetryButton.Click += (_, _) => ReconnectRequested?.Invoke(this, EventArgs.Empty);
+        AuthBannerButton.Click += (_, _) => AuthBannerInvoked?.Invoke(this, EventArgs.Empty);
+        CertBannerButton.Click += (_, _) => CertBannerInvoked?.Invoke(this, EventArgs.Empty);
+
+        listController.RowsChanged += (_, _) => ApplyRows();
+        listController.RowsRefreshed += (_, _) => ApplyRows();
+        listController.ListStateChanged += (_, state) => ShowState(state);
+        listController.LoadMoreChanged += (_, _) => ShowLoadMore();
+        listController.SelectionCleared += (_, _) => SyncSelection();
+        listController.SearchBarChanged += (_, bar) => ShowScope(bar);
+        listController.FocusRow += (_, key) => FocusRow(key);
+        listController.PropertyChanged += OnListPropertyChanged;
+        mailbox.ListTitleChanged += (_, heading) => ShowHeading(heading);
+        sync.AuthBannerChanged += (_, banner) => ShowBanner(AuthBanner, AuthBannerButton, banner);
+        sync.CertBannerChanged += (_, banner) => ShowBanner(CertBanner, null, banner);
+        foreach (var key in (SettingsKey[])[SettingsKey.Density, SettingsKey.ShowPreviewLine, SettingsKey.ShowAvatars, SettingsKey.MonochromeAvatars])
+        {
+            settings.OnChange(key, ApplyRows);
+        }
+
+        // What the controllers hold already.
+        Reveal(BackendBanner, false);
+        Reveal(AuthBanner, false);
+        Reveal(CertBanner, false);
+        ShowHeading(mailbox.ListHeading);
+        ApplyRows();
+        ShowState(listController.ListState);
+        ShowLoadMore();
+        ShowScope(listController.SearchBar);
+        ShowFilter();
+    }
+
+    /// <summary>
+    /// The connection changed (window.go showConnectionState, after the
+    /// mailbox): the backend banner shows while there is no daemon, hides on
+    /// a connection or a daemon of another protocol (the status line names
+    /// it), and an attempt underway leaves it as it is, so it does not blink
+    /// with the retry loop.
+    /// </summary>
+    public void ShowConnectionState(ConnectionState state)
+    {
+        switch (state)
+        {
+            case ConnectionState.Unavailable or ConnectionState.Stopping:
+                Reveal(BackendBanner, true);
+                break;
+            case ConnectionState.Connected or ConnectionState.ProtocolMismatch or ConnectionState.InfoFailed:
+                Reveal(BackendBanner, false);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Puts the keyboard on the selected row, or on the first (search.go
+    /// onSearchModeChanged: messageList.GrabFocus); while the rows are not
+    /// shown yet (the folder reloading after a search), as soon as they are.
+    /// </summary>
+    public void FocusList()
+    {
+        focusPending = true;
+        focusFrom = XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
+        TryFocusPending();
+    }
+
+    /// <summary>A request of <see cref="FocusList"/> still waiting lapses (the search box took the keyboard again).</summary>
+    public void CancelFocusList() => EndFocusRequest();
+
+    /// <summary>
+    /// window.go addConversationPaging: Space pages down (up with Shift)
+    /// through the conversation the pane shows; true when it did, false when
+    /// the key does what it did (no conversation shown).
+    /// </summary>
+    internal Func<bool, bool>? PageConversation { get; set; }
+
+    /// <summary>
+    /// The main window's Assistant menu (null before the reader exists):
+    /// while the Assistant is shown, a message's context menu has its items
+    /// as a submenu.
+    /// </summary>
+    internal AssistantMenu? AssistantMenu { get; set; }
+
+    /// <summary>
+    /// The main window's eWay-CRM actions (MainWindow.Crm.cs): the message
+    /// menu's Save to eWay-CRM… of the selection, or for one saved message
+    /// Open in eWay-CRM, Edit Links… and Remove from eWay-CRM
+    /// (contextmenu.go CrmSave, CrmOpen, CrmEditLinks, CrmRemove); none
+    /// before the Integration.
+    /// </summary>
+    internal Malachi.Core.Controllers.CrmController? Crm { get; set; }
+
+    /// <summary>
+    /// The main window's Create Rule from Message… (MainWindow.Rules.cs): the
+    /// message menu's item of one message of a mail account opens the rule
+    /// editor prefilled from it (contextmenu.go CreateRule); none before the
+    /// Integration.
+    /// </summary>
+    internal Action<MessageSummary>? CreateRule { get; set; }
+
+    /// <summary>A conversation row's fold arrow (threads.go toggleThread).</summary>
+    internal void ToggleThread(MessageRow row)
+    {
+        if (row.IsThread && row.Key.Thread is { } tid)
+        {
+            list?.ToggleThread(tid);
+        }
+    }
+
+    // window.go refreshListTitle: the folder and its counts, or Search and
+    // the number of results.
+    private void ShowHeading(ListHeading heading)
+    {
+        ListTitleText.Text = heading.Title;
+        ListSubtitleText.Text = heading.Subtitle;
+        ListSubtitleText.Visibility = heading.Subtitle.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // sync.go showAuthRequired / hideAuthBanner, refreshCertBanner. The
+    // title is the account and the reason, plain text; the sign-in banner's
+    // button says what it does for the account (a null button keeps the
+    // label the XAML gives: the certificate banner's "_Edit Account…", with
+    // its access key).
+    private static void ShowBanner(InfoBar bar, Button? button, SyncBanner banner)
+    {
+        if (banner.IsHidden)
+        {
+            Reveal(bar, false);
+            return;
+        }
+        bar.Message = banner.Title ?? "";
+        if (button is not null && banner.Button is { } label)
+        {
+            button.Content = label;
+        }
+        Reveal(bar, true);
+    }
+
+    // Adw.Banner's revealed: a closed banner takes no room, its margin
+    // included.
+    private static void Reveal(InfoBar bar, bool open)
+    {
+        bar.IsOpen = open;
+        bar.Margin = open ? new Thickness(6, 6, 6, 0) : default;
+    }
+
+    // MessageListViewController.apply(rows:hint:): the rows by key, updated
+    // in place; then the hairline of the last row and the selection.
+    private void ApplyRows()
+    {
+        if (list is not { } l || settings is null || mailbox is null)
+        {
+            return;
+        }
+        // The user's own rows (Sent, Outbox) never show a contact's photo (F10).
+        var look = RowAppearance.From(settings, l.SearchActive, mailbox.Model.Grouped) with
+        {
+            Own = l.FolderRole == FolderRole.Sent || l.FolderRole == FolderRole.Outbox,
+        };
+        calendarStamp = CalendarStamp();
+        reselecting = true;
+        try
+        {
+            var selected = l.SelectedKeys;
+            var folder = mailbox.Model.ListFolder;
+            var sections = !l.SearchActive && l.FolderRole == FolderRole.Inbox;
+            void Apply() => dateList.Apply(l.Rows, folder, sections, selected.Count > 0 ? selected[0] : (ListKey?)null,
+                (view, row, now) => view.Update(row, l.RowMessage(row.Message), look, now));
+            Apply();
+            // Every selected row in sight (date_groups.go syncDateRows): a
+            // flag may have moved one of several into a folded section.
+            var revealed = false;
+            for (var i = 1; i < selected.Count; i++)
+            {
+                revealed |= dateList.Reveal(selected[i]);
+            }
+            if (revealed)
+            {
+                Apply();
+            }
+            var source = dateList.Enabled ? (object)groupedSource.View : Rows;
+            if (!ReferenceEquals(MessageList.ItemsSource, source))
+            {
+                MessageList.ItemsSource = source;
+            }
+        }
+        finally
+        {
+            reselecting = false;
+        }
+        SyncSelection();
+        ShowLoadMore();
+        TryFocusPending();
+        // After the layout: the rows' extent moved (fillPane).
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ReportViewport);
+    }
+
+    private static (DateTime Day, TimeSpan Offset, DayOfWeek FirstDay) CalendarStamp()
+    {
+        var now = TimeZoneInfo.ConvertTime(TimeProvider.System.GetUtcNow(), TimeZoneInfo.Local);
+        return (now.Date, now.Offset, CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek);
+    }
+
+    // date_groups.go toggleDateGroup: the selected rows a fold hides leave
+    // the selection (the pane follows), or the next apply would unfold
+    // their section again.
+    private void OnDateGroupClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: MailDateSectionRow section } && list is { } l)
+        {
+            // The rows a fold hides (an unfold hides none: a folded
+            // section has no rows).
+            var hidden = section.Rows.Select(r => r.Key).ToHashSet();
+            _ = dateList.Toggle(section.Group, null);
+            ListKey[] kept = [.. l.SelectedKeys.Where(k => !hidden.Contains(k))];
+            if (kept.Length != l.SelectedKeys.Count)
+            {
+                l.SelectKeys(kept);
+            }
+            ApplyRows();
+        }
+    }
+
+    // syncSelection: the controller's SelectedKeys, without re-entering
+    // SelectKeys; a key the view does not show is left out.
+    private void SyncSelection()
+    {
+        if (list is null)
+        {
+            return;
+        }
+        var byKey = new Dictionary<ListKey, MessageRow>();
+        foreach (var r in Rows)
+        {
+            byKey.TryAdd(r.Key, r);
+        }
+        var wanted = new List<MessageRow>();
+        foreach (var key in list.SelectedKeys)
+        {
+            if (byKey.TryGetValue(key, out var row))
+            {
+                wanted.Add(row);
+            }
+        }
+        var wantedSet = wanted.ToHashSet();
+        var selected = MessageList.SelectedItems;
+        var current = selected.OfType<MessageRow>().ToHashSet();
+        if (current.Count == selected.Count && current.SetEquals(wantedSet))
+        {
+            return;
+        }
+        reselecting = true;
+        try
+        {
+            for (var i = selected.Count - 1; i >= 0; i--)
+            {
+                if (selected[i] is not MessageRow r || !wantedSet.Contains(r))
+                {
+                    selected.RemoveAt(i);
+                }
+            }
+            foreach (var row in wanted)
+            {
+                if (!current.Contains(row))
+                {
+                    selected.Add(row);
+                }
+            }
+        }
+        finally
+        {
+            reselecting = false;
+        }
+    }
+
+    // The selected rows in the list's order (SelectedItems keeps the order
+    // they were selected in).
+    private List<MessageRow> SelectedRowsInOrder()
+    {
+        var selected = MessageList.SelectedItems.OfType<MessageRow>().ToHashSet();
+        return [.. Rows.Where(selected.Contains)];
+    }
+
+    // selectOnly: row becomes the whole selection, as a plain click makes
+    // it; the selection handler runs for it.
+    private void SelectOnly(MessageRow row)
+    {
+        MessageList.SelectedItem = row;
+        // What an Extended selection kept beside it goes as well.
+        foreach (var other in MessageList.SelectedItems.OfType<MessageRow>().Where(r => !ReferenceEquals(r, row)).ToList())
+        {
+            MessageList.SelectedItems.Remove(other);
+        }
+    }
+
+    // messages.go showListState (window.blp list_stack).
+    private void ShowState(ListState state)
+    {
+        if (state is ListState.Status page)
+        {
+            // An empty icon is the Loading… page, which has none.
+            ListStatusPage.Show(page.Icon, page.Title, page.Description);
+            retryButton.Visibility = page.Retry ? Visibility.Visible : Visibility.Collapsed;
+            ListStatusPage.Visibility = Visibility.Visible;
+            MessagesPage.Visibility = Visibility.Collapsed;
+            if (page.Icon.Length > 0)
+            {
+                // No rows to come: the keyboard stays where it is.
+                EndFocusRequest();
+            }
+            return;
+        }
+        ListStatusPage.Visibility = Visibility.Collapsed;
+        MessagesPage.Visibility = Visibility.Visible;
+        TryFocusPending();
+    }
+
+    // FocusList's request, once rows are shown: the selected row's
+    // container, or the first's, realised by a layout pass. A container not
+    // there yet, or refusing the focus, keeps the request for the next pass
+    // (a few at most).
+    private void TryFocusPending()
+    {
+        if (!focusPending || Rows.Count == 0 || MessagesPage.Visibility != Visibility.Visible || Visibility != Visibility.Visible)
+        {
+            return;
+        }
+        if (!FocusStillWanted() || ++focusAttempts > MaxFocusAttempts)
+        {
+            EndFocusRequest();
+            return;
+        }
+        var index = Math.Clamp(MessageList.SelectedIndex, 0, Rows.Count - 1);
+        MessageList.UpdateLayout();
+        if (MessageList.ContainerFromIndex(index) is not ListViewItem)
+        {
+            MessageList.ScrollIntoView(Rows[index]);
+            MessageList.UpdateLayout();
+        }
+        if (MessageList.ContainerFromIndex(index) is ListViewItem item && item.Focus(FocusState.Keyboard))
+        {
+            EndFocusRequest();
+            return;
+        }
+        if (!focusWaitsForLayout)
+        {
+            focusWaitsForLayout = true;
+            MessageList.LayoutUpdated += OnLayoutForFocus;
+        }
+    }
+
+    private void OnLayoutForFocus(object? sender, object e)
+    {
+        MessageList.LayoutUpdated -= OnLayoutForFocus;
+        focusWaitsForLayout = false;
+        // Not from inside the layout pass.
+        DispatcherQueue.TryEnqueue(TryFocusPending);
+    }
+
+    // The keyboard is still where it was asked from (or nowhere, or already
+    // in the list): the user has not taken it elsewhere meanwhile.
+    private bool FocusStillWanted()
+    {
+        if (XamlRoot is not { } root)
+        {
+            return false;
+        }
+        var now = FocusManager.GetFocusedElement(root) as DependencyObject;
+        if (now is null || ReferenceEquals(now, focusFrom))
+        {
+            return true;
+        }
+        for (var d = now; d is not null; d = VisualTreeHelper.GetParent(d))
+        {
+            if (ReferenceEquals(d, this))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void EndFocusRequest()
+    {
+        focusPending = false;
+        focusFrom = null;
+        focusAttempts = 0;
+        if (focusWaitsForLayout)
+        {
+            MessageList.LayoutUpdated -= OnLayoutForFocus;
+            focusWaitsForLayout = false;
+        }
+    }
+
+    // messages.go showLoadMore, the macOS way: the spinner while a page
+    // comes, Load More for retries or collapsed sections, the search note.
+    private void ShowLoadMore()
+    {
+        if (list is not { } l)
+        {
+            return;
+        }
+        var state = l.LoadMoreState;
+        LoadMoreSpinner.IsActive = state.Spinner;
+        LoadMoreSpinner.Visibility = state.Spinner ? Visibility.Visible : Visibility.Collapsed;
+        var showButton = l.LoadMoreRetry || (dateList.HasCollapsed && state.Button);
+        LoadMoreButton.Visibility = showButton ? Visibility.Visible : Visibility.Collapsed;
+        LoadMoreBox.Visibility = state.Spinner || showButton ? Visibility.Visible : Visibility.Collapsed;
+        SearchNote.Text = state.Note;
+        SearchNote.Visibility = state.Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // search.go refreshSearchScope (SearchScopeBar.show): the scope, Folder
+    // and Account only with a selected folder, the tooltips naming what each
+    // searches; null hides the bar.
+    private void ShowScope(SearchBarState? bar)
+    {
+        if (bar is null)
+        {
+            ScopeBar.Visibility = Visibility.Collapsed;
+            return;
+        }
+        ScopeBar.Visibility = Visibility.Visible;
+        ScopeFolder.IsEnabled = bar.NarrowEnabled;
+        ScopeAccount.IsEnabled = bar.NarrowEnabled;
+        ToolTipService.SetToolTip(ScopeFolder, bar.FolderTooltip);
+        ToolTipService.SetToolTip(ScopeAccount, bar.AccountTooltip.Length > 0 ? bar.AccountTooltip : null);
+        ToolTipService.SetToolTip(ScopeAll, bar.AllTooltip);
+        var item = ScopeBar.Items[Math.Max(Array.IndexOf(Scopes, bar.Scope), 0)];
+        if (!ReferenceEquals(ScopeBar.SelectedItem, item))
+        {
+            settingFilter = true;
+            try
+            {
+                ScopeBar.SelectedItem = item;
+            }
+            finally
+            {
+                settingFilter = false;
+            }
+        }
+    }
+
+    private void OnScopeChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (settingFilter || list is null || sender.SelectedItem is not { } item)
+        {
+            return;
+        }
+        var i = sender.Items.IndexOf(item);
+        if (i >= 0)
+        {
+            list.SetSearchScope(Scopes[i]);
+        }
+    }
+
+    // window.blp message_filter: the list's filter, hidden while searching.
+    private void ShowFilter()
+    {
+        if (list is not { } l)
+        {
+            return;
+        }
+        FilterBar.Visibility = l.SearchActive || !filterShown ? Visibility.Collapsed : Visibility.Visible;
+        var item = FilterBar.Items[Math.Max(Array.IndexOf(Filters, l.ListFilter), 0)];
+        if (!ReferenceEquals(FilterBar.SelectedItem, item))
+        {
+            settingFilter = true;
+            try
+            {
+                FilterBar.SelectedItem = item;
+            }
+            finally
+            {
+                settingFilter = false;
+            }
+        }
+    }
+
+    private void OnFilterChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (settingFilter || list is null || sender.SelectedItem is not { } item)
+        {
+            return;
+        }
+        var i = sender.Items.IndexOf(item);
+        if (i >= 0)
+        {
+            list.SetListFilter(Filters[i]);
+        }
+    }
+
+    private void OnListPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(ListController.ListFilter):
+                ShowFilter();
+                break;
+            case nameof(ListController.SearchActive):
+                if (list?.SearchActive == true)
+                {
+                    // The search box keeps the keyboard.
+                    EndFocusRequest();
+                }
+                ShowFilter();
+                // A search result's excerpt always shows.
+                ApplyRows();
+                break;
+            case nameof(ListController.LoadMoreRetry):
+                ShowLoadMore();
+                break;
+        }
+    }
+
+    // The rows the user selected (window.go row-selected →
+    // onMessageRowSelected; selection.go onSelectionChanged): one shows its
+    // message, several their count, within one account; a deselection the
+    // collection caused is not the user's and never goes back.
+    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (reselecting || list is null)
+        {
+            return;
+        }
+        EndFocusRequest();
+        var rows = SelectedRowsInOrder();
+        IReadOnlyList<ListKey> keys = rows.Count > 1 ? Restricted(rows, e) : [.. rows.Select(r => r.Key)];
+        list.SelectKeys(keys);
+        // The rows of another account (restrictSelection) leave the view's
+        // selection too.
+        SyncSelection();
+        if (keys.Count == 1 && !selectingForMenu)
+        {
+            MessageChosen?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    // selection.go restrictSelection: the keys of rows (two or more, in
+    // list order) within the account of the row the user added last: the
+    // focused one when it is selected, else the first this change added,
+    // else the last.
+    private IReadOnlyList<ListKey> Restricted(List<MessageRow> rows, SelectionChangedEventArgs e)
+    {
+        var latest = rows[^1];
+        var added = e.AddedItems.OfType<MessageRow>().ToHashSet();
+        if (FocusedRow() is { } focused && rows.Contains(focused))
+        {
+            latest = focused;
+        }
+        else if (rows.FirstOrDefault(added.Contains) is { } first)
+        {
+            latest = first;
+        }
+        ListKey[] keys = [.. rows.Select(r => r.Key)];
+        return list is { } l ? l.Restrict(keys, latest.Key) : keys;
+    }
+
+    // The row whose container has the keyboard, if any.
+    private MessageRow? FocusedRow() =>
+        XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused ? RowAt(focused, out _) : null;
+
+    // Windows addition: a click on the row already selected shows it too,
+    // which a folded window needs for a row a context menu selected (or one
+    // left selected by the back button); a click that selects shows it
+    // through OnSelectionChanged, and a second MessageChosen is harmless.
+    // Not for several rows, which stay in the list.
+    private void OnRowTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (RowAt(e.OriginalSource as DependencyObject, out var inButton) is { } row && !inButton
+            && MessageList.SelectedItems.Count == 1 && ReferenceEquals(MessageList.SelectedItem, row))
+        {
+            MessageChosen?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Scrolls the row of <paramref name="key"/> into view without touching
+    /// the selection or the keyboard (the row= step of MainWindow.DevStart.cs,
+    /// after the controller's Select).
+    /// </summary>
+    internal void ScrollTo(ListKey key)
+    {
+        if (Rows.FirstOrDefault(r => r.Key == key) is { } row)
+        {
+            MessageList.ScrollIntoView(row);
+        }
+    }
+
+    // search.go selectFirstResult (MessageListViewController.focus): the
+    // row is selected, shown and given the keyboard.
+    private void FocusRow(ListKey key)
+    {
+        if (dateList.Reveal(key))
+        {
+            ApplyRows();
+        }
+        if (Rows.FirstOrDefault(r => r.Key == key) is not { } row)
+        {
+            return;
+        }
+        SelectOnly(row);
+        MessageList.ScrollIntoView(row);
+        MessageList.UpdateLayout();
+        if (MessageList.ContainerFromItem(row) is ListViewItem item)
+        {
+            item.Focus(FocusState.Keyboard);
+        }
+    }
+
+    // MessageListTableView.keyDown: Enter opens the selected row (a
+    // conversation folds instead), Left folds its conversation, Right
+    // unfolds a conversation row; a key with nothing to do goes on to the
+    // list (threads.go addThreadShortcuts). Those are for one selected row;
+    // Escape lets go of several, and Ctrl+A selects every row shown
+    // (selection.go setupSelection).
+    private void OnListKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == WinKey.Escape)
+        {
+            // With one row (or none) it goes on to the window.
+            if (MessageList.SelectedItems.Count > 1)
+            {
+                MessageList.SelectedItems.Clear();
+                e.Handled = true;
+            }
+            return;
+        }
+        if (e.Key == WinKey.A && ModifierDown(WinKey.Control) && !ModifierDown(WinKey.Shift) && !ModifierDown(WinKey.Menu))
+        {
+            // The ListView's own key in Extended mode, made sure of.
+            MessageList.SelectAll();
+            e.Handled = true;
+            return;
+        }
+        // A disclosure button owns Enter/Space/arrows while it has focus.
+        for (var source = e.OriginalSource as DependencyObject; source is not null && source != MessageList;
+            source = VisualTreeHelper.GetParent(source))
+        {
+            if (source is FrameworkElement { DataContext: MailDateSectionRow })
+            {
+                return;
+            }
+        }
+        if (list is not { } l || MessageList.SelectedItems.Count != 1 || MessageList.SelectedItem is not MessageRow row)
+        {
+            return;
+        }
+        if (e.Key == WinKey.Space && PageConversation is { } page && !ModifierDown(WinKey.Control) && !ModifierDown(WinKey.Menu)
+            && !ModifierDown(WinKey.LeftWindows) && !ModifierDown(WinKey.RightWindows))
+        {
+            e.Handled = page(ModifierDown(WinKey.Shift));
+            return;
+        }
+        switch (e.Key)
+        {
+            case WinKey.Enter:
+                l.Activate(row.Key);
+                e.Handled = true;
+                break;
+            case WinKey.Left when row.Key.Thread is { } tid:
+                e.Handled = l.SetThreadExpanded(tid, false);
+                break;
+            case WinKey.Right when row.Key.Thread is { } tid && !row.IsMember:
+                e.Handled = l.SetThreadExpanded(tid, true);
+                break;
+        }
+    }
+
+    private static bool ModifierDown(WinKey key) =>
+        Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
+    // rowDoubleClicked (window.go row-activated); a double click on the
+    // fold arrow is the arrow's. The row is activated once the second press
+    // is released (AfterRelease: the message or compose window opened on the
+    // press came up behind this one).
+    private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (list is not { } l || RowAt(e.OriginalSource as DependencyObject, out var inButton) is not { } row || inButton)
+        {
+            return;
+        }
+        e.Handled = true;
+        var key = row.Key;
+        afterRelease.Run(() => l.Activate(key));
+    }
+
+    private MessageRow? RowAt(DependencyObject? source, out bool inButton)
+    {
+        inButton = false;
+        while (source is not null and not ListViewItem)
+        {
+            inButton |= source is ButtonBase;
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return source is ListViewItem item ? MessageList.ItemFromContainer(item) as MessageRow : null;
+    }
+
+    // context_menus.go showMessageMenu: the menu of the selection the row
+    // belongs to, or of the row alone, selected first; it is
+    // ContextMenu.MessageItems in its groups, a separator between two.
+    private void OnContextRequested(UIElement sender, ContextRequestedEventArgs e)
+    {
+        if (commands is not { } c || list is not { } l || RowAt(e.OriginalSource as DependencyObject, out _) is not { } row)
+        {
+            return;
+        }
+        if (!MessageList.SelectedItems.Contains(row))
+        {
+            if (!e.TryGetPosition(this, out _) && SelectedRowsInOrder() is { Count: > 0 } selection)
+            {
+                // Shift+F10 or the Menu key on a row outside the selection
+                // (Ctrl+arrows moved the keyboard): the selection's menu, at
+                // its first row (context_menus.go wireContextMenus).
+                row = selection[0];
+            }
+            else
+            {
+                // The actions act on the selection, so the row becomes it; a
+                // folded window stays on the list, under the menu.
+                selectingForMenu = true;
+                try
+                {
+                    SelectOnly(row);
+                }
+                finally
+                {
+                    selectingForMenu = false;
+                }
+            }
+        }
+        var rows = l.SelectedRows;
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        var first = rows[0];
+        var flags = c.Flags;
+        var assistant = AssistantMenu is { Shown: true } shown ? shown : null;
+        var state = ContextMenu.MessageState.Of(flags, draft: l.Mailbox.Model.InDrafts(first.Message), assistant: assistant is not null);
+        if (Crm is { } crm)
+        {
+            // crm.OfferFor of the selected rows (MessageState.SetCrm).
+            state = state.WithCrm(crm.Offer);
+        }
+        // Create Rule from Message…: one message of a mail account, not in the outbox, drafts or sent mail.
+        state = state with { OfferRule = rows.Count == 1 && CreateRule is not null && OffersRule(first.Message) };
+        // Print… right after Open (contextmenu.go OfferPrint; Windows prints).
+        state = state with { OfferPrint = true, Print = rows.Count <= Core.Printing.Print.MaxMessages };
+        var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox, Count = rows.Count };
+        var menu = new MenuFlyout();
+        foreach (var group in ContextMenu.MessageItems(state))
+        {
+            if (menu.Items.Count > 0)
+            {
+                menu.Items.Add(new MenuFlyoutSeparator());
+            }
+            foreach (var it in group)
+            {
+                menu.Items.Add(MessageMenuItem(it, labels, c, rows, assistant));
+            }
+        }
+        e.Handled = true;
+        if (MessageList.ContainerFromItem(row) is not ListViewItem container)
+        {
+            return;
+        }
+        if (e.TryGetPosition(container, out var point))
+        {
+            menu.ShowAt(container, new FlyoutShowOptions { Position = point });
+        }
+        else
+        {
+            menu.ShowAt(container);
+        }
+    }
+
+    // One item of the message menu: Open in New Window (Edit) and Move To
+    // the pane's own, the Assistant the ✦ menu's items for that many rows,
+    // the rest the window's commands (context_menus.go messageMenuActions),
+    // enabled when the model and the command both say so.
+    private MenuFlyoutItemBase MessageMenuItem(ContextMenu.Item it, ContextMenu.Labels labels, WindowCommands c, IReadOnlyList<ListRow> rows, AssistantMenu? assistant)
+    {
+        MenuFlyoutItemBase item;
+        switch (it.Id)
+        {
+            case ContextMenu.ItemId.OpenMessage or ContextMenu.ItemId.EditDraft:
+                {
+                    var open = new MenuFlyoutItem { IsEnabled = it.Enabled && actions is not null };
+                    open.Click += (_, _) => OpenSelected();
+                    item = open;
+                    break;
+                }
+            case ContextMenu.ItemId.MoveTo:
+                {
+                    var sub = new MenuFlyoutSubItem();
+                    if (it.Enabled)
+                    {
+                        FillMoveTargets(sub.Items, rows[0].Message.AccountId, CommonFolder(rows));
+                    }
+                    sub.IsEnabled = sub.Items.Count > 0;
+                    item = sub;
+                    break;
+                }
+            case ContextMenu.ItemId.Assistant:
+                {
+                    var sub = new MenuFlyoutSubItem();
+                    assistant?.FillMessageMenu(sub.Items, rows.Count);
+                    sub.IsEnabled = sub.Items.Count > 0;
+                    item = sub;
+                    break;
+                }
+            case ContextMenu.ItemId.CrmSave or ContextMenu.ItemId.CrmOpen or ContextMenu.ItemId.CrmEditLinks or ContextMenu.ItemId.CrmRemove:
+                {
+                    var crm = new MenuFlyoutItem { IsEnabled = it.Enabled && Crm is not null };
+                    var id = it.Id;
+                    crm.Click += (_, _) => RunCrm(id);
+                    item = crm;
+                    break;
+                }
+            case ContextMenu.ItemId.CreateRule:
+                {
+                    var create = new MenuFlyoutItem { IsEnabled = it.Enabled && CreateRule is not null };
+                    var message = rows[0].Message;
+                    create.Click += (_, _) => CreateRule?.Invoke(message);
+                    item = create;
+                    break;
+                }
+            default:
+                {
+                    var command = CommandOf(c, it.Id);
+                    var mi = command is null ? new MenuFlyoutItem() : CommandBinding.Item(command);
+                    mi.IsEnabled = it.Enabled && command is { IsEnabled: true };
+                    item = mi;
+                    break;
+                }
+        }
+        MnemonicLabel.Apply(item, ContextMenu.Label(it.Id, labels));
+        AutomationProperties.SetAutomationId(item, "ContextMenu." + ContextMenu.Name(it.Id));
+        return item;
+    }
+
+    // rules.CanCreateFrom of the folder the message is in, for a message of a
+    // mail account (imap, graph: never an issue tracker's).
+    private bool OffersRule(MessageSummary message)
+    {
+        if (mailbox is not { } m || m.Model.Account(message.AccountId) is not { } account || RuleBook.MailAccounts([account]).Count == 0)
+        {
+            return false;
+        }
+        return m.Model.Folders.TryGetValue(message.AccountId, out var folders)
+            && folders.FirstOrDefault(f => f.Id == message.FolderId) is { } folder
+            && RuleBook.CanCreateFrom(folder.Role);
+    }
+
+    // context_menus.go messageMenuActions: the eWay-CRM items run the main
+    // window's CrmController over the selection.
+    private void RunCrm(ContextMenu.ItemId id)
+    {
+        if (Crm is not { } c)
+        {
+            return;
+        }
+        switch (id)
+        {
+            case ContextMenu.ItemId.CrmSave:
+                c.Save();
+                break;
+            case ContextMenu.ItemId.CrmOpen:
+                c.Open();
+                break;
+            case ContextMenu.ItemId.CrmEditLinks:
+                c.EditLinks();
+                break;
+            case ContextMenu.ItemId.CrmRemove:
+                c.Remove();
+                break;
+        }
+    }
+
+    // context_menus.go messageMenuActions: the window's command of an item.
+    private static AppCommand? CommandOf(WindowCommands c, ContextMenu.ItemId id) => id switch
+    {
+        ContextMenu.ItemId.Print => c.Print,
+        ContextMenu.ItemId.Reply => c.Reply,
+        ContextMenu.ItemId.ReplyAll => c.ReplyAll,
+        ContextMenu.ItemId.Forward => c.Forward,
+        ContextMenu.ItemId.MarkRead => c.MarkRead,
+        ContextMenu.ItemId.MarkUnread => c.MarkUnread,
+        ContextMenu.ItemId.ToggleFlag => c.ToggleFlag,
+        ContextMenu.ItemId.ChangeStatus => c.ChangeStatus,
+        ContextMenu.ItemId.Archive => c.Archive,
+        ContextMenu.ItemId.Junk => c.Junk,
+        ContextMenu.ItemId.Trash => c.Trash,
+        _ => null,
+    };
+
+    // context_menus.go commonFolder: the folder every row is in, null when
+    // they differ (a search).
+    private static FolderId? CommonFolder(IReadOnlyList<ListRow> rows)
+    {
+        var folder = rows[0].Message.FolderId;
+        for (var i = 1; i < rows.Count; i++)
+        {
+            if (rows[i].Message.FolderId != folder)
+            {
+                return null;
+            }
+        }
+        return folder;
+    }
+
+    // context_menus.go moveToMenu: the folders of the selection's account as
+    // the sidebar orders them (its tree, nothing folded, no Favourites),
+    // indented by depth; the current folder (when every row is in one) and
+    // the containers disabled. A folder's name is the server's: plain text,
+    // never a mnemonic.
+    private void FillMoveTargets(IList<MenuFlyoutItemBase> items, AccountId accountId, FolderId? current)
+    {
+        if (mailbox is not { } m || m.Model.Account(accountId) is not { } account)
+        {
+            return;
+        }
+        IReadOnlyList<Folder> folders = m.Model.Folders.TryGetValue(accountId, out var known) ? known : [];
+        var entries = new List<ContextMenu.Entry>();
+        foreach (var e in FolderTree.FolderTreeRows(account, folders, new CollapseState(), new FavouriteState()))
+        {
+            if (!e.Header && e.Folder is { } f)
+            {
+                entries.Add(new ContextMenu.Entry(f, e.Depth));
+            }
+        }
+        foreach (var t in ContextMenu.MoveTargets(entries, current ?? new FolderId("")))
+        {
+            var title = FolderTree.FolderTitle(t.Folder);
+            // An em space per level, about the sidebar's 12 px.
+            var indent = new string('\u2003', t.Depth);
+            var item = new MenuFlyoutItem { Text = indent + title, IsEnabled = t.Enabled };
+            AutomationProperties.SetName(item, title);
+            var target = t.Folder.Id;
+            item.Click += (_, _) => MoveSelectedTo(target);
+            items.Add(item);
+        }
+    }
+
+    // window.go open-message (selection.go openSelection): the selected
+    // row's message opens as activating it does (a draft in the compose
+    // window), or a window for each of several rows (the newest member of a
+    // conversation row), at most Selection.MaxOpen.
+    private void OpenSelected()
+    {
+        if (actions is not { } a || list is not { } l)
+        {
+            return;
+        }
+        var rows = l.SelectedRows;
+        if (rows.Count > 1)
+        {
+            a.OpenMessages([.. rows.Select(r => r.Message)]);
+        }
+        else if (rows.Count == 1)
+        {
+            a.OpenMessage(rows[0].Message);
+        }
+    }
+
+    // window.go move-to: every message the selected rows stand for.
+    private void MoveSelectedTo(FolderId target)
+    {
+        if (actions is { } a)
+        {
+            list?.SelectedIds((_, ids) => a.MoveTo(ids, target));
+        }
+    }
+
+    // The scroll edge (window.go ConnectEdgeReached, clipBoundsChanged): the
+    // list's viewer, and every change of its extent, viewport or offset.
+    private void HookScroller()
+    {
+        if (scroller is not null)
+        {
+            return;
+        }
+        scroller = FindDescendant<ScrollViewer>(MessageList);
+        if (scroller is null)
+        {
+            return;
+        }
+        scroller.ViewChanged += (_, _) => ReportViewport();
+        scroller.RegisterPropertyChangedCallback(ScrollViewer.ExtentHeightProperty, (_, _) => ReportViewport());
+        scroller.RegisterPropertyChangedCallback(ScrollViewer.ViewportHeightProperty, (_, _) => ReportViewport());
+        ReportViewport();
+    }
+
+    private void ReportViewport()
+    {
+        if (reselecting || dateList.HasCollapsed || list is null || scroller is null || MessagesPage.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+        var scrollable = scroller.ExtentHeight > scroller.ViewportHeight + 0.5;
+        var atEnd = scroller.VerticalOffset >= scroller.ScrollableHeight - 1;
+        list.ViewportChanged(scrollable, atEnd);
+    }
+
+    // Windows-only: what UI Automation announces of a SelectorBar is the
+    // ItemsView of its template, a list without a name. The bar's name and
+    // id go to that list once the template is applied (a bar collapsed at
+    // first gets them when it is first laid out); the bar itself is Raw in
+    // the XAML, so the list is not announced twice.
+    private static void NameSelectorList(SelectorBar bar)
+    {
+        void Apply()
+        {
+            if (FindDescendant<ItemsView>(bar) is { } view)
+            {
+                AutomationProperties.SetName(view, AutomationProperties.GetName(bar));
+                AutomationProperties.SetAutomationId(view, AutomationProperties.GetAutomationId(bar));
+            }
+        }
+        bar.Loaded += (_, _) => Apply();
+        bar.SizeChanged += (_, _) => Apply();
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T found)
+            {
+                return found;
+            }
+            if (FindDescendant<T>(child) is { } deeper)
+            {
+                return deeper;
+            }
+        }
+        return null;
+    }
+}

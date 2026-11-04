@@ -1,0 +1,8 @@
+[D-BUS Service]
+# Required by DBusActivatable=true in the desktop file: without this service
+# flatpak build-export refuses the build. The bus name is the application ID,
+# which is what GApplication registers; --gapplication-service makes the UI
+# hold itself alive in the background until the first activation (see
+# ui/main.go), so mailto: URIs open a composer even when nothing is running.
+Name=@APP_ID@
+Exec=@BINDIR@/malachi --gapplication-service

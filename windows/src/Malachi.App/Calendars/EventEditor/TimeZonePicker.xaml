@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/EventEditor/EventEditorPopovers.swift
+(EventEditorTimeZoneViewController); GTK: the event editor follows
+(docs/calendar.md §6.4), the placeholder is ui/internal/calendar/editor.go
+(ZoneSearch). The time-zone link's flyout (docs/calendar.md §5.6): a search
+field over the system's zones by their IANA names and the matching list; a
+click, or Enter in the field (the first match), picks.
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.TimeZonePicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Width="300"
+    IsTabStop="False">
+    <StackPanel Spacing="8">
+        <TextBox
+            x:Name="SearchBox"
+            AutomationProperties.AutomationId="EventEditorZoneSearch"
+            IsSpellCheckEnabled="False"
+            KeyDown="OnSearchKeyDown"
+            TextChanged="OnSearchChanged" />
+        <ListView
+            x:Name="ZoneList"
+            Height="260"
+            AutomationProperties.AutomationId="EventEditorZoneList"
+            IsItemClickEnabled="True"
+            ItemClick="OnZoneClick"
+            SelectionMode="Single" />
+    </StackPanel>
+</UserControl>

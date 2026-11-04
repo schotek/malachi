@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Vladislav Janeček
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The Windows client's additions to the repository's .editorconfig, which
+# stays the root (UTF-8, LF, final newline, four spaces).
+
+[*.cs]
+# Every C# file starts with the SPDX header, then a blank line, then the note
+# naming what it ports (docs/windows-port.md §3.1). IDE0073 fails the build
+# on a missing or different header (EnforceCodeStyleInBuild in
+# Directory.Build.props); Malachi.Conventions.Tests reads the same template
+# for every other file type, so change it here and nowhere else.
+file_header_template = SPDX-FileCopyrightText: 2026 Vladislav Janeček\nSPDX-License-Identifier: GPL-3.0-or-later
+dotnet_diagnostic.IDE0073.severity = error
+
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_diagnostic.IDE0161.severity = warning
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_diagnostic.IDE0065.severity = warning
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+[*.{cs,xaml}]
+indent_size = 4
+
+[*.{csproj,props,targets,slnx,manifest,appxmanifest,config,resw,xml,json}]
+indent_size = 2

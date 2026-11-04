@@ -1,0 +1,63 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using WebKit 6.0;
+// Message viewer (ui/internal/htmlview): shows the backend-sanitised HTML of
+// one message. The construct-only WebKit properties (network session, user
+// content manager, settings, default CSP) can only be set here: the Go
+// binding has no g_object_new with properties.
+//
+// The document can run no script: it is sanitised and inert. The
+// JavaScript engine is on for one script of the application's own, as in
+// html_card.blp: htmlview adds it from Go to html_ucm in an isolated world
+// ("malachi-size") with the only message handler ("size") registered in
+// that world, and it only reads the layout (the document's height, so the
+// body area needs no more room than the document). enable-javascript-markup
+// off makes the parser drop every script element, event-handler attribute
+// and javascript: URL; the CSP (default-src 'none') refuses inline and
+// external script besides (docs/security.md §3.2). The CSP allows images from the
+// application's own malachi-cid: scheme (served through message.part) and
+// data: URIs (what the daemon inlined), inline styles, and nothing else; the
+// Go side additionally points the network session at an unreachable proxy
+// and refuses every navigation but the initial load.
+WebKit.WebView html_view {
+  vexpand: true;
+  hexpand: true;
+
+  network-session: WebKit.NetworkSession {
+    is-ephemeral: true;
+  };
+
+  user-content-manager: WebKit.UserContentManager html_ucm {};
+
+  default-content-security-policy: "default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-inline'";
+
+  settings: WebKit.Settings {
+    // The application's isolated-world script only; see above.
+    enable-javascript: true;
+    enable-javascript-markup: false;
+    javascript-can-open-windows-automatically: false;
+    javascript-can-access-clipboard: false;
+    enable-developer-extras: false;
+    enable-html5-local-storage: false;
+    enable-html5-database: false;
+    enable-offline-web-application-cache: false;
+    enable-media: false;
+    enable-mediasource: false;
+    enable-webgl: false;
+    enable-webaudio: false;
+    enable-page-cache: false;
+    // Wheel steps land at once: WebKit's scroll animation lags behind the
+    // wheel and feels sticky next to the native list.
+    enable-smooth-scrolling: false;
+    enable-dns-prefetching: false;
+    enable-hyperlink-auditing: false;
+    enable-site-specific-quirks: false;
+    allow-file-access-from-file-urls: false;
+    allow-universal-access-from-file-urls: false;
+    allow-top-navigation-to-data-urls: false;
+    allow-modal-dialogs: false;
+    auto-load-images: true;
+    enable-write-console-messages-to-stdout: false;
+  };
+}

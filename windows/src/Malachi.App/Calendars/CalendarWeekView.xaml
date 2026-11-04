@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/CalendarTimeGridView.swift
+(CalendarWeekView, CalendarTimeGridView, NowLineView),
+CalendarDayHeaderView.swift and CalendarAllDayView.swift; GTK: the
+calendar's views follow (docs/calendar.md §6.4). The Week and Day views
+(docs/calendar.md §5.3): the day header row (40), the all-day row (36 and
+up, five lanes at most) and a scroll viewer over the time grid of the
+whole day (60 an hour) with the hour axis, the hour and half-hour lines,
+the day columns (today's tinted), the blocks above the lines and the red
+now line above the blocks. Day is the same with one column. Everything
+placed comes from Core; the code behind builds the rows, the lines and
+the blocks.
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.CalendarWeekView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="CalendarWeekView"
+    IsTabStop="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- The day header row: the weekday and the day's number per column. -->
+        <Grid x:Name="HeaderRow" AutomationProperties.AccessibilityView="Raw">
+            <Grid x:Name="HeaderDays" />
+            <Rectangle
+                Height="1"
+                VerticalAlignment="Bottom"
+                Style="{StaticResource CalendarLineStyle}" />
+        </Grid>
+
+        <!-- The all-day row: "All Day" in the axis, the bars in their lanes. -->
+        <Grid
+            x:Name="AllDayRow"
+            Grid.Row="1"
+            Height="36"
+            Background="Transparent"
+            DoubleTapped="OnAllDayDoubleTapped"
+            SizeChanged="OnAllDaySizeChanged">
+            <TextBlock
+                x:Name="AllDayCaption"
+                Width="52"
+                Margin="2,4,0,0"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                FontSize="10"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                IsHitTestVisible="False"
+                MaxLines="2"
+                TextAlignment="Right"
+                TextWrapping="WrapWholeWords" />
+            <Canvas x:Name="AllDayLines" IsHitTestVisible="False" />
+            <Canvas x:Name="AllDayBars" />
+            <Rectangle
+                Height="1"
+                VerticalAlignment="Bottom"
+                Style="{StaticResource CalendarLineStyle}" />
+        </Grid>
+
+        <!-- The time grid of the whole day. -->
+        <ScrollViewer
+            x:Name="Scroller"
+            Grid.Row="2"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="True"
+            SizeChanged="OnScrollerSizeChanged"
+            VerticalScrollBarVisibility="Auto"
+            VerticalScrollMode="Enabled"
+            ViewChanged="OnScrollerViewChanged">
+            <Grid
+                x:Name="TimeGrid"
+                Height="1440"
+                Background="Transparent"
+                DoubleTapped="OnGridDoubleTapped"
+                SizeChanged="OnGridSizeChanged">
+                <Canvas x:Name="BackLayer" IsHitTestVisible="False" />
+                <Canvas x:Name="BlockLayer" />
+                <Canvas x:Name="NowLayer" IsHitTestVisible="False" />
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

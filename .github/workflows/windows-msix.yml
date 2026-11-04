@@ -1,0 +1,147 @@
+# The MSIX package of the Windows client for the Microsoft Store.
+#
+# The app folder of build.ps1 app, given a package identity by
+# windows/msix/build-msix.ps1; what a tag builds was tested before it was
+# tagged.
+#
+# On a release tag (vX.Y.Z): unsigned packages for x64 and ARM64, kept as
+# the run's artifacts (30 days) for the owner to upload to Partner Center,
+# never attached to the release (an unsigned package does not install, and
+# the Store re-signs what it publishes). The
+# Store checks the identity, so it comes from the repository variables
+# MSIX_IDENTITY_NAME, MSIX_PUBLISHER and MSIX_PUBLISHER_DISPLAY_NAME, the
+# values Partner Center shows under Product identity; until they are set a
+# tag skips the job. The tag gives the version Major.Minor.Patch.0 the Store
+# wants.
+#
+# By hand: one architecture, signed with a self-signed certificate made for
+# the run (its .cer in the artifact) or unsigned, with the identity given;
+# kept one day, since any signed-in GitHub user can download the artifacts
+# of a public repository.
+name: Windows MSIX
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Architecture
+        type: choice
+        options: [x64, arm64]
+        default: x64
+      sign:
+        description: Sign with a self-signed test certificate (its .cer comes with the package)
+        type: boolean
+        default: true
+      identity:
+        description: Package identity name (for the Store, the one Partner Center reserved)
+        type: string
+        default: io.github.schotek.Malachi
+      publisher:
+        description: Publisher (CN=...; for the Store, the one Partner Center shows)
+        type: string
+        default: CN=Malachi Mail Test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-msix-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  msix:
+    name: MSIX (${{ matrix.arch }})
+    # A tag builds for the Store only once Partner Center's identity is set.
+    if: ${{ !startsWith(github.ref, 'refs/tags/') || vars.MSIX_PUBLISHER != '' }}
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(startsWith(github.ref, 'refs/tags/') && '["x64","arm64"]' || format('["{0}"]', inputs.arch)) }}
+    env:
+      STORE: ${{ startsWith(github.ref, 'refs/tags/') && '1' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git describe needs the tags, so no shallow clone.
+          fetch-depth: 0
+
+      - name: Read the Go version of backend/go.mod
+        # As in windows.yml.
+        id: go
+        run: |
+          $minor = [regex]::Match([System.IO.File]::ReadAllText('backend/go.mod'), '(?m)^go (\d+\.\d+)').Groups[1].Value
+          if (-not $minor) { throw 'backend/go.mod has no go directive' }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$minor`n")
+          Write-Output "Go $minor"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: windows/global.json
+
+      - name: Restore the NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ matrix.arch }}-${{ hashFiles('windows/**/packages.lock.json', 'windows/Directory.Packages.props') }}
+          restore-keys: |
+            nuget-${{ matrix.arch }}-
+
+      - name: Record the version
+        id: version
+        working-directory: windows
+        run: |
+          $version = (git describe --tags --always --dirty).Trim() -replace '^v', ''
+          if (-not $version) { throw 'git describe gave no version' }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$version`n")
+          Write-Output "version $version"
+
+      - name: Restore, locked to the lock files
+        working-directory: windows
+        run: dotnet restore Malachi.slnx -p:Platform=${{ matrix.arch == 'arm64' && 'ARM64' || 'x64' }} --locked-mode
+
+      - name: App folder
+        # Release, with the daemon, the MCP bridge and the NativeAOT keyring
+        # helper inside (ARM64 cross-built, as in windows.yml).
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 app -Arch ${{ matrix.arch }}
+
+      - name: MSIX
+        working-directory: windows
+        # On a tag: unsigned, with Partner Center's identity; by hand: the
+        # inputs.
+        env:
+          MSIX_IDENTITY: ${{ env.STORE && vars.MSIX_IDENTITY_NAME || inputs.identity }}
+          MSIX_PUBLISHER: ${{ env.STORE && vars.MSIX_PUBLISHER || inputs.publisher }}
+          MSIX_PUBLISHER_NAME: ${{ env.STORE && vars.MSIX_PUBLISHER_DISPLAY_NAME || '' }}
+          MSIX_VERSION: ${{ steps.version.outputs.version }}
+          MSIX_SIGN: ${{ !env.STORE && inputs.sign && '1' || '' }}
+        run: |
+          if ($env:STORE -and (-not $env:MSIX_IDENTITY -or -not $env:MSIX_PUBLISHER_NAME)) {
+            throw 'set the repository variables MSIX_IDENTITY_NAME and MSIX_PUBLISHER_DISPLAY_NAME as Partner Center shows them'
+          }
+          $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'msix\build-msix.ps1',
+            '-AppDir', "..\build\windows\${{ matrix.arch }}\Malachi Mail", '-Version', $env:MSIX_VERSION,
+            '-Arch', '${{ matrix.arch }}', '-OutDir', '..\build\windows\msix',
+            '-IdentityName', $env:MSIX_IDENTITY, '-Publisher', $env:MSIX_PUBLISHER)
+          if ($env:MSIX_PUBLISHER_NAME) { $arguments += @('-PublisherDisplayName', $env:MSIX_PUBLISHER_NAME) }
+          if ($env:MSIX_SIGN) { $arguments += '-Sign' }
+          powershell @arguments
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: malachi-windows-${{ matrix.arch }}-msix-${{ env.STORE && 'store' || 'test' }}
+          path: |
+            build/windows/msix/*.msix
+            build/windows/msix/*.cer
+          # A tag's package has no .cer.
+          if-no-files-found: error
+          retention-days: ${{ env.STORE && 30 || 1 }}

@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/EventBlockView.swift (CalendarMetrics'
+fonts, BlockPainter.background) and of the colours the calendar's views draw
+with (Tint.accent, separatorColor, systemRed); GTK: the calendar's views
+follow (docs/calendar.md §6.4). The calendar's colours as theme brushes,
+light and dark, so a change of theme repaints them: the views' opaque
+surface (CalendarSurfaceColor: an unanswered invitation's fill, the
+tentative bar's hatching and what the light tints are blended over,
+CalendarPalette), the selection's ring and its gap, the hour and half-hour
+lines and the day separators, today's column and cell, the weekends and
+the days of other months, the red now line, the mini month's band and the
+styles of the texts the views make in code. High contrast keeps the
+system's colours.
+Merged into App.xaml.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <Color x:Key="CalendarSurfaceColor">#282828</Color>
+            <SolidColorBrush x:Key="CalendarSurfaceBrush" Color="#282828" />
+            <SolidColorBrush x:Key="CalendarHourLineBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="CalendarHalfHourLineBrush" Color="#10FFFFFF" />
+            <SolidColorBrush x:Key="CalendarTodayTintBrush" Color="{ThemeResource SystemAccentColorLight2}" Opacity="0.07" />
+            <SolidColorBrush x:Key="CalendarWeekendBrush" Color="#08FFFFFF" />
+            <SolidColorBrush x:Key="CalendarOtherMonthBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="CalendarNowLineBrush" Color="#FF453A" />
+            <SolidColorBrush x:Key="CalendarBandBrush" Color="{ThemeResource SystemAccentColorLight2}" Opacity="0.2" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="CalendarSurfaceColor">#F9F9F9</Color>
+            <SolidColorBrush x:Key="CalendarSurfaceBrush" Color="#F9F9F9" />
+            <SolidColorBrush x:Key="CalendarHourLineBrush" Color="#21000000" />
+            <SolidColorBrush x:Key="CalendarHalfHourLineBrush" Color="#0D000000" />
+            <SolidColorBrush x:Key="CalendarTodayTintBrush" Color="{ThemeResource SystemAccentColor}" Opacity="0.05" />
+            <SolidColorBrush x:Key="CalendarWeekendBrush" Color="#08000000" />
+            <SolidColorBrush x:Key="CalendarOtherMonthBrush" Color="#0D000000" />
+            <SolidColorBrush x:Key="CalendarNowLineBrush" Color="#D70015" />
+            <SolidColorBrush x:Key="CalendarBandBrush" Color="{ThemeResource SystemAccentColor}" Opacity="0.15" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <Color x:Key="CalendarSurfaceColor">#000000</Color>
+            <SolidColorBrush x:Key="CalendarSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CalendarHourLineBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CalendarHalfHourLineBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="CalendarTodayTintBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CalendarWeekendBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CalendarOtherMonthBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CalendarNowLineBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="CalendarBandBrush" Color="{ThemeResource SystemColorHighlightColor}" Opacity="0.4" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- The views' opaque surface (the blocks are blended over its colour). -->
+    <Style x:Key="CalendarSurfaceStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CalendarSurfaceBrush}" />
+    </Style>
+
+    <!-- A selected block's ring (Windows: the accent at the block's edge, the
+         keyboard's focus visual outside it) and the gap in the surface's
+         colour between the ring and the fill (BlockBackground). -->
+    <Style x:Key="CalendarSelectionRingStyle" TargetType="Rectangle">
+        <Setter Property="Stroke" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarSelectionGapStyle" TargetType="Rectangle">
+        <Setter Property="Stroke" Value="{ThemeResource CalendarSurfaceBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- The hour lines, the day separators and the views' dividers (separatorColor). -->
+    <Style x:Key="CalendarLineStyle" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource CalendarHourLineBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- The half-hour lines (separatorColor at 40 %). -->
+    <Style x:Key="CalendarHalfLineStyle" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource CalendarHalfHourLineBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- Today's column of the grid and today's month cell (the accent at 5 %). -->
+    <Style x:Key="CalendarTodayTintStyle" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource CalendarTodayTintBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- A weekend's month cell. -->
+    <Style x:Key="CalendarWeekendStyle" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource CalendarWeekendBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- A month cell of another month. -->
+    <Style x:Key="CalendarOtherMonthStyle" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource CalendarOtherMonthBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- The now line and its dot (systemRed). -->
+    <Style x:Key="CalendarNowLineStyle" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource CalendarNowLineBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarNowDotStyle" TargetType="Ellipse">
+        <Setter Property="Fill" Value="{ThemeResource CalendarNowLineBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- Today's number in a filled accent circle (the day header, the month, the mini month). -->
+    <Style x:Key="CalendarTodayCircleStyle" TargetType="Ellipse">
+        <Setter Property="Fill" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- The mini month's band of the shown days. -->
+    <Style x:Key="CalendarBandStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CalendarBandBrush}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- The sidebar's Unanswered row while its filter shows. -->
+    <Style x:Key="CalendarSelectedRowStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style x:Key="CalendarRowStyle" TargetType="Border">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+
+    <!-- The views' texts (CalendarMetrics.titleFont, smallFont). -->
+    <Style x:Key="CalendarBlockTitleStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="MaxLines" Value="1" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarBlockTitleDimStyle" TargetType="TextBlock" BasedOn="{StaticResource CalendarBlockTitleStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+    </Style>
+    <Style x:Key="CalendarSymbolStyle" TargetType="FontIcon">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarWarningIconStyle" TargetType="FontIcon">
+        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarAccentIconStyle" TargetType="FontIcon">
+        <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarStateTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style x:Key="CalendarSmallTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="MaxLines" Value="1" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarPillTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="MaxLines" Value="1" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarDimTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+        <Setter Property="MaxLines" Value="1" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarDayNumberStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style x:Key="CalendarOtherDayNumberStyle" TargetType="TextBlock" BasedOn="{StaticResource CalendarDayNumberStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+    </Style>
+    <Style x:Key="CalendarWeekendNumberStyle" TargetType="TextBlock" BasedOn="{StaticResource CalendarDayNumberStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+    </Style>
+    <Style x:Key="CalendarTodayNumberStyle" TargetType="TextBlock" BasedOn="{StaticResource CalendarDayNumberStyle}">
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+    </Style>
+    <Style x:Key="CalendarSidebarHeadingStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="MaxLines" Value="1" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- The count badge of the Unanswered row (CountBadgeView: accent, white digits). -->
+    <Style x:Key="CalendarCountBadgeStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="MinWidth" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="CalendarCountBadgeTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="LineHeight" Value="14" />
+    </Style>
+
+    <!-- The agenda's badge (PillLabel: unanswered, tentative, "Day 2 of 3"). -->
+    <Style x:Key="CalendarAgendaBadgeStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource IssuePillPlainBrush}" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="5,0,5,1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+</ResourceDictionary>

@@ -1,0 +1,184 @@
+Version 0.4.0
+~~~~~~~~~~~~~
+Released: 2026-11-04
+
+Features:
+ * Print (Ctrl+P, on macOS ⌘P): the selected message, a whole
+   conversation or several messages, each on its own page, and in the
+   Calendar the selected event or the day.
+ * The toolbars of Mail, the Board and the Calendar can be customized: on
+   macOS with the system's palette, on Linux and Windows in Preferences →
+   General → Toolbar or from a right click on a bar.
+ * Report an Issue at the end of the status bar opens the problem report
+   on the website; on Linux the status bar now runs along the whole bottom
+   of the window in every mode, as on macOS and Windows.
+ * All Inboxes is the first row of a Favourites section at the top of the
+   sidebar, which folds like an account.
+ * On Windows, Malachi Mail is being prepared for the Microsoft Store. The
+   Store edition is updated by the Store.
+
+Bugfixes:
+ * The main menu has the same items in every mode, and the mode switch
+   stays in place when the mode changes.
+ * On Windows, an HTML bubble of the chat layout no longer flashes and
+   matches its message.
+
+Version 0.3.0
+~~~~~~~~~~~~~
+Released: 2026-11-03
+
+Features:
+ * Mail rules: conditions on the sender, recipients, subject, body,
+   mailing list, bulk mail, attachments or account, and actions that move,
+   mark as read, star, send to Trash or Junk, forward or answer
+   automatically. Rules run on new mail in the inbox, can also be run on a
+   folder by hand, and are made in Preferences → Rules or from a message's
+   menu.
+ * All Inboxes at the top of the sidebar shows the inbox of every mail
+   account in one list, also grouped by conversation; it can be hidden in
+   Preferences.
+ * Signatures of incoming mail, S/MIME and OpenPGP, are verified: a badge
+   beside the sender, also in the message list and on the Board, says
+   whether the signature is valid and who signed it, with the details a
+   click away.
+ * Searching in a folder also finds your own replies in Sent.
+ * Attachments are shown as tiles with their type, name and size, and an
+   attachment of a message you are writing can be previewed.
+
+Bugfixes:
+ * A reply to an invitation is a short line in the conversation, the
+   invitation card is shown in the chat as well, and the .ics file no
+   longer appears as an attachment beside the card.
+
+Version 0.2.1
+~~~~~~~~~~~~~
+Released: 2026-11-02
+
+Features:
+ * Malachi Mail checks once a day whether a newer version is available
+   and shows a bar with what is new, a download link, Remind Me Later
+   and Skip This Version; a security release asks once. The check sends
+   the program's version and package to its website, nothing else, and
+   can be turned off in Preferences → General → Updates, where Check Now
+   asks at once.
+
+Version 0.2.0
+~~~~~~~~~~~~~
+Released: 2026-11-01
+
+Notes:
+ * The macOS disk image is now signed with a Developer ID and notarised
+   by Apple, so it opens like any downloaded app. The first start after
+   an earlier build asks once for each stored password: choose Always
+   Allow.
+ * The Windows installers are still unsigned, so SmartScreen warns once.
+   There is no portable zip for Windows any more.
+ * Every file of a release is named alike, with the version, the system
+   and the architecture: Malachi-Mail-0.2.0-windows-x64-setup.exe.
+
+Features:
+ * Address books: the contacts of Microsoft 365 and of CardDAV servers in
+   a Contacts window, where they can be searched, edited and added, with
+   their photos. A CalDAV server may now offer only address books.
+ * An address in a message can be shown as a contact or added to the
+   contacts, and contacts are suggested while you write.
+ * Contact photos are shown beside the sender in the message list,
+   conversations, the chat and the Board.
+ * Moving mail to the Trash, the archive, Junk or another folder, also
+   from the Board, can be undone with Ctrl+Z (⌘Z on a Mac) or from the
+   message that confirms it.
+ * AI agents can search and read contacts through the MCP bridge, and
+   create or change them only with your explicit permission.
+
+Bugfixes:
+ * A chat opens at its newest message.
+ * The conversation of a case on the Board shows its cards as soon as
+   they are loaded.
+ * The Board takes new correspondents into account after new mail.
+ * eWay-CRM accepts a web service address over http on this computer.
+ * The assistant in the app reaches your mail from its first answer.
+ * On macOS, the preview of a rewrite shows its answer from the start.
+ * On Windows, cards and status colours follow the window's theme.
+
+Version 0.1.2
+~~~~~~~~~~~~~
+Released: 2026-10-26
+
+Bugfixes:
+ * The macOS app builds again with Xcode 26.6.
+ * Fixed tests of meeting invitations that depended on the date they ran
+   on.
+
+Version 0.1.1
+~~~~~~~~~~~~~
+Released: 2026-10-26
+
+Notes:
+ * Malachi Mail now also runs on Windows 11 and macOS, with a native
+   window on each. It is still an early version: keep a second mail
+   program for anything that matters.
+
+Features:
+ * Gmail and Google Workspace accounts, through GNOME Online Accounts or
+   a sign-in in the browser; Microsoft 365 can sign in in the browser too.
+ * Conversations: the message list can be grouped by conversation, and a
+   conversation is shown as cards on a timeline or as a chat, with your
+   own replies from Sent and unsent drafts in place.
+ * A quick reply under a message or a chat, without opening a window.
+ * Search of the stored mail, as you type, in a folder, an account or
+   all accounts.
+ * Several messages can be selected and archived, moved, deleted, marked
+   or forwarded together; messages and folders have context menus.
+ * Recipients are shown as removable badges while you write.
+ * Plain text that looks like Markdown is pasted as formatted text.
+ * Newsletters and mailing lists are recognised and can be unsubscribed
+   from with one click where the sender allows it.
+ * Jira issues can be followed as conversations: comments, status changes
+   and replies from Malachi Mail, and Jira notification mail can be hidden.
+ * A calendar for Microsoft 365 and CalDAV servers, with invitations
+   answered from the message and reminders.
+ * The Board sorts conversations that wait for you, wait for others or are
+   just for your information, with reminders, Done and archive.
+ * eWay-CRM: messages can be saved to the CRM with links to contacts,
+   companies, deals and projects, and saved conversations followed.
+ * An assistant (Claude Code or ChatGPT, run on your own account) can
+   summarise mail, rewrite what you write, turn your words into a search,
+   suggest replies and sort the Board; a profile tells it about you.
+ * An MCP bridge lets AI agents read your mail and write drafts; changing
+   or sending mail needs your explicit permission.
+ * Mail can be stored compressed, and attachments of older mail left on
+   the server or never stored at all.
+ * A server certificate can be trusted explicitly by its fingerprint.
+
+Version 0.1.0
+~~~~~~~~~~~~~
+Released: 2026-09-06
+
+Notes:
+ * First tagged release. Mail can be read, written and sent, but this is
+   still an early version: keep a second mail program for anything that
+   matters.
+
+Features:
+ * IMAP accounts with a setup assistant that finds the server settings for
+   most providers; passwords are kept in the system keyring.
+ * Mail is synchronised for offline reading, with new messages arriving as
+   the server announces them.
+ * Writing and sending, with formatted text, attachments and inline
+   images. A message that cannot be sent right away waits in the outbox
+   and is retried; a copy is filed in Sent.
+ * Microsoft 365 and Outlook.com accounts through GNOME Online Accounts,
+   with no separate sign-in.
+ * HTML mail is cleaned before it is shown, and remote images stay blocked
+   until you ask for them or trust the sender. Attached messages open in a
+   window of their own.
+ * Attachments can be opened, saved one by one or saved all at once.
+ * The message list can be narrowed to unread or flagged messages.
+ * The folder sidebar can be folded, and folders pinned to Favourites.
+ * Recipients are completed from the system address books and from the
+   people you have written to before.
+ * Czech translation.
+
+Notes:
+ * Search and conversation threading are not available yet.
+ * Gmail accounts are not supported yet.

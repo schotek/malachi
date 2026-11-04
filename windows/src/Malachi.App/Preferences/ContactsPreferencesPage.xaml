@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/ContactsPaneViewController.swift;
+GTK: ui/data/ui/preferences.blp (contacts_page) and
+ui/internal/window/preferences_contacts.go (docs/plans/address-book.md W3).
+Preferences → Contacts, after Calendar: a section per account with the
+contacts capability in account order (built in code: its name with the kind
+capsule, the switch Sync Contacts, Microsoft's consent with Allow… or the
+Online Accounts advice, the books with their check boxes and counts, the
+CardDAV note), the empty state, and the group Recipient Suggestions
+(contacts-suggest-scope) as radio buttons. Every name from a server is plain
+text.
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.ContactsPreferencesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:compose="using:Malachi.App.Compose"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer
+        AutomationProperties.AutomationId="PrefsContacts"
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto">
+        <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+        <Grid>
+            <StackPanel
+                MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                Padding="{StaticResource SettingsPagePadding}"
+                Spacing="{StaticResource SettingsGroupSpacing}">
+                <TextBlock
+                    x:Name="ErrorText"
+                    AutomationProperties.AutomationId="PrefsContactsError"
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    Style="{StaticResource SettingsGroupDescriptionStyle}"
+                    Visibility="Collapsed" />
+
+                <!-- A section per account with the contacts capability. -->
+                <StackPanel x:Name="SectionsHost" Spacing="{StaticResource SettingsGroupSpacing}" />
+
+                <!-- No account can have contacts. -->
+                <TextBlock
+                    x:Name="EmptyText"
+                    AutomationProperties.AutomationId="PrefsContactsEmpty"
+                    Style="{StaticResource SettingsGroupDescriptionStyle}"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed" />
+
+                <!-- Recipient Suggestions: a named group for UI Automation (a panel has no automation peer). -->
+                <compose:ChipGroup x:Name="SuggestGroup" AutomationProperties.AutomationId="PrefsContactsSuggestions">
+                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock
+                            x:Name="SuggestHeading"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}" />
+                        <RadioButton
+                            x:Name="ScopeAccount"
+                            AutomationProperties.AutomationId="PrefsContactsScope:account"
+                            Checked="OnScopeChecked"
+                            GroupName="ContactsScope" />
+                        <RadioButton
+                            x:Name="ScopeAll"
+                            AutomationProperties.AutomationId="PrefsContactsScope:all"
+                            Checked="OnScopeChecked"
+                            GroupName="ContactsScope" />
+                    </StackPanel>
+                </compose:ChipGroup>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

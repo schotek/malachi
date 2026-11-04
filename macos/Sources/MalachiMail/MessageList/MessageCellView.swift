@@ -1,0 +1,714 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import AppKit
+import MalachiCore
+
+/// The list settings a row is laid out with (messages.go
+/// `applyRowAppearance`, style.go "monochrome-avatars").
+struct RowAppearance: Equatable {
+    var compact: Bool
+    var showPreview: Bool
+    var showAvatar: Bool
+    var monochromeAvatars: Bool
+
+    @MainActor
+    init(settings: Settings) {
+        compact = settings.density == .compact
+        showPreview = settings.showPreviewLine
+        showAvatar = settings.showAvatars
+        monochromeAvatars = settings.monochromeAvatars
+    }
+}
+
+/// The geometry of a row (widget/message_row.go constants, message_row.blp
+/// and style.go `.thread-twisty`, `.thread-count`, `.unread-dot`).
+enum RowMetrics {
+    /// The start margin of a plain row, and the tighter one of the rows of
+    /// a grouped list, where the fold arrow (or its kept place) sits in
+    /// front of the avatar.
+    static let rowMarginStart: CGFloat = 6
+    static let threadRowMarginStart: CGFloat = 2
+    static let rowMarginEnd: CGFloat = 6
+    /// The gap between the arrow and the avatar (`lead_box` spacing).
+    static let leadSpacing: CGFloat = 4
+    /// The indent of a member row when no avatar is shown.
+    static let memberIndent: CGFloat = 24
+    static let avatarComfortable: CGFloat = 40
+    static let avatarCompact: CGFloat = 28
+    /// The space above and below a row's text; more with the larger text
+    /// (`Typo.size`, macOS only).
+    @MainActor static var marginComfortable: CGFloat { Typo.size == .larger ? 13 : 8 }
+    @MainActor static var marginCompact: CGFloat { Typo.size == .larger ? 6 : 3 }
+    /// `content_box` spacing, the column's spacing, the first line's.
+    static let contentSpacing: CGFloat = 12
+    static let columnSpacing: CGFloat = 2
+    static let lineSpacing: CGFloat = 6
+    /// `button.thread-twisty { min-width: 20px; min-height: 20px }`.
+    static let expanderSize: CGFloat = 20
+    /// `.unread-dot`: 8 × 8, radius 4.
+    static let unreadDotSize: CGFloat = 8
+    /// `label.thread-count { padding: 0 6px }`.
+    static let badgePadding: CGFloat = 6
+    /// The widest a search result's folder label gets (message_row.blp
+    /// `origin_label` `max-width-chars: 16`).
+    static let originMaxWidth: CGFloat = 120
+}
+
+/// One row of the message list (message_row.blp, widget/message_row.go): the
+/// fold arrow or spinner and the avatar in front, then the sender line with
+/// the badge, the icons, the date and the unread dot, the subject and the
+/// preview; a search result also names its folder, and its preview is the
+/// excerpt with the matched words in bold. A row of a Jira account shows
+/// the issue on the subject line (key, summary, status pill, the Internal
+/// badge of an internal comment); an event row (a status or assignee
+/// change) is compact: the actor and the change in the caption, no preview,
+/// never unread. Every string from the mail or the site is plain text:
+/// through `stringValue`, or an attributed string built from it with fonts
+/// and colours only.
+@MainActor
+final class MessageCellView: NSTableCellView {
+    static let reuseIdentifier = NSUserInterfaceItemIdentifier("MessageCell")
+
+    /// Runs when the fold arrow is clicked (threads.go `toggleThread`).
+    var onToggle: (@MainActor () -> Void)?
+
+    private let expander = NSButton()
+    private let spinner = Spinner(size: 16)
+    private let avatar = AvatarView(size: RowMetrics.avatarComfortable)
+    private let from = NSTextField(labelWithString: "")
+    private let badge = CountBadgeView(padding: RowMetrics.badgePadding)
+    private let attachment = NSImageView()
+    /// The verdict of a signed message beside the paperclip
+    /// (`SignatureView.listIcon`): a shield or a warning for a valid,
+    /// invalid, revoked or mismatching signature; nothing for the rest.
+    private let signatureIcon = NSImageView()
+    private let star = NSImageView()
+    private let origin = NSTextField(labelWithString: "")
+    private let date = NSTextField(labelWithString: "")
+    private let unreadDot = DotView()
+    private let subject = NSTextField(labelWithString: "")
+    private let preview = NSTextField(labelWithString: "")
+    private let content = NSStackView()
+    /// The issue's parts of the subject line, and the change of an event
+    /// row after the actor.
+    private let issueKey = NSTextField(labelWithString: "")
+    private let statusPill = PillLabel()
+    /// The tag of a bulk message (message_row.blp `bulk_pill`): neutral,
+    /// next to the subject; never on a row of an issue.
+    private let bulkPill = PillLabel()
+    private let internalPill = PillLabel()
+    /// The Draft badge of a conversation with an unsent reply
+    /// (`RowThread.draft`).
+    private let draftPill = PillLabel()
+    /// The pill of a message with a calendar part (`InvitationPill`):
+    /// Invitation, Update, Cancelled (the subject struck through) or Reply,
+    /// after the subject (docs/calendar.md §5.7).
+    private let calendarPill = PillLabel()
+    /// The eWay pill of a message saved in eWay-CRM (`CRM.pillFor`; GTK
+    /// `crm_pill`), beside the Draft and Jira pills.
+    private let crmPill = PillLabel()
+    private let eventLabel = NSTextField(labelWithString: "")
+    private let subjectLine = NSStackView()
+
+    private var leadingConstraint: NSLayoutConstraint!
+    private var topConstraint: NSLayoutConstraint!
+    private var bottomConstraint: NSLayoutConstraint!
+
+    /// `thread` says the row shows a conversation (the arrow is live),
+    /// `loading` that its members are on their way (the spinner instead),
+    /// `reserve` that a plain row keeps the arrow's place so every avatar
+    /// of a grouped list lines up, `member` that the row is indented under
+    /// its conversation (without an avatar of its own).
+    private var thread = false
+    private var loading = false
+    private var reserve = false
+    private var member = false
+    private var showAvatar = true
+    /// The row is the user's own (F10: its avatar never shows a photo).
+    private var mine = false
+    private var avatarSize = RowMetrics.avatarComfortable
+    /// The preview's text and its matched words (UTF-16 ranges), redrawn
+    /// in the colour the selection asks for (`renderPreview`).
+    private var previewText = ""
+    private var previewHighlights: [NSRange] = []
+    /// The issue of a Jira row (nil for mail), whether the row is an event
+    /// row, the status pill's colour, and whether the row is selected (the
+    /// colours follow `backgroundStyle`).
+    private var issue: Jira.IssueRow?
+    /// The bulk tag of the row (`Bulk.tag`); "" for personal mail.
+    private var bulkTag = ""
+    /// The invitation pill of the row's message (`invitationPill`).
+    private var invitation = Cal.InvitationPill.none
+    private var signature: SignatureView.ListIcon?
+    private var event = false
+    private var statusStyle = Jira.StatusStyle.plain
+    private var emphasized = false
+
+    init() {
+        super.init(frame: .zero)
+        identifier = MessageCellView.reuseIdentifier
+        build()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    private func build() {
+        expander.isBordered = false
+        expander.setButtonType(.momentaryChange)
+        expander.imagePosition = .imageOnly
+        expander.imageScaling = .scaleNone
+        expander.refusesFirstResponder = true
+        expander.target = self
+        expander.action = #selector(expanderClicked)
+        expander.image = Icon.image("pan-end", size: .small)
+        expander.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            expander.widthAnchor.constraint(equalToConstant: RowMetrics.expanderSize),
+            expander.heightAnchor.constraint(equalToConstant: RowMetrics.expanderSize),
+        ])
+
+        let lead = NSStackView(views: [expander, spinner, avatar])
+        lead.orientation = .horizontal
+        // A stack view sizes itself by its own hugging priority, not by
+        // setContentHuggingPriority: the lead must never take the width
+        // that belongs to the text column (its last edge is only ">= 0").
+        lead.setHuggingPriority(.required, for: .horizontal)
+        lead.alignment = .centerY
+        lead.spacing = RowMetrics.leadSpacing
+        lead.setContentHuggingPriority(.required, for: .horizontal)
+        lead.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        for label in [from, subject, preview] {
+            label.lineBreakMode = .byTruncatingTail
+            label.maximumNumberOfLines = 1
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            label.isSelectable = false
+        }
+        from.font = Typo.body
+        subject.font = Typo.body
+        preview.font = Typo.caption
+        preview.textColor = Tint.secondary
+
+        badge.font = Typo.captionNumeric
+        badge.textColor = .labelColor
+        badge.isHidden = true
+        draftPill.isHidden = true
+
+        // The issue key ("ITSD-42") in the caption with monospaced digits,
+        // the status and the Internal badge as pills after the summary.
+        issueKey.font = Typo.captionNumeric
+        issueKey.textColor = Tint.secondary
+        issueKey.isSelectable = false
+        issueKey.lineBreakMode = .byClipping
+        issueKey.maximumNumberOfLines = 1
+        issueKey.isHidden = true
+        issueKey.setContentHuggingPriority(.required, for: .horizontal)
+        issueKey.setContentCompressionResistancePriority(.required, for: .horizontal)
+        for pill in [statusPill, bulkPill, internalPill, draftPill, calendarPill, crmPill] {
+            pill.font = Typo.caption
+            pill.isHidden = true
+        }
+        // An event row's change, after the actor: it takes the width the
+        // actor leaves and truncates before the actor does.
+        eventLabel.font = Typo.caption
+        eventLabel.textColor = Tint.secondary
+        eventLabel.lineBreakMode = .byTruncatingTail
+        eventLabel.maximumNumberOfLines = 1
+        eventLabel.isSelectable = false
+        eventLabel.isHidden = true
+        let belowLow = NSLayoutConstraint.Priority(rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue - 1)
+        eventLabel.setContentHuggingPriority(belowLow, for: .horizontal)
+        eventLabel.setContentCompressionResistancePriority(belowLow, for: .horizontal)
+
+        attachment.image = Icon.image("mail-attachment", size: .small)
+        attachment.contentTintColor = Tint.secondary
+        attachment.imageScaling = .scaleNone
+        attachment.isHidden = true
+        signatureIcon.imageScaling = .scaleNone
+        signatureIcon.isHidden = true
+        star.image = Icon.image("starred", size: .small)
+        star.contentTintColor = Tint.accent
+        star.imageScaling = .scaleNone
+        star.isHidden = true
+        for icon in [attachment, signatureIcon, star] {
+            icon.setContentHuggingPriority(.required, for: .horizontal)
+            icon.setContentCompressionResistancePriority(.required, for: .horizontal)
+        }
+
+        // Where a search result lies (message_row.blp `origin_label`).
+        origin.font = Typo.caption
+        origin.textColor = Tint.secondary
+        origin.lineBreakMode = .byTruncatingTail
+        origin.maximumNumberOfLines = 1
+        origin.isSelectable = false
+        origin.isHidden = true
+        origin.setContentHuggingPriority(.required, for: .horizontal)
+        // Shrinks before the sender does: the name is what a row is read by.
+        origin.setContentCompressionResistancePriority(
+            NSLayoutConstraint.Priority(rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue - 1), for: .horizontal)
+        origin.widthAnchor.constraint(lessThanOrEqualToConstant: RowMetrics.originMaxWidth).isActive = true
+
+        date.font = Typo.caption
+        date.textColor = Tint.secondary
+        date.alignment = .right
+        date.isSelectable = false
+        date.setContentHuggingPriority(.required, for: .horizontal)
+        date.setContentCompressionResistancePriority(.required, for: .horizontal)
+        unreadDot.isHidden = true
+
+        let line = NSStackView(views: [from, eventLabel, badge, attachment, signatureIcon, star, origin, date, unreadDot])
+        line.orientation = .horizontal
+        line.distribution = .fill
+        line.setHuggingPriority(.defaultLow, for: .horizontal)
+        line.alignment = .centerY
+        line.spacing = RowMetrics.lineSpacing
+
+        for v in [issueKey, subject, calendarPill, bulkPill, statusPill, internalPill, draftPill, crmPill] {
+            subjectLine.addArrangedSubview(v)
+        }
+        subjectLine.orientation = .horizontal
+        subjectLine.distribution = .fill
+        subjectLine.setHuggingPriority(.defaultLow, for: .horizontal)
+        subjectLine.alignment = .centerY
+        subjectLine.spacing = RowMetrics.lineSpacing
+
+        let column = FillStackView(fillingViews: [line, subjectLine, preview])
+        column.spacing = RowMetrics.columnSpacing
+        column.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        column.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        content.addArrangedSubview(lead)
+        content.addArrangedSubview(column)
+        content.orientation = .horizontal
+        content.distribution = .fill
+        content.alignment = .top
+        content.spacing = RowMetrics.contentSpacing
+        content.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(content)
+        leadingConstraint = content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: RowMetrics.rowMarginStart)
+        topConstraint = content.topAnchor.constraint(equalTo: topAnchor, constant: RowMetrics.marginComfortable)
+        bottomConstraint = bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: RowMetrics.marginComfortable)
+        NSLayoutConstraint.activate([
+            leadingConstraint,
+            topConstraint,
+            bottomConstraint,
+            trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: RowMetrics.rowMarginEnd),
+        ])
+    }
+
+    // MARK: Content
+
+    /// Shows `row` with the current settings (threads.go `renderRow`,
+    /// messages.go `newMessageRow`): a conversation row with its arrow and
+    /// badge, or a message; in a grouped list a plain row keeps the arrow's
+    /// place so the avatars line up. `message` is what a message row
+    /// shows (`ListController.rowMessage`: the summary, or in search the
+    /// excerpt and the folder).
+    func configure(_ row: ListRow, message: RowMessage, reserveExpander: Bool, appearance: RowAppearance, mine: Bool = false) {
+        applyAppearance(appearance)
+        self.mine = mine
+        invitation = invitationPill(row.message)
+        showSignature(SignatureView.listIcon(for: row.message.signature))
+        // A brand and a msgid: nothing from mail.
+        let pill = CRM.pillFor(row.message)
+        crmPill.stringValue = pill?.label ?? ""
+        crmPill.toolTip = pill?.tooltip
+        crmPill.isHidden = pill == nil
+        if row.thread, let summary = row.summary {
+            setThread(summaryThread(summary, expanded: row.expanded, loading: row.loading))
+        } else {
+            setMessage(message)
+            reserve = reserveExpander
+            applyLead()
+        }
+        setMember(row.member)
+        applyIssue()
+    }
+
+    /// The verdict's icon (nil: none), with its tooltip; the colour follows
+    /// the selection state (`applyColours`). A verdict's name is a fixed
+    /// text, nothing from the mail.
+    private func showSignature(_ icon: SignatureView.ListIcon?) {
+        signature = icon
+        signatureIcon.isHidden = icon == nil
+        if let icon {
+            signatureIcon.image = SignatureTint.image(icon.icon, description: icon.tooltip)
+            signatureIcon.toolTip = icon.tooltip
+            signatureIcon.setAccessibilityLabel(icon.tooltip)
+        } else {
+            signatureIcon.image = nil
+            signatureIcon.toolTip = nil
+        }
+        applySignatureTint()
+    }
+
+    private func applySignatureTint() {
+        guard let signature else { return }
+        signatureIcon.contentTintColor = emphasized ? .alternateSelectedControlTextColor : SignatureTint.color(signature.severity)
+    }
+
+    /// Displays a message (message_row.go `SetMessage`). The first sender
+    /// is shown; a message without one gets an empty name.
+    private func setMessage(_ m: RowMessage) {
+        let sender = m.from.first ?? Address(address: "")
+        let name = displayName(sender)
+        avatar.text = name
+        avatar.photoSource = ContactBook.avatarOfSender(address: sender.address, name: name, mine: mine)
+        from.stringValue = name
+        from.toolTip = formatAddress(sender)
+        fill(subject: m.subject, snippet: m.snippet, date: m.date, unread: m.unread, flagged: m.flagged, attachments: m.hasAttachments)
+        setPreview(m.snippet, highlights: highlightRanges(m.snippet, m.highlights))
+        origin.stringValue = m.origin
+        origin.toolTip = m.originTooltip.isEmpty ? nil : m.originTooltip
+        origin.isHidden = m.origin.isEmpty
+        badge.isHidden = true
+        draftPill.isHidden = true
+        issue = m.issue
+        bulkTag = m.tag
+        thread = false
+        loading = false
+        applyLead()
+    }
+
+    /// Displays a conversation (message_row.go `SetThread`): the
+    /// participants where the sender goes, the member count in a badge,
+    /// the fold arrow (or the spinner while the members load).
+    private func setThread(_ t: RowThread) {
+        let first = t.participants.first ?? Address(address: "")
+        avatar.text = displayName(first)
+        avatar.photoSource = ContactBook.avatarOfSender(address: first.address, name: avatar.text, mine: mine)
+        from.stringValue = formatParticipants(t.participants)
+        from.toolTip = t.participants.map(formatAddress).joined(separator: "\n")
+        fill(subject: t.subject, snippet: t.snippet, date: t.date, unread: t.unread > 0, flagged: t.flagged, attachments: t.hasAttachments)
+        origin.isHidden = true
+        badge.text = threadCountText(t.count)
+        // TRANSLATORS: tooltip of the member count of a conversation row.
+        badge.toolTip = L10n.N("%d message", "%d messages", t.count)
+        badge.isHidden = t.count < 2
+        draftPill.stringValue = t.draft
+        draftPill.isHidden = t.draft.isEmpty
+        issue = t.issue
+        bulkTag = t.tag
+        thread = true
+        loading = t.loading
+        reserve = false
+        applyLead()
+        setExpanded(t.expanded)
+    }
+
+    /// The parts a message and a conversation row share (message_row.go
+    /// `fill`).
+    private func fill(subject text: String, snippet: String, date when: Date, unread: Bool, flagged: Bool, attachments: Bool) {
+        date.stringValue = formatDate(when, now: Date())
+        subject.stringValue = subjectText(text)
+        setPreview(snippet, highlights: [])
+        attachment.isHidden = !attachments
+        star.isHidden = !flagged
+        unreadDot.isHidden = !unread
+        let font = unread ? Typo.heading : Typo.body
+        from.font = font
+        subject.font = font
+    }
+
+    private func setPreview(_ text: String, highlights: [NSRange]) {
+        previewText = text
+        previewHighlights = highlights
+        renderPreview()
+    }
+
+    /// The preview line: plain text, with the matched words of a search
+    /// result in bold (message_row.go `highlightAttrs`), in the colour the
+    /// selection asks for. The attributed string carries fonts and colours
+    /// only; nothing in the text is interpreted.
+    private func renderPreview() {
+        guard !previewHighlights.isEmpty else {
+            preview.stringValue = previewText
+            return
+        }
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
+        let text = NSMutableAttributedString(string: previewText, attributes: [
+            .font: Typo.caption, .foregroundColor: preview.textColor ?? Tint.secondary, .paragraphStyle: style,
+        ])
+        let bold = NSFontManager.shared.convert(Typo.caption, toHaveTrait: .boldFontMask)
+        for r in previewHighlights where NSMaxRange(r) <= text.length {
+            text.addAttribute(.font, value: bold, range: r)
+        }
+        preview.attributedStringValue = text
+    }
+
+    /// The issue of a Jira row, over what `setMessage` / `setThread` laid
+    /// out: the key, the issue's summary for the subject ("KEY: Summary"
+    /// without the key), the status pill and the Internal badge. A
+    /// conversation whose latest member is an event shows the change as
+    /// its preview; an event message row is the actor and the change in the
+    /// caption, without a preview or an unread dot, and under its
+    /// conversation without the subject line either (one line). A mail row
+    /// hides all of it.
+    private func applyIssue() {
+        // The neutral tag of a bulk message (widget.SetBulkPill): its text
+        // is its own tooltip, as a long one is cut; none on an issue's row.
+        bulkPill.setText(bulkTag, maxCharacters: PillLabel.statusCharacters)
+        bulkPill.toolTip = bulkTag.isEmpty ? nil : bulkTag
+        bulkPill.isHidden = issue != nil || bulkTag.isEmpty
+        guard let issue else {
+            event = false
+            issueKey.isHidden = true
+            statusPill.isHidden = true
+            internalPill.isHidden = true
+            eventLabel.isHidden = true
+            subjectLine.isHidden = false
+            applyColours()
+            return
+        }
+        issueKey.stringValue = issue.key
+        issueKey.isHidden = issue.key.isEmpty
+        // An issue without a summary keeps the message's subject.
+        if !issue.summary.isEmpty {
+            subject.stringValue = issue.summary
+        }
+        statusPill.setText(issue.status, maxCharacters: PillLabel.statusCharacters)
+        statusPill.toolTip = issue.status
+        statusPill.isHidden = issue.status.isEmpty
+        statusStyle = issue.statusStyle
+        internalPill.stringValue = issue.internalLabel
+        internalPill.isHidden = !issue.internal
+        event = issue.event && !thread
+        if thread {
+            if issue.event, !issue.eventText.isEmpty {
+                setPreview(issue.eventText, highlights: [])
+            }
+            eventLabel.isHidden = true
+            subjectLine.isHidden = false
+        } else if event {
+            eventLabel.stringValue = Self.eventArrow + issue.eventText
+            eventLabel.toolTip = issue.eventText
+            eventLabel.isHidden = false
+            subjectLine.isHidden = member
+            preview.isHidden = true
+            unreadDot.isHidden = true
+            from.font = Typo.caption
+        } else {
+            eventLabel.isHidden = true
+            subjectLine.isHidden = false
+        }
+        applyColours()
+    }
+
+    /// What leads an event's change after its actor: a symbol, not a word.
+    private static let eventArrow = "→ "
+
+    /// Turns the fold arrow of a conversation row (message_row.go
+    /// `SetExpanded`).
+    private func setExpanded(_ on: Bool) {
+        expander.image = Icon.image(on ? "pan-down" : "pan-end", size: .small)
+        expander.toolTip = on ? L10n.T("Collapse") : L10n.T("Expand")
+    }
+
+    /// Indents the row as a member of an unfolded conversation
+    /// (message_row.go `SetMember`).
+    private func setMember(_ on: Bool) {
+        member = on
+        applyLead()
+    }
+
+    /// Lays the start of the row out (message_row.go `applyLead`): on a
+    /// conversation row the arrow (or the spinner while loading), on a
+    /// plain row of a grouped list the arrow's place kept empty (invisible
+    /// and inert, so a click reaches the row), on a flat list's row
+    /// nothing. A member row shows no avatar; it is indented so that its
+    /// text lines up with its conversation's (the avatar's width and gap),
+    /// or by a fixed step when avatars are off.
+    private func applyLead() {
+        let live = thread && !loading
+        let spinning = thread && loading
+        spinner.isHidden = !spinning
+        if spinning {
+            spinner.start()
+        } else {
+            spinner.stop()
+        }
+        expander.isHidden = !(live || (!thread && reserve))
+        expander.isEnabled = live
+        expander.alphaValue = live ? 1 : 0
+        if !live {
+            expander.toolTip = nil
+        }
+        avatar.isHidden = !(showAvatar && !member)
+        var margin = RowMetrics.rowMarginStart
+        if thread || reserve {
+            margin = RowMetrics.threadRowMarginStart
+        }
+        if member {
+            margin += showAvatar ? avatarSize + RowMetrics.leadSpacing : RowMetrics.memberIndent
+        }
+        leadingConstraint.constant = margin
+    }
+
+    /// The density, the preview line, the avatars (message_row.go
+    /// `SetCompact`, `SetShowPreview`, `SetShowAvatar`).
+    private func applyAppearance(_ a: RowAppearance) {
+        let margin = a.compact ? RowMetrics.marginCompact : RowMetrics.marginComfortable
+        avatarSize = a.compact ? RowMetrics.avatarCompact : RowMetrics.avatarComfortable
+        topConstraint.constant = margin
+        bottomConstraint.constant = margin
+        avatar.size = avatarSize
+        avatar.monochrome = a.monochromeAvatars
+        preview.isHidden = !a.showPreview
+        showAvatar = a.showAvatar
+    }
+
+    /// The row's colours follow the selection: white on the accent
+    /// highlight, the label colours otherwise.
+    override var backgroundStyle: NSView.BackgroundStyle {
+        didSet {
+            emphasized = backgroundStyle == .emphasized
+            applyColours()
+        }
+    }
+
+    /// The colours for the selection state (`emphasized`); an event row is
+    /// in the secondary colour throughout, the status pill in its style's.
+    private func applyColours() {
+        let primary: NSColor = emphasized ? .alternateSelectedControlTextColor : .labelColor
+        let secondary: NSColor = emphasized ? .alternateSelectedControlTextColor : Tint.secondary
+        from.textColor = event ? secondary : primary
+        subject.textColor = primary
+        applyInvitation(primary)
+        issueKey.textColor = secondary
+        eventLabel.textColor = secondary
+        IssuePill.paint(statusPill, IssuePill.colours(statusStyle), emphasized: emphasized)
+        IssuePill.paint(bulkPill, IssuePill.bulkColours, emphasized: emphasized)
+        IssuePill.paint(internalPill, IssuePill.internalColours, emphasized: emphasized)
+        IssuePill.paint(draftPill, IssuePill.draftColours, emphasized: emphasized)
+        IssuePill.paint(crmPill, IssuePill.crmColours, emphasized: emphasized)
+        date.textColor = secondary
+        origin.textColor = secondary
+        preview.textColor = secondary
+        renderPreview()
+        attachment.contentTintColor = secondary
+        applySignatureTint()
+        star.contentTintColor = emphasized ? .alternateSelectedControlTextColor : Tint.accent
+        unreadDot.color = emphasized ? .alternateSelectedControlTextColor : Tint.accent
+        badge.textColor = primary
+        badge.fill = emphasized ? NSColor.alternateSelectedControlTextColor.withAlphaComponent(0.2) : Tint.fg(alpha: 0.1)
+        expander.contentTintColor = emphasized ? .alternateSelectedControlTextColor : nil
+    }
+
+    /// The invitation pill, and a cancellation's subject struck through:
+    /// the subject's own text with a font, a colour and the line only.
+    private func applyInvitation(_ colour: NSColor) {
+        InvitationPill.show(invitation, in: calendarPill, emphasized: emphasized)
+        calendarPill.toolTip = nil
+        guard Cal.strikesSubject(invitation) else { return }
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
+        subject.attributedStringValue = NSAttributedString(string: subject.stringValue, attributes: [
+            .font: subject.font ?? Typo.body, .foregroundColor: colour,
+            .strikethroughStyle: NSUnderlineStyle.single.rawValue, .paragraphStyle: style,
+        ])
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        onToggle = nil
+    }
+
+    @objc private func expanderClicked() {
+        onToggle?()
+    }
+}
+
+/// `label.thread-count`: a caption in a capsule, padded 0/6
+/// (style.go).
+@MainActor
+final class PillLabel: NSTextField {
+    var fill: NSColor = Tint.fg(alpha: 0.1) {
+        didSet { needsDisplay = true }
+    }
+
+    init() {
+        super.init(frame: .zero)
+        isEditable = false
+        isSelectable = false
+        isBezeled = false
+        drawsBackground = false
+        lineBreakMode = .byClipping
+        maximumNumberOfLines = 1
+        alignment = .center
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    /// The most characters of a status a pill shows (widget/pill.go
+    /// `NewPill`: ellipsised at 24); the tooltip has the whole of it.
+    static let statusCharacters = 24
+
+    /// Shows `text`, cut to `maxCharacters` with an ellipsis: a status
+    /// name comes from the site and may be of any length, and a pill does
+    /// not shrink.
+    func setText(_ text: String, maxCharacters: Int) {
+        if text.count > maxCharacters, maxCharacters > 1 {
+            stringValue = text.prefix(maxCharacters - 1) + "…"
+        } else {
+            stringValue = text
+        }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        var s = super.intrinsicContentSize
+        s.width += 2 * RowMetrics.badgePadding
+        s.height += 2
+        return s
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let radius = bounds.height / 2
+        fill.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+        super.draw(dirtyRect)
+    }
+}
+
+/// `.unread-dot`: an 8 × 8 disc in the accent colour (style.go).
+@MainActor
+final class DotView: NSView {
+    var color: NSColor = Tint.accent {
+        didSet { needsDisplay = true }
+    }
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: RowMetrics.unreadDotSize, height: RowMetrics.unreadDotSize))
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: RowMetrics.unreadDotSize),
+            heightAnchor.constraint(equalToConstant: RowMetrics.unreadDotSize),
+        ])
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: RowMetrics.unreadDotSize, height: RowMetrics.unreadDotSize)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        color.setFill()
+        NSBezierPath(ovalIn: bounds).fill()
+    }
+}

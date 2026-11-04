@@ -1,0 +1,206 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
+package smtp
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/emersion/go-sasl"
+	"github.com/emersion/go-smtp"
+
+	"github.com/schotek/malachi/backend/internal/auth"
+	"github.com/schotek/malachi/backend/internal/transport"
+	"github.com/schotek/malachi/backend/pkg/api"
+)
+
+// ProbeResult is what a successful Probe learned.
+type ProbeResult struct {
+	Capabilities []string      // scrubbed EHLO keywords the backend knows about
+	Latency      time.Duration // dial start → EHLO answered (over TLS for STARTTLS)
+}
+
+// knownExtensions is the list probed with Client.Extension; go-smtp does
+// not expose the raw EHLO response.
+var knownExtensions = []string{
+	"AUTH", "STARTTLS", "SIZE", "8BITMIME", "SMTPUTF8", "PIPELINING", "CHUNKING",
+	"BINARYMIME", "DSN", "ENHANCEDSTATUSCODES", "REQUIRETLS", "DELIVERBY", "MT-PRIORITY", "RRVS", "HELP",
+}
+
+// Conn is an open client whose connection is closed when the context that
+// opened it ends.
+type Conn struct {
+	*smtp.Client
+	stop func() bool
+}
+
+// Close releases the connection and the watchdog.
+func (c *Conn) Close() error {
+	c.stop()
+	return c.Client.Close()
+}
+
+// Connect dials, secures the connection according to cfg.Security (with
+// the endpoint's TLS policy, its pinned certificate if any) and completes
+// EHLO. It never authenticates and never logs traffic.
+func Connect(ctx context.Context, cfg api.ServerConfig) (*Conn, time.Duration, error) {
+	start := time.Now()
+	raw, err := transport.DialContext(ctx, cfg)
+	if err != nil {
+		return nil, 0, err
+	}
+	stop := context.AfterFunc(ctx, func() { raw.Close() })
+
+	var c *smtp.Client
+	if cfg.Security == api.SecuritySTARTTLS {
+		c, err = smtp.NewClientStartTLS(raw, transport.EndpointTLSConfig(cfg))
+		if err != nil {
+			stop()
+			return nil, 0, classify(ctx, transport.StageTLS, err)
+		}
+	} else {
+		c = smtp.NewClient(raw)
+	}
+	c.CommandTimeout = transport.CommandTimeout
+	// After STARTTLS the library forgets the plaintext EHLO, so this sends
+	// a fresh one over TLS.
+	if err := c.Hello("localhost"); err != nil {
+		stage := transport.StageGreeting
+		if st, isTLS := c.TLSConnectionState(); isTLS && !st.HandshakeComplete {
+			// The library upgrades lazily: the STARTTLS handshake runs on
+			// this first write, and that is what failed.
+			stage = transport.StageTLS
+		}
+		c.Close()
+		stop()
+		return nil, 0, classify(ctx, stage, err)
+	}
+	return &Conn{Client: c, stop: stop}, time.Since(start), nil
+}
+
+// Probe connects, authenticates with the password (or, for an oauth2
+// endpoint, the access token passed in its place) and quits.
+func Probe(ctx context.Context, cfg api.ServerConfig, password string) (ProbeResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, transport.EndpointTimeout)
+	defer cancel()
+
+	c, latency, err := Connect(ctx, cfg)
+	if err != nil {
+		return ProbeResult{}, err
+	}
+	defer c.Close()
+
+	var caps []string
+	for _, ext := range knownExtensions {
+		if ok, param := c.Extension(ext); ok {
+			if param != "" {
+				ext += " " + param
+			}
+			caps = append(caps, ext)
+		}
+	}
+
+	if err := authenticate(ctx, c, cfg, password); err != nil {
+		return ProbeResult{}, err
+	}
+
+	res := ProbeResult{Capabilities: transport.CleanCapabilities(caps), Latency: latency}
+	quit(c)
+	return res, nil
+}
+
+// errNoAuthMechanism is returned when the server advertises neither PLAIN
+// nor LOGIN (or, for an oauth2 endpoint, neither XOAUTH2 nor
+// OAUTHBEARER); a retry cannot change that.
+var (
+	errNoAuthMechanism   = api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
+	errNoOAuth2Mechanism = api.NewError(api.CodeServerError, "server offers no OAuth2 authentication mechanism")
+)
+
+// authenticate runs the SASL exchange shared by Probe and Deliver. With a
+// password: PLAIN when offered, LOGIN otherwise. With AuthOAuth2 the
+// secret is an access token: XOAUTH2, or OAUTHBEARER when that is all the
+// server offers. The returned error is already classified (*api.Error)
+// and never carries the secret.
+func authenticate(ctx context.Context, c *Conn, cfg api.ServerConfig, secret string) error {
+	var err error
+	switch cfg.AuthMethod {
+	case api.AuthPassword:
+		switch {
+		case c.SupportsAuth(sasl.Plain):
+			err = c.Auth(sasl.NewPlainClient("", cfg.Username, secret))
+		case c.SupportsAuth(sasl.Login):
+			err = c.Auth(sasl.NewLoginClient(cfg.Username, secret))
+		default:
+			return errNoAuthMechanism
+		}
+	case api.AuthOAuth2:
+		switch {
+		case c.SupportsAuth(auth.XOAuth2):
+			err = c.Auth(auth.NewXOAuth2Client(cfg.Username, secret))
+		case c.SupportsAuth(sasl.OAuthBearer):
+			err = c.Auth(sasl.NewOAuthBearerClient(&sasl.OAuthBearerOptions{
+				Username: cfg.Username, Token: secret, Host: cfg.Host, Port: cfg.Port,
+			}))
+		default:
+			return errNoOAuth2Mechanism
+		}
+	default:
+		return api.ErrNotImplemented
+	}
+	if err != nil {
+		return classify(ctx, transport.StageAuth, err)
+	}
+	return nil
+}
+
+// quit sends QUIT on a best-effort basis, bounded by transport.QuitTimeout;
+// the caller still closes the connection.
+func quit(c *Conn) {
+	done := make(chan struct{})
+	go func() { _ = c.Quit(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(transport.QuitTimeout):
+	}
+}
+
+// Verify is Connect plus Close: it proves that the endpoint speaks SMTP
+// under the requested security without authenticating.
+func Verify(ctx context.Context, cfg api.ServerConfig) error {
+	ctx, cancel := context.WithTimeout(ctx, transport.EndpointTimeout)
+	defer cancel()
+	c, _, err := Connect(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	return c.Close()
+}
+
+// classify handles SMTP reply codes before the generic rules.
+func classify(ctx context.Context, stage transport.Stage, err error) error {
+	if stage == transport.StageTLS && strings.Contains(err.Error(), "doesn't support STARTTLS") {
+		return transport.NewTLSError(api.TLSStartTLSUnavail, "server does not offer STARTTLS")
+	}
+	var se *smtp.SMTPError
+	if errors.As(err, &se) {
+		text := transport.CleanMessage(se.Message)
+		switch {
+		case stage == transport.StageAuth && (se.Code == 535 || se.Code == 534 ||
+			se.EnhancedCode == smtp.EnhancedCode{5, 7, 8} || se.EnhancedCode == smtp.EnhancedCode{5, 7, 9}):
+			return api.NewError(api.CodeAuthFailed, "authentication rejected: %d %s", se.Code, text)
+		case stage == transport.StageAuth && (se.Code == 530 || se.Code == 538):
+			return transport.NewTLSError(api.TLSRequired, "server requires TLS before authentication: %d %s", se.Code, text)
+		case stage == transport.StageTLS && se.Code == 454:
+			// The reply to STARTTLS itself (RFC 3207 §4); a refused
+			// greeting or EHLO has other codes.
+			return transport.NewTLSError(api.TLSStartTLSUnavail, "STARTTLS refused: %d %s", se.Code, text)
+		default:
+			return api.NewError(api.CodeServerError, "%s: server said %d %s", stage, se.Code, text)
+		}
+	}
+	return transport.Classify(ctx, stage, err)
+}

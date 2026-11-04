@@ -1,0 +1,679 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// Preferences dialog, opened by the app.preferences action (Ctrl+,). Object
+// IDs are looked up from ui/internal/window/preferences.go; keep them in sync.
+//
+// The "Accounts" page (mail accounts) and the "Integrations" page (every
+// other account) are owned by the daemon (account.list / account.remove /
+// account.setEnabled / account.reorder; rows are built in
+// ui/internal/window/accounts_page.go).
+// The other pages are bound to GSettings (ui/internal/settings), except the
+// "Mail" group, which is owned by the daemon and goes through config.get /
+// config.set, and "Launch at Login", whose state is decided by the
+// Background portal (ui/internal/background). In the "Mail" group,
+// attachment_days, never_store_attachments and compress_store stay hidden
+// until config.get reports them (a daemon that does not know them never
+// does), and storage_row shows what system.storage says, asked again every
+// few seconds while the dialog is open (hidden for a daemon without it).
+// On the "AI" page the MCP switch has no setting of its own: it shows what
+// malachi-mcp reports about the Claude configuration files
+// (ui/internal/mcpsetup). The Assistant group under it is bound to the
+// assistant-* keys and depends on that switch; its texts come from
+// ui/internal/assistant, set in Go (window/preferences.go bindAssistant).
+Adw.PreferencesDialog preferences_dialog {
+  title: _("Preferences");
+  search-enabled: true;
+
+  Adw.PreferencesPage accounts_page {
+    name: "accounts";
+    title: _("Accounts");
+    icon-name: "system-users-symbolic";
+
+    Adw.PreferencesGroup accounts_group {
+      title: _("Mail Accounts");
+
+      // The mail account assistant (window/accounts_page.go, the "prefs"
+      // action group); Jira and CalDAV are added on the Integrations page.
+      header-suffix: Button add_account_button {
+        icon-name: "list-add-symbolic";
+        tooltip-text: _("Add Account");
+        valign: center;
+        action-name: "prefs.add-account";
+
+        styles [
+          "flat",
+        ]
+      };
+
+      Adw.ActionRow accounts_empty_row {
+        title: _("No accounts yet");
+        subtitle: _("Use the + button to add one");
+        sensitive: false;
+      }
+    }
+  }
+
+  // Every account that is not a mail account (Jira, CalDAV) and the
+  // catalogue of services that can be added. Its texts come from
+  // ui/internal/integrations, set in Go (window/integrations_page.go); the
+  // rows are built there and in window/accounts_page.go.
+  Adw.PreferencesPage integrations_page {
+    name: "integrations";
+    icon-name: "application-x-addon-symbolic";
+
+    Adw.PreferencesGroup integrations_group {
+      Adw.ActionRow integrations_empty_row {
+        use-markup: false;
+        sensitive: false;
+      }
+    }
+
+    Adw.PreferencesGroup integrations_available_group {}
+  }
+
+  // Preferences → Rules (docs/plans/rules.md R14, window/preferences_rules.go
+  // bindRules over rulesctl.Controller): the mail rules in the order they
+  // run. Every text is ui/internal/rules', set in Go, so this page has no
+  // translatable strings; the rows are built there.
+  Adw.PreferencesPage rules_page {
+    name: "rules";
+    icon-name: "funnel-symbolic";
+
+    Adw.PreferencesGroup rules_group {
+      header-suffix: Button rules_add_button {
+        valign: center;
+      };
+
+      Adw.ActionRow rules_empty_row {
+        use-markup: false;
+        sensitive: false;
+      }
+    }
+  }
+
+  Adw.PreferencesPage general_page {
+    name: "general";
+    title: _("General");
+    icon-name: "preferences-system-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Startup");
+
+      Adw.SwitchRow launch_at_login {
+        title: _("Launch at Login");
+        subtitle: _("Start hidden in the background when you log in");
+      }
+
+      Adw.SwitchRow run_in_background {
+        title: _("Run in Background");
+        subtitle: _("Closing the window keeps Malachi Mail running for notifications");
+      }
+    }
+
+    // The update check (window/preferences_updates.go bindUpdates): every
+    // text is ui/internal/updates', set in Go. The switch is the daemon's
+    // update.setPrefs; the row under it shows the status line with Check
+    // Now.
+    Adw.PreferencesGroup update_group {
+      Adw.SwitchRow update_enabled {
+        use-markup: false;
+      }
+
+      Adw.ActionRow update_status {
+        use-markup: false;
+
+        [suffix]
+        Button update_check_now {
+          valign: center;
+        }
+      }
+    }
+
+    // The board (ui/internal/board): its texts and the items of the combo
+    // rows are set in Go (window/preferences_board.go bindBoard). Show the
+    // Board, the windows and the triage's accounts are the daemon's board
+    // preferences; Board View and Open at Launch are board-default-style
+    // and board-start-mode.
+    Adw.PreferencesGroup board_group {
+      title: _("Board");
+
+      Adw.SwitchRow board_show {
+        use-markup: false;
+      }
+
+      Adw.ComboRow board_default_style {
+        use-markup: false;
+      }
+
+      Adw.ComboRow board_start_mode {
+        use-markup: false;
+      }
+    }
+
+    // How long each state keeps a case (BoardPreferences.windows), one row
+    // per state in board.States' order.
+    Adw.PreferencesGroup board_windows_group {
+      Adw.SpinRow board_window_hot {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_you {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_them {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_info {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Reading");
+
+      Adw.SpinRow mark_read_delay {
+        title: _("Mark as Read After");
+        subtitle: _("Seconds a message must be shown before it is marked as read; 0 marks it immediately");
+
+        adjustment: Adjustment {
+          lower: 0;
+          upper: 60;
+          step-increment: 1;
+          value: 2;
+        };
+      }
+
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Deleting");
+
+      Adw.SwitchRow confirm_delete {
+        title: _("Confirm Before Deleting");
+        subtitle: _("Ask before moving a message to Trash");
+        active: true;
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Notifications");
+
+      Adw.SwitchRow desktop_notifications {
+        title: _("Show Desktop Notifications");
+        active: true;
+      }
+
+      Adw.SwitchRow notification_sound {
+        title: _("Play Sound");
+        subtitle: _("Play the system new-mail sound");
+      }
+    }
+
+    Adw.PreferencesGroup mail_group {
+      title: _("Mail");
+      description: _("Stored by the mail daemon.");
+
+      Adw.ComboRow check_interval {
+        title: _("Check for New Mail");
+        selected: 1;
+
+        model: StringList {
+          strings [
+            _("Manually"),
+            _("Every 5 minutes"),
+            _("Every 15 minutes"),
+            _("Every 30 minutes"),
+          ]
+        };
+      }
+
+      Adw.ComboRow remote_images {
+        title: _("Load Remote Images");
+
+        model: StringList {
+          strings [
+            _("Never"),
+            _("From Known Senders"),
+            _("Always"),
+          ]
+        };
+      }
+
+      Adw.ComboRow offline_days {
+        title: _("Keep Mail Offline For");
+        subtitle: _("Older messages stay on the server and are not shown");
+
+        model: StringList {
+          strings [
+            _("1 week"),
+            _("1 month"),
+            _("3 months"),
+            _("1 year"),
+            _("Everything"),
+          ]
+        };
+      }
+
+      // Preferences.attachmentOfflineDays per row (attachmentChoices in
+      // preferences.go): -1, 7, 30, 90, 0.
+      Adw.ComboRow attachment_days {
+        title: _("Keep Attachments Offline For");
+        subtitle: _("Large attachments of older messages stay on the server and are downloaded when you open them");
+        selected: 4;
+        visible: false;
+
+        model: StringList {
+          strings [
+            _("Small Attachments Only"),
+            _("1 week"),
+            _("1 month"),
+            _("3 months"),
+            _("Everything"),
+          ]
+        };
+      }
+
+      // While on, attachment_days does not apply and is insensitive
+      // (attachmentDaysApply in preferences.go).
+      Adw.SwitchRow never_store_attachments {
+        title: _("Never Store Attachments");
+        subtitle: _("Attachments are downloaded whenever you open them and are gone when you quit");
+        visible: false;
+      }
+
+      Adw.SwitchRow compress_store {
+        title: _("Compress Stored Mail");
+        subtitle: _("Uses less disk space; stored mail is converted in the background");
+        visible: false;
+      }
+
+      // The total as the suffix, what compression saves and what stays on
+      // the server as the subtitle (storageTexts in preferences.go).
+      Adw.ActionRow storage_row {
+        title: _("Disk Space Used");
+        use-markup: false;
+
+        [suffix]
+        Label storage_size {
+          valign: center;
+
+          styles [
+            "dim-label",
+            "numeric",
+          ]
+        }
+      }
+    }
+  }
+
+  // Preferences → Calendar (docs/calendar.md §5.8, window/preferences_calendar.go
+  // bindCalendar): every text is ui/internal/calendar's, set in Go. The
+  // Display group is static; one group per calendar account (and its
+  // Invitations group) is added from Go between it and the empty state,
+  // following calendar.PreferencesLayout. Hidden without a calendar source.
+  Adw.PreferencesPage calendar_page {
+    name: "calendar";
+    icon-name: "x-office-calendar-symbolic";
+
+    Adw.PreferencesGroup calendar_display_group {
+      Adw.ComboRow calendar_week_start {
+        use-markup: false;
+      }
+
+      Adw.ComboRow calendar_duration {
+        use-markup: false;
+      }
+
+      Adw.ComboRow calendar_alert {
+        use-markup: false;
+      }
+
+      Adw.SwitchRow calendar_declined {
+        use-markup: false;
+      }
+
+      // The seven day toggles (filled from Go); the last day stays on.
+      Adw.ActionRow calendar_work_days {
+        use-markup: false;
+
+        [suffix]
+        Box calendar_work_days_box {
+          valign: center;
+
+          styles [
+            "linked",
+          ]
+        }
+      }
+
+      // Half hours (CalendarPreferencesController.WorkingTimeChoices).
+      Adw.ComboRow calendar_work_start {
+        use-markup: false;
+      }
+
+      Adw.ComboRow calendar_work_end {
+        use-markup: false;
+      }
+    }
+
+    // calendar.NoCalendarsTitle / NoCalendarsBody without calendar accounts.
+    Adw.PreferencesGroup calendar_empty_group {
+      visible: false;
+
+      Adw.ActionRow calendar_empty_row {
+        use-markup: false;
+
+        styles [
+          "dim-label",
+        ]
+      }
+    }
+
+    Adw.PreferencesGroup calendar_add_group {
+      Adw.ButtonRow calendar_add_caldav {
+        use-markup: false;
+        start-icon-name: "list-add-symbolic";
+      }
+    }
+  }
+
+  // Preferences → Contacts (docs/plans/address-book.md W3,
+  // window/preferences_contacts.go bindContacts over
+  // contactsctl.PreferencesController): every text is ui/internal/contacts',
+  // set in Go. One group per account with the contacts capability is added
+  // from Go before the empty state and Recipient Suggestions.
+  Adw.PreferencesPage contacts_page {
+    name: "contacts";
+    icon-name: "x-office-address-book-symbolic";
+
+    // contacts.NoContactAccounts without such an account.
+    Adw.PreferencesGroup contacts_empty_group {
+      visible: false;
+
+      Adw.ActionRow contacts_empty_row {
+        use-markup: false;
+
+        styles [
+          "dim-label",
+        ]
+      }
+    }
+
+    // contacts-suggest-scope: one check row per contacts.Scopes.
+    Adw.PreferencesGroup contacts_suggest_group {}
+  }
+
+  Adw.PreferencesPage appearance_page {
+    name: "appearance";
+    title: _("Appearance");
+    icon-name: "applications-graphics-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Theme");
+
+      Adw.ComboRow color_scheme {
+        title: _("Color Scheme");
+
+        model: StringList {
+          strings [
+            _("Follow System"),
+            _("Light"),
+            _("Dark"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Message List");
+
+      Adw.ComboRow list_density {
+        title: _("Density");
+
+        model: StringList {
+          strings [
+            _("Comfortable"),
+            _("Compact"),
+          ]
+        };
+      }
+
+      Adw.SwitchRow show_preview_line {
+        title: _("Show Preview Line");
+        active: true;
+      }
+
+      Adw.SwitchRow show_avatars {
+        title: _("Show Avatars");
+        active: true;
+      }
+
+      Adw.SwitchRow monochrome_avatars {
+        title: _("Monochrome Avatars");
+        subtitle: _("Neutral grey instead of a colour per sender");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      // Title and subtitle are set from Go (unified.PreferenceTitle).
+      Adw.SwitchRow unified_inbox {}
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Conversations");
+
+      Adw.SwitchRow group_by_conversation {
+        title: _("Group by Conversation");
+        subtitle: _("One row per conversation; expand it to see its messages");
+      }
+
+      Adw.SwitchRow conversation_chat_html {
+        title: _("Render HTML in Chat");
+        subtitle: _("Messages in the chat layout as they were sent, in a locked web view, instead of their plain text");
+      }
+
+      Adw.SwitchRow conversation_chat_truncate_mine {
+        title: _("Shorten My Messages in Chat");
+        subtitle: _("About three lines of each message in its bubble; a click shows the whole message");
+      }
+
+      Adw.SwitchRow conversation_chat_truncate_others {
+        title: _("Shorten Others' Messages in Chat");
+        subtitle: _("About three lines of each message in its bubble; a click shows the whole message");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Message View");
+
+      Adw.SwitchRow monospace_plain_text {
+        title: _("Use Monospace Font for Plain Text");
+      }
+
+      Adw.SpinRow text_zoom {
+        title: _("Text Zoom");
+        subtitle: _("Percent");
+
+        adjustment: Adjustment {
+          lower: 50;
+          upper: 200;
+          step-increment: 10;
+          value: 100;
+        };
+      }
+    }
+  }
+
+  Adw.PreferencesPage ai_page {
+    name: "ai";
+    title: _("AI");
+    icon-name: "applications-science-symbolic";
+
+    // About You (window/preferences_profile.go fills both from Go).
+    Adw.PreferencesGroup about_you_group {}
+
+    Adw.PreferencesGroup about_you_pending_group {
+      visible: false;
+    }
+
+    Adw.PreferencesGroup mcp_group {
+      title: _("MCP");
+      description: _("Lets AI assistants read your mail and prepare drafts through the Model Context Protocol.");
+
+      Adw.SwitchRow mcp_switch {
+        title: _("Register with Claude");
+        subtitle: _("Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer");
+      }
+    }
+
+    Adw.PreferencesGroup assistant_group {
+      Adw.ComboRow assistant_provider { use-markup: false; }
+      Adw.SwitchRow assistant_menu_switch {
+        use-markup: false;
+      }
+
+      Adw.ComboRow assistant_target {
+        use-markup: false;
+      }
+
+      // In App only: the claude the panel runs, and the model.
+      Adw.ActionRow assistant_claude_code {
+        use-markup: false;
+        subtitle-selectable: true;
+        visible: false;
+
+        [suffix]
+        Button assistant_claude_choose {
+          valign: center;
+        }
+      }
+
+      Adw.ComboRow assistant_model {
+        use-markup: false;
+        visible: false;
+      }
+    }
+
+    Adw.PreferencesGroup chatgpt_group {
+      visible: false;
+      Adw.ActionRow codex_executable {
+        use-markup: false;
+        subtitle-selectable: true;
+        [suffix]
+        Button codex_choose { valign: center; }
+        [suffix]
+        Button codex_install { valign: center; }
+      }
+      Adw.ActionRow chatgpt_connection {
+        use-markup: false;
+        [suffix]
+        Button chatgpt_sign_in { valign: center; }
+        [suffix]
+        Button chatgpt_disconnect { valign: center; }
+      }
+      Adw.ComboRow chatgpt_model { use-markup: false; }
+      Adw.ActionRow chatgpt_usage {
+        use-markup: false;
+        [suffix]
+        Button chatgpt_manage_usage { valign: center; }
+      }
+    }
+
+    // The board's triage, shown while it is offered (boardtriage
+    // View.Offered: the Assistant shown with In App, and a board the
+    // daemon has and has not turned off). The texts come from
+    // ui/internal/board and ui/internal/assistant, set in Go
+    // (window/preferences.go bindBoardTriage), and so do the items of the
+    // combo rows; the description says why triage cannot run now.
+    Adw.PreferencesGroup board_triage_group {
+      title: _("Board");
+      visible: false;
+
+      Adw.SwitchRow board_triage_consent {
+        use-markup: false;
+      }
+
+      // board-triage-model, apart from the panel's assistant-model.
+      Adw.ComboRow board_triage_model {
+        use-markup: false;
+      }
+
+      // Triage These Accounts: a switch row per account, made in Go.
+      Adw.ExpanderRow board_triage_accounts {
+        use-markup: false;
+      }
+
+      Adw.SwitchRow board_triage_auto {
+        use-markup: false;
+      }
+
+      // autoTriageMinutes and autoTriageDailyCases of the daemon's
+      // board.preferences.
+      Adw.ComboRow board_triage_interval {
+        use-markup: false;
+      }
+
+      Adw.ComboRow board_triage_daily {
+        use-markup: false;
+      }
+
+      Adw.ActionRow board_triage_status {
+        title: _("Status");
+        use-markup: false;
+      }
+
+      // The tokens of the last 24 hours: the sum as the suffix, by kind
+      // and the runs as the subtitle.
+      Adw.ActionRow board_triage_usage {
+        use-markup: false;
+        visible: false;
+
+        [suffix]
+        Label board_triage_usage_value {
+          valign: center;
+
+          styles [
+            "dim-label",
+            "numeric",
+          ]
+        }
+      }
+    }
+  }
+}

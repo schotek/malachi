@@ -1,0 +1,186 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Package widget holds reusable widgets built from Blueprint definitions,
+// plus the small pure formatting helpers they display data with.
+package widget
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
+
+	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
+)
+
+// DisplayName is the short form of an address for lists and avatars: the
+// name if the backend parsed one, otherwise the bare address. Both fields
+// are attacker-controlled text; callers must show the result as plain text.
+func DisplayName(a api.Address) string {
+	if name := strings.TrimSpace(a.Name); name != "" {
+		return name
+	}
+	return strings.TrimSpace(a.Address)
+}
+
+// FormatAddress is the long form: "Name <addr>", or just the address.
+func FormatAddress(a api.Address) string {
+	name := strings.TrimSpace(a.Name)
+	addr := strings.TrimSpace(a.Address)
+	switch {
+	case name == "":
+		return addr
+	case addr == "":
+		return name
+	default:
+		return name + " <" + addr + ">"
+	}
+}
+
+// FormatParticipants joins the display names of a conversation's
+// participants in the order given (newest first), each address once,
+// compared case-insensitively; entries with neither name nor address are
+// skipped. Plain text, like DisplayName.
+func FormatParticipants(list []api.Address) string {
+	seen := make(map[string]bool, len(list))
+	names := make([]string, 0, len(list))
+	for _, a := range list {
+		key := strings.ToLower(strings.TrimSpace(a.Address))
+		if key == "" {
+			key = "name:" + strings.ToLower(strings.TrimSpace(a.Name))
+		}
+		if key == "name:" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		names = append(names, DisplayName(a))
+	}
+	// TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
+	return strings.Join(names, i18n.C("participant list separator", ", "))
+}
+
+// ThreadCountText is the badge of a conversation row: the member count
+// from two on, nothing below.
+func ThreadCountText(n int) string {
+	if n < 2 {
+		return ""
+	}
+	return fmt.Sprint(n)
+}
+
+// FormatDate renders a message date for the list, relative to now: the time
+// for today, day and month for the current year, the full date otherwise.
+// A zero time renders as an empty string.
+func FormatDate(t, now time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	t, now = t.Local(), now.Local()
+	ty, tm, td := t.Date()
+	ny, nm, nd := now.Date()
+	switch {
+	case ty == ny && tm == nm && td == nd:
+		return FormatTime(t)
+	case ty == ny:
+		// TRANSLATORS: strftime format for a date in the current year in
+		// the message list, e.g. "2 Sep".
+		// xgettext:no-c-format
+		return strftime(t, i18n.T("%-d %b"))
+	default:
+		// TRANSLATORS: strftime format for a date in another year in the
+		// message list, e.g. "2025-09-02".
+		// xgettext:no-c-format
+		return strftime(t, i18n.T("%Y-%m-%d"))
+	}
+}
+
+// FormatTime renders a wall-clock time.
+func FormatTime(t time.Time) string {
+	// TRANSLATORS: strftime format for a time of day, e.g. "15:04".
+	// xgettext:no-c-format
+	return strftime(t, i18n.T("%H:%M"))
+}
+
+// FormatDateTime renders a full date with time (quote headers, "draft
+// saved" status).
+func FormatDateTime(t time.Time) string {
+	// TRANSLATORS: strftime format for a full date and time, e.g.
+	// "Wed, 2 Sep 2026 at 15:04".
+	// xgettext:no-c-format
+	return strftime(t, i18n.T("%a, %-d %b %Y at %H:%M"))
+}
+
+// FormatSize renders a byte count for attachment chips and the disk space
+// in the preferences in decimal units, like Finder and Outlook: B, kB, MB
+// or GB, one decimal below 100 ("41.1 kB", "7.2 MB", "123 kB"), with the
+// translated decimal separator ("41,1 kB" in Czech).
+func FormatSize(n int64) string {
+	if n < 1000 {
+		// TRANSLATORS: file size in bytes.
+		return fmt.Sprintf(i18n.T("%d B"), n)
+	}
+	v := float64(n)
+	switch {
+	case n >= 999_500_000:
+		// TRANSLATORS: file size in gigabytes; %s is the number with its
+		// decimal separator, e.g. "1.5".
+		return fmt.Sprintf(i18n.T("%s GB"), sizeNumber(v/1e9))
+	case n >= 999_500:
+		// TRANSLATORS: file size in megabytes; %s is the number with its
+		// decimal separator, e.g. "7.2".
+		return fmt.Sprintf(i18n.T("%s MB"), sizeNumber(v/1e6))
+	default:
+		// TRANSLATORS: file size in kilobytes; %s is the number with its
+		// decimal separator, e.g. "41.1".
+		return fmt.Sprintf(i18n.T("%s kB"), sizeNumber(v/1e3))
+	}
+}
+
+// sizeNumber writes v with one decimal below 100 and none from there, with
+// the translated decimal separator.
+func sizeNumber(v float64) string {
+	prec := 1
+	if v >= 99.95 {
+		prec = 0
+	}
+	s := strconv.FormatFloat(v, 'f', prec, 64)
+	// TRANSLATORS: the decimal separator of numbers such as file sizes
+	// ("41.1 kB"); "," in Czech.
+	return strings.Replace(s, ".", i18n.C("decimal separator", "."), 1)
+}
+
+// Strftime writes t's wall clock (its date and time of day in t's own
+// zone, which the caller already chose) with a strftime format through
+// GLib, so day and month names, %OB's standalone month among them, follow
+// the locale: calendar.Env{Format: widget.Strftime}. The fields are handed
+// to GLib as they are, so %z and %Z name UTC and never t's zone; no
+// format of the calendar uses them.
+func Strftime(t time.Time, format string) string {
+	dt := glib.NewDateTimeUTC(t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), float64(t.Second()))
+	if dt == nil {
+		return t.Format(time.RFC3339)
+	}
+	return dt.Format(format)
+}
+
+// strftime formats through GLib so month and day names follow the locale.
+func strftime(t time.Time, format string) string {
+	dt := glib.NewDateTimeFromUnixLocal(t.Unix())
+	if dt == nil {
+		return t.Format(time.RFC3339)
+	}
+	return dt.Format(format)
+}
+
+// AttachmentSummary is the line over the attachment tiles of a message:
+// how many there are and their total size ("2 attachments · 255 kB").
+func AttachmentSummary(count int, total int64) string {
+	files := fmt.Sprintf(i18n.N("%d attachment", "%d attachments", count), count)
+	// TRANSLATORS: the line over the attachments of a message: the number
+	// of attachments and their total size, e.g. "2 attachments · 255 kB".
+	return fmt.Sprintf(i18n.C("attachment summary", "%s · %s"), files, FormatSize(total))
+}

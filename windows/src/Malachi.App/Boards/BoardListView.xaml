@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Board/BoardListViewController.swift;
+GTK: board_nav_split and board_list_split of ui/data/ui/board_page.blp and
+window/board_list.go. The board's List style ("Seznam"): its own side
+pane with the state filters and the accounts (BoardNavView, as GTK's
+board_nav_page), the sectioned list of cases (under Overview the
+commitments first, "From the Assistant"), and the selected case's detail
+beside it, the list's width dragged with the sizer (372 to 520). Below 900
+the side pane folds away; below 640, or where list and detail no longer
+fit beside it, the detail does too and the page's sliding panel shows it
+instead (BoardController.SetInlineDetail). The page puts the one detail
+view into DetailSlot while it is beside the list.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardListView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:boards="using:Malachi.App.Boards"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <DataTemplate x:Key="RowTemplate" x:DataType="boards:BoardRowItem">
+            <boards:BoardRowView Row="{x:Bind Row}" />
+        </DataTemplate>
+        <DataTemplate x:Key="CommitmentTemplate" x:DataType="boards:BoardCommitmentItem">
+            <boards:BoardCommitmentView Commitment="{x:Bind Commitment}" />
+        </DataTemplate>
+        <boards:BoardListTemplateSelector
+            x:Key="ItemSelector"
+            CommitmentTemplate="{StaticResource CommitmentTemplate}"
+            RowTemplate="{StaticResource RowTemplate}" />
+    </UserControl.Resources>
+    <Grid x:Name="Columns" SizeChanged="OnSizeChanged">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="NavColumn" Width="240" />
+            <ColumnDefinition
+                x:Name="ListColumn"
+                Width="400"
+                MinWidth="372"
+                MaxWidth="520" />
+            <ColumnDefinition
+                x:Name="DetailColumn"
+                Width="*"
+                MinWidth="266" />
+        </Grid.ColumnDefinitions>
+
+        <boards:BoardNavView x:Name="Nav" AutomationProperties.AutomationId="BoardNav" />
+
+        <!-- The list on the content layer, as the mail's list. -->
+        <Grid
+            x:Name="ListPane"
+            Grid.Column="1"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1,0,1,0">
+            <ListView
+                x:Name="CaseList"
+                Padding="0,0,0,8"
+                AutomationProperties.AutomationId="BoardList"
+                ContainerContentChanging="OnContainerContentChanging"
+                ContextRequested="OnContextRequested"
+                ItemTemplateSelector="{StaticResource ItemSelector}"
+                PreviewKeyDown="OnListKeyDown"
+                SelectionChanged="OnSelectionChanged"
+                SelectionMode="Single">
+                <ListView.ItemContainerStyle>
+                    <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                        <Setter Property="MinHeight" Value="0" />
+                        <Setter Property="Padding" Value="10,0,10,0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.GroupStyle>
+                    <GroupStyle HidesIfEmpty="True">
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate x:DataType="boards:BoardListGroup">
+                                <boards:BoardSectionHeader Group="{x:Bind}" />
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListView.GroupStyle>
+            </ListView>
+            <TextBlock
+                x:Name="EmptyText"
+                Margin="16"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource BodyTextBlockStyle}"
+                TextAlignment="Center"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+        </Grid>
+
+        <Grid x:Name="DetailPane" Grid.Column="2">
+            <ContentControl
+                x:Name="DetailSlot"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
+                IsTabStop="False" />
+            <main:PaneStatusPage x:Name="NoSelection" Visibility="Collapsed" />
+        </Grid>
+
+        <!-- The list's width (BoardListViewController's 372 to 520). -->
+        <tk:GridSplitter
+            x:Name="ListSplitter"
+            Grid.Column="1"
+            Width="8"
+            Margin="0,0,-4,0"
+            HorizontalAlignment="Right"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="Transparent"
+            IsTabStop="False"
+            IsThumbVisible="False"
+            ResizeBehavior="CurrentAndNext"
+            ResizeDirection="Columns" />
+    </Grid>
+</UserControl>

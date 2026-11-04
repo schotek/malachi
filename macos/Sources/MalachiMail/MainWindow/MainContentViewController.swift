@@ -1,0 +1,256 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import AppKit
+import MalachiCore
+
+/// The main window's content: the three panes (`MainSplitViewController`)
+/// with the status bar across the whole bottom edge under them, as GTK's
+/// (window.blp `status_bar`): it stays in sight with the sidebar folded
+/// away.
+///
+/// The split view is a child view controller and still reaches the top of
+/// the window, so the sidebar runs under the unified toolbar and the
+/// toolbar's tracking separators follow its dividers as before. The status
+/// bar's view controller is installed later by the app (`install(statusBar:)`),
+/// like the panes' contents; its slot keeps the bar's height meanwhile.
+/// In the Board and Calendar modes a page takes the split view's place
+/// above the bar (`setMode`), and the split view leaves the window
+/// meanwhile.
+///
+/// The update check's banner (`install(banner:)`) spans the window under
+/// the toolbar in every mode, above the split view or the page, which keep
+/// the window's top: while it shows, they get its height as an additional
+/// safe-area inset, so every column starts under it as it starts under the
+/// toolbar (moving them down instead covered the tops of the list and the
+/// reading pane, which inset themselves by the toolbar's safe area).
+@MainActor
+final class MainContentViewController: NSViewController {
+    let split: MainSplitViewController
+    /// The bar's slot at the bottom edge, `StatusBarViewController.height`
+    /// high.
+    private let statusSlot = NSView()
+    private(set) var statusBar: NSViewController?
+    /// The banner across the top (the update check's), nil until installed.
+    private var banner: NSView?
+    private var bannerShown = false
+    /// The top of the split view or the page shown: the window's top, or
+    /// the banner's bottom while it shows.
+    private var contentTop: NSLayoutConstraint?
+
+    init(split: MainSplitViewController) {
+        self.split = split
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    override func loadView() {
+        let v = NSView()
+        addChild(split)
+        statusSlot.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(statusSlot)
+        view = v
+        attachPanes()
+        NSLayoutConstraint.activate([
+            statusSlot.leadingAnchor.constraint(equalTo: v.leadingAnchor),
+            statusSlot.trailingAnchor.constraint(equalTo: v.trailingAnchor),
+            statusSlot.bottomAnchor.constraint(equalTo: v.bottomAnchor),
+            statusSlot.heightAnchor.constraint(equalToConstant: StatusBarViewController.height),
+        ])
+    }
+
+    /// Puts the split view into the content above the status bar; nothing
+    /// when it is there.
+    private func attachPanes() {
+        let panes = split.view
+        guard panes.superview !== view else { return }
+        panes.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(panes, positioned: .below, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            panes.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            panes.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            panes.bottomAnchor.constraint(equalTo: statusSlot.topAnchor),
+        ])
+        pinTop()
+    }
+
+    /// Puts `banner` across the top of the content, under the toolbar
+    /// (the safe area), hidden until `showBanner(true)`.
+    func install(banner v: NSView) {
+        _ = view
+        banner?.removeFromSuperview()
+        banner = v
+        v.translatesAutoresizingMaskIntoConstraints = false
+        v.isHidden = !bannerShown
+        view.addSubview(v)
+        NSLayoutConstraint.activate([
+            v.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            v.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            v.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        // Only as tall as its content: nothing else bounds the banner's
+        // height, and without this it took the space of the panes below.
+        // Above the split view's own constraints, below the compression
+        // resistance (750) of the text and buttons inside.
+        let fit = v.heightAnchor.constraint(equalToConstant: 0)
+        fit.priority = NSLayoutConstraint.Priority(740)
+        fit.isActive = true
+        pinTop()
+    }
+
+    /// Shows or hides the banner; the content below follows.
+    func showBanner(_ on: Bool) {
+        guard on != bannerShown else { return }
+        bannerShown = on
+        banner?.isHidden = !on
+        view.layoutSubtreeIfNeeded()
+        insetForBanner()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        insetForBanner() // the banner's height follows the window's width
+    }
+
+    /// Gives the split view and the page the banner's height as an
+    /// additional top safe-area inset (none while it is hidden).
+    private func insetForBanner() {
+        let h = bannerShown ? (banner?.frame.height ?? 0) : 0
+        for v in [split.view, page?.view].compactMap({ $0 }) where v.additionalSafeAreaInsets.top != h {
+            v.additionalSafeAreaInsets = NSEdgeInsets(top: h, left: 0, bottom: 0, right: 0)
+        }
+    }
+
+    /// Ties the top of what the content shows (the page, else the split
+    /// view) to the window's top, under the banner, and gives it the
+    /// banner's inset.
+    private func pinTop() {
+        contentTop?.isActive = false
+        contentTop = nil
+        let shown: NSView? = page?.view ?? (split.view.superview === view ? split.view : nil)
+        guard let shown, shown.superview === view else { return }
+        contentTop = shown.topAnchor.constraint(equalTo: view.topAnchor)
+        contentTop?.isActive = true
+        if let banner, banner.superview === view {
+            view.addSubview(banner, positioned: .above, relativeTo: shown)
+        }
+        insetForBanner()
+    }
+
+    /// Puts the status bar into its slot (replacing an earlier one).
+    func install(statusBar vc: NSViewController) {
+        _ = view // the slot exists once the view is loaded
+        if let old = statusBar {
+            old.view.removeFromSuperview()
+            old.removeFromParent()
+        }
+        statusBar = vc
+        addChild(vc)
+        let bar = vc.view
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        statusSlot.addSubview(bar)
+        NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: statusSlot.topAnchor),
+            bar.bottomAnchor.constraint(equalTo: statusSlot.bottomAnchor),
+            bar.leadingAnchor.constraint(equalTo: statusSlot.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: statusSlot.trailingAnchor),
+        ])
+    }
+
+    // MARK: Modes
+
+    /// The window's mode, as the window controller last set it.
+    private(set) var mode: Board.Mode = .mail
+    /// The page shown in place of the split view in the Board and Calendar
+    /// modes, nil while the panes show.
+    private(set) var page: NSViewController?
+
+    /// Shows the mode's `page` (the board's, the calendar's) in place of
+    /// the split view (every mode but `.mail`), from the top of the window
+    /// down to the status bar, or the split view again (`.mail`, `page`
+    /// ignored).
+    ///
+    /// Outside Mail the split view leaves the window: hidden, it would
+    /// still be the window's sidebar split view, and the unified toolbar
+    /// would keep its sidebar section reserved for it (and track its
+    /// divider instead of the page's own split view). Its controller stays
+    /// this one's child with all its state; nothing in the panes reacts to
+    /// leaving the window (no pane controller overrides `viewWillAppear` /
+    /// `viewDidDisappear`; `MainSplitViewController.viewDidAppear` applies
+    /// the first layout once), and the views keep their frames, selection,
+    /// scroll positions and documents for the way back.
+    func setMode(_ newMode: Board.Mode, page newPage: NSViewController? = nil) {
+        _ = view // the slot exists once the view is loaded
+        mode = newMode
+        let shown = newMode != .mail ? newPage : nil
+        if shown !== page, let old = page {
+            old.view.removeFromSuperview()
+            old.removeFromParent()
+            page = nil
+        }
+        if newMode != .mail {
+            split.view.removeFromSuperview()
+        } else {
+            if split.view.superview !== view {
+                // The window may have changed its size meanwhile: the
+                // panes take the slot above the status bar first.
+                split.prepare(for: NSSize(
+                    width: view.bounds.width, height: view.bounds.height - StatusBarViewController.height))
+            }
+            attachPanes()
+        }
+        guard shown !== page, let shown else { return }
+        page = shown
+        addChild(shown)
+        let v = shown.view
+        v.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(v, positioned: .below, relativeTo: statusSlot)
+        NSLayoutConstraint.activate([
+            v.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            v.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            v.bottomAnchor.constraint(equalTo: statusSlot.topAnchor),
+        ])
+        pinTop()
+    }
+
+    // MARK: Responder chain
+
+    /// The split view's own actions (⌃⌘S `toggleSidebar:`, ⌥⌘L
+    /// `toggleMessageList:`, the assistant panel's `toggleInspector:`) keep
+    /// working while the keyboard focus is in the status bar: the bar is
+    /// not under the split view controller in the responder chain, but
+    /// under this one.
+    override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
+        if let target = splitTarget(forAction: action) {
+            return target
+        }
+        return super.supplementalTarget(forAction: action, sender: sender)
+    }
+
+    /// `split` when it handles `action` and the action is one of the split
+    /// view's, nil otherwise, and nil where the mode does not allow the
+    /// mail's views (`Board.allows`; the panes out of the window take no
+    /// action, so the menu items disable themselves); in the board's List
+    /// the sidebar toggle goes to the List's own split view, in the
+    /// Calendar to the calendar page's. Shared
+    /// with the window controller, which the chain reaches when no view of
+    /// the window has the focus.
+    func splitTarget(forAction action: Selector) -> Any? {
+        if mode != .mail, action == Action.toggleSidebar {
+            // The board's List folds its own navigation column, the
+            // calendar page its sidebar.
+            if let board = page as? BoardPageViewController {
+                return board.sidebarTarget
+            }
+            return page as? CalendarPageViewController
+        }
+        guard Board.allows(.mailView, in: mode),
+              action == Action.toggleSidebar || action == Action.toggleMessageList || action == Action.toggleInspector,
+              split.responds(to: action) else { return nil }
+        return split
+    }
+}

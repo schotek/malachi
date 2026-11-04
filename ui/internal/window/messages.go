@@ -1,0 +1,419 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package window
+
+import (
+	"context"
+	"slices"
+
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
+
+	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/settings"
+	"github.com/schotek/malachi/ui/internal/widget"
+)
+
+// The message list: message.list paging, the rows and the list states.
+// With "Group by Conversation" on the list is thread.list instead
+// (threads.go, thread_model.go); the outbox folder is never grouped.
+
+// loadMessages runs message.list (or thread.list) for the selected folder
+// (first page). A switch to another folder, or of the grouping mode,
+// empties the list at once; a reload of the same folder keeps the rows
+// until the reply, so the list never flickers through the loading state
+// and the selection survives (by key).
+func (w *Window) loadMessages() {
+	w.syncPanelActions()
+	if w.model.search.active {
+		// The list shows search results; a reload of the folder (a sync,
+		// a selection) is a new search only if it changes the scope.
+		w.runSearch(false)
+		return
+	}
+	k := w.model.selected
+	gen := w.model.bumpList()
+	w.model.loadingMore = false
+	grouped := w.groupedListing(k)
+	if k != w.model.listFolder || grouped != w.model.grouped {
+		w.model.listFolder = k
+		w.model.grouped = grouped
+		w.model.clearMessages()
+		w.rebuildMessageRows()
+		// With nothing selected the actions follow the listed folder's
+		// account (a Jira folder has no Reply).
+		w.setMessageActionsSensitive(false)
+	}
+	if k == (folderKey{}) {
+		w.model.loading = false
+		w.showListState()
+		return
+	}
+	if f, ok := w.model.folder(k); ok && !f.Synced {
+		// Never downloaded (Gmail's All Mail): nothing to ask for.
+		w.model.loading = false
+		w.showListState()
+		return
+	}
+	w.model.loading = true
+	w.model.listErr = nil
+	w.showListState()
+	if grouped {
+		w.loadThreadPage(k, gen)
+		return
+	}
+
+	params := w.model.messageListParams(k, "")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+		defer cancel()
+		var res api.MessageListResult
+		err := w.client.Call(ctx, api.MethodMessageList, params, &res)
+		glib.IdleAdd(func() {
+			if gen != w.model.listGen {
+				return
+			}
+			w.model.loading = false
+			if err != nil {
+				w.log.Warn("message.list", "folder", k.Folder, "err", err)
+				if w.model.rowCount() > 0 {
+					// A reload failed: keep what is shown, say so once.
+					w.Toast(widget.RPCErrorText(i18n.T("Loading messages"), err))
+					return
+				}
+				w.model.listErr = err
+				w.showListState()
+				return
+			}
+			w.model.setMessages(res.Messages, res.Page)
+			w.rebuildMessageRows()
+			w.showListState()
+			w.takeUndoReselect()
+		})
+	}()
+}
+
+// groupedListing reports whether folder k is listed as conversations
+// (thread.list): with the "group by conversation" setting, and always for
+// a folder of a Jira account (alwaysGrouped); never the outbox.
+func (w *Window) groupedListing(k folderKey) bool {
+	return (w.settings.GroupByConversation() || w.model.alwaysGrouped(k)) && w.model.folderRole(k) != api.RoleOutbox
+}
+
+// groupingChanged runs when the "group by conversation" setting changed:
+// the folder is listed again in the other mode. A folder whose mode stays
+// (a Jira account's, the outbox) keeps its rows and is not asked again.
+func (w *Window) groupingChanged() {
+	m := &w.model
+	if !m.search.active && m.listFolder == m.selected && w.groupedListing(m.selected) == m.grouped {
+		return
+	}
+	w.loadMessages()
+}
+
+// setListFilter switches the list between all, unread and flagged
+// messages. The backend does the filtering, so the rows and the cursor
+// from the previous filter are dropped and the folder is paged again from
+// the start. Called from the toggle group, which also fires when Go sets
+// the active name, hence the no-op on an unchanged filter.
+func (w *Window) setListFilter(f api.MessageFilter) {
+	if f == "" {
+		f = api.FilterAll
+	}
+	if f == w.model.listFilter {
+		return
+	}
+	w.model.listFilter = f
+	w.model.clearMessages()
+	w.rebuildMessageRows()
+	w.loadMessages()
+}
+
+// loadMore fetches the next page (Load More button, scroll edge). It is a
+// no-op while a page is in flight or when the last page is shown.
+func (w *Window) loadMore() {
+	m := &w.model
+	if m.loading || m.loadingMore || m.nextCursor == "" || m.listErr != nil {
+		return
+	}
+	k := m.listFolder
+	gen := m.listGen
+	m.loadingMore = true
+	w.showLoadMore()
+	if m.search.active {
+		w.loadMoreSearch(gen)
+		return
+	}
+	if m.grouped {
+		w.loadMoreThreads(k, gen)
+		return
+	}
+
+	params := m.messageListParams(k, m.nextCursor)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+		defer cancel()
+		var res api.MessageListResult
+		err := w.client.Call(ctx, api.MethodMessageList, params, &res)
+		glib.IdleAdd(func() {
+			if gen != w.model.listGen {
+				return
+			}
+			w.model.loadingMore = false
+			if err != nil {
+				w.log.Warn("message.list (more)", "folder", k.Folder, "err", err)
+				w.Toast(widget.RPCErrorText(i18n.T("Loading more messages"), err))
+				w.showLoadMore() // the cursor is still there; the button offers a retry
+				return
+			}
+			added := w.model.appendMessages(res.Messages, res.Page)
+			if w.usesDateGroups() {
+				w.syncDateRows(false)
+				return
+			}
+			for _, s := range w.model.messages[len(w.model.messages)-added:] {
+				r := w.newMessageRow(s)
+				w.rows[listKey{Message: s.ID}] = r
+				w.messageList.Append(r)
+			}
+			w.showListState()
+		})
+	}()
+}
+
+// rebuildMessageRows recreates the rows from the model. In flat mode one
+// row per message. Inbox sections insert headings; row handlers resolve
+// messages by key rather than physical list position. The selected message stays selected when it is
+// still listed, without re-entering the row-selected handler (the pane
+// already shows it); when it is gone the pane is cleared. In grouped mode
+// the rows are keyed and syncRows does the same from scratch.
+func (w *Window) rebuildMessageRows() {
+	if w.usesDateGroups() {
+		w.syncDateRows(false)
+		return
+	}
+	w.dateCollapsed = nil
+	w.dateButtons = nil
+	w.dateFolder = folderKey{}
+	if w.model.grouped {
+		w.reselecting = true
+		w.messageList.RemoveAll()
+		w.reselecting = false
+		w.rows = make(map[listKey]*widget.MessageRow, w.model.rowCount())
+		w.syncRows()
+		return
+	}
+	prev := w.selectedKeys()
+
+	w.reselecting = true
+	w.messageList.RemoveAll()
+	w.rows = make(map[listKey]*widget.MessageRow, len(w.model.messages))
+	for _, s := range w.model.messages {
+		r := w.newMessageRow(s)
+		w.rows[listKey{Message: s.ID}] = r
+		w.messageList.Append(r)
+	}
+	w.restoreSelection(prev, nil)
+}
+
+// newMessageRow builds a row for s with the current appearance settings.
+func (w *Window) newMessageRow(s api.MessageSummary) *widget.MessageRow {
+	r := widget.NewMessageRow()
+	r.SetMessage(w.model.rowMessage(s))
+	w.applyRowAppearance(r)
+	w.attachMessageMenu(r.ListBoxRow)
+	return r
+}
+
+// showListState switches list_stack between the list and the status page
+// (nothing selected, loading, no messages, error with retry).
+func (w *Window) showListState() {
+	m := &w.model
+	if m.rowCount() > 0 {
+		w.listStack.SetVisibleChildName("messages")
+		w.showLoadMore()
+		return
+	}
+	if m.search.active {
+		w.showSearchState()
+		return
+	}
+	retry := false
+	switch {
+	case m.selected == (folderKey{}):
+		setStatusPage(w.listStatusPage, "folder-symbolic", i18n.T("Select a folder"),
+			i18n.T("Choose a folder in the sidebar to see its messages."))
+	case w.folderUnsynced(m.selected):
+		setStatusPage(w.listStatusPage, "folder-download-symbolic", i18n.T("Not Synchronised"),
+			i18n.T("Messages moved here are archived on the server; the folder itself is not downloaded."))
+	case m.listErr != nil:
+		retry = true
+		setStatusPage(w.listStatusPage, "dialog-warning-symbolic", i18n.T("Messages Unavailable"),
+			widget.RPCErrorText(i18n.T("Loading messages"), m.listErr))
+	case m.loading:
+		setStatusPage(w.listStatusPage, "", i18n.T("Loading…"), "")
+	case m.listFilter == api.FilterUnread:
+		setStatusPage(w.listStatusPage, "mail-read-symbolic", i18n.T("No Unread Messages"),
+			i18n.T("Everything in this folder has been read."))
+	case m.listFilter == api.FilterFlagged:
+		setStatusPage(w.listStatusPage, "starred-symbolic", i18n.T("No Flagged Messages"),
+			i18n.T("No message in this folder carries a flag."))
+	default:
+		setStatusPage(w.listStatusPage, "mail-unread-symbolic", i18n.T("No Messages"),
+			i18n.T("This folder is empty."))
+	}
+	w.listRetryButton.SetVisible(retry)
+	w.listStack.SetVisibleChildName("status")
+}
+
+// folderUnsynced reports a selected folder the daemon never downloads.
+func (w *Window) folderUnsynced(k folderKey) bool {
+	f, ok := w.model.folder(k)
+	return ok && !f.Synced
+}
+
+// showLoadMore shows the Load More button while a further page exists and
+// the spinner while it is being fetched.
+func (w *Window) showLoadMore() {
+	m := &w.model
+	w.loadMoreSpinner.SetVisible(m.loadingMore)
+	w.loadMoreButton.SetVisible(!m.loadingMore && m.nextCursor != "" && m.listErr == nil)
+	// Under the last page of results: how far back search reaches.
+	note := m.search.active && m.search.shown && m.nextCursor == "" && !m.loadingMore && m.rowCount() > 0
+	if note {
+		w.searchNote.SetLabel(searchRetentionText(m.search.offlineDays, m.search.offlineKnown))
+	}
+	w.searchNote.SetVisible(note)
+}
+
+// selectedMessage is the summary behind the selected row, if any: on a
+// conversation row its newest folder member (what the pane shows).
+func (w *Window) selectedMessage() (api.MessageSummary, bool) {
+	r, ok := w.selectedRow()
+	return r.Message, ok
+}
+
+// removeMessageRow drops a message from the flat list (removeMessageRows).
+func (w *Window) removeMessageRow(id api.MessageID) (restore func()) {
+	return w.removeMessageRows([]api.MessageID{id})
+}
+
+// removeMessageRows drops messages from the flat list in one go. The
+// selection keeps the rows still listed; when every selected row went,
+// the row now at the first removed selected one's place takes over (the
+// pane follows), or the pane is cleared when the list ran empty. The
+// returned function puts the messages back at their places, for reverting
+// a failed move or delete; it does nothing once the list was reloaded in
+// the meantime. Grouped mode goes through removeRows.
+func (w *Window) removeMessageRows(ids []api.MessageID) (restore func()) {
+	type removed struct {
+		s   api.MessageSummary
+		idx int
+	}
+	prev := w.selectedKeys()
+	selectedAt := -1
+	var gone []removed
+	for _, id := range ids {
+		s, idx, ok := w.model.removeMessage(id)
+		if !ok {
+			continue
+		}
+		gone = append(gone, removed{s, idx})
+		if selectedAt < 0 && slices.Contains(prev, listKey{Message: id}) {
+			selectedAt = idx
+		}
+	}
+	if len(gone) == 0 {
+		return func() {}
+	}
+	gen := w.model.listGen
+	if w.usesDateGroups() {
+		w.syncDateRows(true)
+		return func() {
+			if w.model.listGen != gen {
+				return
+			}
+			for i := len(gone) - 1; i >= 0; i-- {
+				w.model.insertMessage(gone[i].idx, gone[i].s)
+			}
+			w.syncDateRows(false)
+		}
+	}
+	// Removing a selected row emits the selection signals; they are
+	// skipped so that the pane does not blink through the empty page
+	// before the neighbour.
+	w.reselecting = true
+	for _, g := range gone {
+		key := listKey{Message: g.s.ID}
+		if r := w.rows[key]; r != nil {
+			delete(w.rows, key)
+			w.messageList.Remove(r)
+		}
+	}
+	w.restoreSelection(prev, func() (listKey, bool) {
+		next := min(selectedAt, len(w.model.messages)-1)
+		if selectedAt < 0 || next < 0 {
+			return listKey{}, false
+		}
+		r, ok := w.rowForWidget(w.messageList.RowAtIndex(next))
+		return r.Key, ok
+	})
+	w.showListState()
+
+	return func() {
+		if w.model.listGen != gen {
+			return
+		}
+		for i := len(gone) - 1; i >= 0; i-- {
+			g := gone[i]
+			if !w.model.insertMessage(g.idx, g.s) {
+				continue
+			}
+			_, at, _ := w.model.message(g.s.ID)
+			r := w.newMessageRow(g.s)
+			w.rows[listKey{Message: g.s.ID}] = r
+			w.messageList.Insert(r, at)
+		}
+		w.showListState()
+	}
+}
+
+// removeRows drops messages from the list in either mode and returns the
+// function that puts them back after a failed move or delete. A grouped
+// conversation whose members are not all known cannot be edited in place;
+// the list is loaded again instead and the restore does nothing.
+func (w *Window) removeRows(ids []api.MessageID) (restore func()) {
+	if !w.model.grouped {
+		return w.removeMessageRows(ids)
+	}
+	r, ok := w.model.removeMessages(ids)
+	if !ok {
+		w.loadMessages()
+		return func() {}
+	}
+	gen := w.model.listGen
+	w.syncRowsAfterRemoval()
+	return func() {
+		if w.model.listGen != gen {
+			return
+		}
+		w.model.restoreRemoval(r)
+		w.syncRows()
+	}
+}
+
+// applyListAppearance pushes the current list settings to every row.
+func (w *Window) applyListAppearance() {
+	for _, r := range w.rows {
+		w.applyRowAppearance(r)
+	}
+}
+
+// applyRowAppearance pushes the current list settings to one row.
+func (w *Window) applyRowAppearance(r *widget.MessageRow) {
+	r.SetCompact(w.settings.Density() == settings.DensityCompact)
+	// A search result's excerpt shows why it was found: always there.
+	r.SetShowPreview(w.settings.ShowPreviewLine() || w.model.search.active)
+	r.SetShowAvatar(w.settings.ShowAvatars())
+}

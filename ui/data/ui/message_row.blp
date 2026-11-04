@@ -1,0 +1,262 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// One row of the message list, instantiated per message by
+// ui/internal/widget/message_row.go. Object IDs are looked up there; keep
+// them in sync.
+//
+// All labels are plain Gtk.Label (use-markup is off by default): sender,
+// subject and preview are hostile input and must never be interpreted as
+// markup. The avatar shows initials derived from the display name; nothing
+// is fetched from the network.
+ListBoxRow message_row {
+  child: Box content_box {
+    orientation: horizontal;
+    spacing: 12;
+    margin-start: 6;
+    margin-end: 6;
+    margin-top: 8;
+    margin-bottom: 8;
+
+    // The avatar with, on a conversation row of the grouped list
+    // (window/threads.go), the fold arrow in front of it: its own box, so
+    // the arrow centres on the avatar rather than on the whole row, with
+    // a tighter gap than the columns keep between them.
+    Box lead_box {
+      orientation: horizontal;
+      spacing: 4;
+      valign: start;
+
+      // Hidden on plain rows. The spinner takes its place while thread.get
+      // runs. Not focusable: Enter and Space keep acting on the row itself.
+      Button expander {
+        icon-name: "pan-end-symbolic";
+        valign: center;
+        visible: false;
+        can-focus: false;
+
+        styles [
+          "flat",
+          "thread-twisty",
+        ]
+      }
+
+      Adw.Spinner expander_spinner {
+        valign: center;
+        visible: false;
+      }
+
+      Adw.Avatar avatar {
+        size: 40;
+        show-initials: true;
+      }
+    }
+
+    Box {
+      orientation: vertical;
+      spacing: 2;
+      hexpand: true;
+
+      Box {
+        orientation: horizontal;
+        spacing: 6;
+
+        Label from_label {
+          xalign: 0;
+          ellipsize: end;
+          hexpand: true;
+        }
+
+        // The change of an event row of a Jira account (a status or
+        // assignee change) after its actor; hidden otherwise.
+        Label event_label {
+          xalign: 0;
+          ellipsize: end;
+          hexpand: true;
+          visible: false;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        // Member count of a conversation row; hidden below two.
+        Label count_badge {
+          visible: false;
+          valign: center;
+
+          styles [
+            "caption",
+            "numeric",
+            "thread-count",
+          ]
+        }
+
+        Image attachment_icon {
+          icon-name: "mail-attachment-symbolic";
+          visible: false;
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        // The verdict of a signed message (widget/message_row.go,
+        // signature.ListIconFor): only valid, validSeen, invalid, revoked
+        // and mismatch get one; its colour is a style class set from Go.
+        Image signature_icon {
+          visible: false;
+        }
+
+        Image star_icon {
+          icon-name: "starred-symbolic";
+          visible: false;
+
+          styles [
+            "accent",
+          ]
+        }
+
+        // Where a search result lies: its folder, and the account when
+        // the search spans several (window/search_model.go); hidden
+        // outside search.
+        Label origin_label {
+          visible: false;
+          ellipsize: end;
+          max-width-chars: 16;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        Label date_label {
+          xalign: 1;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        // Styled by the application CSS provider (see ui/internal/style).
+        Box unread_dot {
+          valign: center;
+          visible: false;
+
+          styles [
+            "unread-dot",
+          ]
+        }
+      }
+
+      // The subject; on a row of a Jira account the issue's key before the
+      // summary and its status (and the Internal badge of an internal
+      // comment) after it, as pills styled by the application CSS
+      // (widget/pill.go).
+      Box subject_line {
+        orientation: horizontal;
+        spacing: 6;
+
+        Label issue_key {
+          visible: false;
+
+          styles [
+            "caption",
+            "numeric",
+            "dim-label",
+          ]
+        }
+
+        Label subject_label {
+          xalign: 0;
+          ellipsize: end;
+          hexpand: true;
+        }
+
+        // Pill of a message with a calendar part (widget/pill.go
+        // SetInvitationPill, calendar.PillKind): Invitation, Update,
+        // Cancelled (the subject then struck through), Reply.
+        Label invitation_pill {
+          visible: false;
+          valign: center;
+
+          styles [
+            "issue-pill",
+          ]
+        }
+
+        // Tag of a bulk message (widget/message_row.go, bulkmail.Tag).
+        Label bulk_pill {
+          visible: false;
+          valign: center;
+          ellipsize: end;
+          max-width-chars: 24;
+
+          styles [
+            "issue-pill",
+            "bulk-pill",
+          ]
+        }
+
+        // A message saved in eWay-CRM (widget/message_row.go, crm.PillFor):
+        // the brand "eWay", tooltip "Saved in eWay-CRM".
+        Label crm_pill {
+          visible: false;
+          valign: center;
+
+          styles [
+            "issue-pill",
+            "crm-pill",
+          ]
+        }
+
+        Label status_pill {
+          visible: false;
+          valign: center;
+          ellipsize: end;
+          max-width-chars: 24;
+
+          styles [
+            "issue-pill",
+          ]
+        }
+
+        Label internal_pill {
+          visible: false;
+          valign: center;
+
+          styles [
+            "issue-pill",
+            "internal-pill",
+          ]
+        }
+
+        // Draft badge of a conversation with an unsent reply
+        // (widget/message_row.go, conversation.DraftBadge).
+        Label draft_pill {
+          visible: false;
+          valign: center;
+
+          styles [
+            "issue-pill",
+            "draft-pill",
+          ]
+        }
+      }
+
+      Label preview_label {
+        xalign: 0;
+        ellipsize: end;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+    }
+  };
+}

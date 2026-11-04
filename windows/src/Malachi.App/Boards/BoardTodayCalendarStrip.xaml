@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Board/BoardTodayCalendarStrip.swift;
+GTK: none yet (ui/internal/calendar/today.go, docs/calendar.md §5.9,
+artboard 8). The Board → Today strip "Today in Calendar", a row of the
+Today page after the greeting: the heading in capitals with "Open
+Calendar ›" at its end, then today's occurrences in the agenda's order,
+each with its time range (or All Day), its calendar's colour dot (hollow
+and dashed for an invitation not answered yet), its title with a small
+Invitation pill for such an invitation, and at the end "took place", Respond
+or the place; "Nothing in the calendar today." without any. The rows are
+made in code (BoardTodayCalendarStrip.xaml.cs), every text a cleaned plain
+string of Cal set as TextBlock.Text. Collapsed while no account has the
+calendar capability.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardTodayCalendarStrip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="BoardTodayCalendarStrip"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <StackPanel Padding="0,4,0,10" Spacing="2">
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="Heading"
+                VerticalAlignment="Center"
+                CharacterSpacing="40"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                MaxLines="1"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextTrimming="CharacterEllipsis" />
+            <HyperlinkButton
+                x:Name="OpenButton"
+                Grid.Column="1"
+                Padding="4,2"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="TodayOpenCalendar"
+                Click="OnOpenCalendarClick"
+                FontSize="12" />
+        </Grid>
+        <StackPanel x:Name="Rows" />
+    </StackPanel>
+</UserControl>
