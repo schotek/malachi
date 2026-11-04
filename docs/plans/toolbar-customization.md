@@ -890,3 +890,261 @@ Schované zůstávají na svém místě (`Collapsed` v pořadí `ToolbarStrip`).
 - Neověřeno (pro vlastníka): obě opravy pádů, tisk zprávy, konverzace, výběru a události
   (vzorová data bez démona zprávy nemají), panel tisku, obrázky `cid:`
   a `data:` v tisku, okno zprávy.
+
+## 17. Reference for the GTK and Windows ports (2026-11-04)
+
+Společná čistá Go reference, kterou použijí GTK (`ui/internal/window`)
+i Windows port (`windows/`). Widgety ani kód Windows se tu neměnily, macOS
+(Swift) beze změny.
+
+### 17.1 Rozhodnutí vlastníka (2026-11-04), závazná pro oba porty
+
+- **T12 Vlastní výchozí sada každého klienta**: varianta klienta
+  v referenci (co klient nemá, co má navíc, vlastní výchozí sada na lištu),
+  takže neupravená lišta na GTK i na Windows vypadá přesně jako dnes.
+  Uložené rozvržení (klíče gschema `toolbar-*`) zůstává společné. Položky,
+  které klient nemá, při zobrazení vynechá a při uložení z toho klienta
+  **nesmí zmizet** (úprava klienta se slévá zpět do uložených tokenů).
+- **T13 Editor v obou klientech**: skupina „Lišta“ v Předvolbách → Obecné
+  s režimem zobrazení a tlačítkem „Přizpůsobit lištu…“, které otevře dialog
+  s editorem (výběr lišty, položky po sekcích, přidat a odebrat, řazení
+  přetažením a Ctrl+↑/↓ jen v mezích `CanInsert`, přidat mezeru a pružnou
+  mezeru, Obnovit výchozí s potvrzením, které zapíše `[]`).
+- **T14** Nic v hlavní nabídce (☰ / „…“, ustálené v PR #20).
+- **T15** Pravý klik na prázdné místo lišty nebo pruhu nabídne
+  „Přizpůsobit lištu…“.
+- macOS zůstává, jak je: jeho varianta je nulová (`Variant{}` = dnešní
+  katalog a výchozí sady), `Default`, `Normalize`, `Stored` a ostatní
+  funkce bez varianty se chovají beze změny (stávající testy prošly beze
+  změny, Swift port se nemění).
+
+### 17.2 API (`ui/internal/toolbar`)
+
+`variant.go`:
+
+- `type Variant struct { Omit map[Bar][]ID; Extra map[Bar]map[ID][]Section; Default map[Bar]Layout }`
+  — co klient nemá (nenabízí, nezobrazuje, ale zachová v uloženém), sekce
+  navíc ke katalogu (domov zůstává katalogový) a vlastní výchozí sada (nil =
+  `Default(bar)` bez vynechaných).
+- `var GTK, Windows Variant` (neměnit), `func (v Variant) Omits(bar Bar, id ID) bool`.
+- `LookupFor(v, bar, id) (Item, bool)`, `CatalogFor(v, bar) []Item`,
+  `DefaultFor(v, bar) Layout`, `NormalizeFor(v, bar, stored []string) Layout`,
+  `CanInsertFor(v, bar, id, s) bool`, `ImmovableFor(v, bar) []ID`,
+  `AllowedFor(v, bar, f) []ID`, `PresentFor(v, bar, l, f) []Shown`,
+  `MissingActionsFor(v, bar, l, f) []ID`,
+  `StoredFor(v, bar, stored []string, l Layout) []string`.
+- Funkce bez varianty (`Normalize`, `CanInsert`, `Immovable`, `Allowed`,
+  `Present`, `MissingActions`) jsou teď obaly `…For(Variant{}, …)`;
+  `Default`, `Stored`, `Lookup`, `Catalog`, `SearchIndex` beze změny.
+
+`fit.go`:
+
+- `type FitResult struct { Visible []bool; Overflow []ID }`,
+  `Fit(v Variant, bar Bar, shown []Shown, widths []int, available int) FitResult`:
+  `shown` je úsek `PresentFor`, který kreslí jeden pruh nebo hlavičková
+  lišta, `widths[i]` šířka položky i s mezerou (pružná mezera své minimum).
+  Dokud se nevejde, ustoupí nejnižší priorita, při shodě položka nejvíc
+  vpravo; oddělovače, mezery, pevné položky, `PriorityUser` a položky
+  nulové šířky nikdy. Skrytá položka z `Present` místo nezabírá a do
+  `Overflow` nejde. `Overflow` (v pořadí rozvržení) dá klient do Dalších
+  akcí nebo do »; `MissingActionsFor` zůstává zvlášť.
+
+`text.go` (`Translator` jako `unified`/`printing`, v `po/POTFILES`):
+`GroupTitle`, `CustomizeTitle` (tlačítko i položka kontextového menu, T15),
+`DialogTitle`, `DisplayModeTitle`, `DisplayModes`, `DisplayModeLabel(tr, m)`,
+`BarTitle(tr, bar)`, `SectionTitle(tr, bar, s)`, `ItemLabel(tr, bar, id)`
+(i mezery), `UnavailableSubtitle`, `AddItemTitle`, `RemoveTitle`,
+`RestoreTitle`, `RestoreQuestion`, `RestoreBody(tr, bar)`, `RestoreCancel`,
+`StripMnemonic`.
+
+`ui/internal/toolbaredit` (čistý kontroler editoru jedné lišty):
+`New(v, bar, stored, f) *Editor`, `Bar`, `Reload(stored)` (po zápisu
+i po změně odjinud), `SetFeatures(f)`, `Layout`, `Tokens()` (=
+`StoredFor`, klient je hned zapíše do `toolbar.Key(bar)`), `Sections()
+[]Section` (`Section{Section, Rows []Row}`, `Row{Index, ID, Fixed, Space,
+Unavailable, CanMoveUp, CanMoveDown}`; oddělovače jsou nadpisy, ne
+řádky), `Available(s) []ID`, `Add(id, s) bool` (konec sekce),
+`AddSpace(kind, i) bool` (za řádek i, za nadpis, `-1` = začátek první
+sekce; vždy za pevnými), `Remove(i) bool`, `MoveUp(i)`/`MoveDown(i) (int,
+bool)` (Ctrl+↑/↓, i přes nadpis sekce na konec sousední, jen kde to
+`CanInsertFor` dovolí, nikdy před pevnou položku), `CanDrop(from, to)`
+a `Drop(from, to) (int, bool)` (`to` je index vložení v rozvržení bez
+taženého řádku; odmítnutý drop nic nemění), `Reset() []string` (Obnovit
+výchozí: výchozí sada klienta a `[]` k zápisu), `IsDefault()`,
+`MaxTokens` (= `toolbar.MaxTokens − 16`, strop přidávání mezer, aby se
+zapsané i se slitými položkami přečetlo celé). Řádek bez funkce
+(`Unavailable`) GTK ukáže s podtitulem, Windows ho může vynechat (W.6);
+posuny pracují s indexy rozvržení.
+
+### 17.3 Varianty
+
+| lišta | macOS (`Variant{}`) | GTK | Windows |
+|---|---|---|---|
+| `mail` | `mode flexibleSpace │list toggleSidebar newMessage contacts filter refresh flexibleSpace │message reply replyAll forward flexibleSpace archive trash space crm space star assistant moreActions search` | `mode newMessage flexibleSpace │list refresh flexibleSpace search │message reply replyAll forward flexibleSpace archive trash space crm space star assistant moreActions` | `mode newMessage │list refresh filter │message reply replyAll forward flexibleSpace archive trash space crm space star assistant moreActions search` |
+| `board-list` | `mode flexibleSpace │list toggleSidebar boardStyle contacts flexibleSpace boardAccount boardTriage │detail boardDone boardRemind boardArchive boardTrash flexibleSpace boardReply` | `mode boardStyle flexibleSpace │list boardTriage boardAccount │detail boardDone boardRemind boardArchive boardTrash flexibleSpace boardReply` | `mode boardStyle flexibleSpace │list boardAccount boardTriage │detail …` (jako GTK) |
+| `board-flow` | `mode boardStyle contacts flexibleSpace boardAccount boardTriage` | `mode boardStyle flexibleSpace boardTriage boardAccount` | `mode boardStyle flexibleSpace boardAccount boardTriage` |
+| `calendar` | `mode flexibleSpace │main toggleSidebar calendarToday calendarStep calendarView flexibleSpace calendarSearch contacts calendarNewEvent calendarAssistant` | `mode │main toggleSidebar calendarToday calendarStep calendarView flexibleSpace calendarSearch calendarNewEvent calendarAssistant` | jako GTK |
+
+- Pořadí je pořadí na obrazovce zleva doprava (GTK balí položky za
+  poslední pružnou mezerou do `[end]` obráceně, návrh GTK §4.2). Výchozí
+  sady GTK jsou z `window.blp`, `board_page.blp` a `calendar_page.blp`,
+  Windows z `MessageCommandBar`, `SidebarPane`, `MessageListPane`,
+  `BoardPage.Bar`, `BoardDetailView` a `CalendarBar` (W.1, W.2). Proti
+  návrhu GTK §2 chybí v Kalendáři úvodní pružná mezera za `mode`: na
+  Windows by jeden pruh `CalendarBar` posunula všechno doprava, v GTK ji
+  pravidlo poslední pružné mezery stejně ignoruje.
+- **GTK** `Omit`: `mail` `filter` a `toggleSidebar`, `board-list`
+  `toggleSidebar` (O-G4: `NavigationSplitView` sloupec neskryje); `Extra`:
+  `mail` `search` smí i do sekce `list` (lišta hledání je nad seznamem,
+  O-G2). Kontakty a T10 položky má (nové widgety v G2), jen ne ve výchozí
+  sadě.
+- **Windows** `Omit` nic (W.5: každá položka existuje nebo přibude;
+  `mode`, `search`, `calendarSearch` a `filter` stojí na pevném místě
+  a počítá se jen přítomnost); `Extra` `mail` `search` do `list` jako GTK,
+  aby uložení z Windows nechalo hledání tam, kam ho dalo GTK. `filter` je
+  ve výchozí sadě, aby řádek Vše / Nepřečtené / Označené zůstal (Q-W7).
+- **Tisk** žádná varianta nevynechává: na GTK i Windows je to
+  `FeaturePrint` vypnutý (položka zůstane schovaná na svém místě, editor
+  ji nenabízí), dokud tam tisk nebude.
+
+### 17.4 Pravidlo slévání při uložení (`StoredFor`)
+
+1. Úprava klienta se normalizuje pro klienta (`NormalizeFor`).
+2. Uložený seznam se přečte s katalogem a sekcemi navíc **všech** klientů
+   (aby GTK hledání v sekci seznamu přežilo); prázdný seznam znamená
+   `Default(bar)` macOS, takže první úprava na GTK zachová `filter`
+   a `toggleSidebar` tam, kde je měla výchozí lišta.
+3. Každá položka uloženého seznamu, kterou klient nemá, jde za nejbližší
+   předchozí token uloženého seznamu (položku nebo oddělovač, i dříve
+   slitou), který výsledek má **ve stejné sekci**; jinak na konec své
+   sekce. Pořadí slitých položek zůstane.
+4. Prázdný seznam (`[]`, výchozí a budoucí výchozí) se zapíše jen tehdy,
+   když úprava je výchozí sada klienta a uložený seznam má z položek,
+   které klient nemá, právě ty, které má `Default(bar)` (jejich pozice se
+   pak vzdají). S nulovou variantou je `StoredFor` přesně `Stored`.
+   Obnovit výchozí zapisuje `[]` vždy (`Editor.Reset`), tedy zahodí i cizí
+   položky (rozhodnutí T13).
+5. Neznámé tokeny (jiné verze) zahodí čtení jako dosud. Položky, které
+   klient má, dostanou rozvržení klienta, i když je jiný klient předtím
+   rozestavil jinak (Windows bez kontaktů v Poště je tak po uložení vezme
+   i macOS).
+
+Testy: `TestStoredForKeepsWhatTheClientLacks` (sousedé, přesunutý
+a odebraný soused, pořadí, prázdný klíč), `TestStoredForRoundTripsBetweenClients`
+(macOS → GTK → macOS → Windows), `TestStoredForOnEveryBar`,
+`TestStoredForPathological` (samé oddělovače, prázdné a dlouhé tokeny,
+tisíc kopií), opakované uložení nic nemění, GTK přečte zpět, co upravil.
+
+### 17.5 Nové msgid
+
+Česky v `po/cs.po` (2055 přeložených, bez fuzzy), všechny ve
+`windows/parity-exclusions.txt` s důvodem „toolbar customization: Windows
+port pending“: `Toolbar` (Lišta), `Customize Toolbar…` (Přizpůsobit
+lištu…), `Customize Toolbar` (titulek dialogu), `Toolbar Display`
+(Zobrazení lišty), `Icons Only`, `Icons and Text`, `Text Only` (Jen ikony,
+Ikony a text, Jen text), `Board – List`, `Board – Columns and Today`
+(Nástěnka – Seznam, Nástěnka – Sloupce a Dnes), `Cases` (Případy),
+`Case Detail` (Detail případu), `Sidebar` (Postranní panel: sekce i
+přepínač), `Space`, `Flexible Space` (Mezera, Pružná mezera),
+`Mode Switch` (Přepínač režimu), `Filter` (Filtr; jen Windows, GTK ho
+nemá), `Board Style` (Styl nástěnky), `Previous and Next` (Předchozí
+a další), `Calendar View` (Pohled kalendáře), `Hidden while unavailable`
+(Skryté, dokud není k dispozici), `Add Item…` (Přidat položku…),
+`Restore Defaults` (Obnovit výchozí), `Restore the Default Toolbar?`
+(Obnovit výchozí lištu?), `Your changes to the “%s” toolbar will be lost.`
+(Vaše úpravy lišty „%s“ se ztratí.). Ostatní popisky jsou existující
+msgid: `Reply`, `Reply All`, `Forward`, `Archive`, `Move to Trash`,
+`Save to eWay-CRM…`, `Star`, `Assistant`, `More Actions`, `Search`,
+`Mark as _Read` a `Load _Images` (bez mnemoniky), `Mark as Junk`,
+`Move To`, `Print`, `Undo`, `New Message`, `Contacts`,
+`Check for New Mail`, `All Accounts` (kontext `account filter`),
+`✦ Triage`, `Done`, `Remind…`, `Delete`, `Today`, `Search Events`,
+`New Event`, `Mail`, `Board`, `Calendar`, `Folders`, `Message List`,
+`Message`, `Remove`, `Cancel`.
+
+### 17.6 Ověřeno
+
+- Z `ui/`: `gofmt`, `go vet ./internal/toolbar/... ./internal/toolbaredit/...`
+  a `go test` obou balíčků zelené (stávající testy `toolbar_test.go` beze
+  změny).
+- `make po` v kontejneru `malachi-po:f42`, `msgfmt --check --statistics`
+  nad `po/cs.po`: 2055 přeložených, žádné fuzzy; kontejner zastavený.
+- Neověřeno: sestavení GTK, `make lint`, Windows `build.ps1 lint`
+  (`StringsCheckTests` s novými exclusions) a Swift (beze změny, nic
+  ke spuštění).
+
+### 17.7 Otevřené body
+
+- O-G2 a O-G4 rozhodla varianta GTK prozatím podle návrhu GTK (hledání
+  i v sekci seznamu, bez přepínače postranního panelu v Poště a Seznamu);
+  Q-W7 (Filtr na Windows) podle návrhu W (ve výchozí sadě, odebratelný).
+  Pokud vlastník rozhodne jinak, mění se jen `GTK`/`Windows` a jejich
+  testy.
+- Uložení z Windows přesune hledání, které GTK dalo do sekce seznamu, jen
+  pokud ho tam Windows nepovolí; teď ho povoluje (`Extra`). macOS ho při
+  čtení ukáže na konci sekce zprávy a při svém uložení ho tam i zapíše.
+
+## 18. As built (GTK port, 2026-11-04, necommitnuté)
+
+- Hlavičkové lišty se skládají z `toolbar.PresentFor(toolbar.GTK, …)`
+  (`ui/internal/window/toolbar_pack.go`, `toolbar_host.go`, `toolbar_mail.go`,
+  `toolbar_board.go`, `toolbar_calendar.go`). Každá lišta se dělí
+  u poslední pružné mezery na začátek a konec. Mezera dává 12 px okraje.
+  Widgety mimo katalog se nehýbou. Sekce: Pošta `sidebar` → `folders_header`,
+  `list` → `list_header`, `message` → `message_header`; Nástěnka Seznam
+  `sidebar`+`list` → `board_header`, `detail` → `board_detail_header`
+  (detail drží sekci Seznamu i ve Sloupcích a Dnes); Kalendář → `calendar_header`.
+  ✦, Triage a eWay jsou zabalené vždy (T7).
+- Editor `toolbar_editor.go`: `Adw.Dialog` nad `toolbaredit.Editor`
+  (výběr lišty, skupina na sekci, přetažení a Ctrl+↑/↓ podle `CanDrop`,
+  Odebrat, Přidat položku… s mezerami, Obnovit výchozí s `Adw.AlertDialog`,
+  zápis hned, znovunačtení při změně klíče odjinud). Předvolby → Obecné →
+  skupina Lišta z Go (`preferences_toolbar.go`, `preferences.blp` beze
+  změny). Pravý klik na prázdné místo lišty (T15). Hlavní nabídka beze
+  změny (T14), tisk nezapojený.
+- Režim zobrazení přes `Adw.ButtonContent`. Přetok `toolbar_fit.go`
+  (tick callback, `toolbar.Fit`, hystereze 12 px) a „Další akce“ s dynamickým
+  prvním oddílem (`MissingActionsFor` + přetok). Nové položky
+  v `ui/data/ui/toolbar_items.blp` bez textů. Klíče v `settings/store.go`.
+  Do reference přibylo `toolbaredit.Editor.DropAtEnd` s testem. Vývojové
+  kroky `MALACHI_GTK_START=toolbar-editor[:<bar>]` a `prefs-general`.
+- Ověřeno v kontejneru: `gtk.sh make build`, celé `test-ui` (51 balíčků),
+  všech 30 smoke testů (`TestToolbarGTKSmoke` nový), `make lint`, `make po`
+  (jen odkazy). Nedotčené výchozí lišty změřené proti HEAD: všech sedm
+  hlavičkových lišt má stejné pořadí, okraje i šířky.
+- Neověřeno: na obrazovce nic (přetahování myší, nabídka pravého kliku,
+  režimy zobrazení, přetok při změně šířky). Otevřené: Fit mění nedotčenou
+  lištu jen při šířkách, kde by se dnes ořízla (Hvězdička první do „Další
+  akce“); Nástěnka a Kalendář nemají „Další akce“, co se nevejde, zmizí
+  (O-G7); detail Nástěnky nepřetéká.
+
+## 19. As built (Windows port, 2026-11-04, nesestavené a necommitnuté)
+
+- Napsané na Macu bez `dotnet`. Zkontrolované jen závorky, SPDX hlavičky,
+  XAML jako XML a msgid proti šabloně.
+- Core `windows/src/Malachi.Core/Toolbars/`: 1:1 porty `Toolbar.cs`,
+  `ToolbarVariant.cs`, `Toolbar.Variant.cs`, `Toolbar.Fit.cs`,
+  `Toolbar.Text.cs`, `ToolbarEditor.cs`, navíc `Toolbar.Runs.cs` (jedna
+  sekce na pruh). `SettingsStore` přístupy ke klíčům (`SetToolbarLayout`
+  zapisuje `StoredFor(Windows, …)`). `IconGlyphs` `edit-undo`. Testy
+  `Toolbars/*Tests` (porty Go) a `ToolbarRunsTests`, `ToolbarSettingsTests`.
+- App: `Toolbars/ToolbarStrip` (Panel řazený podle rozvržení, ovládací prvky
+  se jen přesouvají, přetok `Toolbar.Fit` u pruhu zprávy, pravý klik T15),
+  `ToolbarLabels` (režim zobrazení), editor `ToolbarEditorView` jako
+  ContentDialog, Předvolby → Obecné → skupina Lišta, `MainWindow.Toolbars.cs`
+  (pruhy, nové položky, Další akce, dočasné hledání O5). Sekce: Pošta
+  `sidebar` → hlavička SidebarPane, `list` → hlavička MessageListPane,
+  `message` → MessageCommandBar; Nástěnka → BoardPage bar a řádek akcí
+  BoardDetailView; Kalendář → CalendarBar; `mode`, `search`,
+  `calendarSearch`, `filter` jen přítomnost.
+- `parity-exclusions.txt`: pryč všech 24 textů editoru a „Print“ (používá ho
+  `Toolbar.ItemLabel`). Zůstává „_Print…“, „Date“, „Attachments“ (port tisku
+  na `feat/print-windows`) a sedm popisů gschema. `README.md`: 6 odchylek.
+- Pro Windows agenta: `build.ps1 app`/`test`/`lint`; testy `Toolbar*Tests`,
+  `SettingsTests`, `IconGlyphsTests`, `StringsCheckTests`,
+  `GschemaCoverageTests`, `SpdxHeaderTests`, `ThemeBrushTests`; UI smoke
+  dotčených pruhů; nový `ToolbarSmokeTests` napsat (návrh W.11); vizuálně
+  porovnat nedotčené pruhy s dneškem (T12).
+- Otevřené: přetéká jen pruh zprávy (Q-W3); Ikony a text dává popisek vedle
+  ikony (Q-W9); ✦ v přetoku se v „Další akce“ nenabízí; Zpět není zašedlé bez
+  přesunu; sbalení postranního panelu Pošty se neukládá.

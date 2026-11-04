@@ -64,6 +64,7 @@ public sealed partial class BoardPage : UserControl
     public BoardPage()
     {
         InitializeComponent();
+        InitializeToolbar();
         StyleListButton.Content = Board.Text.StyleTitle(BoardStyle.List);
         StyleColumnsButton.Content = Board.Text.StyleTitle(BoardStyle.Columns);
         StyleTodayButton.Content = Board.Text.StyleTitle(BoardStyle.Today);
@@ -119,6 +120,7 @@ public sealed partial class BoardPage : UserControl
         CommandBinding.Bind(MenuPreferences, commands.Preferences);
         CommandBinding.Bind(MenuAbout, commands.About);
         CommandBinding.Bind(MenuQuit, commands.Quit);
+        AttachToolbar(commands);
         detail.Attach(boardActions);
         boardActions.Controller.Changed += (_, changes) => Apply(changes);
         ShowStyle(boardActions.Controller.State.Style);
@@ -184,6 +186,8 @@ public sealed partial class BoardPage : UserControl
         var hadFocus = FocusIn(StyleHost);
         current = next;
         StyleHost.Content = next.View;
+        // The bar and the detail's row follow the style's toolbar.
+        ApplyToolbarForStyle(style);
         // A style just put in renders the whole view model.
         next.Apply(BoardController.Changes.Content | BoardController.Changes.Selection | BoardController.Changes.Filters);
         if (hadFocus)

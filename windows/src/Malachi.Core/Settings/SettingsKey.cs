@@ -158,7 +158,7 @@ public enum SettingsKey
     /// <summary><c>contacts-suggest-scope</c>: <see cref="SettingsStore.ContactsSuggestScope"/>.</summary>
     ContactsSuggestScope,
 
-    /// <summary><c>toolbar-mail</c>: the user's arrangement of the Mail toolbar (ui/internal/toolbar); the Windows port is pending.</summary>
+    /// <summary><c>toolbar-mail</c>: the user's arrangement of the Mail toolbar (<see cref="SettingsStore.ToolbarLayout"/>).</summary>
     ToolbarMail,
 
     /// <summary><c>toolbar-board-list</c>: the Board's toolbar in the List style.</summary>

@@ -101,6 +101,8 @@ public static class IconGlyphs
         ["goa-account"] = G(0xE715),
         ["avatar-default"] = G(0xE77B),
         ["sidebar-show"] = G(0xE8A0),
+        // The toolbar's Undo (docs/plans/toolbar-customization.md T10).
+        ["edit-undo"] = G(0xE7A7),
         ["preferences-system"] = G(0xE713),
         // The strip of an automated message (bulk mail): the same gear.
         ["applications-system"] = G(0xE713),

@@ -25,6 +25,7 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
     xmlns:main="using:Malachi.App.Main"
     xmlns:p="using:Malachi.Core.Presentation"
     xmlns:res="using:Malachi.App.Resources"
+    xmlns:toolbars="using:Malachi.App.Toolbars"
     IsTabStop="False">
     <Grid>
         <Grid.RowDefinitions>
@@ -32,25 +33,35 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- The sidebar's header bar. -->
+        <!-- The sidebar's header bar: the Folders section of the user's
+             toolbar-mail layout (Toolbars/ToolbarStrip; by default New
+             Message), then the primary menu, which is Windows' own. -->
         <Grid
             x:Name="HeaderRow"
             Height="44"
-            Padding="8,0">
-            <Button
-                x:Name="NewMessageButton"
-                Width="40"
-                Height="32"
-                Padding="0"
-                HorizontalAlignment="Left"
-                AutomationProperties.AutomationId="NewMessageButton"
-                AutomationProperties.Name="{l:T Msgid='New Message'}"
-                Style="{StaticResource AccentButtonStyle}"
-                ToolTipService.ToolTip="{l:T Msgid='New Message (Ctrl+N)'}">
-                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-message-new-symbolic')}" />
-            </Button>
+            Padding="8,0"
+            Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <toolbars:ToolbarStrip x:Name="HeaderStrip">
+                <Button
+                    x:Name="NewMessageButton"
+                    Width="40"
+                    Height="32"
+                    Padding="0"
+                    toolbars:ToolbarStrip.Item="newMessage"
+                    AutomationProperties.AutomationId="NewMessageButton"
+                    AutomationProperties.Name="{l:T Msgid='New Message'}"
+                    Style="{StaticResource AccentButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='New Message (Ctrl+N)'}">
+                    <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-message-new-symbolic')}" />
+                </Button>
+            </toolbars:ToolbarStrip>
             <Button
                 x:Name="MainMenuButton"
+                Grid.Column="1"
                 Width="40"
                 Height="32"
                 Padding="0"

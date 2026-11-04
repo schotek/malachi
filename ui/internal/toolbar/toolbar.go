@@ -13,13 +13,19 @@
 // as the token list Tokens returns in the key Key names, an empty list
 // meaning the default. Pure logic, no widgets: macOS edits it with
 // AppKit's customization palette (MalachiCore/Toolbar), GTK and Windows
-// will with an editor in Preferences over the same catalog and keys.
+// will with an editor in Preferences over the same catalog and keys
+// (ui/internal/toolbaredit). A client's differences, the items it lacks
+// and its own defaults, are its Variant (GTK, Windows; variant.go, the
+// functions ending in For, StoredFor merging an edit into the shared
+// key); Fit picks what a too narrow strip leaves out; text.go has the
+// editor's texts. The functions without a variant are macOS's.
 //
 // The item ids are the macOS toolbar identifiers (MainToolbar.ID,
 // BoardToolbar.ID, CalendarToolbar.ID), so nothing is renamed; the
 // toolbar's own items are neutral tokens (Space, FlexibleSpace,
 // ToggleSidebar) and a section's separator is a token starting with "|".
-// The labels are the clients' (their toolbar items have them already).
+// The toolbars' own labels are the clients'; ItemLabel names the items in the
+// GTK and Windows editors.
 package toolbar
 
 import "strings"
@@ -375,62 +381,9 @@ const MaxTokens = 128
 // separators stand in their order, each once, the missing ones where
 // they belong; an item in a section it may not stand in goes to the end
 // of its home section; a fixed item stands at the start of its home
-// section in the default's order.
-func Normalize(bar Bar, stored []string) Layout {
-	secs := sections[bar]
-	if len(stored) == 0 || len(secs) == 0 {
-		return Default(bar)
-	}
-	if len(stored) > MaxTokens {
-		stored = stored[:MaxTokens]
-	}
-	index := make(map[Section]int, len(secs))
-	for i, s := range secs {
-		index[s] = i
-	}
-	parts := make([][]ID, len(secs))
-	moved := make([][]ID, len(secs))
-	seen := map[ID]bool{}
-	cur := 0
-	for _, tok := range stored {
-		id := ID(tok)
-		if IsSeparator(id) {
-			if i, ok := index[Section(strings.TrimPrefix(tok, "|"))]; ok && i > cur {
-				cur = i
-			}
-			continue
-		}
-		if IsSpace(id) {
-			parts[cur] = append(parts[cur], id)
-			continue
-		}
-		it, ok := Lookup(bar, id)
-		if !ok || seen[id] || it.Fixed {
-			continue
-		}
-		seen[id] = true
-		if it.allows(secs[cur]) {
-			parts[cur] = append(parts[cur], id)
-		} else {
-			h := index[it.Home()]
-			moved[h] = append(moved[h], id)
-		}
-	}
-	var out Layout
-	for i, s := range secs {
-		if i > 0 {
-			out = append(out, Separator(s))
-		}
-		for _, id := range defaults[bar] {
-			if it, ok := Lookup(bar, id); ok && it.Fixed && it.Home() == s {
-				out = append(out, id)
-			}
-		}
-		out = append(out, parts[i]...)
-		out = append(out, moved[i]...)
-	}
-	return out
-}
+// section in the default's order. It is NormalizeFor with the zero
+// Variant (macOS).
+func Normalize(bar Bar, stored []string) Layout { return NormalizeFor(Variant{}, bar, stored) }
 
 // SectionAt is the section of the item at index i of l (a separator
 // belongs to the section it starts).
@@ -451,31 +404,11 @@ func SectionAt(bar Bar, l Layout, i int) Section {
 // CanInsert reports whether the user may put id into section s of bar
 // (macOS: toolbar(_:itemIdentifier:canBeInsertedAt:)). Spaces go
 // anywhere; separators and fixed items never move.
-func CanInsert(bar Bar, id ID, s Section) bool {
-	if IsSpace(id) {
-		return true
-	}
-	if IsSeparator(id) {
-		return false
-	}
-	it, ok := Lookup(bar, id)
-	return ok && !it.Fixed && it.allows(s)
-}
+func CanInsert(bar Bar, id ID, s Section) bool { return CanInsertFor(Variant{}, bar, id, s) }
 
 // Immovable are the items of bar the user can neither move nor remove,
 // its separators included (macOS: toolbarImmovableItemIdentifiers).
-func Immovable(bar Bar) []ID {
-	var out []ID
-	for _, it := range catalogs[bar] {
-		if it.Fixed {
-			out = append(out, it.ID)
-		}
-	}
-	for _, s := range sections[bar][1:] {
-		out = append(out, Separator(s))
-	}
-	return out
-}
+func Immovable(bar Bar) []ID { return ImmovableFor(Variant{}, bar) }
 
 // Features are what the window has at the moment.
 type Features struct {
@@ -493,15 +426,7 @@ type Features struct {
 // Allowed is what the palette offers: the catalog without the items
 // whose feature is missing, in the catalog's order (spaces are the
 // client's own).
-func Allowed(bar Bar, f Features) []ID {
-	var out []ID
-	for _, it := range catalogs[bar] {
-		if it.Feature == "" || f.Have[it.Feature] {
-			out = append(out, it.ID)
-		}
-	}
-	return out
-}
+func Allowed(bar Bar, f Features) []ID { return AllowedFor(Variant{}, bar, f) }
 
 // Shown is an entry of what the toolbar holds.
 type Shown struct {
@@ -514,51 +439,14 @@ type Shown struct {
 // Present is what the toolbar holds for l: the hidden sections with
 // their separators and the hidden separators left out, an item whose
 // feature is missing kept in its place and hidden.
-func Present(bar Bar, l Layout, f Features) []Shown {
-	var out []Shown
-	s := SectionMain
-	if secs := sections[bar]; len(secs) > 0 {
-		s = secs[0]
-	}
-	for _, id := range l {
-		if IsSeparator(id) {
-			s = Section(strings.TrimPrefix(string(id), "|"))
-			if f.HiddenSections[s] || f.HiddenSeparators[id] {
-				continue
-			}
-			out = append(out, Shown{ID: id})
-			continue
-		}
-		if f.HiddenSections[s] {
-			continue
-		}
-		hidden := false
-		if it, ok := Lookup(bar, id); ok && it.Feature != "" {
-			hidden = !f.Have[it.Feature]
-		}
-		out = append(out, Shown{ID: id, Hidden: hidden})
-	}
-	return out
-}
+func Present(bar Bar, l Layout, f Features) []Shown { return PresentFor(Variant{}, bar, l, f) }
 
 // MissingActions are the actions of bar the More Actions menu adds
 // because l does not show them, in the catalog's order (T8); an action
 // whose feature is missing is not one. The client adds the ones its
 // toolbar moved to its overflow.
 func MissingActions(bar Bar, l Layout, f Features) []ID {
-	shown := map[ID]bool{}
-	for _, e := range Present(bar, l, f) {
-		if !e.Hidden {
-			shown[e.ID] = true
-		}
-	}
-	var out []ID
-	for _, it := range catalogs[bar] {
-		if it.InMore && !shown[it.ID] && (it.Feature == "" || f.Have[it.Feature]) {
-			out = append(out, it.ID)
-		}
-	}
-	return out
+	return MissingActionsFor(Variant{}, bar, l, f)
 }
 
 // SearchItem is bar's search field, "" for a toolbar without one.

@@ -30,6 +30,7 @@ TextBlock.Text.
     xmlns:controls="using:Malachi.App.Controls"
     xmlns:reader="using:Malachi.App.Reader"
     xmlns:res="using:Malachi.App.Resources"
+    xmlns:toolbars="using:Malachi.App.Toolbars"
     AutomationProperties.AutomationId="BoardDetail"
     IsTabStop="False">
     <UserControl.Resources>
@@ -66,69 +67,67 @@ TextBlock.Text.
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- The detail's bar (board_detail_tree's header bar). -->
+        <!-- The detail's bar (board_detail_tree's header bar): the Case
+             Detail section of the user's toolbar-board-list layout in the
+             List style, the Windows default in Columns and Today
+             (Toolbars/ToolbarStrip, BoardPage.Toolbar.cs; Q-W6). Close and
+             "…" are Windows' own: Close first, "…" after the last of the
+             actions before Reply. -->
         <Grid
             x:Name="ActionBar"
             Padding="16,8"
+            Background="Transparent"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-            BorderThickness="0,0,0,1"
-            ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Button
-                x:Name="CloseButton"
-                AutomationProperties.AutomationId="BoardPanelClose"
-                Click="OnCloseClick"
-                Visibility="Collapsed" />
-            <Button
-                x:Name="DoneButton"
-                Grid.Column="1"
-                AutomationProperties.AutomationId="BoardDone"
-                Click="OnDoneClick" />
-            <Button
-                x:Name="RemindButton"
-                Grid.Column="2"
-                AutomationProperties.AutomationId="BoardRemind">
-                <Button.Flyout>
-                    <MenuFlyout x:Name="RemindMenu" Opening="OnRemindOpening" Placement="BottomEdgeAlignedLeft" />
-                </Button.Flyout>
-            </Button>
-            <Button
-                x:Name="ArchiveButton"
-                Grid.Column="3"
-                AutomationProperties.AutomationId="BoardArchive"
-                Click="OnArchiveClick" />
-            <Button
-                x:Name="TrashButton"
-                Grid.Column="4"
-                AutomationProperties.AutomationId="BoardTrash"
-                Click="OnTrashClick" />
-            <Button
-                x:Name="MoreButton"
-                Grid.Column="5"
-                Width="40"
-                Padding="0"
-                AutomationProperties.AutomationId="BoardMore"
-                Style="{StaticResource SubtleButtonStyle}">
-                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
-                <Button.Flyout>
-                    <MenuFlyout x:Name="MoreMenu" Opening="OnMoreOpening" Placement="BottomEdgeAlignedLeft" />
-                </Button.Flyout>
-            </Button>
-            <Button
-                x:Name="ReplyButton"
-                Grid.Column="7"
-                AutomationProperties.AutomationId="BoardReply"
-                Click="OnReplyClick"
-                Style="{StaticResource AccentButtonStyle}" />
+            BorderThickness="0,0,0,1">
+            <toolbars:ToolbarStrip x:Name="ActionStrip" Spacing="8">
+                <Button
+                    x:Name="CloseButton"
+                    toolbars:ToolbarStrip.Pin="start"
+                    AutomationProperties.AutomationId="BoardPanelClose"
+                    Click="OnCloseClick"
+                    Visibility="Collapsed" />
+                <Button
+                    x:Name="DoneButton"
+                    toolbars:ToolbarStrip.Item="boardDone"
+                    AutomationProperties.AutomationId="BoardDone"
+                    Click="OnDoneClick" />
+                <Button
+                    x:Name="RemindButton"
+                    toolbars:ToolbarStrip.Item="boardRemind"
+                    AutomationProperties.AutomationId="BoardRemind">
+                    <Button.Flyout>
+                        <MenuFlyout x:Name="RemindMenu" Opening="OnRemindOpening" Placement="BottomEdgeAlignedLeft" />
+                    </Button.Flyout>
+                </Button>
+                <Button
+                    x:Name="ArchiveButton"
+                    toolbars:ToolbarStrip.Item="boardArchive"
+                    AutomationProperties.AutomationId="BoardArchive"
+                    Click="OnArchiveClick" />
+                <Button
+                    x:Name="TrashButton"
+                    toolbars:ToolbarStrip.Item="boardTrash"
+                    AutomationProperties.AutomationId="BoardTrash"
+                    Click="OnTrashClick" />
+                <Button
+                    x:Name="MoreButton"
+                    Width="40"
+                    Padding="0"
+                    toolbars:ToolbarStrip.Pin="after:boardTrash,boardArchive,boardRemind,boardDone"
+                    AutomationProperties.AutomationId="BoardMore"
+                    Style="{StaticResource SubtleButtonStyle}">
+                    <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
+                    <Button.Flyout>
+                        <MenuFlyout x:Name="MoreMenu" Opening="OnMoreOpening" Placement="BottomEdgeAlignedLeft" />
+                    </Button.Flyout>
+                </Button>
+                <Button
+                    x:Name="ReplyButton"
+                    toolbars:ToolbarStrip.Item="boardReply"
+                    AutomationProperties.AutomationId="BoardReply"
+                    Click="OnReplyClick"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </toolbars:ToolbarStrip>
         </Grid>
 
         <ScrollViewer

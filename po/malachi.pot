@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 11:07+0000\n"
+"POT-Creation-Date: 2026-11-04 11:51+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -509,6 +509,7 @@ msgstr ""
 
 #. TRANSLATORS: The menu that hands the selected mail to Claude Desktop or Claude Code, and its settings group.
 #: ui/internal/assistant/assistant.go:476 ui/internal/contextmenu/text.go:85
+#: ui/internal/toolbar/text.go:156
 msgid "Assistant"
 msgstr ""
 
@@ -1331,8 +1332,8 @@ msgid "The sender's server refused the request."
 msgstr ""
 
 #: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1048
-#: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:460
-#: ui/internal/window/assistant_panel.go:204
+#: ui/internal/toolbar/text.go:217 ui/internal/jira/settings.go:123
+#: ui/internal/contacts/form.go:460 ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36 ui/internal/rules/text.go:180
 #: ui/internal/rules/text.go:269
 msgid "Remove"
@@ -1346,8 +1347,8 @@ msgstr ""
 msgid "Using placeholder account"
 msgstr ""
 
-#: ui/internal/compose/pane.go:612 ui/data/ui/compose.ui:10
-#: ui/data/ui/compose.ui:48
+#: ui/internal/compose/pane.go:612 ui/internal/toolbar/text.go:133
+#: ui/data/ui/compose.ui:10 ui/data/ui/compose.ui:48
 msgid "New Message"
 msgstr ""
 
@@ -1577,7 +1578,7 @@ msgstr ""
 
 #: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
 #: ui/internal/calendar/detail.go:256 ui/internal/contacts/text.go:131
-#: ui/data/ui/window.ui:513
+#: ui/data/ui/window.ui:512
 msgid "Edit"
 msgstr ""
 
@@ -1586,33 +1587,34 @@ msgstr ""
 msgid "Comment"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
-#: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:302
+#: ui/internal/contextmenu/text.go:57 ui/internal/toolbar/text.go:142
+#: ui/internal/jira/compose.go:164 ui/internal/board/text.go:374
+#: ui/internal/window/conversation_card.go:302
 #: ui/internal/window/quick_reply_bar.go:194 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:398
 msgid "Reply"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:59
+#: ui/internal/contextmenu/text.go:59 ui/internal/toolbar/text.go:144
 #: ui/internal/window/conversation_card.go:303
 #: ui/internal/window/quick_reply_bar.go:192 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:405
 msgid "Reply All"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:61
+#: ui/internal/contextmenu/text.go:61 ui/internal/toolbar/text.go:146
 #: ui/internal/window/conversation_card.go:304 ui/data/ui/message_window.ui:56
 #: ui/data/ui/window.ui:412
 msgid "Forward"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:592
-#: ui/data/ui/window.ui:1253
+#: ui/internal/contextmenu/text.go:63 ui/internal/toolbar/text.go:163
+#: ui/data/ui/message_window.ui:592 ui/data/ui/window.ui:1252
 msgid "Mark as _Read"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
-#: ui/data/ui/window.ui:1249
+#: ui/data/ui/window.ui:1248
 msgid "Mark as _Unread"
 msgstr ""
 
@@ -1621,32 +1623,34 @@ msgstr ""
 msgid "Unstar"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:70 ui/internal/window/actions.go:67
-#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:439
+#: ui/internal/contextmenu/text.go:70 ui/internal/toolbar/text.go:154
+#: ui/internal/window/actions.go:62 ui/data/ui/message_window.ui:74
+#: ui/data/ui/window.ui:439
 msgid "Star"
 msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
 #: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1269
+#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1268
 msgid "Change Status"
 msgstr ""
 
 #. TRANSLATORS: After Answering, Move the Invitation Message: to the
 #. archive.
-#: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:824
-#: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:132
-#: ui/data/ui/window.ui:499
+#: ui/internal/contextmenu/text.go:74 ui/internal/toolbar/text.go:148
+#: ui/internal/board/text.go:824 ui/internal/calendar/preferences.go:318
+#: ui/data/ui/message_window.ui:132 ui/data/ui/window.ui:498
 msgid "Archive"
 msgstr ""
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/contextmenu/text.go:76 ui/internal/board/text.go:1065
+#: ui/internal/contextmenu/text.go:76 ui/internal/toolbar/text.go:167
+#: ui/internal/board/text.go:1065
 msgid "Move To"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:582
-#: ui/data/ui/window.ui:1243
+#: ui/internal/contextmenu/text.go:78 ui/internal/toolbar/text.go:165
+#: ui/data/ui/message_window.ui:582 ui/data/ui/window.ui:1242
 msgid "Mark as Junk"
 msgstr ""
 
@@ -1654,13 +1658,15 @@ msgstr ""
 msgid "Cancel Sending"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:83 ui/internal/window/outbox.go:242
-#: ui/data/ui/message_window.ui:125 ui/data/ui/window.ui:491
+#: ui/internal/contextmenu/text.go:83 ui/internal/toolbar/text.go:150
+#: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:125
+#: ui/data/ui/window.ui:491
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:95 ui/internal/window/status.go:270
-#: ui/data/ui/preferences.ui:257 ui/data/ui/window.ui:171
+#: ui/internal/contextmenu/text.go:95 ui/internal/toolbar/text.go:140
+#: ui/internal/window/status.go:270 ui/data/ui/preferences.ui:257
+#: ui/data/ui/window.ui:171
 msgid "Check for New Mail"
 msgstr ""
 
@@ -1791,7 +1797,7 @@ msgid "_Print…"
 msgstr ""
 
 #. TRANSLATORS: toolbar button that prints the selected message, conversation, event or day.
-#: ui/internal/printing/printing.go:43
+#: ui/internal/printing/printing.go:43 ui/internal/toolbar/text.go:169
 msgid "Print"
 msgstr ""
 
@@ -1802,21 +1808,21 @@ msgstr ""
 #: ui/internal/printing/printing.go:75
 #: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
-#: ui/data/ui/window.ui:797
+#: ui/data/ui/window.ui:796
 msgid "From"
 msgstr ""
 
 #: ui/internal/printing/printing.go:76
 #: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
-#: ui/data/ui/window.ui:823
+#: ui/data/ui/window.ui:822
 msgid "To"
 msgstr ""
 
 #: ui/internal/printing/printing.go:77
 #: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
-#: ui/data/ui/window.ui:851
+#: ui/data/ui/window.ui:850
 msgid "Cc"
 msgstr ""
 
@@ -1830,6 +1836,248 @@ msgstr ""
 
 #: ui/internal/printing/printing.go:80
 msgid "Attachments"
+msgstr ""
+
+#. TRANSLATORS: a group in Preferences → General with the toolbar's display mode and its editor.
+#: ui/internal/toolbar/text.go:26
+msgid "Toolbar"
+msgstr ""
+
+#. TRANSLATORS: a button in Preferences and a context menu item of a toolbar; it opens the toolbar editor.
+#: ui/internal/toolbar/text.go:33
+msgid "Customize Toolbar…"
+msgstr ""
+
+#. TRANSLATORS: the title of the dialog where the user arranges a toolbar's items.
+#: ui/internal/toolbar/text.go:39
+msgid "Customize Toolbar"
+msgstr ""
+
+#. TRANSLATORS: a row in Preferences: whether the toolbar's buttons show icons, text or both.
+#: ui/internal/toolbar/text.go:45
+msgid "Toolbar Display"
+msgstr ""
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with an icon and a label.
+#: ui/internal/toolbar/text.go:57
+msgid "Icons and Text"
+msgstr ""
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with a label and no icon.
+#: ui/internal/toolbar/text.go:60
+msgid "Text Only"
+msgstr ""
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with an icon and no label.
+#: ui/internal/toolbar/text.go:63
+msgid "Icons Only"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:70 ui/internal/board/text.go:57
+#: ui/data/ui/preferences.ui:253
+msgid "Mail"
+msgstr ""
+
+#. TRANSLATORS: the toolbar of the Board in its List style, in the toolbar editor.
+#: ui/internal/toolbar/text.go:73
+msgid "Board – List"
+msgstr ""
+
+#. TRANSLATORS: the toolbar of the Board in its Columns and Today styles, in the toolbar editor.
+#: ui/internal/toolbar/text.go:76
+msgid "Board – Columns and Today"
+msgstr ""
+
+#. TRANSLATORS: the window's third mode beside Mail and Board: the calendar.
+#: ui/internal/toolbar/text.go:78 ui/internal/toolbar/text.go:105
+#: ui/internal/board/text.go:72
+msgid "Calendar"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:89 ui/internal/jira/settings.go:100
+#: ui/data/ui/window.ui:66
+msgid "Folders"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:94 ui/data/ui/preferences.ui:478
+msgid "Message List"
+msgstr ""
+
+#. TRANSLATORS: the part of the Board's toolbar over its list of cases, in the toolbar editor.
+#: ui/internal/toolbar/text.go:97
+msgid "Cases"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:99 ui/data/ui/message_window.ui:38
+#: ui/data/ui/window.ui:389
+msgid "Message"
+msgstr ""
+
+#. TRANSLATORS: the part of the Board's toolbar over the shown case, in the toolbar editor.
+#: ui/internal/toolbar/text.go:102
+msgid "Case Detail"
+msgstr ""
+
+#. TRANSLATORS: the window's second mode beside Mail: the conversations
+#. that need something, sorted into four states.
+#: ui/internal/toolbar/text.go:107 ui/internal/board/text.go:65
+#: ui/data/ui/preferences.ui:125 ui/data/ui/preferences.ui:689
+msgid "Board"
+msgstr ""
+
+#. TRANSLATORS: in the toolbar editor, the button that shows or hides the sidebar and the part of a toolbar over the sidebar.
+#: ui/internal/toolbar/text.go:114
+msgid "Sidebar"
+msgstr ""
+
+#. TRANSLATORS: a fixed gap between toolbar buttons, in the toolbar editor.
+#: ui/internal/toolbar/text.go:123
+msgid "Space"
+msgstr ""
+
+#. TRANSLATORS: a gap that takes the toolbar's free room, in the toolbar editor.
+#: ui/internal/toolbar/text.go:126
+msgid "Flexible Space"
+msgstr ""
+
+#. TRANSLATORS: the toolbar's switch between Mail, Board and Calendar, in the toolbar editor.
+#: ui/internal/toolbar/text.go:131
+msgid "Mode Switch"
+msgstr ""
+
+#. TRANSLATORS: the Contacts window (address books of the user's
+#. accounts), its menu item and its Preferences page.
+#: ui/internal/toolbar/text.go:135 ui/internal/contacts/text.go:50
+msgid "Contacts"
+msgstr ""
+
+#. TRANSLATORS: the toolbar item that filters the message list (All, Unread, Flagged), in the toolbar editor.
+#: ui/internal/toolbar/text.go:138
+msgid "Filter"
+msgstr ""
+
+#. TRANSLATORS: context menu of a message: opens the dialog that saves it to eWay-CRM.
+#: ui/internal/toolbar/text.go:152 ui/internal/crm/text.go:90
+msgid "Save to eWay-CRM…"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:158 ui/internal/window/attachments.go:201
+#: ui/data/ui/message_window.ui:62 ui/data/ui/window.ui:427
+msgid "More Actions"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1131
+#: ui/data/ui/window.ui:178
+msgid "Search"
+msgstr ""
+
+#. TRANSLATORS: the button of a toast that takes back what was just
+#. done (an archive).
+#: ui/internal/toolbar/text.go:171 ui/internal/board/text.go:905
+#: ui/internal/undo/text.go:45
+msgid "Undo"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:173 ui/internal/window/conversation_card.go:797
+#: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:259
+#: ui/data/ui/message_window.ui:598 ui/data/ui/window.ui:634
+#: ui/data/ui/window.ui:1258
+msgid "Load _Images"
+msgstr ""
+
+#. TRANSLATORS: the Board's switch between its List, Columns and Today styles, in the toolbar editor.
+#: ui/internal/toolbar/text.go:176
+msgid "Board Style"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:178 ui/internal/board/text.go:132
+msgctxt "account filter"
+msgid "All Accounts"
+msgstr ""
+
+#. TRANSLATORS: a button: the assistant reads the conversations on the
+#. board and adds notes (titles, summaries, tasks, deadlines).
+#: ui/internal/toolbar/text.go:180 ui/internal/board/text.go:384
+msgid "✦ Triage"
+msgstr ""
+
+#. TRANSLATORS: the board's filter and section of the finished cases,
+#. and the button that marks a case finished.
+#: ui/internal/toolbar/text.go:182 ui/internal/board/text.go:138
+msgid "Done"
+msgstr ""
+
+#. TRANSLATORS: a button that takes a case off the board until a
+#. chosen time.
+#: ui/internal/toolbar/text.go:184 ui/internal/board/text.go:370
+msgid "Remind…"
+msgstr ""
+
+#. TRANSLATORS: a button and menu item of the board: the case's received
+#. messages go to the trash and the case is done.
+#: ui/internal/toolbar/text.go:186 ui/internal/board/text.go:917
+#: ui/internal/calendar/detail.go:272 ui/internal/calendar/detail.go:313
+#: ui/internal/contacts/text.go:146
+msgid "Delete"
+msgstr ""
+
+#. TRANSLATORS: the board's style that shows the day (what needs the
+#. user, deadlines), a group of deadlines and a deadline's day.
+#. TRANSLATORS: the calendar's toolbar button that goes to today.
+#. TRANSLATORS: the heading of today's events in the agenda.
+#: ui/internal/toolbar/text.go:188 ui/internal/board/text.go:210
+#: ui/internal/calendar/text.go:44 ui/internal/calendar/agenda.go:107
+#: ui/internal/maildate/groups.go:39
+msgid "Today"
+msgstr ""
+
+#. TRANSLATORS: the Calendar's pair of buttons that step to the previous and next day, week or month, in the toolbar editor.
+#: ui/internal/toolbar/text.go:191
+msgid "Previous and Next"
+msgstr ""
+
+#. TRANSLATORS: the Calendar's switch between Day, Week, Month and Agenda, in the toolbar editor.
+#: ui/internal/toolbar/text.go:194
+msgid "Calendar View"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:196 ui/internal/calendar/text.go:67
+msgid "Search Events"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:198 ui/internal/calendar/text.go:61
+msgid "New Event"
+msgstr ""
+
+#. TRANSLATORS: the subtitle of a toolbar item in the editor whose feature is off at the moment (e.g. no eWay-CRM account).
+#: ui/internal/toolbar/text.go:207
+msgid "Hidden while unavailable"
+msgstr ""
+
+#. TRANSLATORS: a button of the toolbar editor that opens the list of items to add.
+#: ui/internal/toolbar/text.go:213
+msgid "Add Item…"
+msgstr ""
+
+#. TRANSLATORS: a button of the toolbar editor that gives the chosen toolbar its default items back.
+#: ui/internal/toolbar/text.go:223
+msgid "Restore Defaults"
+msgstr ""
+
+#. TRANSLATORS: the question before the toolbar editor restores the default toolbar.
+#: ui/internal/toolbar/text.go:229
+msgid "Restore the Default Toolbar?"
+msgstr ""
+
+#. TRANSLATORS: %s is the toolbar's name, e.g. "Mail" or "Board – List".
+#: ui/internal/toolbar/text.go:235
+#, c-format
+msgid "Your changes to the “%s” toolbar will be lost."
+msgstr ""
+
+#: ui/internal/toolbar/text.go:239 ui/internal/calendar/editor.go:245
+#: ui/internal/contacts/text.go:140 ui/internal/updates/updates.go:195
+msgid "Cancel"
 msgstr ""
 
 #. TRANSLATORS: a comment on a service-desk request that the customer reads too.
@@ -1965,7 +2213,7 @@ msgid "The Jira site rejected the token of %s"
 msgstr ""
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
-#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:726
+#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:725
 msgid "Add _Jira Account…"
 msgstr ""
 
@@ -2154,10 +2402,6 @@ msgstr ""
 #. TRANSLATORS: switch; the changes are listed among the comments of an issue.
 #: ui/internal/jira/settings.go:99
 msgid "Show Status and Assignee Changes"
-msgstr ""
-
-#: ui/internal/jira/settings.go:100 ui/data/ui/window.ui:66
-msgid "Folders"
 msgstr ""
 
 #: ui/internal/jira/settings.go:101
@@ -2490,11 +2734,6 @@ msgid "Save %d Message to eWay-CRM…"
 msgid_plural "Save %d Messages to eWay-CRM…"
 msgstr[0] ""
 msgstr[1] ""
-
-#. TRANSLATORS: context menu of a message: opens the dialog that saves it to eWay-CRM.
-#: ui/internal/crm/text.go:90
-msgid "Save to eWay-CRM…"
-msgstr ""
 
 #. TRANSLATORS: placeholder of the search field of the Save to eWay-CRM dialog.
 #: ui/internal/crm/text.go:119
@@ -2863,22 +3102,6 @@ msgstr ""
 msgid "Forward…"
 msgstr ""
 
-#: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:253
-msgid "Mail"
-msgstr ""
-
-#. TRANSLATORS: the window's second mode beside Mail: the conversations
-#. that need something, sorted into four states.
-#: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:125
-#: ui/data/ui/preferences.ui:689
-msgid "Board"
-msgstr ""
-
-#. TRANSLATORS: the window's third mode beside Mail and Board: the calendar.
-#: ui/internal/board/text.go:72
-msgid "Calendar"
-msgstr ""
-
 #. TRANSLATORS: a state of the board, its column and filter: the
 #. cases that need the user now (a deadline, an escalation).
 #: ui/internal/board/text.go:81
@@ -2906,17 +3129,6 @@ msgstr ""
 #. TRANSLATORS: the board's filter that shows every case still on it.
 #: ui/internal/board/text.go:128
 msgid "Overview"
-msgstr ""
-
-#: ui/internal/board/text.go:132
-msgctxt "account filter"
-msgid "All Accounts"
-msgstr ""
-
-#. TRANSLATORS: the board's filter and section of the finished cases,
-#. and the button that marks a case finished.
-#: ui/internal/board/text.go:138
-msgid "Done"
 msgstr ""
 
 #. TRANSLATORS: the number of cases on the board, after the account
@@ -2981,15 +3193,6 @@ msgstr ""
 #: ui/internal/board/text.go:201
 msgctxt "deadline"
 msgid "Later"
-msgstr ""
-
-#. TRANSLATORS: the board's style that shows the day (what needs the
-#. user, deadlines), a group of deadlines and a deadline's day.
-#. TRANSLATORS: the calendar's toolbar button that goes to today.
-#. TRANSLATORS: the heading of today's events in the agenda.
-#: ui/internal/board/text.go:210 ui/internal/calendar/text.go:44
-#: ui/internal/calendar/agenda.go:107 ui/internal/maildate/groups.go:39
-msgid "Today"
 msgstr ""
 
 #: ui/internal/board/text.go:239
@@ -3114,18 +3317,6 @@ msgstr ""
 
 #: ui/internal/board/text.go:364
 msgid "Move Back to Board"
-msgstr ""
-
-#. TRANSLATORS: a button that takes a case off the board until a
-#. chosen time.
-#: ui/internal/board/text.go:370
-msgid "Remind…"
-msgstr ""
-
-#. TRANSLATORS: a button: the assistant reads the conversations on the
-#. board and adds notes (titles, summaries, tasks, deadlines).
-#: ui/internal/board/text.go:384
-msgid "✦ Triage"
 msgstr ""
 
 #: ui/internal/board/text.go:388
@@ -3548,21 +3739,8 @@ msgid_plural "Archived %d messages."
 msgstr[0] ""
 msgstr[1] ""
 
-#. TRANSLATORS: the button of a toast that takes back what was just
-#. done (an archive).
-#: ui/internal/board/text.go:905 ui/internal/undo/text.go:45
-msgid "Undo"
-msgstr ""
-
 #: ui/internal/board/text.go:910
 msgid "Could not undo the archive."
-msgstr ""
-
-#. TRANSLATORS: a button and menu item of the board: the case's received
-#. messages go to the trash and the case is done.
-#: ui/internal/board/text.go:917 ui/internal/calendar/detail.go:272
-#: ui/internal/calendar/detail.go:313 ui/internal/contacts/text.go:146
-msgid "Delete"
 msgstr ""
 
 #: ui/internal/board/text.go:924
@@ -3612,7 +3790,7 @@ msgstr ""
 msgid "Changing the promise"
 msgstr ""
 
-#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:277
+#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:280
 msgid "Removing the star"
 msgstr ""
 
@@ -4211,16 +4389,8 @@ msgstr ""
 msgid "Next"
 msgstr ""
 
-#: ui/internal/calendar/text.go:61
-msgid "New Event"
-msgstr ""
-
 #: ui/internal/calendar/text.go:64
 msgid "Edit Event"
-msgstr ""
-
-#: ui/internal/calendar/text.go:67
-msgid "Search Events"
 msgstr ""
 
 #. TRANSLATORS: an event without a title.
@@ -4990,11 +5160,6 @@ msgstr[1] ""
 
 #: ui/internal/calendar/editor.go:225
 msgid "Save and Send Invitations"
-msgstr ""
-
-#: ui/internal/calendar/editor.go:245 ui/internal/contacts/text.go:140
-#: ui/internal/updates/updates.go:195
-msgid "Cancel"
 msgstr ""
 
 #: ui/internal/calendar/editor.go:256
@@ -5906,12 +6071,6 @@ msgstr ""
 
 #: ui/internal/calendar/keys.go:166
 msgid "Select Next Event"
-msgstr ""
-
-#. TRANSLATORS: the Contacts window (address books of the user's
-#. accounts), its menu item and its Preferences page.
-#: ui/internal/contacts/text.go:50
-msgid "Contacts"
 msgstr ""
 
 #. TRANSLATORS: the Contacts window's sidebar row that lists the
@@ -6867,97 +7026,97 @@ msgid_plural "Move %d messages to Trash?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:212
+#: ui/internal/window/actions.go:215
 msgid "Marking the message as read"
 msgstr ""
 
-#: ui/internal/window/actions.go:214
+#: ui/internal/window/actions.go:217
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:216
+#: ui/internal/window/actions.go:219
 msgid "Marking the message as unread"
 msgstr ""
 
-#: ui/internal/window/actions.go:218
+#: ui/internal/window/actions.go:221
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:273
+#: ui/internal/window/actions.go:276
 msgid "Starring the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:275
+#: ui/internal/window/actions.go:278
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:279
+#: ui/internal/window/actions.go:282
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:355
+#: ui/internal/window/actions.go:358
 msgid "Moving the message to Trash"
 msgstr ""
 
-#: ui/internal/window/actions.go:357
+#: ui/internal/window/actions.go:360
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:429
+#: ui/internal/window/actions.go:432
 msgid "Archiving the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:431
+#: ui/internal/window/actions.go:434
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:432
+#: ui/internal/window/actions.go:435
 msgid "This account has no archive folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:465 ui/internal/window/actions.go:479
+#: ui/internal/window/actions.go:468 ui/internal/window/actions.go:482
 msgid "This account has no junk folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:468
+#: ui/internal/window/actions.go:471
 msgid "Mark as junk?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:471
+#: ui/internal/window/actions.go:474
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:473
+#: ui/internal/window/actions.go:476
 msgid "Mark as _Junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:476
+#: ui/internal/window/actions.go:479
 msgid "Marking the message as junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:478
+#: ui/internal/window/actions.go:481
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
@@ -6972,7 +7131,7 @@ msgstr ""
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1215
+#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1214
 msgid "_New Message"
 msgstr ""
 
@@ -6983,11 +7142,6 @@ msgstr ""
 
 #: ui/internal/window/attachments.go:102
 msgid "Files inside an attached message cannot be opened or saved yet."
-msgstr ""
-
-#: ui/internal/window/attachments.go:201 ui/data/ui/message_window.ui:62
-#: ui/data/ui/window.ui:427
-msgid "More Actions"
 msgstr ""
 
 #: ui/internal/window/attachments.go:244 ui/internal/window/attachments.go:535
@@ -7102,24 +7256,18 @@ msgid ""
 "plain text."
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:797 ui/data/ui/embedded_window.ui:61
-#: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
-#: ui/data/ui/window.ui:635 ui/data/ui/window.ui:1259
-msgid "Load _Images"
-msgstr ""
-
 #: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:265
-#: ui/data/ui/window.ui:641
+#: ui/data/ui/window.ui:640
 msgid "Always From This _Sender"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:799 ui/data/ui/message_window.ui:267
-#: ui/data/ui/window.ui:643
+#: ui/data/ui/window.ui:642
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:819 ui/data/ui/message_window.ui:296
-#: ui/data/ui/window.ui:672
+#: ui/data/ui/window.ui:671
 msgid "_Download Pictures"
 msgstr ""
 
@@ -7215,7 +7363,7 @@ msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:705
+#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:704
 msgid "No Accounts"
 msgstr ""
 
@@ -7349,76 +7497,76 @@ msgstr ""
 msgid "Cancelling the send"
 msgstr ""
 
-#: ui/internal/window/preferences.go:380
+#: ui/internal/window/preferences.go:385
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:409
+#: ui/internal/window/preferences.go:414
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:472
+#: ui/internal/window/preferences.go:477
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:508
+#: ui/internal/window/preferences.go:513
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:510
+#: ui/internal/window/preferences.go:515
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:514
+#: ui/internal/window/preferences.go:519
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:518
+#: ui/internal/window/preferences.go:523
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:656
+#: ui/internal/window/preferences.go:661
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:659
+#: ui/internal/window/preferences.go:664
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:662
+#: ui/internal/window/preferences.go:667
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:697
+#: ui/internal/window/preferences.go:702
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:703
+#: ui/internal/window/preferences.go:708
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:750
+#: ui/internal/window/preferences.go:755
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:795
+#: ui/internal/window/preferences.go:800
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:798
+#: ui/internal/window/preferences.go:803
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:801
+#: ui/internal/window/preferences.go:806
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
@@ -7768,15 +7916,11 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1055
+#: ui/internal/window/window.go:1058
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1128 ui/data/ui/window.ui:178
-msgid "Search"
-msgstr ""
-
-#: ui/internal/window/window.go:1134 ui/data/ui/window.ui:148
+#: ui/internal/window/window.go:1137 ui/data/ui/window.ui:148
 msgid "Messages"
 msgstr ""
 
@@ -9545,7 +9689,7 @@ msgid "Right"
 msgstr ""
 
 #: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:961
+#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:960
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
@@ -9554,11 +9698,7 @@ msgstr ""
 msgid "Attached Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:389
-msgid "Message"
-msgstr ""
-
-#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1263
+#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1262
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -9747,10 +9887,6 @@ msgstr ""
 msgid "Dark"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:478
-msgid "Message List"
-msgstr ""
-
 #: ui/data/ui/preferences.ui:481
 msgid "Density"
 msgstr ""
@@ -9866,47 +10002,47 @@ msgstr ""
 msgid "Load More"
 msgstr ""
 
-#: ui/data/ui/window.ui:512
+#: ui/data/ui/window.ui:511
 msgid "This message is a draft"
 msgstr ""
 
-#: ui/data/ui/window.ui:693
+#: ui/data/ui/window.ui:692
 msgid "No Message Selected"
 msgstr ""
 
-#: ui/data/ui/window.ui:694
+#: ui/data/ui/window.ui:693
 msgid "Select a message to read it here."
 msgstr ""
 
-#: ui/data/ui/window.ui:706
+#: ui/data/ui/window.ui:705
 msgid "Add a mail account to start reading and sending mail."
 msgstr ""
 
-#: ui/data/ui/window.ui:714
+#: ui/data/ui/window.ui:713
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:1081
+#: ui/data/ui/window.ui:1080
 msgid "Sync Status"
 msgstr ""
 
-#: ui/data/ui/window.ui:1196
+#: ui/data/ui/window.ui:1195
 msgid "Report an Issue"
 msgstr ""
 
-#: ui/data/ui/window.ui:1219
+#: ui/data/ui/window.ui:1218
 msgid "_Contacts"
 msgstr ""
 
-#: ui/data/ui/window.ui:1225
+#: ui/data/ui/window.ui:1224
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:1229
+#: ui/data/ui/window.ui:1228
 msgid "_About Malachi Mail"
 msgstr ""
 
-#: ui/data/ui/window.ui:1235
+#: ui/data/ui/window.ui:1234
 msgid "_Quit"
 msgstr ""
 

@@ -72,7 +72,17 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         ToolTipService.SetToolTip(StateButton, Board.Text.StateLabel);
         Visibility = Visibility.Collapsed;
         Scroll.SizeChanged += (_, _) => ViewportChanged?.Invoke(this, EventArgs.Empty);
+        // The row is clipped when too narrow, as before (no menu would hold
+        // what gave way); BoardPage applies its layout (Q-W6).
+        ActionStrip.Bar = Malachi.Core.Toolbars.Toolbar.Bar.BoardList;
+        ActionStrip.FitsItems = false;
     }
+
+    /// <summary>The detail's row (a right click on an empty spot offers Customize Toolbar…).</summary>
+    internal FrameworkElement ToolbarBar => ActionBar;
+
+    /// <summary>Shows <paramref name="run"/>, the Case Detail section of Toolbar.PresentFor (BoardPage.Toolbar.cs).</summary>
+    internal void ApplyToolbar(IReadOnlyList<Malachi.Core.Toolbars.Toolbar.Shown> run) => ActionStrip.Apply(run);
 
     /// <summary>The panel's Close button: the page clears the selection.</summary>
     public event EventHandler? CloseRequested;
@@ -175,7 +185,9 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
     {
         if (shown is not null && ActionBar.Visibility == Visibility.Visible && RemindButton.IsEnabled)
         {
-            RemindMenu.ShowAt(RemindButton);
+            // The user may have taken Remind… off the row (toolbar-board-list):
+            // the presets open under the row then, the key still works.
+            RemindMenu.ShowAt(RemindButton.Parent is null ? ActionBar : (FrameworkElement)RemindButton);
         }
     }
 
