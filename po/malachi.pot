@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 11:51+0000\n"
+"POT-Creation-Date: 2026-11-04 12:54+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -508,7 +508,7 @@ msgid "The assistant stopped: %s"
 msgstr ""
 
 #. TRANSLATORS: The menu that hands the selected mail to Claude Desktop or Claude Code, and its settings group.
-#: ui/internal/assistant/assistant.go:476 ui/internal/contextmenu/text.go:85
+#: ui/internal/assistant/assistant.go:476 ui/internal/contextmenu/text.go:88
 #: ui/internal/toolbar/text.go:156
 msgid "Assistant"
 msgstr ""
@@ -1564,7 +1564,7 @@ msgid "Recently used"
 msgstr ""
 
 #. TRANSLATORS: In the menu of several selected messages: opens each in a window of its own; %d is their number.
-#: ui/internal/contextmenu/text.go:47
+#: ui/internal/contextmenu/text.go:48
 #, c-format
 msgid "Open %d Message in a New Window"
 msgid_plural "Open %d Messages in New Windows"
@@ -1572,22 +1572,22 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
-#: ui/internal/contextmenu/text.go:50
+#: ui/internal/contextmenu/text.go:51
 msgid "Open in New Window"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
+#: ui/internal/contextmenu/text.go:53 ui/internal/conversation/drafts.go:108
 #: ui/internal/calendar/detail.go:256 ui/internal/contacts/text.go:131
 #: ui/data/ui/window.ui:512
 msgid "Edit"
 msgstr ""
 
 #. TRANSLATORS: the Reply action of an issue: writes a comment.
-#: ui/internal/contextmenu/text.go:55 ui/internal/jira/compose.go:162
+#: ui/internal/contextmenu/text.go:58 ui/internal/jira/compose.go:162
 msgid "Comment"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:57 ui/internal/toolbar/text.go:142
+#: ui/internal/contextmenu/text.go:60 ui/internal/toolbar/text.go:142
 #: ui/internal/jira/compose.go:164 ui/internal/board/text.go:374
 #: ui/internal/window/conversation_card.go:302
 #: ui/internal/window/quick_reply_bar.go:194 ui/data/ui/message_window.ui:44
@@ -1595,133 +1595,133 @@ msgstr ""
 msgid "Reply"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:59 ui/internal/toolbar/text.go:144
+#: ui/internal/contextmenu/text.go:62 ui/internal/toolbar/text.go:144
 #: ui/internal/window/conversation_card.go:303
 #: ui/internal/window/quick_reply_bar.go:192 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:405
 msgid "Reply All"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:61 ui/internal/toolbar/text.go:146
+#: ui/internal/contextmenu/text.go:64 ui/internal/toolbar/text.go:146
 #: ui/internal/window/conversation_card.go:304 ui/data/ui/message_window.ui:56
 #: ui/data/ui/window.ui:412
 msgid "Forward"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:63 ui/internal/toolbar/text.go:163
+#: ui/internal/contextmenu/text.go:66 ui/internal/toolbar/text.go:163
 #: ui/data/ui/message_window.ui:592 ui/data/ui/window.ui:1252
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
+#: ui/internal/contextmenu/text.go:68 ui/data/ui/message_window.ui:588
 #: ui/data/ui/window.ui:1248
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:68 ui/internal/board/text.go:351
+#: ui/internal/contextmenu/text.go:71 ui/internal/board/text.go:351
 #: ui/internal/window/actions.go:64
 msgid "Unstar"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:70 ui/internal/toolbar/text.go:154
+#: ui/internal/contextmenu/text.go:73 ui/internal/toolbar/text.go:154
 #: ui/internal/window/actions.go:62 ui/data/ui/message_window.ui:74
 #: ui/data/ui/window.ui:439
 msgid "Star"
 msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
-#: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
+#: ui/internal/contextmenu/text.go:75 ui/internal/jira/transitions.go:87
 #: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1268
 msgid "Change Status"
 msgstr ""
 
 #. TRANSLATORS: After Answering, Move the Invitation Message: to the
 #. archive.
-#: ui/internal/contextmenu/text.go:74 ui/internal/toolbar/text.go:148
+#: ui/internal/contextmenu/text.go:77 ui/internal/toolbar/text.go:148
 #: ui/internal/board/text.go:824 ui/internal/calendar/preferences.go:318
 #: ui/data/ui/message_window.ui:132 ui/data/ui/window.ui:498
 msgid "Archive"
 msgstr ""
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/contextmenu/text.go:76 ui/internal/toolbar/text.go:167
+#: ui/internal/contextmenu/text.go:79 ui/internal/toolbar/text.go:167
 #: ui/internal/board/text.go:1065
 msgid "Move To"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:78 ui/internal/toolbar/text.go:165
+#: ui/internal/contextmenu/text.go:81 ui/internal/toolbar/text.go:165
 #: ui/data/ui/message_window.ui:582 ui/data/ui/window.ui:1242
 msgid "Mark as Junk"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:81 ui/internal/window/outbox.go:240
+#: ui/internal/contextmenu/text.go:84 ui/internal/window/outbox.go:240
 msgid "Cancel Sending"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:83 ui/internal/toolbar/text.go:150
+#: ui/internal/contextmenu/text.go:86 ui/internal/toolbar/text.go:150
 #: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:125
 #: ui/data/ui/window.ui:491
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:95 ui/internal/toolbar/text.go:140
+#: ui/internal/contextmenu/text.go:98 ui/internal/toolbar/text.go:140
 #: ui/internal/window/status.go:270 ui/data/ui/preferences.ui:257
 #: ui/data/ui/window.ui:171
 msgid "Check for New Mail"
 msgstr ""
 
 #. TRANSLATORS: In the menu of a folder in the sidebar.
-#: ui/internal/contextmenu/text.go:98
+#: ui/internal/contextmenu/text.go:101
 msgid "Mark All as Read"
 msgstr ""
 
 #. TRANSLATORS: In the menu of the Junk folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:102
+#: ui/internal/contextmenu/text.go:105
 msgid "Empty Junk"
 msgstr ""
 
 #. TRANSLATORS: In the menu of the Trash folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:105
+#: ui/internal/contextmenu/text.go:108
 msgid "Empty Trash"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:108 ui/internal/window/favourites.go:113
+#: ui/internal/contextmenu/text.go:111 ui/internal/window/favourites.go:113
 msgid "Remove from Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:110 ui/internal/window/favourites.go:111
+#: ui/internal/contextmenu/text.go:113 ui/internal/window/favourites.go:111
 msgid "Add to Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:441
+#: ui/internal/contextmenu/text.go:116 ui/internal/widget/message_row.go:441
 #: ui/internal/window/board_conversation.go:491
 #: ui/internal/window/conversation_card.go:482 ui/internal/window/folders.go:66
 msgid "Expand"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:437
+#: ui/internal/contextmenu/text.go:118 ui/internal/widget/message_row.go:437
 #: ui/internal/window/board_conversation.go:494
 #: ui/internal/window/conversation_card.go:480 ui/internal/window/folders.go:63
 msgid "Collapse"
 msgstr ""
 
 #. TRANSLATORS: The heading of the question before the Trash is emptied.
-#: ui/internal/contextmenu/text.go:132
+#: ui/internal/contextmenu/text.go:135
 msgid "Empty the Trash?"
 msgstr ""
 
 #. TRANSLATORS: The button that empties the Trash or the Junk folder.
-#: ui/internal/contextmenu/text.go:134
+#: ui/internal/contextmenu/text.go:137
 msgid "_Empty"
 msgstr ""
 
 #. TRANSLATORS: The heading of the question before the Junk folder is emptied.
-#: ui/internal/contextmenu/text.go:138
+#: ui/internal/contextmenu/text.go:141
 msgid "Empty the Junk Folder?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages the folder shows.
-#: ui/internal/contextmenu/text.go:141
+#: ui/internal/contextmenu/text.go:144
 #, c-format
 msgid ""
 "%d message will be deleted for good. Older messages that are only on the "
@@ -1733,12 +1733,12 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: What failed when a message could not be moved to another folder.
-#: ui/internal/contextmenu/text.go:150
+#: ui/internal/contextmenu/text.go:153
 msgid "Moving the message"
 msgstr ""
 
 #. TRANSLATORS: What failed when messages could not be moved to another folder; %d is their number.
-#: ui/internal/contextmenu/text.go:153
+#: ui/internal/contextmenu/text.go:156
 #, c-format
 msgid "Moving %d message"
 msgid_plural "Moving %d messages"
@@ -1746,17 +1746,17 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: What failed when a folder could not be marked read.
-#: ui/internal/contextmenu/text.go:159
+#: ui/internal/contextmenu/text.go:162
 msgid "Marking the folder as read"
 msgstr ""
 
 #. TRANSLATORS: What failed when the Junk folder could not be emptied.
-#: ui/internal/contextmenu/text.go:166
+#: ui/internal/contextmenu/text.go:169
 msgid "Emptying the Junk folder"
 msgstr ""
 
 #. TRANSLATORS: What failed when the Trash could not be emptied.
-#: ui/internal/contextmenu/text.go:169
+#: ui/internal/contextmenu/text.go:172
 msgid "Emptying the Trash"
 msgstr ""
 
@@ -1966,7 +1966,7 @@ msgstr ""
 msgid "More Actions"
 msgstr ""
 
-#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1131
+#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1135
 #: ui/data/ui/window.ui:178
 msgid "Search"
 msgstr ""
@@ -7916,11 +7916,11 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1058
+#: ui/internal/window/window.go:1062
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1137 ui/data/ui/window.ui:148
+#: ui/internal/window/window.go:1141 ui/data/ui/window.ui:148
 msgid "Messages"
 msgstr ""
 

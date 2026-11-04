@@ -276,6 +276,7 @@ func (w *Window) setMode(m board.Mode) {
 	w.mode = m
 	w.syncModeSwitches(m)
 	w.applyMessageAccels()
+	w.refreshPrint()
 	if leaving == board.ModeCalendar {
 		w.leaveCalendar()
 	}

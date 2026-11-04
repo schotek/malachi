@@ -13,6 +13,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/contextmenu"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/printing"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -29,6 +30,7 @@ import (
 var messageMenuActions = map[contextmenu.ItemID]string{
 	contextmenu.OpenMessage:  "win.open-message",
 	contextmenu.EditDraft:    "win.open-message",
+	contextmenu.Print:        "win.print",
 	contextmenu.Reply:        "win.reply",
 	contextmenu.ReplyAll:     "win.reply-all",
 	contextmenu.Forward:      "win.forward",
@@ -138,6 +140,8 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 		MixedAccounts: st.mixed,
 		Open:          st.open,
 		Draft:         w.model.inDrafts(row.Message),
+		OfferPrint:    true,
+		Print:         st.count <= printing.MaxMessages,
 		Outbox:        st.outbox,
 		OfferReply:    st.supported.Reply,
 		OfferReplyAll: st.supported.ReplyAll,
