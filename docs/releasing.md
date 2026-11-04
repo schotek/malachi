@@ -264,6 +264,10 @@ permission for Microsoft's components is in [LICENSING.md](../LICENSING.md)
 - **Updates** (Velopack or a check against GitHub Releases, the update
   stopping the daemon gracefully first) and a winget manifest.
 
+`.github/workflows/windows-msix.yml` builds an MSIX **test** package by
+hand only (never on a tag, kept one day), a trial of the Microsoft Store
+route; see [windows-port.md §17](windows-port.md#17-before-a-public-release).
+
 Release notes stay in `NEWS` for every platform; the AppStream metainfo
 it feeds is Linux's.
 
