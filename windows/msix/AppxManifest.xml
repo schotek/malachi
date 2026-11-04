@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+The manifest of the MSIX test package (build-msix.ps1, the workflow
+windows-msix.yml): the unpackaged app folder of build.ps1 app, unchanged,
+given a package identity. A trial of the Microsoft Store route
+(docs/windows-port.md section 17), not a release artefact.
+
+The tokens in double braces are filled in by build-msix.ps1.
+
+What the package changes for the app, and what the test is for:
+- desktop6 FileSystemWriteVirtualization and RegistryWriteVirtualization
+  disabled (restricted capability unvirtualizedResources): config.toml,
+  store.db and the WebView2 data stay in the real %LOCALAPPDATA%\Malachi
+  Mail\, the settings in the real HKCU, as the unpackaged app keeps them.
+  Virtualised AppData was why MSIX was ruled out (docs/windows-port.md,
+  Packaging). The Store accepts the capability only with a justification.
+- The app notifications: a packaged app's AppNotificationManager.Register()
+  takes its COM class from this manifest (ToastActivatorCLSID and the
+  ExeServer below; the arguments are the ones the unpackaged registration
+  uses). The GUID is this package's own, never reused elsewhere.
+- Not declared yet: mailto: (windows.protocol), the start at sign-in
+  (windows.startupTask). The app still writes its own HKCU registrations;
+  whether Windows honours them from a package is part of the test.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  IgnorableNamespaces="uap rescap desktop desktop6 com">
+
+  <Identity
+    Name="{{IdentityName}}"
+    Publisher="{{Publisher}}"
+    Version="{{Version}}"
+    ProcessorArchitecture="{{Arch}}" />
+
+  <Properties>
+    <DisplayName>Malachi Mail</DisplayName>
+    <PublisherDisplayName>{{PublisherDisplayName}}</PublisherDisplayName>
+    <Logo>Assets\Package\StoreLogo.png</Logo>
+    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
+    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
+  </Properties>
+
+  <Dependencies>
+    <!-- Windows 11, as the unpackaged app (windows/README.md). The Windows
+         App SDK is inside the app folder (self-contained), so there is no
+         framework dependency. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+    <Resource Language="cs-cz" />
+  </Resources>
+
+  <Applications>
+    <Application Id="MalachiMail" Executable="MalachiMail.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Malachi Mail"
+        Description="Malachi Mail"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Package\Square150x150Logo.png"
+        Square44x44Logo="Assets\Package\Square44x44Logo.png" />
+      <Extensions>
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="6F1B2C4A-8E37-4D5B-9A21-3C7E5F0D8B64" />
+        </desktop:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="MalachiMail.exe" DisplayName="Malachi Mail" Arguments="----AppNotificationActivated:">
+              <com:Class Id="6F1B2C4A-8E37-4D5B-9A21-3C7E5F0D8B64" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+</Package>

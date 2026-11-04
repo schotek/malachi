@@ -395,7 +395,7 @@ stáhne kdokoli přihlášený). Windows instalátory (Inno Setup, x64 a ARM64,
 nepodepsané) staví od 2026-11-01 jen CI u tagu (`windows.yml`, ARM64
 křížově) a připojí je k vydání; zip ani ruční nahrávání už neexistují
 (`build.ps1` nemá `package` ani `release`, Makefile `windows-installer`;
-rozhodnutí vlastníka, `docs/releasing.md` §7). Soubory vydání se jmenují
+rozhodnutí vlastníka, `docs/releasing.md` §7). Testovací balíček MSIX (zkouška cesty přes Microsoft Store, 2026-11-04) staví jen ručně spouštěný `windows-msix.yml` přes `windows/msix/build-msix.ps1`, podepsaný jednorázovým self-signed certifikátem nebo nepodepsaný pro Partner Center, artefakt jeden den, nikdy k vydání; co čeká na ověření, je v `docs/windows-port.md` §17. Soubory vydání se jmenují
 `Malachi-Mail-<verze>-<os>-<arch>…` (`macos-universal.dmg`,
 `windows-x64-setup.exe`, `linux-x64.flatpak`, `linux-x64.deb`,
 `linux-x64-fedora42.rpm`; architektury všude `x64`/`arm64`, rozhodnutí

@@ -5372,6 +5372,21 @@ cross-built, attaches them, and there is no zip (§13).
   open to individuals in the EU). The executables and the installers are
   unsigned: SmartScreen warns when the installer is downloaded and run
   (*More info → Run anyway*).
+- **MSIX (trial).** The Microsoft Store re-signs an MSIX package for free
+  (an EXE or MSI it does not), so the owner asked for a test package
+  (2026-11-04): `.github/workflows/windows-msix.yml`, by hand only, packs
+  the app folder of `build.ps1 app` with `windows\msix\build-msix.ps1` and
+  `windows\msix\AppxManifest.xml` (write virtualisation of AppData and
+  HKCU disabled through the restricted capability `unvirtualizedResources`,
+  the notification activator declared in the manifest, `mailto:` and Run
+  still the app's own), signed with a self-signed certificate made for the
+  run (its `.cer` in the artifact: import it into *Local Machine → Trusted
+  People*, then open the `.msix`) or unsigned for Partner Center. Not a
+  release artefact. Unverified, to be tried on a Windows machine: that the
+  app starts packaged (MRT Core and `MalachiMail.pri`, WebView2), the data
+  and settings land where the unpackaged app keeps them, notifications and
+  their clicks, `mailto:`, Run, the Claude registration of `malachi-mcp`,
+  and whether the Store accepts `unvirtualizedResources`.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs
