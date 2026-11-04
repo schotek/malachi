@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 10:41+0000\n"
+"POT-Creation-Date: 2026-11-04 11:06+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1898,6 +1898,53 @@ msgstr "Zobrazovat Všechny doručené"
 #: ui/internal/unified/text.go:31
 msgid "In the sidebar when you have more than one mail account"
 msgstr "V postranním panelu, když máte více než jeden poštovní účet"
+
+#. TRANSLATORS: File menu item that prints the selected message, conversation, event or day.
+#: ui/internal/printing/printing.go:37
+msgid "_Print…"
+msgstr "_Tisk…"
+
+#. TRANSLATORS: toolbar button that prints the selected message, conversation, event or day.
+#: ui/internal/printing/printing.go:43
+msgid "Print"
+msgstr "Tisk"
+
+#: ui/internal/printing/printing.go:71 ui/data/ui/compose_pane.ui:172
+msgid "Subject"
+msgstr "Předmět"
+
+#: ui/internal/printing/printing.go:75
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
+#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
+#: ui/data/ui/window.ui:797
+msgid "From"
+msgstr "Od"
+
+#: ui/internal/printing/printing.go:76
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
+#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
+#: ui/data/ui/window.ui:823
+msgid "To"
+msgstr "Komu"
+
+#: ui/internal/printing/printing.go:77
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
+#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
+#: ui/data/ui/window.ui:851
+msgid "Cc"
+msgstr "Kopie"
+
+#: ui/internal/printing/printing.go:78 ui/data/ui/compose_pane.ui:138
+msgid "Bcc"
+msgstr "Skrytá kopie"
+
+#: ui/internal/printing/printing.go:79
+msgid "Date"
+msgstr "Datum"
+
+#: ui/internal/printing/printing.go:80
+msgid "Attachments"
+msgstr "Přílohy"
 
 #. TRANSLATORS: a comment on a service-desk request that the customer reads too.
 #: ui/internal/jira/compose.go:74
@@ -7340,24 +7387,6 @@ msgstr "Příprava přeposílané zprávy"
 msgid "Preparing the reply"
 msgstr "Příprava odpovědi"
 
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
-#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
-#: ui/data/ui/window.ui:797
-msgid "From"
-msgstr "Od"
-
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
-#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
-#: ui/data/ui/window.ui:823
-msgid "To"
-msgstr "Komu"
-
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
-#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
-#: ui/data/ui/window.ui:851
-msgid "Cc"
-msgstr "Kopie"
-
 #: ui/internal/window/conversation_card.go:758
 #: ui/internal/window/message_view.go:339
 msgid ""
@@ -9817,14 +9846,6 @@ msgstr "Vložit _obrázek…"
 msgid "Cc/Bcc"
 msgstr "Kopie/Skrytá"
 
-#: ui/data/ui/compose_pane.ui:138
-msgid "Bcc"
-msgstr "Skrytá kopie"
-
-#: ui/data/ui/compose_pane.ui:172
-msgid "Subject"
-msgstr "Předmět"
-
 #: ui/data/ui/compose_pane.ui:281
 msgid "Bold (Ctrl+B)"
 msgstr "Tučně (Ctrl+B)"
@@ -10665,7 +10686,8 @@ msgstr "Položky lišty Pošty"
 msgid ""
 "The toolbar's items in order, as the user arranged them; empty for the "
 "default toolbar."
-msgstr "Položky lišty v pořadí, jak je uživatel uspořádal; prázdné pro výchozí lištu."
+msgstr ""
+"Položky lišty v pořadí, jak je uživatel uspořádal; prázdné pro výchozí lištu."
 
 #: data/io.github.schotek.Malachi.gschema.xml:332
 msgid "The items of the Board's toolbar in the List style"
@@ -10687,7 +10709,8 @@ msgstr "Co ukazují položky lišt"
 msgid ""
 "Icons only, icons with their labels or labels only, for every toolbar of the "
 "main window."
-msgstr "Jen ikony, ikony s popisky nebo jen popisky, pro všechny lišty hlavního okna."
+msgstr ""
+"Jen ikony, ikony s popisky nebo jen popisky, pro všechny lišty hlavního okna."
 
 #: data/io.github.schotek.Malachi.desktop.in:3
 msgid "Email Client"

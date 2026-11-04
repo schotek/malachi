@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 10:41+0000\n"
+"POT-Creation-Date: 2026-11-04 11:07+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1783,6 +1783,53 @@ msgstr ""
 #. TRANSLATORS: The subtitle of the "Show All Inboxes" switch in Preferences.
 #: ui/internal/unified/text.go:31
 msgid "In the sidebar when you have more than one mail account"
+msgstr ""
+
+#. TRANSLATORS: File menu item that prints the selected message, conversation, event or day.
+#: ui/internal/printing/printing.go:37
+msgid "_Print…"
+msgstr ""
+
+#. TRANSLATORS: toolbar button that prints the selected message, conversation, event or day.
+#: ui/internal/printing/printing.go:43
+msgid "Print"
+msgstr ""
+
+#: ui/internal/printing/printing.go:71 ui/data/ui/compose_pane.ui:172
+msgid "Subject"
+msgstr ""
+
+#: ui/internal/printing/printing.go:75
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
+#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
+#: ui/data/ui/window.ui:797
+msgid "From"
+msgstr ""
+
+#: ui/internal/printing/printing.go:76
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
+#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
+#: ui/data/ui/window.ui:823
+msgid "To"
+msgstr ""
+
+#: ui/internal/printing/printing.go:77
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
+#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
+#: ui/data/ui/window.ui:851
+msgid "Cc"
+msgstr ""
+
+#: ui/internal/printing/printing.go:78 ui/data/ui/compose_pane.ui:138
+msgid "Bcc"
+msgstr ""
+
+#: ui/internal/printing/printing.go:79
+msgid "Date"
+msgstr ""
+
+#: ui/internal/printing/printing.go:80
+msgid "Attachments"
 msgstr ""
 
 #. TRANSLATORS: a comment on a service-desk request that the customer reads too.
@@ -7048,24 +7095,6 @@ msgstr ""
 msgid "Preparing the reply"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
-#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
-#: ui/data/ui/window.ui:797
-msgid "From"
-msgstr ""
-
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
-#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
-#: ui/data/ui/window.ui:823
-msgid "To"
-msgstr ""
-
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
-#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
-#: ui/data/ui/window.ui:851
-msgid "Cc"
-msgstr ""
-
 #: ui/internal/window/conversation_card.go:758
 #: ui/internal/window/message_view.go:339
 msgid ""
@@ -9437,14 +9466,6 @@ msgstr ""
 
 #: ui/data/ui/compose_pane.ui:81
 msgid "Cc/Bcc"
-msgstr ""
-
-#: ui/data/ui/compose_pane.ui:138
-msgid "Bcc"
-msgstr ""
-
-#: ui/data/ui/compose_pane.ui:172
-msgid "Subject"
 msgstr ""
 
 #: ui/data/ui/compose_pane.ui:281

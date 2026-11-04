@@ -672,6 +672,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         messageActions?.openSelected()
     }
 
+    /// File ▸ Print… and the toolbars' Print (docs/plans/toolbar-customization.md
+    /// §8): Mail the selection, Calendar the selected event or the day.
+    @objc func printMail(_ sender: Any?) {
+        switch mode {
+        case .mail: messageActions?.printSelected()
+        case .calendar: messageActions?.printCalendar(calendarController)
+        case .board: break
+        }
+    }
+
     /// Move To in a message's context menu: the item's folder id.
     @objc func moveToFolder(_ sender: Any?) {
         guard let id = (sender as? NSMenuItem)?.representedObject as? String else { return }
@@ -740,6 +750,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         case Action.trustSender: return f.trustSender
         case Action.openMessage: return f.on && f.open
         case Action.moveToFolder: return f.move
+        case Action.printMail:
+            switch mode {
+            case .mail: return f.on && f.count <= Printing.maxMessages
+            case .calendar: return messageActions != nil
+            case .board: return false
+            }
         // A message not in the Outbox, and the chosen Claude app can read
         // the mail (ui/internal/assistant `Pick`, no fallback).
         case Action.askAssistant: return f.on && !f.outbox && state.assistant.pick(needsBridge: true).ok

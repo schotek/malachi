@@ -50,6 +50,11 @@ import MalachiCore
     /// `representedObject`.
     @objc optional func openMessage(_ sender: Any?)
     @objc optional func moveToFolder(_ sender: Any?)
+    /// File ▸ Print… (⌘P) and the toolbars' Print: the selection, the
+    /// conversation, the message window's message, or in Calendar the
+    /// selected event, else the day (docs/plans/toolbar-customization.md
+    /// §8). Not `print:`, which every view answers by printing itself.
+    @objc optional func printMail(_ sender: Any?)
     /// Mail or Board (MalachiCore `Board.Mode`): the menu item's tag, the
     /// toolbar switch's selected segment. Swift-first.
     @objc optional func setWindowMode(_ sender: Any?)
@@ -138,6 +143,7 @@ enum Action {
     static let trustSender = #selector(MalachiActions.trustSender(_:))
     static let openMessage = #selector(MalachiActions.openMessage(_:))
     static let moveToFolder = #selector(MalachiActions.moveToFolder(_:))
+    static let printMail = #selector(MalachiActions.printMail(_:))
     static let setWindowMode = #selector(MalachiActions.setWindowMode(_:))
     static let setBoardStyle = #selector(MalachiActions.setBoardStyle(_:))
     static let boardDone = #selector(MalachiActions.boardDone(_:))

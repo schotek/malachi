@@ -123,6 +123,37 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         }
     }
 
+    func printSelected() {
+        let window = mainWindow()
+        let mailbox = list.mailbox
+        let cache = cache
+        let role: @MainActor (MessageSummary) -> FolderRole? = { s in
+            mailbox.model.folderRole(FolderKey(account: s.accountId, folder: s.folderId))
+        }
+        list.selectedIDs { [weak self] rows, _ in
+            guard let self else { return }
+            // The rows' messages with their accounts: a conversation row's
+            // folder members, else the row's message.
+            var messages: [MessageSummary] = []
+            for r in rows {
+                let ids = mailbox.model.rowIDs(r) ?? [r.message.id]
+                for id in ids {
+                    if let s = self.actions.summary(id) {
+                        messages.append(s)
+                    } else if id == r.message.id {
+                        messages.append(r.message)
+                    }
+                }
+            }
+            let layout: Printing.Layout = rows.count > 1 ? .pages : (messages.count > 1 ? .conversation : .single)
+            PrintController.printMessages(messages, layout: layout, cache: cache, role: role, window: window)
+        }
+    }
+
+    func printCalendar(_ calendar: CalendarController) {
+        PrintController.printCalendar(calendar, cache: cache, window: mainWindow())
+    }
+
     func moveSelected(to folder: FolderID) {
         list.selectedIDs { [weak self] _, ids in
             self?.actions.moveTo(ids, folder: folder)
@@ -218,6 +249,14 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     func reply(_ id: MessageID) {
         actions.openCompose(.reply, id)
+    }
+
+    func printMessage(_ summary: MessageSummary, from window: NSWindow?) {
+        let mailbox = list.mailbox
+        let s = actions.summary(summary.id) ?? summary
+        PrintController.printMessages([s], layout: .single, cache: cache, role: { s in
+            mailbox.model.folderRole(FolderKey(account: s.accountId, folder: s.folderId))
+        }, window: window)
     }
 
     func replyAll(_ id: MessageID) {

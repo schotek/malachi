@@ -105,6 +105,12 @@ protocol MessageActions: AnyObject {
     /// Moves what the selection stands for to another folder of its
     /// account (Move To).
     func moveSelected(to folder: FolderID)
+    /// Prints the selection: one message, a conversation row's folder
+    /// members as a conversation, several rows each on its own page
+    /// (`PrintController`, P5).
+    func printSelected()
+    /// Prints the Calendar's selected event, else its day (P8).
+    func printCalendar(_ calendar: CalendarController)
 
     /// The Assistant menu (ui/internal/assistant): a message action on the
     /// selection, a conversation row's folder members newest first or the
@@ -162,6 +168,8 @@ protocol MessageActionDelegate: AnyObject {
     /// through the message cache's `onLoaded`.
     func loadImages(_ id: MessageID)
     func trustSender(_ id: MessageID)
+    /// Prints the message (its window's File ▸ Print…).
+    func printMessage(_ summary: MessageSummary, from window: NSWindow?)
     /// remote.go `downloadPictures`: the pictures bar's Download Pictures;
     /// a failure toasts in `window` (the one the click came from).
     func downloadPictures(_ id: MessageID, from window: NSWindow?)

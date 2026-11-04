@@ -245,6 +245,20 @@ Rozhodnutí vlastníka (AskUserQuestion 2026-11-04, O1):
   Ne v menu „…“ ani v kontextovém menu (pokud ho tam nedoplní T8, protože
   na liště není).
 
+Rozhodnutí vlastníka (AskUserQuestion 2026-11-04, po průzkumu kódu):
+
+- **P5 Stránky**: konverzace souvisle (zprávy od nejstarší, oddělené
+  čarou a hlavičkou), víc vybraných zpráv každá na nové stránce.
+- **P6 Hlavička**: Od, Komu, Kopie, Datum, Předmět, seznam příloh (jména
+  a velikosti, bez vložených obrázků), Skrytá kopie jen u vlastních zpráv
+  (složka role Odeslané, Koncepty, Outbox), systémové záhlaví a zápatí
+  stránky (`NSPrintInfo.isHeaderAndFooter`: název úlohy, datum, číslo
+  stránky).
+- **P7 Den v Kalendáři** jako seznam událostí dne (agenda: celodenní
+  nahoře, pak čas, název, místo).
+- **P8 ⌘P v Kalendáři**: vybraná událost, jinak den, na kterém stojí pohled
+  (u týdne a měsíce den kotvy).
+
 Návrh (podrobnosti po průzkumu, než začne M5):
 
 - **Jen sanitizované HTML.** Tiskový dokument skládá klient z `message.body`
@@ -825,3 +839,54 @@ Schované zůstávají na svém místě (`Collapsed` v pořadí `ToolbarStrip`).
 - **Q-W9 Ikony a text**: popisek pod ikonou (jako `AppBarButton`, vyšší
   řádky), nebo vedle ní (užší pruhy se dřív přeplní)?
 - **Q-W10 Obnovit výchozí**: s otázkou, nebo bez?
+
+## 16. As built (tisk na macOS, 2026-11-04)
+
+- Go reference `ui/internal/printing` (`printing.go`, testy; v
+  `po/POTFILES`): `Header`/`HeaderRows` (Předmět, Od, Komu, Kopie, Skrytá
+  kopie, Datum, Přílohy; prázdné vynechané, předmět `Strong`), `Escape`,
+  `Body` (sanitizované HTML doslova, jinak text v `<pre>`), `Message`, `CSS`,
+  `Fragment` s `Single`/`Conversation` (čára)/`Pages` (zalomení, P5),
+  `EventSection`, `DaySection`, `MaxMessages` 50, texty `MenuTitle`
+  („_Print…“) a `ItemLabel` („Print“). Nové msgid: „_Print…“, „Print“
+  a bez kontextu „Date“ a „Attachments“ (dosud jen s kontextem), česky
+  Tisk…, Tisk, Datum, Přílohy; všechny čtyři ve
+  `windows/parity-exclusions.txt` do Windows portu.
+- Swift port `MalachiCore/Printing/Printing.swift` + `PrintingTests` (Go 1:1).
+- macOS `MalachiMail/Printing/PrintController.swift`: zprávy (hlavička
+  z `message.get` přes cache, tělo z `message.body` s `trimQuoted: false`
+  přímo přes `cache.client`, aby se v panelu čtení nepřepnula zobrazená
+  varianta; obrázky podle výchozí politiky zprávy; Skrytá kopie jen
+  u složek role sent/drafts/outbox), událost (`Cal.detailOf`: čas,
+  opakování, místo, kalendář, lidé, účastníci s odpovědí, poznámky) a den
+  (`Cal.agenda` na jeden den, prázdný den „No events in this period.“).
+  `PrintJob` tiskne skrytý `MessageWebView` (stejná CSP, rule list, proxy
+  a `malachi-cid:`) vložený do neviditelného okna mimo obrazovku, vždy
+  přes `runModal(for:)`. Synchronní `run()` a pohled mimo okno tiskly
+  nekonečně prázdných stránek (první běh vyrobil 678 MB, smazané). Se
+  systémovým záhlavím a zápatím.
+- Vstupy: akce `printMail:` (ne `print:`, na které odpovídá každý pohled).
+  Soubor ▸ Tisk… ⌘P. Hlavní okno tiskne v Poště výběr (jedna zpráva,
+  řádek konverzace jako konverzace od nejstarší, víc řádků po stránkách,
+  nejvýš 50), v Kalendáři vybranou událost, jinak den kotvy (P8), na
+  Nástěnce nic. Okno zprávy tiskne svou zprávu. Položky lišty `print`
+  v Poště a Kalendáři (`Feature.print` teď zapnutá, paleta je nabízí).
+- Vývojové: krok `print` a `MALACHI_PRINT_PDF=<cesta>` (uloží PDF bez
+  panelu, nejvýš 20 stránek).
+- Ověřeno: `go test ./internal/printing`, `swift build` bez varování,
+  `swift test --filter PrintingTests`, `check-strings.py` (nic nového),
+  `make po` (2031 přeložených, bez fuzzy). Izolovaný běh se vzorky
+  Kalendáře vytiskl den do PDF: 1 stránka, záhlaví a zápatí, dvě události
+  s časem a místem.
+- Pád po třetím běhu (SIGABRT): AppKit volá `didRun` modální tiskové
+  operace na vlastním vlákně a `host.contentView = nil` tam shodilo
+  proces. `didRun` je teď `nonisolated` a úklid jde na hlavní vlákno.
+  Sestaveno, opakovaný běh už ne (tři běhy na položku vyčerpané).
+- Pád u vlastníka při tisku dvou zpráv (SIGTRAP, „continuation resumed
+  more than once“): `MessageCache.fetch` volá čekající po každé polovině
+  (message.get, tělo) i při pozdějších změnách. `PrintController.section`
+  teď pokračuje jednou (`Once`), a to až když nic neběží
+  (`!getting && !fetching`), aby hlavička měla Kopii a přílohy.
+- Neověřeno (pro vlastníka): obě opravy pádů, tisk zprávy, konverzace, výběru a události
+  (vzorová data bez démona zprávy nemají), panel tisku, obrázky `cid:`
+  a `data:` v tisku, okno zprávy.

@@ -58,6 +58,8 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         /// Undo the newest move of mail (Edit ▸ Undo, `MainWindow`).
         static let undo = NSToolbarItem.Identifier("undo")
         static let loadPictures = NSToolbarItem.Identifier("loadPictures")
+        /// Print (`printMail:`, §8 of the plan).
+        static let print = NSToolbarItem.Identifier("print")
     }
 
     /// The order of the plan: sidebar section, list section, message
@@ -239,7 +241,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// hides itself (`CRMToolbarItem`), so it counts as there; printing
     /// does not exist yet.
     private var features: Toolbar.Features {
-        var f = Toolbar.Features(have: [.crm])
+        var f = Toolbar.Features(have: [.crm, .print])
         if showsAssistant, assistantMenu != nil {
             f.have.insert(.assistant)
         }
@@ -609,6 +611,12 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             it.target = nil
             it.action = Selector(("undo:"))
             it.enabledProvider = { [weak self] in self?.undoEnabled?() ?? false }
+            it.visibilityPriority = .low
+            return it
+        case ID.print:
+            let it = button(id, image: Icon.symbol("printer", size: .toolbar), label: Printing.itemLabel,
+                            action: Action.printMail)
+            it.toolTip = Printing.itemLabel + " (⌘P)"
             it.visibilityPriority = .low
             return it
         case ID.loadPictures:

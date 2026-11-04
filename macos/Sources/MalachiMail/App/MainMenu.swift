@@ -162,6 +162,10 @@ enum MainMenu {
         m.addItem(item(mn(L10n.T("Insert _Image…")), Action.insertImage))
         m.addItem(.separator())
         m.addItem(item(mn(L10n.T("_Discard")), Action.discardDraft))
+        m.addItem(.separator())
+        // docs/plans/toolbar-customization.md §8: the main window and the
+        // message windows answer it (`printMail:`).
+        m.addItem(item(mn(Printing.menuTitle), Action.printMail, key: "p"))
         return m
     }
 

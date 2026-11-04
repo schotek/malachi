@@ -20,6 +20,8 @@ import MalachiCore
 //   `toolbar-palette` opens AppKit's customization palette on the window;
 //   `toolbar-palette-end` ends its sheet, as Done does, and the window
 //   saves what the toolbar holds.
+//   `print` sends File ▸ Print… (`printMail:`) to the window; with
+//   MALACHI_PRINT_PDF=<path> PrintController saves a PDF there.
 // Each dumps the toolbar's items (`LAYOUT: toolbar item <id> <frame>
 // hidden <n>`), its separators' places, the stored arrangement and the
 // display mode.
@@ -31,6 +33,11 @@ enum DevelopmentToolbar {
         } else if step.hasPrefix("toolbar-display=") {
             main.state.settings.toolbarDisplayMode = Toolbar.parseDisplayMode(String(step.dropFirst("toolbar-display=".count)))
             later { dump("toolbar-display", main) }
+        } else if step == "print" {
+            // File ▸ Print… on what the window shows; with
+            // MALACHI_PRINT_PDF=<path> the PDF goes there, no panel.
+            main.printMail(nil)
+            say("LAYOUT: print asked")
         } else if step == "toolbar-palette" {
             main.window?.runToolbarCustomizationPalette(nil)
             later { dump("toolbar-palette", main) }

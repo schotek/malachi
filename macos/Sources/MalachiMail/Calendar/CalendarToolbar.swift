@@ -40,6 +40,8 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
         static let search = NSToolbarItem.Identifier("calendarSearch")
         static let newEvent = NSToolbarItem.Identifier("calendarNewEvent")
         static let assistant = NSToolbarItem.Identifier("calendarAssistant")
+        /// Print (`printMail:`: the selected event, else the day).
+        static let print = NSToolbarItem.Identifier("print")
     }
 
     static let items: [NSToolbarItem.Identifier] = [
@@ -84,7 +86,7 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
         super.init()
         customization?.transient = { [weak self] in self?.temporarySearch == true ? [ID.search] : [] }
         customization?.features = { [weak self] in
-            self?.showsAssistant == true ? Toolbar.Features(have: [.assistant]) : Toolbar.Features()
+            self?.showsAssistant == true ? Toolbar.Features(have: [.assistant, .print]) : Toolbar.Features(have: [.print])
         }
     }
 
@@ -304,6 +306,17 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
             it.target = nil
             it.action = CalendarAction.newEvent
             it.visibilityPriority = .high
+            return it
+        case ID.print:
+            let it = NSToolbarItem(itemIdentifier: id)
+            it.image = Icon.symbol("printer", size: .toolbar, description: Printing.itemLabel)
+            it.label = Printing.itemLabel
+            it.paletteLabel = Printing.itemLabel
+            it.toolTip = Printing.itemLabel + " (⌘P)"
+            it.isBordered = true
+            it.target = nil
+            it.action = Action.printMail
+            it.visibilityPriority = .low
             return it
         case ID.assistant:
             let label = Assistant.texts().assistant
