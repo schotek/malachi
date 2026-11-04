@@ -228,17 +228,17 @@ func (w *Window) rebuildFolderList() {
 		}
 		k := folderKey{Account: e.Account.ID, Folder: e.Folder.ID}
 		subtitle := ""
-		if e.Favourite && several {
-			// The All Inboxes item names no account, but keeps the line
-			// (a blank subtitle) so every row of the section is two lines
-			// tall and the section has one rhythm; macOS and Windows give
-			// its row the subtitle row's height instead.
-			subtitle = " "
-			if !e.Unified {
-				subtitle = accountLabel(e.Account)
-			}
+		if e.Favourite && !e.Unified && several {
+			subtitle = accountLabel(e.Account)
 		}
 		r := newFolderRow(e, subtitle)
+		if e.Unified && several {
+			// The All Inboxes item names no account, but its row is as
+			// tall as a pinned folder's two-line row, so every row of the
+			// section has one rhythm and the name stands centred (macOS
+			// and Windows give the row the subtitle row's height too).
+			r.SetSizeRequest(-1, twoLineRowHeight())
+		}
 		if e.HasChildren && r.twisty != nil {
 			r.twisty.ConnectClicked(func() { w.toggleFolder(k) })
 		}
@@ -431,6 +431,23 @@ func newFolderRow(e folderEntry, subtitle string) *folderRow {
 	r := &folderRow{ActionRow: row, badge: badge, twisty: twisty, star: star}
 	r.setUnread(e.Badge)
 	return r
+}
+
+// twoLineRowHeight is the natural height of a folder row with an account
+// under its name, measured on a throwaway row with the rows' styles
+// (newFolderRow's CSS classes), so it follows the font and the theme
+// rather than a number of pixels.
+func twoLineRowHeight() int {
+	probe := adw.NewActionRow()
+	probe.AddCSSClass("folder-row")
+	probe.AddCSSClass("favourite")
+	probe.SetTitle("X")
+	probe.SetTitleLines(1)
+	probe.SetSubtitle("X")
+	probe.SetSubtitleLines(1)
+	probe.AddPrefix(gtk.NewImageFromIconName("mail-inbox-symbolic"))
+	_, natural, _, _ := probe.Measure(gtk.OrientationVertical, -1)
+	return natural
 }
 
 // showEmptySidebarStatus explains an empty sidebar: no account, none

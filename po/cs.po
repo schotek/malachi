@@ -7419,11 +7419,11 @@ msgstr "Přiloženo ke zprávě „%s“"
 msgid "Loading the images"
 msgstr "Načtení obrázků"
 
-#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:450
+#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:467
 msgid "Folders Unavailable"
 msgstr "Složky nejsou dostupné"
 
-#: ui/internal/window/folders.go:105 ui/internal/window/folders.go:451
+#: ui/internal/window/folders.go:105 ui/internal/window/folders.go:468
 msgid "Loading folders"
 msgstr "Načtení složek"
 
@@ -7482,27 +7482,27 @@ msgstr[0] "%d nepřečtená z %d"
 msgstr[1] "%d nepřečtené z %d"
 msgstr[2] "%d nepřečtených z %d"
 
-#: ui/internal/window/folders.go:442 ui/data/ui/window.ui:788
+#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:788
 msgid "No Accounts"
 msgstr "Žádné účty"
 
-#: ui/internal/window/folders.go:443
+#: ui/internal/window/folders.go:460
 msgid "Add a mail account in Preferences to see its folders here."
 msgstr "Přidejte poštovní účet v Předvolbách a jeho složky se zobrazí zde."
 
-#: ui/internal/window/folders.go:445
+#: ui/internal/window/folders.go:462
 msgid "No Enabled Accounts"
 msgstr "Žádné povolené účty"
 
-#: ui/internal/window/folders.go:446
+#: ui/internal/window/folders.go:463
 msgid "Enable an account in Preferences to see its folders here."
 msgstr "Povolte účet v Předvolbách a jeho složky se zobrazí zde."
 
-#: ui/internal/window/folders.go:455
+#: ui/internal/window/folders.go:472
 msgid "No Folders Yet"
 msgstr "Zatím žádné složky"
 
-#: ui/internal/window/folders.go:456
+#: ui/internal/window/folders.go:473
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 

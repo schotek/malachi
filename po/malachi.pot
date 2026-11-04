@@ -7124,11 +7124,11 @@ msgstr ""
 msgid "Loading the images"
 msgstr ""
 
-#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:450
+#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:467
 msgid "Folders Unavailable"
 msgstr ""
 
-#: ui/internal/window/folders.go:105 ui/internal/window/folders.go:451
+#: ui/internal/window/folders.go:105 ui/internal/window/folders.go:468
 msgid "Loading folders"
 msgstr ""
 
@@ -7186,27 +7186,27 @@ msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:442 ui/data/ui/window.ui:788
+#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:788
 msgid "No Accounts"
 msgstr ""
 
-#: ui/internal/window/folders.go:443
+#: ui/internal/window/folders.go:460
 msgid "Add a mail account in Preferences to see its folders here."
 msgstr ""
 
-#: ui/internal/window/folders.go:445
+#: ui/internal/window/folders.go:462
 msgid "No Enabled Accounts"
 msgstr ""
 
-#: ui/internal/window/folders.go:446
+#: ui/internal/window/folders.go:463
 msgid "Enable an account in Preferences to see its folders here."
 msgstr ""
 
-#: ui/internal/window/folders.go:455
+#: ui/internal/window/folders.go:472
 msgid "No Folders Yet"
 msgstr ""
 
-#: ui/internal/window/folders.go:456
+#: ui/internal/window/folders.go:473
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
