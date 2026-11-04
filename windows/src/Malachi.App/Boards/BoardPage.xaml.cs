@@ -114,12 +114,10 @@ public sealed partial class BoardPage : UserControl
         ArgumentNullException.ThrowIfNull(boardActions);
         ArgumentNullException.ThrowIfNull(commands);
         actions = boardActions;
-        CommandBinding.Bind(MenuMail, commands.ShowMail);
-        CommandBinding.Bind(MenuBoard, commands.ShowBoard);
-        CommandBinding.Bind(MenuCalendar, commands.ShowCalendar);
+        CommandBinding.Bind(MenuNewMessage, commands.NewMessage);
         CommandBinding.Bind(MenuContacts, commands.Contacts);
-        CommandBinding.Bind(MenuAddAccount, commands.AddAccount);
         CommandBinding.Bind(MenuPreferences, commands.Preferences);
+        CommandBinding.Bind(MenuAbout, commands.About);
         CommandBinding.Bind(MenuQuit, commands.Quit);
         detail.Attach(boardActions);
         boardActions.Controller.Changed += (_, changes) => Apply(changes);
@@ -152,14 +150,6 @@ public sealed partial class BoardPage : UserControl
         {
             PageMenu.ShowAt(MoreButton);
         }
-    }
-
-    /// <summary>The window's mode, for the menu's Mail, Board and Calendar.</summary>
-    public void ShowMode(Board.Mode mode)
-    {
-        MenuMail.IsChecked = mode == Board.Mode.Mail;
-        MenuBoard.IsChecked = mode == Board.Mode.Board;
-        MenuCalendar.IsChecked = mode == Board.Mode.Calendar;
     }
 
     // Changes

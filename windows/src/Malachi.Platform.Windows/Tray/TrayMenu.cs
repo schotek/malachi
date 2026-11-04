@@ -4,9 +4,9 @@
 // Windows-only file: the menu of the notification-area icon (docs/windows-port.md
 // §10; measured in APP-SPIKES §4.2: Open in bold, New Message, Check for New
 // Mail, a separator, Quit). The labels are GTK's where GTK has the action
-// in a menu or a button (window.blp primary_menu "_New Message", the
-// refresh button's "Check for New Mail"); GTK has no Open or Quit item, so
-// those two are Windows-only strings. A GTK mnemonic (_N) becomes the Win32
+// in a menu or a button (window.blp primary_menu "_New Message" and "_Quit",
+// the refresh button's "Check for New Mail"); GTK has no Open item, so that
+// one is a Windows-only string. A GTK mnemonic (_N) becomes the Win32
 // menu's access key (&N).
 
 using System.Collections.Generic;
@@ -25,7 +25,7 @@ public static class TrayMenu
         new(TrayCommand.NewMessage, FromGtkLabel(L10n.T("_New Message"))),
         new(TrayCommand.CheckForNewMail, FromGtkLabel(L10n.T("Check for New Mail"))),
         TrayMenuItem.Separator,
-        new(TrayCommand.Quit, "&Quit"), // Windows-only string
+        new(TrayCommand.Quit, FromGtkLabel(L10n.T("_Quit"))),
     ];
 
     /// <summary>

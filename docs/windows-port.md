@@ -1944,8 +1944,8 @@ and pane buttons in narrow layouts. Below it the three panes of
 message ≥ 300; widths in the gschema keys, written only from a wide,
 uncollapsed layout). At 900 effective pixels or less the sidebar becomes an
 overlay; at 600 or less list and message form one stack with Back (GTK). Command
-rows per pane: sidebar (New Message, the primary menu `…`: New Message, Add
-Account…, Preferences, About, Quit), list (folder title and counts, Check
+rows per pane: sidebar (New Message, the primary menu `…`: New Message,
+Contacts, Preferences, About, Quit), list (folder title and counts, Check
 for New Mail, the All/Unread/Flagged `SelectorBar`, hidden while
 searching), message (Reply, Reply All, Forward; Archive, Trash; Star, ✦,
 More). The status line runs across the bottom edge (26 px, spinner,
@@ -2001,9 +2001,10 @@ shortcuts type; `MainWindow.Panes` hands that one focus to the sidebar's
 first tab stop (GTK's first focusable widget, New Message), and a click or
 Ctrl+F that comes first stays the user's. The command rows are 44
 px under the tall title bar: the sidebar's accent New Message and the
-primary menu `…` (`_New Message`, `_Add Account…`, `_Preferences`, `_About
-Malachi Mail` and a Windows-only *Quit*, with the keys beside them; GTK's
-dead `_Keyboard Shortcuts` is left out), the list's Check for New Mail and
+primary menu `…` (`_New Message`, `_Contacts`, `_Preferences`, `_About
+Malachi Mail` and `_Quit`, with the keys beside them: GTK's `primary_menu`,
+which the Board's and the Calendar's `…` repeat; no modes and no Add
+Account since 2026-11-04), the list's Check for New Mail and
 title with its counts (`MessageListPane`, no search toggle: the box is in
 the title bar), the message page's Reply, Reply All, Forward and, packed
 from the end as in the Blueprint, Archive and Trash, a gap, then the Star
@@ -2722,9 +2723,9 @@ the live cards, the rails, the height governor), and the controllers
 `ConversationController` and the comment mode of `ComposeController`,
 tested against the fake daemon. The app is thin over them:
 
-- **Adding and editing.** *Add Jira Account…* is in the primary menu `…`
-  and on the empty window (`AddJiraAccountButton`), and Jira's *Add…* in
-  *Preferences → Integrations* (`AddJiraIntegration`, §11.10); it opens `Wizard/JiraWizardWindow`, an owned
+- **Adding and editing.** *Add Jira Account…* is on the empty window
+  (`AddJiraAccountButton`), and Jira's *Add…* in *Preferences →
+  Integrations* (`AddJiraIntegration`, §11.10); it opens `Wizard/JiraWizardWindow`, an owned
   modal window like the account wizard (`ModalDialog`, shared by both)
   with the pages site, credentials and spaces. Every route that edits an
   account asks `AccountsPage.EditorOf` first (GTK's `accountEditor`): a
@@ -4761,9 +4762,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   main window with its New Message and primary menu and, once the daemon
   answered, its No Accounts page; the sidebar's New Message opens a
   composer (To, Subject, the editor) that closes without a question; the
-  primary menu's Preferences (its navigation), Add Account… (the wizard on
-  its identity page, modal, the main window enabled again after it) and
-  About (the executable's version); the No Accounts page's Add Account…;
+  primary menu's Preferences (its navigation) and About (the executable's
+  version); the No Accounts page's Add Account… (the wizard on its
+  identity page, modal, the main window enabled again after it);
   and Quit from the primary menu: the app exits with 0, the daemon it
   started exits with 0, and the socket and its key are gone; and the
   preferences' key: a `window-maximized` the session wrote into its key

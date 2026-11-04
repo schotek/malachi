@@ -1296,6 +1296,10 @@ Adw.ApplicationWindow main_window {
   };
 }
 
+// The main menu, the same in Mail, on the Board and in the Calendar (their
+// headers reuse this model: board_list.go, calendar.go) and as Windows' "…"
+// menus. The modes and adding accounts are not here: the mode switch and
+// Preferences have them (the owner's decision, 2026-11-04).
 menu primary_menu {
   section {
     item {
@@ -1317,13 +1321,17 @@ menu primary_menu {
     }
 
     item {
-      label: _("_Keyboard Shortcuts");
-      action: "win.show-help-overlay";
-    }
-
-    item {
       label: _("_About Malachi Mail");
       action: "app.about";
+    }
+  }
+
+  // Ctrl+Q (main.go app.quit): the window may only hide while the
+  // application keeps running in the background.
+  section {
+    item {
+      label: _("_Quit");
+      action: "app.quit";
     }
   }
 }
