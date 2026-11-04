@@ -169,6 +169,9 @@ public sealed partial class MainWindow
 
     // The title bar's search box: in Mail and the Calendar while the
     // layout has it or a search runs without it (O5), never in the Board.
+    // Its area keeps its room (a star column of its own) so that the mode
+    // switch beside it stays where it is in every mode; only the box and
+    // the own-words button go.
     private void SyncSearchArea()
     {
         var on = mode switch
@@ -177,14 +180,26 @@ public sealed partial class MainWindow
             Board.Mode.Calendar => calendarSearchOnBar || temporarySearch,
             _ => false,
         };
-        SearchArea.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        // The title bar centres its content by the width it asks for: a
+        // hidden box keeps the width the area had with it.
+        if (!on && SearchArea.ActualWidth > 0 && SearchBox.Visibility == Visibility.Visible)
+        {
+            searchAreaWidth = SearchArea.ActualWidth;
+        }
+        SearchArea.MinWidth = on ? 0 : searchAreaWidth;
+        SearchBox.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        SyncOwnWords();
     }
+
+    // The search area's width while its box showed (the box's own minimum
+    // until it has been laid out once).
+    private double searchAreaWidth = 240;
 
     // Ctrl+F without a search in the layout: the box shows for the search
     // and is laid out before it takes the keyboard.
     private void RevealSearchForTyping()
     {
-        if (SearchArea.Visibility == Visibility.Visible)
+        if (SearchBox.Visibility == Visibility.Visible)
         {
             return;
         }
