@@ -76,7 +76,6 @@ public sealed partial class MainWindow
     {
         CalendarView.Attach(Commands);
         CalendarView.OpenPreferencesRequested += (_, _) => OpenCalendarPreferences();
-        CalendarView.ShowMode(mode);
         // File ▸ New Event, the calendar's "+" and Ctrl+Shift+N, ShortcutMap's
         // key in every mode (macOS newEvent, ⌥⌘N): Mail and the Calendar (the
         // gate of MainWindow.Mode.cs).

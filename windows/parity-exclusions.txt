@@ -23,7 +23,6 @@ The desktop portal refused to change autostart	xdg-desktop-portal: the Backgroun
 Autostart needs xdg-desktop-portal	xdg-desktop-portal: the Background portal's reason; Windows launches at login through its Run key
 Not available in the Flatpak build	Flatpak: the Windows client is no Flatpak
 New mail	gsound: the event description of the sound theme; Windows plays the user's New Mail Notification sound
-_Keyboard Shortcuts	The primary menu's Keyboard Shortcuts: no help overlay exists in GTK either (research 05 W4)
 Window width	gschema: a key's summary or description, for dconf editors, not the UI
 Window height	gschema: a key's summary or description, for dconf editors, not the UI
 Window maximized state	gschema: a key's summary or description, for dconf editors, not the UI

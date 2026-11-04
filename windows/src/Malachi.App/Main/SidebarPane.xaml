@@ -61,25 +61,11 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                 ToolTipService.ToolTip="{l:T Msgid='Main Menu'}">
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
                 <Button.Flyout>
+                    <!-- window.blp primary_menu, the same as the Board's and the
+                         Calendar's "…" (BoardPage.xaml, CalendarPage.xaml): no
+                         modes (the title bar's switch) and no Add Account
+                         (Preferences), the owner's decision of 2026-11-04. -->
                     <MenuFlyout x:Name="PrimaryMenu" Placement="BottomEdgeAlignedRight">
-                        <!-- The window's modes at the top (macOS's View ▸ Mail, Board, Calendar; no key). -->
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuMail"
-                            AutomationProperties.AutomationId="MenuMail"
-                            GroupName="WindowMode"
-                            IsChecked="True"
-                            Text="{l:T Msgid='Mail'}" />
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuBoard"
-                            AutomationProperties.AutomationId="MenuBoard"
-                            GroupName="WindowMode"
-                            Text="{l:T Msgid='Board'}" />
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuCalendar"
-                            AutomationProperties.AutomationId="MenuCalendar"
-                            GroupName="WindowMode"
-                            Text="{l:T Msgid='Calendar'}" />
-                        <MenuFlyoutSeparator />
                         <!-- Windows-only strings: the key names beside the items. -->
                         <MenuFlyoutItem
                             x:Name="MenuNewMessage"
@@ -91,14 +77,6 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                             AutomationProperties.AutomationId="MenuContacts"
                             l:MnemonicLabel.Text="{l:T Msgid='_Contacts'}" />
                         <MenuFlyoutSeparator />
-                        <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
-                        <MenuFlyoutItem x:Name="MenuAddJiraAccount" l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
-                        <!-- macOS File ▸ Add CalDAV Calendar… (docs/calendar.md §5.8). -->
-                        <MenuFlyoutItem
-                            x:Name="MenuAddCalDAVCalendar"
-                            AutomationProperties.AutomationId="MenuAddCalDAVCalendar"
-                            Text="{l:T Msgid='Add CalDAV Calendar…'}" />
-                        <MenuFlyoutSeparator />
                         <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem
                             x:Name="MenuPreferences"
@@ -106,10 +84,10 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                             KeyboardAcceleratorTextOverride="Ctrl+," />
                         <MenuFlyoutItem x:Name="MenuAbout" l:MnemonicLabel.Text="{l:T Msgid='_About Malachi Mail'}" />
                         <MenuFlyoutSeparator />
-                        <!-- Windows-only strings: Quit has no GTK msgid (the tray's too). -->
+                        <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem
                             x:Name="MenuQuit"
-                            l:MnemonicLabel.Text="_Quit"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Quit'}"
                             KeyboardAcceleratorTextOverride="Ctrl+Q" />
                     </MenuFlyout>
                 </Button.Flyout>

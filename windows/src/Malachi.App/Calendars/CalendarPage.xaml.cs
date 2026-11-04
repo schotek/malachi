@@ -3,24 +3,22 @@
 
 // Port of macos/Sources/MalachiMail/Calendar/CalendarPageViewController.swift
 // (the page's slots, controllerChanged, open(_:anchoredTo:), anchor(for:),
-// the assistant panel's slot; CalendarEmptyView.set), of the menu part of
-// MainWindowController+Mode.swift (View ▸ Mail, Board, Calendar; File ▸ New
-// Event) and of the calendar's keys (MalachiCore's CalendarController
-// .handleKey, which macOS reaches through its menus); GTK: the calendar
-// page follows (docs/calendar.md §6.4), window/board.go's mode switch is
-// the reference of the menu.
+// the assistant panel's slot; CalendarEmptyView.set) and of the calendar's
+// keys (MalachiCore's CalendarController .handleKey, which macOS reaches
+// through its menus); GTK: the calendar page follows (docs/calendar.md
+// §6.4), and its "…" menu is window.blp's primary_menu (calendar.go).
 //
 // The main window's Calendar mode, the page that takes the panes' place
 // (MainWindow.Mode.cs, MainWindow.Calendar.cs, MainWindow.CalendarPage.cs).
 // Its bar holds CalendarBar (the sidebar toggle, Today, ‹ ›, the views, the
-// title, New Event and ✦) and the "…" menu (the window's modes, New Event,
-// Add Account…, Preferences, Quit); its content CalendarContentView (the
-// sidebar, the views, the assistant panel's slot), with the empty state of
-// Core's EmptyKind over the views (Open Preferences for No Calendars and
-// Calendar Sync Is Off, as macOS CalendarEmptyView), the toast layer and
-// the calendar's query as the title bar's search box holds it. Until the
-// window's controller exists the page shows the mode's title and the
-// empty state alone.
+// title, New Event and ✦) and the "…" menu (New Message, Contacts,
+// Preferences, About, Quit: the sidebar's primary menu); its content
+// CalendarContentView (the sidebar, the views, the assistant panel's slot),
+// with the empty state of Core's EmptyKind over the views (Open
+// Preferences for No Calendars and Calendar Sync Is Off, as macOS
+// CalendarEmptyView), the toast layer and the calendar's query as the title
+// bar's search box holds it. Until the window's controller exists the page
+// shows the mode's title and the empty state alone.
 //
 // The keys (the Board's pattern, BoardPage.OnPageKeyDown): every key the
 // page sees goes to CalendarController.HandleKey as a Cal.Press
@@ -131,21 +129,17 @@ public sealed partial class CalendarPage : UserControl
     public bool AssistantShown => content?.AssistantShown == true;
 
     /// <summary>
-    /// Connects the "…" menu to the window's commands: the modes (their
-    /// keys Ctrl+1, Ctrl+2 and Ctrl+3), New Event, Add Account…,
-    /// Preferences and Quit.
+    /// Connects the "…" menu to the window's commands: New Message,
+    /// Contacts, Preferences, About and Quit, as the sidebar's primary menu.
     /// </summary>
     public void Attach(WindowCommands commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
         this.commands = commands;
-        CommandBinding.Bind(MenuMail, commands.ShowMail);
-        CommandBinding.Bind(MenuBoard, commands.ShowBoard);
-        CommandBinding.Bind(MenuCalendar, commands.ShowCalendar);
-        CommandBinding.Bind(MenuNewEvent, commands.NewEvent);
+        CommandBinding.Bind(MenuNewMessage, commands.NewMessage);
         CommandBinding.Bind(MenuContacts, commands.Contacts);
-        CommandBinding.Bind(MenuAddAccount, commands.AddAccount);
         CommandBinding.Bind(MenuPreferences, commands.Preferences);
+        CommandBinding.Bind(MenuAbout, commands.About);
         CommandBinding.Bind(MenuQuit, commands.Quit);
     }
 
@@ -198,14 +192,6 @@ public sealed partial class CalendarPage : UserControl
         ShowEmpty(CalendarContentView.ShowsEmpty(c) ? c.EmptyKind : null);
         ShowTitle(c.Title, c.Subtitle);
         SyncBar();
-    }
-
-    /// <summary>The window's mode, for the menu's Mail, Board and Calendar.</summary>
-    public void ShowMode(Board.Mode mode)
-    {
-        MenuMail.IsChecked = mode == Board.Mode.Mail;
-        MenuBoard.IsChecked = mode == Board.Mode.Board;
-        MenuCalendar.IsChecked = mode == Board.Mode.Calendar;
     }
 
     /// <summary>The page's "…" menu (F10 while the calendar shows).</summary>

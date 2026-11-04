@@ -452,8 +452,8 @@ kontroluje u souboru s klíčem navíc vlastníka a DACL. Démon dostal jen
 platformně neutrální opravy (`exec.LookPath` pro helper, zavírání surových
 souborů před smazáním, `malachi-mcp --claude-desktop-config/--command`,
 `.gitattributes` a přenositelné Go testy). Odchylky od GTK jen z tabulky
-ve `windows/README.md` (hledání v titulkové liště, skládání panelů při 900/600 px s tlačítky v titulkové liště, menu `…`
-s Přidat účet a Konec, klávesy Windows s volbou `ctrl-r`, přístupové
+ve `windows/README.md` (hledání v titulkové liště, skládání panelů při 900/600 px s tlačítky v titulkové liště,
+klávesy Windows s volbou `ctrl-r`, přístupové
 klávesy místo mnemonik, pořadí tlačítek ContentDialog, bannery InfoBar,
 kontextová menu, vlastní náhled příloh, Mark of the Web, Uložit vše bez
 programů a zástupců, potvrzení nevypsaných odkazů, obnova WebView2 jednou na dokument, uložení konceptů
@@ -591,6 +591,24 @@ třech klientech „Nahlásit problém“ (msgid „Report an Issue“, ikona
 `malachi-report-symbolic` / `exclamationmark.bubble` / Feedback ED15),
 který otevře https://malachimail.app/#report jako O aplikaci (GTK
 `app.report-issue`, macOS a Windows `AppLinks`).
+
+Hlavní nabídka (2026-11-04, GTK a Windows, větev `fix/main-menu-parity`;
+rozhodnutí vlastníka přes AskUserQuestion, Windows prošel na obrazovce). `primary_menu` v GTK a nabídky „…“ ve
+Windows (postranní panel Pošty, Nástěnka, Kalendář) mají ve všech
+režimech stejný obsah: Nová zpráva, Kontakty | Předvolby, O aplikaci
+Malachi Mail | Konec (Ctrl+Q). Režimy (dělají totéž co přepínač),
+Přidat účet…, Přidat účet Jira…, Přidat kalendář CalDAV… (jsou
+v Předvolbách a na prázdném okně), Nová událost (je to + v liště
+Kalendáře) a mrtvé Klávesové zkratky z ní zmizely. Nový msgid `_Quit`
+(česky „Kone_c“) používá i nabídka ikony v oznamovací oblasti Windows.
+macOS zůstal beze změny, protože všechno má v menu baru. `po/` je
+upravené ručně: odkazy `window.ui` za nabídkou se posunuly o +2 a
+„_Keyboard Shortcuts“ přešlo do `#~`. Na Windows prošly `build.ps1
+app` a `lint`, `TrayMenuTests` a UI smoke testy `BoardSmokeTests`
+(nový `EveryModeHasTheSameMainMenu`), `SmokeTests` a
+`ContactsSmokeTests`. Čeká: v kontejneru na Macu `gtk.sh make build`,
+`make po` (má vyjít beze změny), `make lint` a pohled na nabídku
+v XQuartz.
 
 Pravidla pošty (2026-11-02, všechny tři klienty, v PR do `main`;
 plán, rozhodnutí R1–R14 a stav ověření v `docs/plans/rules.md`, API
@@ -1255,8 +1273,8 @@ Windows (2026-09-30, větev `feat/jira-windows`, `docs/windows-port.md`
 `Wizard/JiraWizardWindow` (stránky site, přihlášení, spaces; vlastní modální
 okno přes `ModalDialog` jako poštovní průvodce), nastavení
 `Preferences/JiraAccountWindow` (+ `JiraListEditor`, `JiraStatusPicker`;
-Uložit a Zrušit dole), *Přidat účet Jira…* v nabídce `…`, v „+“ Předvoleb
-→ Účty a na prázdném okně, karta issue `Reader/IssueCardView` (pilulka
+Uložit a Zrušit dole), *Přidat účet Jira…* na prázdném okně a v Předvolbách
+→ Integrace, karta issue `Reader/IssueCardView` (pilulka
 jako `DropDownButton` s přechody), okno komentáře
 `Compose/ComposeWindow.Comment.cs` (viditelnost jako `SelectorBar`),
 zobrazení konverzace `Reader/Conversation/` (`ConversationView`,
@@ -2643,7 +2661,7 @@ ChatGPT v panelu; (CP3) v Toolbxu `make build`, `go test
 Archivovat, Ctrl+1/2 na české klávesnici, R v úzkém Seznamu; na Windows
 `build.ps1 app`/`test`/`lint` a smoke; skutečný běh triage a návrhu
 odpovědi s Claude Code i Codexem. GTK nemá okno zkratek
-(`win.show-help-overlay` ukazuje nikam), takže Ctrl+1/2 a E/D/R nejsou
+(položka Klávesové zkratky z hlavní nabídky zmizela 2026-11-04), takže Ctrl+1/2 a E/D/R nejsou
 nikde vypsané (rozhodnutí vlastníka).
 
 Kalendář (stav 2026-10-17, větev `feat/calendar`; návrh a poznámky „As
@@ -2880,9 +2898,8 @@ Platform: `Notifications/CalendarAlertActivation`, `CalendarAlertResponse`,
 `NotificationArguments.ForAlert`/`ForInvitation`. App (jmenný prostor
 `Malachi.App.Calendars`): třísegmentový přepínač režimu
 (`ModeCalendarButton`; s vypnutou nástěnkou zůstává se zašedlým segmentem
-Nástěnka jako na macOS, dřív se na Windows schoval), Pošta/Nástěnka/Kalendář
-v nabídkách `…` postranního panelu, nástěnky i kalendáře
-(`MainWindow.Mode.cs`, `MainWindow.Calendar.cs`, `MainWindow.CalendarPage.cs`,
+Nástěnka jako na macOS, dřív se na Windows schoval;
+`MainWindow.Mode.cs`, `MainWindow.Calendar.cs`, `MainWindow.CalendarPage.cs`,
 `Shell/AppState.Calendar.cs` se zdrojem na okno a `MALACHI_CALENDAR_SAMPLES`,
 `Integration.Calendar.cs`); stránka `Calendars/CalendarPage` s lištou
 `CalendarBar` (přepínač postranního panelu, Dnes, ‹ ›, Den/Týden/Měsíc/Agenda
@@ -2967,7 +2984,7 @@ rozcházejí) a okno `Wizard/CalDAVWizardWindow` (modální 560×560 přes
 `ModalDialog`, chyby v InfoBaru, Přidat a pak Zrušit, Enter spustí Zjistit
 kalendáře a pak Přidat, výběr poštovního účtu jen když server nechá
 plánování klientovi, dialog důvěry certifikátu poštovního průvodce; vstupy:
-nabídka `…`, stránka Žádné účty, postranní panel kalendáře, Předvolby →
+stránka Žádné účty, postranní panel kalendáře, Předvolby →
 Kalendář; nabídka „+“ v Předvolbách → Účty ho nemá, jako
 macOS M9). Testy: `tests/Malachi.Core.Tests/Calendars/*` (Go testy 1:1
 a případy Swiftu, asi 614), `Controllers/Calendar*Tests`,

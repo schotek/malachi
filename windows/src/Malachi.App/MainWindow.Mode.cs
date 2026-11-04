@@ -155,8 +155,6 @@ public sealed partial class MainWindow
                 ShowMailMode();
                 break;
         }
-        BoardView.ShowMode(mode);
-        CalendarView.ShowMode(mode);
         Commands.RefreshAll();
         SyncModeSwitch();
         SyncOwnWordsMode();
@@ -412,7 +410,6 @@ public sealed partial class MainWindow
         integration.BoardController.ToastRequested += (_, text) => Toasts.Show(text);
         BoardView.Attach(actions, Commands);
         AttachBoardParts(integration, actions);
-        BoardView.ShowMode(mode);
         // Show the Board, and Open at Launch once the preferences are known.
         boardEnabledToken = state.BoardPreferences.Observe(BoardPreferencesChanged);
         Closed += (_, _) =>
