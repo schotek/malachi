@@ -1148,3 +1148,20 @@ msgid: `Reply`, `Reply All`, `Forward`, `Archive`, `Move to Trash`,
 - Otevřené: přetéká jen pruh zprávy (Q-W3); Ikony a text dává popisek vedle
   ikony (Q-W9); ✦ v přetoku se v „Další akce“ nenabízí; Zpět není zašedlé bez
   přesunu; sbalení postranního panelu Pošty se neukládá.
+
+## 20. As built (tisk na Windows, 2026-11-04)
+
+Port na větvi `feat/print-windows`, podrobnosti v `docs/windows-port.md` §11.19.
+
+- **Core:**
+  - `Malachi.Core/Printing/Print.cs` je port Go 1:1 (`Single` → `One`, `Event` → `PrintedEvent`);
+  - `PrintComposer` drží macOS `PrintController` (Pošta a Kalendář) a má testy nad FakeDaemonem;
+  - Ctrl+P (`ShortcutCommand.Print`).
+- **Tisk:**
+  1. Skrytý uzamčený `MessageWebView` vysází dokument do PDF v paměti (`PrintToPdfStreamAsync`).
+  2. `Windows.Data.Pdf` z něj vykreslí stránky.
+  3. Tiskové okno Windows s náhledem je dostane přes XAML `PrintDocument` a `PrintManagerInterop`.
+- **Proč ne tiskové okno WebView2:** nese jméno procesu WebView2 a náhled v něm chybí. Ukázal to průchod vlastníka.
+- **Vstupy:** Ctrl+P, Další akce a kontextové menu zprávy (rozhodnutí vlastníka 2026-11-04, doplněk P4 do příchodu položky lišty), nikdy hlavní nabídka „…“.
+- **Čtyři msgid** jsou z exclusions pryč.
+

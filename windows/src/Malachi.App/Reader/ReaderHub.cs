@@ -153,6 +153,8 @@ public sealed class ReaderHub : IDisposable
         mainWindow.SetConversationPaging(up => conversation.Shown && conversation.PageBy(up));
 
         WireMainCommands(mainWindow.Commands, router);
+        // Print (Ctrl+P): the selection in Mail, the event or day in the Calendar.
+        mainWindow.InitializePrint(Services);
         // win.change-status pops up the Change Status menu of the issue card
         // on display (window.go).
         mainWindow.Commands.ChangeStatus.Handler = () => Pane.OpenStatusMenu();

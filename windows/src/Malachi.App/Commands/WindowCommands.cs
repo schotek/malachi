@@ -56,6 +56,7 @@ public sealed class WindowCommands
             [ShortcutCommand.SaveDraft] = SaveDraft,
             [ShortcutCommand.MoveUp] = MoveUp,
             [ShortcutCommand.MoveDown] = MoveDown,
+            [ShortcutCommand.Print] = Print,
         };
         // The per-message commands follow Flags unless a screen says otherwise.
         Reply.CanExecute = () => flags.Reply;
@@ -70,6 +71,9 @@ public sealed class WindowCommands
         LoadImages.CanExecute = () => flags.LoadImages;
         TrustSender.CanExecute = () => flags.TrustSender;
         ChangeStatus.CanExecute = () => flags.ChangeStatus;
+        // Print takes one row, or several up to Print.MaxMessages (macOS's
+        // validation of printMail:); the Calendar's screen says otherwise.
+        Print.CanExecute = () => flags.On && flags.Count <= Core.Printing.Print.MaxMessages;
     }
 
     /// <summary>app.compose (Ctrl+N).</summary>
@@ -183,6 +187,13 @@ public sealed class WindowCommands
     public AppCommand MoveDown { get; } = new(nameof(MoveDown));
 
     /// <summary>
+    /// Print (Ctrl+P; docs/plans/toolbar-customization.md §8, macOS
+    /// printMail:): the main window's selection, or the Calendar's event or
+    /// day, and a message window's message.
+    /// </summary>
+    public AppCommand Print { get; } = new(nameof(Print));
+
+    /// <summary>
     /// What the window's current message allows (the list's selection in
     /// the main window, the message of a message window); the per-message
     /// commands are re-validated when it changes.
@@ -197,7 +208,7 @@ public sealed class WindowCommands
                 return;
             }
             flags = value;
-            foreach (var c in (AppCommand[])[Reply, ReplyAll, Forward, Trash, Archive, Junk, MarkRead, MarkUnread, ToggleFlag, LoadImages, TrustSender, ChangeStatus])
+            foreach (var c in (AppCommand[])[Reply, ReplyAll, Forward, Trash, Archive, Junk, MarkRead, MarkUnread, ToggleFlag, LoadImages, TrustSender, ChangeStatus, Print])
             {
                 c.Refresh();
             }

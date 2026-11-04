@@ -127,6 +127,7 @@ public sealed partial class MessageCommandBar : UserControl
         CommandBinding.Bind(MenuMarkRead, windowCommands.MarkRead);
         CommandBinding.Bind(MenuLoadImages, windowCommands.LoadImages);
         CommandBinding.Bind(MenuTrustSender, windowCommands.TrustSender);
+        CommandBinding.Bind(MenuPrint, windowCommands.Print);
         CommandBinding.Bind(MenuChangeStatus, windowCommands.ChangeStatus);
         foreach (var c in new[] { windowCommands.ChangeStatus, windowCommands.ToggleFlag, windowCommands.Trash, windowCommands.MarkRead, windowCommands.MarkUnread })
         {

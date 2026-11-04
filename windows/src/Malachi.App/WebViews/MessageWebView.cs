@@ -131,6 +131,13 @@ public sealed partial class MessageWebView : HardenedWebView
     public event EventHandler? ContentHeightChanged;
 
     /// <summary>
+    /// Raised when a loaded document finished, its pictures included
+    /// (NavigationCompleted; the print waits for it, macOS
+    /// <c>onFinishedLoading</c>).
+    /// </summary>
+    public event EventHandler? DocumentLoaded;
+
+    /// <summary>
     /// The document's height in device-independent pixels, the text zoom
     /// included (CSS pixels of the viewport, CardSize); null while a document
     /// is loading or none is shown (GTK View.OnSize -1).
@@ -218,6 +225,54 @@ public sealed partial class MessageWebView : HardenedWebView
     /// <summary>htmlview.Clear: drops the current document (and its pictures).</summary>
     public void Clear() => Load("");
 
+    /// <summary>
+    /// The loaded document (a print's fragment, docs/plans/toolbar-customization.md
+    /// §8; macOS <c>printOperation</c>) laid out as a PDF in memory on pages
+    /// of <paramref name="widthInches"/> × <paramref name="heightInches"/>,
+    /// with the page header (<paramref name="title"/>, the date) and footer
+    /// (the page numbers): WebView2 lays it out with the view's own policy,
+    /// so the print fetches nothing the document did not show. Null while
+    /// the view has no document.
+    /// </summary>
+    public async Task<Windows.Storage.Streams.IRandomAccessStream?> PrintToPdfStreamAsync(string title, double widthInches, double heightInches)
+    {
+        if (!IsReady || loadedBody is null || Web.CoreWebView2 is not { } core)
+        {
+            return null;
+        }
+        return await core.PrintToPdfStreamAsync(PrintSettings(core, title, widthInches, heightInches));
+    }
+
+    /// <summary>
+    /// DEVELOPMENT AID (MALACHI_PRINT_PDF): saves the loaded document as a
+    /// PDF at <paramref name="path"/>, as <see cref="PrintToPdfStreamAsync"/>
+    /// lays it out; never a printer.
+    /// </summary>
+    public async Task<bool> PrintToPdfAsync(string path, string title, double widthInches, double heightInches)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        if (!IsReady || loadedBody is null || Web.CoreWebView2 is not { } core)
+        {
+            return false;
+        }
+        return await core.PrintToPdfAsync(path, PrintSettings(core, title, widthInches, heightInches));
+    }
+
+    // The page's header has the title (never the document's own, which is
+    // the viewer's fixed one) and the date, its footer the page numbers;
+    // the footer's address is blanked (the document's is malachi-doc:).
+    private static CoreWebView2PrintSettings PrintSettings(CoreWebView2 core, string title, double widthInches, double heightInches)
+    {
+        var settings = core.Environment.CreatePrintSettings();
+        settings.ShouldPrintHeaderAndFooter = true;
+        settings.HeaderTitle = title;
+        settings.FooterUri = " ";
+        settings.ShouldPrintBackgrounds = true;
+        settings.PageWidth = widthInches;
+        settings.PageHeight = heightInches;
+        return settings;
+    }
+
     private protected override Task ConfigureAsync(CoreWebView2 webView)
     {
         webView.StatusBarTextChanged += (sender, _) => Hover(sender.StatusBarText ?? "");
@@ -239,6 +294,7 @@ public sealed partial class MessageWebView : HardenedWebView
     {
         loadedGeneration = Gate.Generation;
         ScheduleMeasure();
+        DocumentLoaded?.Invoke(this, EventArgs.Empty);
     }
 
     // The body's one reload (RendererRecovery).

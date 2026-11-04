@@ -9,8 +9,9 @@
 // (msg.*: Delete, a, j, u, s), the Escape shortcut controllers of
 // message_window.blp, embedded_window.blp and compose.blp, compose.blp's
 // compose.send (Ctrl+Return) and compose.save (Ctrl+S),
-// accounts_reorder.go (Ctrl+Up, Ctrl+Down) and F10, which GtkWindow gives
-// to the primary menu (window.blp's MenuButton with primary: true); macOS:
+// accounts_reorder.go (Ctrl+Up, Ctrl+Down), F10, which GtkWindow gives
+// to the primary menu (window.blp's MenuButton with primary: true), and
+// Print's Ctrl+P (docs/plans/toolbar-customization.md §8); macOS:
 // App/MainMenu.swift's key table with command-r and Actions.swift's
 // bareKeyActions.
 //
@@ -55,6 +56,9 @@ public static class ShortcutMap
         (KeyChord.Bare(VirtualKey.J), ShortcutCommand.Junk),
         (KeyChord.Bare(VirtualKey.U), ShortcutCommand.MarkUnread),
         (KeyChord.Bare(VirtualKey.S), ShortcutCommand.ToggleFlag),
+        // Print (macOS ⌘P): a Ctrl chord, so no text input lifts it; the
+        // command's gate decides (nothing on the Board).
+        (KeyChord.Ctrl(VirtualKey.P), ShortcutCommand.Print),
     ];
 
     // F10 opens the primary menu from anywhere in the window, a text input

@@ -21,6 +21,7 @@
 using System;
 using Malachi.App.Assistants;
 using Malachi.App.Preferences;
+using Malachi.App.Printing;
 using Malachi.App.Reader;
 using Malachi.App.Shell;
 using Malachi.Core;
@@ -29,6 +30,7 @@ using Malachi.Core.Assistants;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
+using Malachi.Core.Printing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -115,6 +117,8 @@ public sealed partial class MessageWindow : Window, IMessageWindowHandle
         c.TrustSender.Handler = () => router.TrustSender(Id);
         // msg.change-status: the Change Status menu of this window's card.
         c.ChangeStatus.Handler = () => View.OpenStatusMenu();
+        // Print (Ctrl+P): this window's message (macOS MessageWindowController printMail:).
+        c.Print.Handler = () => PrintJob.Messages(this, services, [View.Reader.Current ?? summary], Print.Layout.One);
         RefreshActions();
     }
 
