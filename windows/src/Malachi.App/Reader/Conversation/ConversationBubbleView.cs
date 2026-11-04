@@ -41,12 +41,16 @@
 // Conversation.BubbleRendersHtml; docs/windows-port.md §11.7 "HTML in the
 // chat bubbles"): a body that is BubbleBody.Html shows its sanitized
 // fragment in a CardWebView, the timeline card's locked view, where the text
-// stands, inside the bubble's background with the same padding (the view
-// transparent and its document, ViewerDocument.ChatDocument, without any
-// background of the mail and without a frame, so the bubble's own colour,
-// the card's or the accent tint of the user's own, is the document's; in
-// the dark theme the text and links take the bubbles' text colours, in high
-// contrast the system's, the light theme keeps the mail's), while the
+// stands, inside the bubble's background with the same padding (its
+// document, ViewerDocument.ChatDocument, without any background of the mail
+// and without a frame; WinUI's WebView2 shows the window's background under
+// transparent pixels, not the XAML under it, so such a bubble is filled with
+// its colour flattened over the panes under it, BubbleColor, which the view
+// paints under the document, and the view stays covered in it until the
+// document reports its height, past the view's first frames, the window's
+// grey and a black one; in the dark theme the text and links take the
+// bubbles' text colours, in high contrast the system's, the light theme
+// keeps the mail's), while the
 // chat gives the bubble a web view (SetLive: near the viewport and within
 // the timeline's cap); otherwise, and when the view cannot show the
 // document, the message's text as without the preference. Such a bubble is
@@ -136,6 +140,15 @@ internal sealed partial class ConversationBubbleView : UserControl
     private readonly TextBlock showMore;
     private readonly Grid fade;
     private readonly RectangleGeometry htmlClip = new();
+
+    // The cover over the web view in the bubble's colour, from each document
+    // loaded until the view reports its height: WebView2 shows the window's
+    // background and then a black frame before the document's first paint.
+    private readonly Rectangle cover = new() { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+
+    // The opaque colour of an HTML bubble (ApplyFill): its own fill, the
+    // view's Backdrop and the cover's; null for any other bubble.
+    private Windows.UI.Color? fill;
 
     // The column of the header, the invitation card, the body and the hint;
     // the invitation card of a message with a calendar part
@@ -290,6 +303,7 @@ internal sealed partial class ConversationBubbleView : UserControl
         // in under it); while it shows it takes the presses the view would.
         fade = new Grid { Visibility = Visibility.Collapsed, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
         htmlHost.Children.Add(fade);
+        htmlHost.Children.Add(cover);
         htmlHost.Clip = htmlClip;
         htmlHost.SizeChanged += (_, e) => htmlClip.Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Height);
         showMore = new TextBlock
@@ -329,9 +343,13 @@ internal sealed partial class ConversationBubbleView : UserControl
         Tapped += OnTapped;
         // An HTML bubble takes the widest the row allows (ApplyWidth).
         RegisterPropertyChangedCallback(MaxWidthProperty, (_, _) => ApplyWidth());
+        // The colour of an HTML bubble is the panes' under it: known once in
+        // the tree.
+        Loaded += (_, _) => ApplyFill();
         // The theme changed: the document again with the theme's colours.
         ActualThemeChanged += (_, _) =>
         {
+            ApplyFill();
             if (web is not null)
             {
                 LoadWebView();
@@ -481,6 +499,7 @@ internal sealed partial class ConversationBubbleView : UserControl
                     inner.Style = look("ConversationDraftTintStyle");
                 }
             }
+            ApplyFill();
         }
         AutomationProperties.SetAutomationId(this, DraftPrefix + (card.Draft.Id?.ToString() ?? ""));
         ShowSender(card.Sender);
@@ -579,6 +598,7 @@ internal sealed partial class ConversationBubbleView : UserControl
         if (wasHtml != (body is BubbleBody.Html))
         {
             ApplyWidth();
+            ApplyFill();
         }
         if (wanted != WantsWebView)
         {
@@ -775,13 +795,37 @@ internal sealed partial class ConversationBubbleView : UserControl
         fade.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle { Fill = brush, IsHitTestVisible = false });
     }
 
-    // The bubble's colour, opaque: its fill and its tint over an opaque
-    // base of the theme (the pane's solid background). The fade ends in it
-    // and the web view paints it under the document (Backdrop).
+    // The bubble's colour, opaque: the backgrounds of the panes under it
+    // (the reading pane's layer fill, …), its fill and its tint, over an
+    // opaque base of the theme (the window's solid background, the colour
+    // Mica is closest to). The fade ends in it, and an HTML bubble is filled
+    // with it (ApplyFill): WinUI's WebView2 does not compose its transparent
+    // pixels with the XAML under it, it shows the window's background, so
+    // the view paints it under the document (Backdrop) and the bubble
+    // around the document is the same colour, whatever Mica shows.
     private Windows.UI.Color BubbleColor()
     {
         var dark = ActualTheme == ElementTheme.Dark;
         var color = dark ? Windows.UI.Color.FromArgb(255, 0x20, 0x20, 0x20) : Windows.UI.Color.FromArgb(255, 0xF3, 0xF3, 0xF3);
+        var under = new System.Collections.Generic.List<SolidColorBrush>();
+        for (var d = VisualTreeHelper.GetParent(this); d is not null; d = VisualTreeHelper.GetParent(d))
+        {
+            var brush = d switch
+            {
+                Panel p => p.Background,
+                Border b => b.Background,
+                Control c => c.Background,
+                _ => null,
+            };
+            if (brush is SolidColorBrush solid)
+            {
+                under.Add(solid);
+            }
+        }
+        for (var i = under.Count - 1; i >= 0; i--)
+        {
+            color = Over(color, under[i].Color, under[i].Opacity);
+        }
         if (Content is not Border outer)
         {
             return color;
@@ -796,6 +840,37 @@ internal sealed partial class ConversationBubbleView : UserControl
         }
         return color;
     }
+
+    // An HTML bubble (not in high contrast, which keeps the system's
+    // colours) is filled with its opaque colour, so that the document's
+    // Backdrop and the bubble match; any other keeps its translucent style.
+    private void ApplyFill()
+    {
+        if (Content is not Border { Child: Border inner })
+        {
+            return;
+        }
+        inner.ClearValue(Border.BackgroundProperty);
+        if (!RendersHtml || Accessibility.HighContrast || XamlRoot is null)
+        {
+            fill = null;
+            cover.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var color = BubbleColor();
+        fill = color;
+        inner.Background = new SolidColorBrush(color);
+        cover.Fill = new SolidColorBrush(color);
+        if (web is not null)
+        {
+            web.Backdrop = color;
+        }
+    }
+
+    // The cover over the web view while its document is on its way (only
+    // with a fill: in high contrast the view stays transparent).
+    private void Cover(bool on) =>
+        cover.Visibility = on && fill is not null ? Visibility.Visible : Visibility.Collapsed;
 
     // over drawn at opacity over an opaque under.
     private static Windows.UI.Color Over(Windows.UI.Color under, Windows.UI.Color over, double opacity)
@@ -922,8 +997,15 @@ internal sealed partial class ConversationBubbleView : UserControl
         {
             gov.Reset();
         }
+        if (fill is null)
+        {
+            ApplyFill();
+        }
+        // Covered until the document reports its height (SizeReported), a
+        // document loaded again (the theme, pictures) as well.
+        Cover(true);
         web.Palette = Palette();
-        web.Backdrop = Accessibility.HighContrast ? null : BubbleColor();
+        web.Backdrop = fill;
         web.Load(h.Value, reload);
         webDoc = h.Value;
         reload = false;
@@ -961,6 +1043,7 @@ internal sealed partial class ConversationBubbleView : UserControl
         }
         web = null;
         webDoc = null;
+        Cover(false);
         htmlHost.Children.Remove(view);
         WebHost?.ReturnWebView(view);
         WebHost?.Hover("");
@@ -994,6 +1077,7 @@ internal sealed partial class ConversationBubbleView : UserControl
         {
             return;
         }
+        Cover(false);
         if (relayout)
         {
             gov.WidthChanged();
