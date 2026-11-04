@@ -12,7 +12,7 @@
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
 <link rel="stylesheet" href="assets/style.css?v=5">
-<script src="assets/report.js?v=3" defer></script>
+<script src="assets/report.js?v=4" defer></script>
 <link rel="icon" href="assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="assets/icon-64.png" sizes="64x64">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -218,12 +218,13 @@
       <li><a href="news.html">What's new</a></li>
       <li><a href="under-the-hood.html">Under the hood</a></li>
       <li><a href="https://github.com/schotek/malachi">Source code</a></li>
-      <li><a href="https://github.com/schotek/malachi/issues" data-report>Report a problem with the app</a></li>
+      <li><a href="#report" data-report>Report a problem with the app</a></li>
+      <li><a href="#idea" data-idea>Suggest a feature</a></li>
     </ul>
   </div>
 </footer>
 
-<dialog class="report" aria-labelledby="report-title">
+<dialog class="report" data-form="report" aria-labelledby="report-title">
   <form>
     <h2 id="report-title">Report a problem with the app</h2>
     <label>Name <span>(optional)</span><input name="name" maxlength="100" autocomplete="name"></label>
@@ -234,6 +235,22 @@
     <div class="rp-trap" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
     <div class="rp-turnstile"></div>
     <p class="rp-small">What is sent: the fields above, the screenshot made smaller and without its metadata, the language and the address of this page. The report is kept for 12 months. Cloudflare Turnstile protects the form against spam.</p>
+    <p class="rp-status" role="status" aria-live="polite"></p>
+    <div class="buttons">
+      <button type="submit" class="btn primary">Send</button>
+      <button type="button" class="btn rp-close">Close</button>
+    </div>
+  </form>
+</dialog>
+<dialog class="report" data-form="idea" aria-labelledby="idea-title">
+  <form>
+    <h2 id="idea-title">Suggest a feature</h2>
+    <label>Name <span>(optional)</span><input name="name" maxlength="100" autocomplete="name"></label>
+    <label>E-mail <span>(optional, for an answer)</span><input name="contact" type="email" maxlength="254" autocomplete="email"></label>
+    <label>What would you like? <span>(required)</span><textarea name="text" rows="6" required placeholder="What Malachi Mail should do and what it would help you with; how you manage without it today helps too."></textarea></label>
+    <div class="rp-trap" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <div class="rp-turnstile"></div>
+    <p class="rp-small">What is sent: the fields above, the language and the address of this page. The suggestion is kept for 12 months. Cloudflare Turnstile protects the form against spam.</p>
     <p class="rp-status" role="status" aria-live="polite"></p>
     <div class="buttons">
       <button type="submit" class="btn primary">Send</button>

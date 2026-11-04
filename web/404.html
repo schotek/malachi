@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0b3260">
 <link rel="stylesheet" href="/assets/style.css?v=5">
-<script src="/assets/report.js?v=3" defer></script>
+<script src="/assets/report.js?v=4" defer></script>
 <link rel="icon" href="/assets/icon-32.png" sizes="32x32">
 </head>
 <body>
@@ -32,12 +32,12 @@
       <a class="btn primary" href="/index.html">Malachi Mail in English</a>
       <a class="btn" href="/cs/index.html" lang="cs">Malachi Mail česky</a>
     </div>
-    <p class="hint"><a href="https://github.com/schotek/malachi/issues" data-report>Report a problem with the app</a></p>
+    <p class="hint"><a href="#report" data-report>Report a problem with the app</a></p>
   </div>
 </section>
 </main>
 
-<dialog class="report" aria-labelledby="report-title">
+<dialog class="report" data-form="report" aria-labelledby="report-title">
   <form>
     <h2 id="report-title">Report a problem with the app</h2>
     <label>Name <span>(optional)</span><input name="name" maxlength="100" autocomplete="name"></label>
