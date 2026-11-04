@@ -5395,9 +5395,12 @@ cross-built, attaches them, and there is no zip (§13).
   startable by anyone, the same path across updates), and in a package
   (`PackageIdentity.IsPackaged`) the app hands out that alias
   (`Paths.InPackage`, for the panel, Codex and `install --command`) and
-  registers the notifications without arguments. Still to try: the fix,
-  notification clicks, `mailto:`, Run, uninstalling, and whether the Store
-  accepts `unvirtualizedResources`.
+  registers the notifications without arguments. The owner installed the
+  fixed package over the first one (2026-11-04, after trusting its new
+  test certificate): the update kept the data, and the assistant with
+  Claude works. Still to try: notifications and their clicks, `mailto:`,
+  Run, uninstalling, ARM64, and whether the Store accepts
+  `unvirtualizedResources`.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs
