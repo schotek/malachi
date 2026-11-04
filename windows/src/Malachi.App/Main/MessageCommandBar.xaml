@@ -280,6 +280,13 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                 Style="{StaticResource HeaderButtonStyle}">
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('insert-image-symbolic')}" />
             </Button>
+            <Button
+                x:Name="PrintButton"
+                toolbars:ToolbarStrip.Item="print"
+                AutomationProperties.AutomationId="PrintButton"
+                Style="{StaticResource HeaderButtonStyle}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('document-print-symbolic')}" />
+            </Button>
         </toolbars:ToolbarStrip>
     </Grid>
 </UserControl>

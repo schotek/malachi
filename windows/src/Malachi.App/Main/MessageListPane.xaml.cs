@@ -998,6 +998,8 @@ public sealed partial class MessageListPane : UserControl
         }
         // Create Rule from Message…: one message of a mail account, not in the outbox, drafts or sent mail.
         state = state with { OfferRule = rows.Count == 1 && CreateRule is not null && OffersRule(first.Message) };
+        // Print… right after Open (contextmenu.go OfferPrint; Windows prints).
+        state = state with { OfferPrint = true, Print = rows.Count <= Core.Printing.Print.MaxMessages };
         var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox, Count = rows.Count };
         var menu = new MenuFlyout();
         foreach (var group in ContextMenu.MessageItems(state))
@@ -1011,15 +1013,6 @@ public sealed partial class MessageListPane : UserControl
                 menu.Items.Add(MessageMenuItem(it, labels, c, rows, assistant));
             }
         }
-        // Print (Ctrl+P) of the selection: a Windows addition to
-        // ui/internal/contextmenu (the owner's, 2026-11-04), until the
-        // toolbar's Print item; Windows-only string: the key name.
-        var print = new MenuFlyoutItem { KeyboardAcceleratorTextOverride = "Ctrl+P" };
-        MnemonicLabel.Apply(print, Core.Printing.Print.MenuTitle);
-        AutomationProperties.SetAutomationId(print, "ContextPrint");
-        CommandBinding.Bind(print, c.Print);
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(print);
         e.Handled = true;
         if (MessageList.ContainerFromItem(row) is not ListViewItem container)
         {
@@ -1141,6 +1134,7 @@ public sealed partial class MessageListPane : UserControl
     // context_menus.go messageMenuActions: the window's command of an item.
     private static AppCommand? CommandOf(WindowCommands c, ContextMenu.ItemId id) => id switch
     {
+        ContextMenu.ItemId.Print => c.Print,
         ContextMenu.ItemId.Reply => c.Reply,
         ContextMenu.ItemId.ReplyAll => c.ReplyAll,
         ContextMenu.ItemId.Forward => c.Forward,

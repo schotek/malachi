@@ -5,8 +5,8 @@
 // features the conditional items of the toolbars need, from the
 // application's state: eWay-CRM with an eWay-CRM account, ✦ while the
 // Assistant is shown (assistant-menu and the registration in Claude),
-// Triage while the board's triage can run (the In App target), and never
-// Print, which Windows does not have yet. The bars hide such an item
+// Triage while the board's triage can run (the In App target), and Print,
+// which Windows has (Malachi.App/Printing). The bars hide such an item
 // themselves (its control's own visibility); the editor marks its row and
 // More Actions leaves out Save to eWay-CRM… without it.
 
@@ -36,6 +36,7 @@ internal static class ToolbarFeatures
         {
             have.Add(Toolbar.Feature.Triage);
         }
+        have.Add(Toolbar.Feature.Print);
         return Toolbar.Features.With([.. have]);
     }
 }

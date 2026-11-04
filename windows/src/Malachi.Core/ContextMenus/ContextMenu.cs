@@ -42,6 +42,13 @@ public static partial class ContextMenu
         /// <summary><see cref="OpenMessage"/> for a message of the Drafts folder, which opens in the compose window ("edit").</summary>
         EditDraft,
 
+        /// <summary>
+        /// Prints the selection as the window's Print does (ui/internal/printing;
+        /// a conversation as one, several rows page by page); disabled over
+        /// <see cref="Printing.Print.MaxMessages"/> rows ("print").
+        /// </summary>
+        Print,
+
         /// <summary>Reply, or Comment on an issue tracker's account (<see cref="Labels.Comment"/>).</summary>
         Reply,
 
@@ -139,6 +146,7 @@ public static partial class ContextMenu
     {
         ItemId.OpenMessage => "open",
         ItemId.EditDraft => "edit",
+        ItemId.Print => "print",
         ItemId.Reply => "reply",
         ItemId.ReplyAll => "replyAll",
         ItemId.Forward => "forward",
@@ -269,6 +277,12 @@ public static partial class ContextMenu
         /// it is offered for one row only.
         /// </summary>
         public bool OfferRule { get; init; }
+
+        /// <summary>The client prints (ui/internal/printing).</summary>
+        public bool OfferPrint { get; init; }
+
+        /// <summary>The selection can be printed now (at most <see cref="Printing.Print.MaxMessages"/> rows).</summary>
+        public bool Print { get; init; }
         /// Several rows of more than one account, which only the All Inboxes
         /// list allows (<see cref="ActionFlags.MixedAccounts"/>, Go
         /// <c>MixedAccounts</c>). Forward, Move To and Save to eWay-CRM, which
@@ -321,7 +335,7 @@ public static partial class ContextMenu
     }
 
     /// <summary>
-    /// contextmenu.MessageItems: the message menu in its groups: opening;
+    /// contextmenu.MessageItems: the message menu in its groups: opening and printing;
     /// answering; eWay-CRM; read, star and status; where the message goes;
     /// Create Rule from Message…; the Assistant. Empty groups are left out. For several rows Open opens
     /// each (<see cref="Labels.Count"/>), Forward forwards them in one
@@ -404,7 +418,12 @@ public static partial class ContextMenu
         {
             assistant.Add(new Item(ItemId.Assistant, true));
         }
-        return Groups([open], answer, crm, mark, move, rule, assistant);
+        List<Item> opening = [open];
+        if (s.OfferPrint)
+        {
+            opening.Add(new Item(ItemId.Print, s.Print));
+        }
+        return Groups(opening, answer, crm, mark, move, rule, assistant);
     }
 
     /// <summary>contextmenu.FolderState: what the sidebar knows of the folder clicked.</summary>

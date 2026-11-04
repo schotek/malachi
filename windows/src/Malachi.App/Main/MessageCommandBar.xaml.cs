@@ -55,6 +55,9 @@ public sealed partial class MessageCommandBar : UserControl
         var loadImages = Toolbar.ItemLabel(Toolbar.Bar.Mail, Toolbar.LoadPictures);
         AutomationProperties.SetName(LoadPicturesButton, loadImages);
         ToolTipService.SetToolTip(LoadPicturesButton, loadImages);
+        var print = Toolbar.ItemLabel(Toolbar.Bar.Mail, Toolbar.Print);
+        AutomationProperties.SetName(PrintButton, print);
+        ToolTipService.SetToolTip(PrintButton, print);
         Strip.Bar = Toolbar.Bar.Mail;
         Strip.OverflowChanged += (_, _) => OverflowChanged?.Invoke(this, EventArgs.Empty);
         // The Windows default until the window applies the user's layout.
@@ -73,6 +76,7 @@ public sealed partial class MessageCommandBar : UserControl
         Labels.Register(MoveToButton, () => L10n.T("Move To"));
         Labels.Register(UndoButton, () => L10n.T("Undo"));
         Labels.Register(LoadPicturesButton, () => loadImages);
+        Labels.Register(PrintButton, () => print);
     }
 
     /// <summary>Which items gave way for the lack of room changed (More Actions has them).</summary>
@@ -122,6 +126,7 @@ public sealed partial class MessageCommandBar : UserControl
         CommandBinding.Bind(JunkButton, windowCommands.Junk);
         CommandBinding.Bind(UndoButton, windowCommands.Undo);
         CommandBinding.Bind(LoadPicturesButton, windowCommands.LoadImages);
+        CommandBinding.Bind(PrintButton, windowCommands.Print);
         CommandBinding.Bind(MenuJunk, windowCommands.Junk);
         CommandBinding.Bind(MenuMarkUnread, windowCommands.MarkUnread);
         CommandBinding.Bind(MenuMarkRead, windowCommands.MarkRead);

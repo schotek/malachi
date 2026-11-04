@@ -34,6 +34,7 @@ namespace Malachi.App.Calendars;
 public sealed partial class CalendarBar : UserControl
 {
     private readonly Button contactsButton = ToolbarButtons.Make("x-office-address-book-symbolic", Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.Contacts), "CalendarContacts", 36);
+    private readonly Button printButton = ToolbarButtons.Make("document-print-symbolic", Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.Print), "CalendarPrint", 36);
     private CalendarController? controller;
     private bool syncing;
 
@@ -67,15 +68,20 @@ public sealed partial class CalendarBar : UserControl
         BarRoot.Bar = Toolbar.Bar.Calendar;
         BarRoot.FitsItems = false;
         BarRoot.Add(Toolbar.Contacts, contactsButton);
+        BarRoot.Add(Toolbar.Print, printButton);
         ApplyToolbar(Toolbar.PresentFor(ToolbarVariant.Windows, Toolbar.Bar.Calendar, Toolbar.DefaultFor(ToolbarVariant.Windows, Toolbar.Bar.Calendar), Toolbar.Features.None));
         Labels.Register(SidebarButton, () => Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.ToggleSidebar));
         Labels.Register(NewEventButton, () => Cal.Text.NewEvent);
         Labels.Register(AssistantButton, () => assistant);
         Labels.Register(contactsButton, () => Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.Contacts));
+        Labels.Register(printButton, () => Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.Print));
     }
 
     /// <summary>Contacts (toolbar-calendar contacts), bound to the window's command by the page.</summary>
     public Button Contacts => contactsButton;
+
+    /// <summary>Print (toolbar-calendar print), bound to the window's command by the page.</summary>
+    public Button Print => printButton;
 
     /// <summary>The bar's icon buttons for the display mode (Today, the views and the title keep their own text).</summary>
     internal ToolbarLabels Labels { get; } = new();

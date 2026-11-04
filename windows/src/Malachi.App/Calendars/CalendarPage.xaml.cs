@@ -168,6 +168,7 @@ public sealed partial class CalendarPage : UserControl
         {
             CommandBinding.Bind(bar.NewEvent, commands.NewEvent);
             CommandBinding.Bind(bar.Contacts, commands.Contacts);
+            CommandBinding.Bind(bar.Print, commands.Print);
         }
         if (toolbar is not null)
         {
