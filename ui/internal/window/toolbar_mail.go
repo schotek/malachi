@@ -28,6 +28,7 @@ type mailToolbar struct {
 	moveTo                   *gtk.MenuButton
 	contacts                 *gtk.Button
 	junk, undo, loadPictures *gtk.Button
+	print                    *gtk.Button
 	// more is More Actions' model: extra, then message_menu_model.
 	more, extra *gio.Menu
 }
@@ -52,6 +53,7 @@ var mailToolbarActions = map[toolbar.ID]string{
 	toolbar.Junk:         "win.junk",
 	toolbar.Undo:         "win.undo",
 	toolbar.LoadPictures: "win.load-images",
+	toolbar.Print:        "win.print",
 }
 
 // setupMailToolbar registers the Mail mode's items and header bars from
@@ -67,6 +69,7 @@ func (w *Window) setupMailToolbar(b *gtk.Builder) {
 		junk:         ib.GetObject("toolbar_junk").Cast().(*gtk.Button),
 		undo:         ib.GetObject("toolbar_undo").Cast().(*gtk.Button),
 		loadPictures: ib.GetObject("toolbar_load_pictures").Cast().(*gtk.Button),
+		print:        ib.GetObject("toolbar_print").Cast().(*gtk.Button),
 	}
 	w.mailBar = t
 	s := t.set
@@ -85,6 +88,7 @@ func (w *Window) setupMailToolbar(b *gtk.Builder) {
 		{toolbar.Assistant, w.assistButton}, {toolbar.MoreActions, w.messageMenu},
 		{toolbar.MarkRead, t.markRead}, {toolbar.Junk, t.junk}, {toolbar.MoveTo, t.moveTo},
 		{toolbar.Undo, t.undo}, {toolbar.LoadPictures, t.loadPictures},
+		{toolbar.Print, t.print},
 	}
 	for _, f := range faced {
 		s.add(f.id, f.w)
@@ -96,7 +100,7 @@ func (w *Window) setupMailToolbar(b *gtk.Builder) {
 	for _, x := range []struct {
 		b  gtk.Widgetter
 		id toolbar.ID
-	}{{t.contacts, toolbar.Contacts}, {t.junk, toolbar.Junk}, {t.undo, toolbar.Undo}, {t.loadPictures, toolbar.LoadPictures}, {t.moveTo, toolbar.MoveTo}, {t.markRead, toolbar.MarkRead}} {
+	}{{t.contacts, toolbar.Contacts}, {t.junk, toolbar.Junk}, {t.undo, toolbar.Undo}, {t.loadPictures, toolbar.LoadPictures}, {t.moveTo, toolbar.MoveTo}, {t.markRead, toolbar.MarkRead}, {t.print, toolbar.Print}} {
 		gtk.BaseWidget(x.b).SetTooltipText(toolbar.ItemLabel(i18n.Tr, toolbar.BarMail, x.id))
 	}
 	t.moveTo.SetCreatePopupFunc(func(*gtk.MenuButton) {
@@ -171,9 +175,9 @@ func (w *Window) toolbarDisplayMode() toolbar.DisplayMode {
 
 // toolbarFeatures are the conditional items' features as the window has
 // them (T7): an eWay-CRM account, the Assistant, the board's triage (the
-// In App target); printing is not in this client yet.
+// In App target) and printing (win.print, print.go).
 func (w *Window) toolbarFeatures() toolbar.Features {
-	have := map[toolbar.Feature]bool{}
+	have := map[toolbar.Feature]bool{toolbar.FeaturePrint: true}
 	if _, ok := w.crmAccount(); ok {
 		have[toolbar.FeatureCRM] = true
 	}

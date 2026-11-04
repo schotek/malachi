@@ -242,8 +242,11 @@ Rozhodnutí vlastníka (AskUserQuestion 2026-11-04, O1):
 - **P3 Klienti**: **macOS první**, GTK a Windows po ověření macOS (stejná výjimka
   z pravidla 6 jako u lišty, i když tisk je funkce mimo lištu).
 - **P4 Vstupy**: Soubor ▸ Tisk… s ⌘P (GTK a Windows Ctrl+P) a položka lišty.
-  Ne v menu „…“ ani v kontextovém menu (pokud ho tam nedoplní T8, protože
-  na liště není).
+  **Změna vlastníka 2026-11-04:** „Tisk…“ je i v kontextovém menu zprávy ve
+  všech třech klientech, v první skupině hned za Otevřít (u konceptu za
+  Upravit), vypnutý nad `printing.MaxMessages` řádků (reference
+  `contextmenu` Print, `MessageState.OfferPrint`/`Print`). V hlavní nabídce
+  ne.
 
 Rozhodnutí vlastníka (AskUserQuestion 2026-11-04, po průzkumu kódu):
 
@@ -1192,3 +1195,21 @@ Port na větvi `feat/print-windows`, podrobnosti v `docs/windows-port.md` §11.1
 - **Vstupy:** Ctrl+P, Další akce a kontextové menu zprávy (rozhodnutí vlastníka 2026-11-04, doplněk P4 do příchodu položky lišty), nikdy hlavní nabídka „…“.
 - **Čtyři msgid** jsou z exclusions pryč.
 
+## 21. Sloučení tisku do větve (2026-11-04)
+
+- `feat/print-gtk` (GTK tisk `e6519694`, Tisk v kontextovém menu `3e08a4b5`)
+  sloučen do `feat/toolbar-customization` (`83db4dbb`); konflikty
+  v `actions.go` a `devstart.go` drží obě strany, odkazy `po/` přepočítané.
+  `gtk.sh make build` a celé `test-ui` (51 balíčků) zelené.
+- macOS: Tisk v kontextovém menu (`ContextMenu.ItemID.print`,
+  `MessageState.offerPrint`/`print`, `MessageContextMenu` → `printMail:`,
+  nejvýš `Printing.maxMessages` řádků), `ContextMenuTests` 1:1 s Go.
+- GTK: položka lišty `print` (`toolbar_items.blp` `toolbar_print`,
+  `win.print`) v Poště i Kalendáři, `FeaturePrint` zapnutá; Windows
+  `IconGlyphs` `document-print` E749 kvůli testu ikon GTK. Smoke
+  `TestToolbarGTKSmoke` a `TestCalendarGTKSmoke` s `G_DEBUG=fatal-criticals`
+  zelené.
+- Zbývá: `feat/print-windows` (`0751d6dc`) sloučit na Windows spolu
+  s opravami Windows portu lišty (Windows agent), tam zapnout `FeaturePrint`,
+  napojit položku lišty na `WindowCommands.Print` a posunout „Tisk…“
+  v kontextovém menu Windows hned za Otevřít podle reference.

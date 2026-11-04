@@ -42,6 +42,7 @@ extension ContextMenu {
                 // TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
                 : L10n.T("Open in New Window")
         case .editDraft: L10n.T("Edit")
+        case .print: Printing.menuTitle
         case .reply: l.comment ? L10n.T("Comment") : L10n.T("Reply")
         case .replyAll: L10n.T("Reply All")
         case .forward: L10n.T("Forward")

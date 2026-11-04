@@ -19,13 +19,18 @@ type calendarToolbar struct {
 	header   *tbHeader
 	faces    []*tbFace
 	contacts *gtk.Button
+	print    *gtk.Button
 }
 
 // wireToolbar registers the page's items from its builder b and packs the
 // stored arrangement.
 func (p *calendarPage) wireToolbar(b *gtk.Builder) {
 	ib := toolbarItemsBuilder()
-	t := &calendarToolbar{set: newToolbarSet(), contacts: ib.GetObject("toolbar_contacts").Cast().(*gtk.Button)}
+	t := &calendarToolbar{
+		set:      newToolbarSet(),
+		contacts: ib.GetObject("toolbar_contacts").Cast().(*gtk.Button),
+		print:    ib.GetObject("toolbar_print").Cast().(*gtk.Button),
+	}
 	p.toolbar = t
 	s := t.set
 	bar := toolbar.BarCalendar
@@ -39,7 +44,9 @@ func (p *calendarPage) wireToolbar(b *gtk.Builder) {
 	s.add(toolbar.Contacts, t.contacts)
 	s.add(toolbar.CalendarNewEvent, p.newEvent)
 	s.add(toolbar.CalendarAssistant, p.assistantButton)
+	s.add(toolbar.Print, t.print)
 	t.contacts.SetTooltipText(label(toolbar.Contacts))
+	t.print.SetTooltipText(label(toolbar.Print))
 	if p.sidebarToggle.TooltipText() == "" {
 		p.sidebarToggle.SetTooltipText(label(toolbar.ToggleSidebar))
 	}
@@ -49,7 +56,7 @@ func (p *calendarPage) wireToolbar(b *gtk.Builder) {
 	}{
 		{toolbar.ToggleSidebar, p.sidebarToggle}, {toolbar.CalendarSearch, p.searchToggle},
 		{toolbar.Contacts, t.contacts}, {toolbar.CalendarNewEvent, p.newEvent},
-		{toolbar.CalendarAssistant, p.assistantButton},
+		{toolbar.CalendarAssistant, p.assistantButton}, {toolbar.Print, t.print},
 	} {
 		t.faces = append(t.faces, addFace(x.w, label(x.id)))
 	}

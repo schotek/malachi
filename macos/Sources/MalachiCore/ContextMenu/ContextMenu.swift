@@ -20,6 +20,10 @@ public enum ContextMenu {
         /// which opens in the compose window.
         case openMessage
         case editDraft
+        /// Prints the selection as the window's Print does (`Printing`; a
+        /// conversation as one, several rows page by page); disabled over
+        /// `Printing.maxMessages` rows.
+        case print
         /// Comment on an issue tracker's account (`Labels.comment`).
         case reply
         case replyAll
@@ -88,6 +92,10 @@ public enum ContextMenu {
         public var count = 0
         public var open = false
         public var draft = false
+        /// contextmenu.MessageState OfferPrint and Print: the client prints,
+        /// and the selection can be printed now (at most
+        /// `Printing.maxMessages` rows).
+        public var offerPrint = false, print = false
         public var outbox = false
         /// What the account offers at all (`Capabilities.supported`, the
         /// outbox always offering Trash): the others are left out.
@@ -157,7 +165,7 @@ public enum ContextMenu {
         }
     }
 
-    /// contextmenu.MessageItems: opening; answering; eWay-CRM; read, star
+    /// contextmenu.MessageItems: opening and printing; answering; eWay-CRM; read, star
     /// and status; where the message goes; Create Rule from Message…; the
     /// Assistant. Empty groups are
     /// left out. For several rows Open opens each, Forward forwards them in
@@ -174,6 +182,8 @@ public enum ContextMenu {
             s.crm = false
         }
         let open = Item(s.draft && !several ? .editDraft : .openMessage, !several || s.open)
+        var opening = [open]
+        if s.offerPrint { opening.append(Item(.print, s.print)) }
         var answer: [Item] = []
         if s.offerReply, !several { answer.append(Item(.reply, s.reply)) }
         if s.offerReplyAll, !several { answer.append(Item(.replyAll, s.replyAll)) }
@@ -196,7 +206,7 @@ public enum ContextMenu {
         if s.offerTrash || s.outbox { move.append(Item(.trash, s.trash)) }
         let rule = s.offerRule && !several && !s.outbox && !s.draft ? [Item(.createRule, true)] : []
         let assistant = s.assistant ? [Item(.assistant, true)] : []
-        return [[open], answer, crmItems, mark, move, rule, assistant].filter { !$0.isEmpty }
+        return [opening, answer, crmItems, mark, move, rule, assistant].filter { !$0.isEmpty }
     }
 
     /// contextmenu.FolderState: what the sidebar knows of the folder
