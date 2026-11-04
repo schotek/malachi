@@ -5431,15 +5431,18 @@ cross-built, attaches them, and there is no zip (§13).
   default, and a `mailto:` link opens the compose window with its address
   and subject both as a Protocol activation redirected to the running app
   and as a cold start; `build.ps1 lint`, `MailtoRegistrationTests` and
-  `PathsTests` passed, and the whole `build.ps1 test` (x64) had 9 370
-  passed, 3 failed and 94 skipped of 9 467, the same three failing on
-  `main` before the merge (`aa0346e`): `WindowsKeyFilePolicyTests`
-  `RetriesWhileTheFileIsHeld` and `ReadsTheKeyTheDaemonWrote` (that
-  machine's `%TEMP%` grants another SID Modify, which the key file
-  inherits, so the DACL check rightly refuses it) and
-  `UnifiedTests.TheModelListCoversItsInboxes` (fails on `main` too,
-  probably since All Inboxes moved into Favourites). Not seen: the
-  Preferences text while another app is the default. The start at sign-in stays the app's own Run value.
+  `PathsTests` passed. The agent also reported the whole `build.ps1 test`
+  (x64): 9 370 passed, 3 failed and 94 skipped of 9 467, the same three
+  failing on `main` before the merge (`aa0346e`), counts as it reported
+  them. `UnifiedTests.TheModelListCoversItsInboxes` was a stale test,
+  checked in the code and fixed since: from `7c474f6` (All Inboxes in a
+  Favourites section) `Entries[0]` is the section's heading, badge 0, and
+  the item is `Entries[1]`. `WindowsKeyFilePolicyTests`
+  `RetriesWhileTheFileIsHeld` and `ReadsTheKeyTheDaemonWrote` fail with
+  `KeyFileReason.AccessibleToOthers`; the agent's reason, that the
+  machine's `%TEMP%` grants another SID Modify and the key file inherits
+  it, is its reading of that machine's ACL, not checked here. Not seen:
+  the Preferences text while another app is the default. The start at sign-in stays the app's own Run value.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs

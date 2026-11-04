@@ -244,12 +244,15 @@ public sealed class UnifiedTests
         Assert.True(model.FolderListed(Unified.Key));
         model.UnifiedInbox = false;
         Assert.False(model.FolderListed(Unified.Key));
-        // The badge follows the counts.
+        // The badge follows the counts. The item is the first row of the
+        // Favourites section, under its heading.
         model.UnifiedInbox = true;
         model.RebuildEntries();
-        Assert.Equal(5, model.Entries[0].Badge);
+        Assert.True(model.Entries[0].Header && model.Entries[0].Favourite);
+        Assert.True(model.Entries[1].IsUnified);
+        Assert.Equal(5, model.Entries[1].Badge);
         model.AdjustCounts(new FolderKey("b", "b-in"), -2, 0);
-        Assert.Equal(3, model.Entries[0].Badge);
+        Assert.Equal(3, model.Entries[1].Badge);
     }
 
     [Fact]
