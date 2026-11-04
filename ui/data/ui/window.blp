@@ -223,7 +223,12 @@ Adw.ApplicationWindow main_window {
               // unsent messages); status_daemon names the connected daemon.
               // The clamp holds the width: a wrapping label asks for the width
               // of its whole text, and the reasons in the rows are sentences.
+              // As in the Windows client (a flyout at TopEdgeAlignedLeft):
+              // no arrow, the popover's start edge on the line's.
               popover: Popover status_popover {
+                has-arrow: false;
+                halign: start;
+
                 child: Adw.Clamp {
                   maximum-size: 320;
                   tightening-threshold: 320;
@@ -239,9 +244,11 @@ Adw.ApplicationWindow main_window {
 
                     ListBox status_accounts {
                       selection-mode: none;
+                      overflow: hidden;
 
                       styles [
                         "boxed-list",
+                        "status-accounts",
                       ]
                     }
 

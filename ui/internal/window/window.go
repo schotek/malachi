@@ -617,6 +617,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// The popover's rows are brought up to date as it opens and, while it
 	// is open, with every refresh of the status line (status.go).
 	w.statusPopover.ConnectShow(w.refreshStatusPopover)
+	// A little above the line rather than on its top edge, as the Windows
+	// flyout and the macOS panel (StatusFlyout) stand.
+	w.statusPopover.SetOffset(0, -8)
 	// The line names the time of the last check ("Up to date · 15:04"): it
 	// is redrawn every minute so that a day later it shows the date.
 	glib.TimeoutSecondsAdd(statusRefreshSeconds, func() bool {

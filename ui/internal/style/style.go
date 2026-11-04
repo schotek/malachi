@@ -84,6 +84,13 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// claims and the bold weight Adwaita gives buttons, and its label keeps
 	// to the left over the full width (hexpand and xalign in window.blp).
 	b.WriteString("menubutton.status-line > button { min-height: 0; padding: 4px 6px; font-weight: normal; }\n")
+	// The accounts in the status popover (window.blp status_accounts), as
+	// the Windows client draws them: a flat card with a hairline border and
+	// a radius of 8 instead of Adwaita's raised boxed list (radius 12 and a
+	// shadow); the rows' corners follow the card's.
+	b.WriteString("list.boxed-list.status-accounts { border-radius: 8px; box-shadow: 0 0 0 1px alpha(@window_fg_color, 0.12); }\n")
+	b.WriteString("list.boxed-list.status-accounts > row:first-child { border-top-left-radius: 8px; border-top-right-radius: 8px; }\n")
+	b.WriteString("list.boxed-list.status-accounts > row:last-child { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }\n")
 	// The fold arrow and the pin star of a sidebar row. A default button
 	// would push the row past the height above, so both are squeezed to the
 	// size of their icon.

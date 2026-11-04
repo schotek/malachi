@@ -32,7 +32,7 @@ import MalachiCore
 /// connection icon and the popover (the accounts, the Outbox) stay the
 /// sync line's.
 @MainActor
-final class StatusBarViewController: NSViewController, NSPopoverDelegate {
+final class StatusBarViewController: NSViewController {
     /// The bar's height, its 1 pt top line included.
     static let height: CGFloat = 26
     /// The inset of the line from the window's edges: the Blueprint's
@@ -58,10 +58,11 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
     private let statusButton = NSButton(title: "", target: nil, action: nil)
     /// The board's triage line at the trailing end (`setNote`).
     private let noteLabel = NSTextField(labelWithString: "")
-    private let popover = NSPopover()
     private let content = StatusPopoverViewController()
-    /// When a click on the line closed the transient popover on its
-    /// mouse-down, the time of that mouse-down: the click's own action must
+    /// The popover's window: the Windows client's flyout, without an arrow
+    /// (`StatusFlyout`).
+    private lazy var popover = StatusFlyout(content: content)
+    /// When a click on the line closed the flyout on its mouse-down, the time of that mouse-down: the click's own action must
     /// not open the popover again.
     private var closedByLineClick: TimeInterval?
     /// The calendars' state line while the window shows the Calendar, nil
@@ -151,17 +152,15 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
         ])
         view = bar
 
-        popover.behavior = .transient
-        popover.contentViewController = content
-        popover.delegate = self
+        popover.onWillClose = { [weak self] event in self?.flyoutWillClose(event) }
         content.onAction = { [weak self] st in
             guard let self else { return }
-            self.popover.performClose(nil)
+            self.popover.close()
             self.onAction?(st)
         }
         content.onShowOutbox = { [weak self] acc in
             guard let self else { return }
-            self.popover.performClose(nil)
+            self.popover.close()
             self.onShowOutbox?(acc)
         }
     }
@@ -229,7 +228,7 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
         }
         connectionIcon.isHidden = line.icon.isEmpty
         if !line.active, popover.isShown {
-            popover.performClose(nil)
+            popover.close()
         }
         statusButton.isEnabled = line.active
         content.setDaemon(line.daemon)
@@ -255,21 +254,20 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
             }
         }
         if popover.isShown {
-            popover.performClose(sender)
+            popover.close()
             return
         }
         refreshStatusPopover()
-        // Above the line, as the GTK menu button opens upwards. The edge is
-        // in the button's coordinates, and a flipped view's top is minY.
-        popover.show(relativeTo: statusTextRect, of: statusButton,
-                     preferredEdge: statusButton.isFlipped ? .minY : .maxY)
+        // Above the bar with its leading edge on the text's, as the Windows
+        // flyout (TopEdgeAlignedLeft) and GTK's menu button open: as far
+        // above the bar's top as the text is from the window's edge.
+        let text = view.convert(statusTextRect, from: statusButton)
+        let anchor = NSRect(x: text.minX, y: view.bounds.minY, width: text.width, height: view.bounds.height)
+        popover.show(above: anchor, of: view, gap: Self.inset)
     }
 
     /// The part of the line its text covers. The button spans the whole
-    /// bar, and a popover is centred on its anchor: anchored to the button
-    /// it opened in the middle of the window, not above the status at the
-    /// bar's leading end, where GTK's menu button (the sidebar's width)
-    /// opens it.
+    /// bar; the flyout lines up with the text at the bar's leading end.
     private var statusTextRect: NSRect {
         let bounds = statusButton.bounds
         let text = statusButton.cell?.cellSize.width ?? bounds.width
@@ -277,12 +275,12 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
                       width: min(bounds.width, max(text, 1)), height: bounds.height)
     }
 
-    /// A transient popover closes on the mouse-down of any click outside
-    /// it; when that click is on the line, its mouse-up would open the
-    /// popover again. The time of such a mouse-down is noted here.
-    func popoverWillClose(_ notification: Notification) {
+    /// The flyout closes on the mouse-down of any click outside it; when
+    /// that click is on the line, its mouse-up would open the flyout again.
+    /// The time of such a mouse-down is noted here.
+    private func flyoutWillClose(_ event: NSEvent?) {
         closedByLineClick = nil
-        guard let event = NSApp.currentEvent, event.type == .leftMouseDown,
+        guard let event, event.type == .leftMouseDown,
               event.window === statusButton.window else { return }
         let point = statusButton.convert(event.locationInWindow, from: nil)
         if statusButton.bounds.contains(point) {

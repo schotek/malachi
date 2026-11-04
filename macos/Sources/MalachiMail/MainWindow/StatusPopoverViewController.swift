@@ -18,7 +18,7 @@ final class StatusPopoverViewController: NSViewController {
     /// The content width (window.blp: a clamp of 320).
     static let width: CGFloat = 320
     /// The margin around the content: the Blueprint's 6 plus the padding a
-    /// GTK popover has of its own, which an NSPopover lacks.
+    /// GTK popover has of its own (the Windows flyout's padding of 12).
     static let margin: CGFloat = 12
 
     /// The action of an account's row, with the state it showed.
@@ -50,6 +50,8 @@ final class StatusPopoverViewController: NSViewController {
         let stack = prefsColumn(spacing: 12, insets: NSEdgeInsets(top: m, left: m, bottom: m, right: m))
         prefsAddFilling(group, to: stack)
         prefsAddFilling(daemonLabel, to: stack)
+        // The Windows client's card (StatusBarView.xaml: CornerRadius 8).
+        group.boxCornerRadius = 8
         v.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: v.topAnchor),
@@ -139,6 +141,8 @@ private final class StatusRowViews: NSObject {
         row = PreferenceRowView(title: "", subtitle: "", trailing: actions)
         failed = StatusLinkRow()
         super.init()
+        // The Windows client's rows (StatusRowView.xaml: MinHeight 52).
+        row.subtitledMinHeight = 52
 
         check.isBordered = false
         check.imagePosition = .imageOnly
