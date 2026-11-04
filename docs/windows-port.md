@@ -5431,8 +5431,15 @@ cross-built, attaches them, and there is no zip (§13).
   default, and a `mailto:` link opens the compose window with its address
   and subject both as a Protocol activation redirected to the running app
   and as a cold start; `build.ps1 lint`, `MailtoRegistrationTests` and
-  `PathsTests` passed. Not seen: the Preferences text while another app
-  is the default. The start at sign-in stays the app's own Run value.
+  `PathsTests` passed, and the whole `build.ps1 test` (x64) had 9 370
+  passed, 3 failed and 94 skipped of 9 467, the same three failing on
+  `main` before the merge (`aa0346e`): `WindowsKeyFilePolicyTests`
+  `RetriesWhileTheFileIsHeld` and `ReadsTheKeyTheDaemonWrote` (that
+  machine's `%TEMP%` grants another SID Modify, which the key file
+  inherits, so the DACL check rightly refuses it) and
+  `UnifiedTests.TheModelListCoversItsInboxes` (fails on `main` too,
+  probably since All Inboxes moved into Favourites). Not seen: the
+  Preferences text while another app is the default. The start at sign-in stays the app's own Run value.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs
