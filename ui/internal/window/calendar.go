@@ -128,6 +128,8 @@ type calendarPage struct {
 	// pendingDetail is the occurrence key whose detail opens once the
 	// range it is in has loaded (showInCalendar).
 	pendingDetail string
+	// toolbar is the page's customizable header bar (toolbar_calendar.go).
+	toolbar *calendarToolbar
 }
 
 // calendarEnv is how the calendar writes its texts with dates: the
@@ -179,9 +181,11 @@ func (w *Window) ensureCalendar() {
 	}
 	p := &calendarPage{w: w, colorIndex: map[api.CalendarID]int{}}
 	p.ctl = calendarctl.NewCalendarController(w.calendarSource(), w.calendarOptions())
-	p.bind(data.Builder("calendar_page.ui"))
+	cb := data.Builder("calendar_page.ui")
+	p.bind(cb)
 	w.cal.page = p
 	p.wire()
+	p.wireToolbar(cb)
 	p.sidebar = newCalendarSidebar(p)
 	p.week = newCalendarWeek(p, false)
 	p.day = newCalendarWeek(p, true)

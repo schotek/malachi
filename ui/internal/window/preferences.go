@@ -126,6 +126,10 @@ type PreferencesDialog struct {
 	boardTriageUsage    *adw.ActionRow
 	boardTriageTokens   *gtk.Label
 
+	// toolbarGroup is Preferences → General → Toolbar (preferences_toolbar.go).
+	toolbarGroup *adw.PreferencesGroup
+	toolbarMode  *adw.ComboRow
+
 	closed bool
 }
 
@@ -290,6 +294,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		d.bindAssistant(s),
 		d.bindBoardTriage(s, c),
 		d.bindSecurity(c),
+		d.bindToolbar(b, s),
 	}
 	d.ConnectClosed(func() {
 		d.closed = true

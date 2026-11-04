@@ -158,6 +158,8 @@ type boardPage struct {
 	gate *boardMessagesGate
 
 	menuButton *gtk.MenuButton
+	// toolbar is the page's customizable header bars (toolbar_board.go).
+	toolbar *boardToolbar
 }
 
 // boardAPIState is api.BoardState's value on the wire: board_actions.go
@@ -370,6 +372,7 @@ func (w *Window) ensureBoard() {
 	p.wireKeys()
 	p.wirePanel()
 	p.wireTriage()
+	p.wireToolbar(pb)
 	if w.assist != nil {
 		if bt := w.assist.BoardTriage(); bt != nil {
 			bt.SetOnRefresh(func() { p.src.Refresh() })

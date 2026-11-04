@@ -20,6 +20,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/toolbar"
 )
 
 // SchemaID must match the gschema, desktop file and application ID.
@@ -301,6 +302,12 @@ var defaults = map[string]any{
 	KeyCalendarView: CalendarViewDefault,
 
 	KeyContactsSuggestScope: "account",
+
+	toolbar.Key(toolbar.BarMail):      []string(nil),
+	toolbar.Key(toolbar.BarBoardList): []string(nil),
+	toolbar.Key(toolbar.BarBoardFlow): []string(nil),
+	toolbar.Key(toolbar.BarCalendar):  []string(nil),
+	toolbar.DisplayModeKey:            string(toolbar.DisplayIcon),
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -686,6 +693,41 @@ func (s *Store) SetCollapsedAccounts(v []string) { s.set(KeyCollapsedAccounts, v
 // section, encoded like CollapsedFolders (internal/window/favourites.go).
 func (s *Store) FavouriteFolders() []string     { return s.strv(KeyFavouriteFolders) }
 func (s *Store) SetFavouriteFolders(v []string) { s.set(KeyFavouriteFolders, v) }
+
+// ToolbarLayout is the stored arrangement of bar's toolbar (the key
+// toolbar.Key names): the tokens as written, empty for the default; the
+// client reads them with toolbar.NormalizeFor.
+func (s *Store) ToolbarLayout(bar toolbar.Bar) []string { return s.strv(toolbar.Key(bar)) }
+
+// SetToolbarLayout writes bar's arrangement (toolbar.StoredFor's tokens,
+// or an empty list for the default). An unknown bar is ignored.
+func (s *Store) SetToolbarLayout(bar toolbar.Bar, tokens []string) {
+	for _, b := range toolbar.Bars {
+		if b == bar {
+			if tokens == nil {
+				tokens = []string{}
+			}
+			s.set(toolbar.Key(bar), tokens)
+			return
+		}
+	}
+}
+
+// ToolbarDisplayMode is what the toolbars' items show; an unknown nick is
+// icons only.
+func (s *Store) ToolbarDisplayMode() toolbar.DisplayMode {
+	return toolbar.ParseDisplayMode(s.str(toolbar.DisplayModeKey))
+}
+
+// SetToolbarDisplayMode ignores values outside the enum.
+func (s *Store) SetToolbarDisplayMode(m toolbar.DisplayMode) {
+	for _, x := range toolbar.DisplayModes {
+		if m == x {
+			s.set(toolbar.DisplayModeKey, string(m))
+			return
+		}
+	}
+}
 
 // OnChanged calls f whenever key changes, from any source (this process or,
 // with the GSettings backend, another one). The returned function removes

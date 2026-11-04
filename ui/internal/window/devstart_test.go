@@ -41,6 +41,11 @@ func TestParseDevStart(t *testing.T) {
 	if err != nil || len(crmSteps) != 2 || crmSteps[0].Kind != devCrmDialog || crmSteps[1].Kind != devEwayWizard {
 		t.Errorf("crm steps %+v %v", crmSteps, err)
 	}
+	tbSteps, err := parseDevStart("toolbar-editor;toolbar-editor:calendar;prefs-general")
+	if err != nil || len(tbSteps) != 3 || tbSteps[0].Kind != devToolbarEditor || tbSteps[0].Text != "" ||
+		tbSteps[1].Kind != devToolbarEditor || tbSteps[1].Text != "calendar" || tbSteps[2].Kind != devPrefsGeneral {
+		t.Errorf("toolbar steps %+v %v", tbSteps, err)
+	}
 	contactSteps, err := parseDevStart("contacts;contacts:edit;prefs-contacts")
 	if err != nil || len(contactSteps) != 3 || contactSteps[0].Kind != devContacts ||
 		contactSteps[1].Kind != devContactsEdit || contactSteps[2].Kind != devPrefsContacts {

@@ -1,0 +1,42 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+// The toolbar items that the header bars of window.blp, board_page.blp and
+// calendar_page.blp do not hold by default (docs/plans/toolbar-customization.md
+// T10): objects without a parent, packed into a header bar by Go
+// (window/toolbar_host.go) only where the user's arrangement has them. One
+// builder per part of the window, so each gets its own widgets. No
+// translatable strings: tooltips and labels come from ui/internal/toolbar.
+// Object IDs are looked up from Go; keep them in sync.
+
+// Mark as Read / Mark as Unread as one button (O3): icon, tooltip and
+// action follow the selection (window/toolbar_mail.go).
+Button toolbar_mark_read {
+  icon-name: "mail-read-symbolic";
+  action-name: "win.mark-read";
+}
+
+Button toolbar_junk {
+  icon-name: "mail-mark-junk-symbolic";
+  action-name: "win.junk";
+}
+
+// The selection's folders, built as the popup opens (contextmenu.MoveTargets).
+MenuButton toolbar_move_to {
+  icon-name: "folder-symbolic";
+}
+
+Button toolbar_undo {
+  icon-name: "edit-undo-symbolic";
+  action-name: "win.undo";
+}
+
+Button toolbar_load_pictures {
+  icon-name: "insert-image-symbolic";
+  action-name: "win.load-images";
+}
+
+Button toolbar_contacts {
+  icon-name: "x-office-address-book-symbolic";
+  action-name: "app.contacts";
+}

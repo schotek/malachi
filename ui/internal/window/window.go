@@ -318,6 +318,8 @@ type Window struct {
 	// window's CRM controls (crm.go, crm_actions.go).
 	crmState *crmState
 	crmMain  *crmControls
+	// mailBar is the Mail mode's customizable toolbar (toolbar_mail.go).
+	mailBar *mailToolbar
 	// updates is the update check's banner and question (updates.go).
 	updates *updateView
 	// RequestClose settles inline drafts before closing the main window.
@@ -644,6 +646,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	if m, ok := b.GetObject("primary_menu").Cast().(gio.MenuModeller); ok {
 		w.mainMenu = m
 	}
+	w.setupMailToolbar(b)
 	w.setupBoardMode()
 	w.setupModeMemory()
 	w.setupUpdates(b)

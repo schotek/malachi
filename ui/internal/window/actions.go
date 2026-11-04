@@ -59,13 +59,16 @@ func flagChange(f api.Flag, on bool) (set, clear []api.Flag) {
 // setStar shows the flagged state on a star toggle button.
 func setStar(b *gtk.ToggleButton, on bool) {
 	b.SetActive(on)
+	icon, tip := "non-starred-symbolic", i18n.T("Star")
 	if on {
-		b.SetIconName("starred-symbolic")
-		b.SetTooltipText(i18n.T("Unstar"))
-	} else {
-		b.SetIconName("non-starred-symbolic")
-		b.SetTooltipText(i18n.T("Star"))
+		icon, tip = "starred-symbolic", i18n.T("Unstar")
 	}
+	// The main window's star is a toolbar item that may show a label
+	// (toolbar_host.go setFace).
+	if !setFace(b, icon, tip) {
+		b.SetIconName(icon)
+	}
+	b.SetTooltipText(tip)
 }
 
 // refreshRow pushes the model's summary of id to its list row, if listed.
@@ -638,6 +641,7 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 			a.SetEnabled(e)
 		}
 	}
+	w.updateMailToolbarItems(st)
 	// eWay-CRM follows the selection explicitly (crm.go refreshCRM).
 	w.refreshCRM()
 }
@@ -649,8 +653,11 @@ func (w *Window) presentReply(b *gtk.Button, comment bool) {
 	if comment {
 		icon = commentIcon
 	}
-	b.SetIconName(icon)
-	b.SetTooltipText(jira.ReplyLabel(comment, i18n.Tr))
+	label := jira.ReplyLabel(comment, i18n.Tr)
+	if !setFace(b, icon, label) {
+		b.SetIconName(icon)
+	}
+	b.SetTooltipText(label)
 }
 
 // commentIcon is the icon of Reply when it writes a comment on an issue.
