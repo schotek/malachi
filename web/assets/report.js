@@ -5,7 +5,8 @@
    is scaled to at most 2560 px on its longest side and re-encoded (WebP,
    else JPEG) in a canvas, which drops its EXIF. Escape and a click beside
    the form close it. Without this script the link goes to the GitHub
-   issues. */
+   issues. An address ending in #report (Report an Issue in the apps'
+   About window) opens the form when the page loads. */
 (function () {
   var dialog = document.querySelector("dialog.report");
   if (!dialog || typeof dialog.showModal !== "function" || !window.fetch || !window.FormData) { return; }
@@ -187,4 +188,14 @@
       post(fd);
     });
   });
+
+  // #report in the address opens the form; the fragment is dropped, so a
+  // reload or Back does not open it again.
+  function fromHash() {
+    if (location.hash !== "#report") { return; }
+    history.replaceState(null, "", location.pathname + location.search);
+    open();
+  }
+  window.addEventListener("hashchange", fromHash);
+  fromHash();
 })();

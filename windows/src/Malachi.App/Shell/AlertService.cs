@@ -45,10 +45,10 @@ namespace Malachi.App.Shell;
 internal sealed partial class AlertService : IAlerts
 {
     /// <summary>The project's website (main.go SetWebsite).</summary>
-    public const string Website = "https://github.com/schotek/malachi";
+    public const string Website = "https://malachimail.app";
 
     /// <summary>The issue tracker (main.go SetIssueURL).</summary>
-    public const string IssueUrl = "https://github.com/schotek/malachi/issues";
+    public const string IssueUrl = "https://malachimail.app/#report";
 
     // The width of a value in the certificate's details (Alerts.swift
     // detailValueWidth): the fingerprint takes two lines.

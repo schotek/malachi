@@ -303,24 +303,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showAbout(_ sender: Any?) {
         // Built in code from fixed text, never from mail: the one place an
-        // attributed string is made by hand. macOS-only strings.
-        let credits = NSMutableAttributedString(string: "A native mail client.\n", attributes: [
-            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-            .foregroundColor: NSColor.labelColor,
-        ])
-        if let site = URL(string: "https://github.com/schotek/malachi") {
-            credits.append(NSAttributedString(string: site.absoluteString, attributes: [
-                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-                .link: site,
-            ]))
+        // attributed string is made by hand. macOS-only strings. The
+        // standard panel takes only text, so the website and the report
+        // form (main.go SetWebsite and SetIssueURL) are links, set apart
+        // from the description and the update line by paragraph spacing.
+        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let credits = NSMutableAttributedString()
+        func paragraph(_ text: String, before: CGFloat, _ attributes: [NSAttributedString.Key: Any]) {
+            let style = NSMutableParagraphStyle()
+            style.alignment = .center
+            style.paragraphSpacingBefore = credits.length == 0 ? 0 : before
+            var a = attributes
+            a[.font] = font
+            a[.paragraphStyle] = style
+            credits.append(NSAttributedString(string: (credits.length == 0 ? "" : "\n") + text, attributes: a))
+        }
+        paragraph("A native mail client.", before: 0, [.foregroundColor: NSColor.labelColor])
+        if let site = URL(string: "https://malachimail.app") {
+            paragraph("malachimail.app", before: 10, [.link: site])
+        }
+        if let report = URL(string: "https://malachimail.app/#report") {
+            paragraph("Report an Issue", before: 4, [.link: report])
         }
         // The update check's status line (updates.AboutLine), plain text.
         let line = state.map { Updates.aboutLine($0.updates.status, date: AppState.updateTime) } ?? ""
         if !line.isEmpty {
-            credits.append(NSAttributedString(string: "\n" + line, attributes: [
-                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-                .foregroundColor: NSColor.secondaryLabelColor,
-            ]))
+            paragraph(line, before: 10, [.foregroundColor: NSColor.secondaryLabelColor])
         }
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: MainMenu.appName,
