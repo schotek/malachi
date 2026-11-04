@@ -13,9 +13,8 @@ import MalachiCore
 ///
 /// The sync controller computes everything (`SyncController.line`, sync.go
 /// `syncStatusText` under status.go `statusLineFor`); this view shows it.
-/// Where GTK has the line at the bottom of the sidebar, it spans the window
-/// here so that it stays in sight with the sidebar folded away (the
-/// deviation table in macos/README.md). The actions of the popover's rows
+/// Like GTK's (window.blp `status_bar`), it spans the window so that it
+/// stays in sight with the sidebar folded away. The actions of the popover's rows
 /// go to the app (`onAction`, `onShowOutbox`), which owns the sign-in, the
 /// account assistant and the selection.
 ///
@@ -25,6 +24,10 @@ import MalachiCore
 /// mode. It is never the sync line's: it gives way first when the bar is
 /// too narrow for both (lower compression resistance), and is hidden when
 /// empty. macOS-only, like the board.
+///
+/// At the very end, Report an Issue (window.blp) opens the website's
+/// report form, the About panel's link (`AppLinks.reportIssue`); it keeps
+/// its width, the note and then the line give way.
 ///
 /// In the Calendar mode (`setCalendar`) the line's text is the calendars'
 /// state ("Calendars synced 2 min ago", an error, a sign-in needed) and
@@ -58,6 +61,8 @@ final class StatusBarViewController: NSViewController {
     private let statusButton = NSButton(title: "", target: nil, action: nil)
     /// The board's triage line at the trailing end (`setNote`).
     private let noteLabel = NSTextField(labelWithString: "")
+    /// Report an Issue at the trailing end.
+    private let reportButton = NSButton(title: "", target: nil, action: nil)
     private let content = StatusPopoverViewController()
     /// The popover's window: the Windows client's flyout, without an arrow
     /// (`StatusFlyout`).
@@ -130,7 +135,20 @@ final class StatusBarViewController: NSViewController {
         // Below the sync line's: the note truncates first.
         noteLabel.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(rawValue: 200), for: .horizontal)
 
-        let row = NSStackView(views: [spinner, connectionIcon, statusButton, noteLabel])
+        // window.blp's Report an Issue.
+        reportButton.isBordered = false
+        reportButton.title = L10n.T("Report an Issue")
+        reportButton.image = Icon.image("malachi-report-symbolic", size: .small)
+        reportButton.imagePosition = .imageLeading
+        reportButton.imageHugsTitle = true
+        reportButton.font = Typo.caption
+        reportButton.contentTintColor = .secondaryLabelColor
+        reportButton.target = self
+        reportButton.action = #selector(reportIssue(_:))
+        reportButton.setContentHuggingPriority(.required, for: .horizontal)
+        reportButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+
+        let row = NSStackView(views: [spinner, connectionIcon, statusButton, noteLabel, reportButton])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.distribution = .fill
@@ -242,6 +260,13 @@ final class StatusBarViewController: NSViewController {
     private func refreshStatusPopover() {
         let mailbox = mailbox
         content.update(sync.accountStatuses()) { mailbox.model.outboxKey($0) != nil }
+    }
+
+    // MARK: Report an Issue
+
+    /// main.go app.report-issue: the report form in the browser.
+    @objc private func reportIssue(_ sender: Any?) {
+        NSWorkspace.shared.open(AppLinks.reportIssue)
     }
 
     // MARK: Popover

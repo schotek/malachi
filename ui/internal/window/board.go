@@ -75,11 +75,6 @@ type boardPage struct {
 	// entries do not change (renderHeader).
 	accountFilterLabels []string
 
-	statusButton *gtk.MenuButton
-	syncSpinner  *adw.Spinner
-	connIcon     *gtk.Image
-	syncLabel    *gtk.Label
-
 	listSplit     *adw.NavigationSplitView
 	listStack     *gtk.Stack
 	listEmptyPage *adw.StatusPage
@@ -263,8 +258,8 @@ func modeTitle(m board.Mode) string {
 }
 
 // setMode switches between Mail, Board and Calendar (board.Mode): gates
-// the mail-only actions and shortcuts (applyMessageAccels), moves the
-// status strip's popover (status.go moveStatusStripTo), tells
+// the mail-only actions and shortcuts (applyMessageAccels), brings the
+// status bar's text to the mode (status.go statusTexts), tells
 // the board controller it is about to show or has left
 // (BoardWillShow/BoardShown; board.StyleOnShow) and the calendar page it
 // shows or has left (enterCalendar, leaveCalendar: calendar.go).
@@ -291,7 +286,7 @@ func (w *Window) setMode(m board.Mode) {
 		w.ensureBoard()
 		// The conversation the board held back while in Mail.
 		w.boardPage.gate.flush()
-		w.moveStatusStripTo(board.ModeBoard)
+		w.refreshSyncLabel()
 		w.ResumeBoardReplies()
 		w.boardPage.ctl.BoardWillShow()
 		w.modeStack.SetVisibleChildName(board.ModeBoard.Nick())
@@ -309,7 +304,7 @@ func (w *Window) setMode(m board.Mode) {
 	if m == board.ModeCalendar {
 		w.enterCalendar()
 	}
-	w.moveStatusStripTo(m)
+	w.refreshSyncLabel()
 	w.modeStack.SetVisibleChildName(m.Nick())
 	if w.boardPage != nil {
 		// win.board-* act on a selection only Board shows.
@@ -443,37 +438,18 @@ func (w *Window) boardConnectionChanged(connected bool) {
 	w.refreshBoardStatusLabel()
 }
 
-// refreshBoardStatusLabel is the board's half of refreshSyncLabel
-// (sync.go): the same status line (currentStatusLine, status.go),
-// replaced by a non-empty boardtriage.StripText while there is one to
-// show (the triage's note takes the strip over, as it does on macOS and
-// in the GTK panel). Called whenever something that moves the line
-// changes: refreshSyncLabel itself (sync.go), the board's own notify hooks
-// above, the triage's Observe (board_triage_button.go) and
-// moveStatusStripTo. Only while the board shows: switching to Board
-// refreshes it (moveStatusStripTo), so a hidden board costs nothing.
+// refreshBoardStatusLabel brings the window's status bar up to date
+// while the board shows, when the triage's note may have changed (the
+// board's own notify hooks above, the triage's Observe in
+// board_triage_button.go): the triage's note takes the line over
+// (status.go statusTexts). A hidden board costs nothing: switching to
+// Board refreshes the bar (setMode).
 func (w *Window) refreshBoardStatusLabel() {
 	p := w.boardPage
 	if p == nil || p.replyClosed || w.mode != board.ModeBoard {
 		return
 	}
-	line := w.currentStatusLine()
-	text := line.Text
-	if v, ok := p.cachedTriageView(); ok {
-		triageText := boardtriage.StripText(v, true, p.ctl.Source().Snapshot().Phase, i18n.Tr)
-		text = boardStatusText(line.Text, triageText)
-	}
-	p.syncLabel.SetUseMarkup(false)
-	p.syncLabel.SetLabel(text)
-	p.syncSpinner.SetVisible(line.Spinning)
-	if line.Icon != "" {
-		p.connIcon.SetFromIconName(line.Icon)
-	}
-	p.connIcon.SetVisible(line.Icon != "")
-	if !line.Active {
-		p.statusButton.Popdown()
-	}
-	p.statusButton.SetSensitive(line.Active)
+	w.refreshSyncLabel()
 }
 
 // cachedTriageView is the board triage's View as last observed

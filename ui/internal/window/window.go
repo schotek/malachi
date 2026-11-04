@@ -209,6 +209,9 @@ type Window struct {
 	syncSpinner      *adw.Spinner
 	syncLabel        *gtk.Label
 	connIcon         *gtk.Image
+	// statusNote is the note at the end of the status bar (status.go
+	// statusTexts).
+	statusNote *gtk.Label
 
 	refreshButton   *gtk.Button
 	searchButton    *gtk.ToggleButton
@@ -381,13 +384,6 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		folderStack:      b.GetObject("folder_stack").Cast().(*gtk.Stack),
 		folderList:       b.GetObject("folder_list").Cast().(*gtk.ListBox),
 		folderStatusPage: b.GetObject("folder_status_page").Cast().(*adw.StatusPage),
-		statusButton:     b.GetObject("status_button").Cast().(*gtk.MenuButton),
-		statusPopover:    b.GetObject("status_popover").Cast().(*gtk.Popover),
-		statusAccounts:   b.GetObject("status_accounts").Cast().(*gtk.ListBox),
-		statusDaemon:     b.GetObject("status_daemon").Cast().(*gtk.Label),
-		syncSpinner:      b.GetObject("sync_spinner").Cast().(*adw.Spinner),
-		syncLabel:        b.GetObject("sync_label").Cast().(*gtk.Label),
-		connIcon:         b.GetObject("connection_icon").Cast().(*gtk.Image),
 
 		refreshButton:   b.GetObject("refresh_button").Cast().(*gtk.Button),
 		searchButton:    b.GetObject("search_button").Cast().(*gtk.ToggleButton),
@@ -416,6 +412,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		outboxBanner:   b.GetObject("outbox_banner").Cast().(*adw.Banner),
 		draftBanner:    b.GetObject("draft_banner").Cast().(*adw.Banner),
 	}
+	w.bindStatusBar(b)
 	w.SetApplication(&app.Application)
 	w.issues = &issueActions{
 		client:  c,

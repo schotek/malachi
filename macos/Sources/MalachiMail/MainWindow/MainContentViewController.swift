@@ -5,10 +5,9 @@ import AppKit
 import MalachiCore
 
 /// The main window's content: the three panes (`MainSplitViewController`)
-/// with the status bar across the whole bottom edge under them. In GTK the
-/// status line sits at the bottom of the sidebar (window.blp
-/// `status_button`); here it spans the window so that it stays in sight
-/// with the sidebar folded away (the deviation table in macos/README.md).
+/// with the status bar across the whole bottom edge under them, as GTK's
+/// (window.blp `status_bar`): it stays in sight with the sidebar folded
+/// away.
 ///
 /// The split view is a child view controller and still reaches the top of
 /// the window, so the sidebar runs under the unified toolbar and the

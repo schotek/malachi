@@ -26,6 +26,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/style"
+	"github.com/schotek/malachi/ui/internal/widget"
 	"github.com/schotek/malachi/ui/internal/window"
 )
 
@@ -250,6 +251,14 @@ func addUninstalledIconPath() {
 // settings store and the Assistant state, which exist only after startup
 // has run; show presents the main window. It returns app.compose, which
 // follows the accounts that write mail.
+// The website and its form for reporting a problem with the app: the
+// About dialog's links and Report an Issue at the end of the status line
+// (macOS AppLinks, Windows AppLinks).
+const (
+	websiteURL     = "https://malachimail.app"
+	reportIssueURL = "https://malachimail.app/#report"
+)
+
 func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, cal func() calendardata.DataSource, openNotified func(api.AccountID, api.MessageID), requestQuit func(), mainWindow func() *window.Window) *gio.SimpleAction {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
@@ -284,8 +293,8 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 		d.SetDeveloperName("Malachi Mail contributors")
 		d.SetVersion(version)
 		d.SetLicenseType(gtk.LicenseGPL30)
-		d.SetWebsite("https://malachimail.app")
-		d.SetIssueURL("https://malachimail.app/#report")
+		d.SetWebsite(websiteURL)
+		d.SetIssueURL(reportIssueURL)
 		comments := i18n.T("A native mail client for the GNOME desktop.")
 		// The update check's status line (Check Now is in Preferences →
 		// General); the comments are Pango markup, the line is not.
@@ -296,6 +305,19 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 		d.Present(app.ActiveWindow())
 	})
 	app.AddAction(about)
+
+	// app.report-issue: Report an Issue at the end of the status bar
+	// (window.blp) opens the About
+	// dialog's issue link, the website's report form, in the browser.
+	reportIssue := gio.NewSimpleAction("report-issue", nil)
+	reportIssue.ConnectActivate(func(*glib.Variant) {
+		widget.LaunchURI(app.ActiveWindow(), reportIssueURL, func(err error) {
+			if err != nil {
+				log.Warn("could not open the report form", "err", err)
+			}
+		})
+	})
+	app.AddAction(reportIssue)
 
 	// app.contacts opens the Contacts window (window.OpenContacts) from the
 	// main menu; no shortcut (docs/plans/address-book.md §8).

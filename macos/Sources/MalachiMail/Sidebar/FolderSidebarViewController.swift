@@ -10,8 +10,8 @@ import MalachiCore
 /// list: headings and folders fold with the disclosure chevron at the start
 /// of the row, always visible like the GTK twisty (the hover button of
 /// group rows was easy to miss); Left/Right are the outline's own. The
-/// status line GTK has at the bottom of the sidebar is the window's status
-/// bar here (`StatusBarViewController`), so the outline runs to the bottom.
+/// status line is the window's status bar (`StatusBarViewController`, GTK
+/// window.blp `status_bar`), so the outline runs to the bottom.
 ///
 /// A right click (or a Control-click) on a folder, an account heading or
 /// the Favourites heading opens its context menu (ui/internal/contextmenu

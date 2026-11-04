@@ -303,10 +303,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showAbout(_ sender: Any?) {
         // Built in code from fixed text, never from mail: the one place an
-        // attributed string is made by hand. macOS-only strings. The
-        // standard panel takes only text, so the website and the report
-        // form (main.go SetWebsite and SetIssueURL) are links, set apart
-        // from the description and the update line by paragraph spacing.
+        // attributed string is made by hand. macOS-only strings but Report
+        // an Issue. The standard panel takes only text, so the website and
+        // the report form (main.go SetWebsite and SetIssueURL) are links,
+        // set apart from the description and the update line by paragraph
+        // spacing.
         let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         let credits = NSMutableAttributedString()
         func paragraph(_ text: String, before: CGFloat, _ attributes: [NSAttributedString.Key: Any]) {
@@ -319,12 +320,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             credits.append(NSAttributedString(string: (credits.length == 0 ? "" : "\n") + text, attributes: a))
         }
         paragraph("A native mail client.", before: 0, [.foregroundColor: NSColor.labelColor])
-        if let site = URL(string: "https://malachimail.app") {
-            paragraph("malachimail.app", before: 10, [.link: site])
-        }
-        if let report = URL(string: "https://malachimail.app/#report") {
-            paragraph("Report an Issue", before: 4, [.link: report])
-        }
+        paragraph("malachimail.app", before: 10, [.link: AppLinks.website])
+        // window.blp's Report an Issue (Adw.AboutDialog words its own).
+        paragraph(L10n.T("Report an Issue"), before: 4, [.link: AppLinks.reportIssue])
         // The update check's status line (updates.AboutLine), plain text.
         let line = state.map { Updates.aboutLine($0.updates.status, date: AppState.updateTime) } ?? ""
         if !line.isEmpty {

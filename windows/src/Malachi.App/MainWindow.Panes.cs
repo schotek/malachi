@@ -111,6 +111,7 @@ public sealed partial class MainWindow
         ListPane.CertBannerInvoked += (_, _) => repair.CertBannerButton();
         ListPane.ReconnectRequested += (_, _) => state.Connection.ReconnectNow();
         StatusLine.ActionRequested += (_, st) => repair.StatusAction(st);
+        StatusLine.ReportIssueRequested += (_, _) => _ = state.OpenUrlAsync(Core.Model.AppLinks.ReportIssue);
         // status.go showOutbox: the account's outbox, and the list it shows.
         StatusLine.OutboxRequested += (_, acc) =>
         {

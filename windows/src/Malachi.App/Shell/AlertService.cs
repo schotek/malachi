@@ -45,10 +45,10 @@ namespace Malachi.App.Shell;
 internal sealed partial class AlertService : IAlerts
 {
     /// <summary>The project's website (main.go SetWebsite).</summary>
-    public const string Website = "https://malachimail.app";
+    public const string Website = AppLinks.Website;
 
     /// <summary>The issue tracker (main.go SetIssueURL).</summary>
-    public const string IssueUrl = "https://malachimail.app/#report";
+    public const string IssueUrl = AppLinks.ReportIssue;
 
     // The width of a value in the certificate's details (Alerts.swift
     // detailValueWidth): the fingerprint takes two lines.
@@ -312,9 +312,10 @@ internal sealed partial class AlertService : IAlerts
         // Windows-only string: Adw.AboutDialog words the licence itself.
         panel.Children.Add(Centred("GNU General Public License, version 3 or later", "DimCaptionLabelStyle"));
         var links = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 8 };
-        // Windows-only strings: Adw.AboutDialog's own buttons.
+        // Windows-only string: Adw.AboutDialog's own button.
         links.Children.Add(Link("Website", Website));
-        links.Children.Add(Link("Report an Issue", IssueUrl));
+        // window.blp's Report an Issue (Adw.AboutDialog words its own).
+        links.Children.Add(Link(L10n.T("Report an Issue"), IssueUrl));
         panel.Children.Add(links);
         return new ContentDialog
         {

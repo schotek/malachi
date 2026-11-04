@@ -1898,7 +1898,9 @@ an error. Actions are `win.*` (`mark-read`, `mark-unread`, `toggle-flag`,
 s and Ctrl+R; flag changes and moves are applied optimistically and
 reverted with a toast when the daemon refuses.
 
-The bottom of the sidebar carries the status line, a menu button with an
+The status bar across the bottom of the window (under every mode, as on
+macOS and Windows; Report an Issue at its end) carries the status line, a
+menu button with an
 `adw.Spinner` and a caption computed from `sync.status` and
 `notify.syncState` across the enabled accounts: "Syncing *folder*…
 42 %", then sign-in required, certificate problems, sending, messages
@@ -1985,8 +1987,8 @@ inline pictures in a `multipart/related`. (`richText` in `compose/draft.go`
 is the switch back to a plain-text build.) After a send the message shows
 up in the local Outbox folder (visible only while non-empty) with a banner
 for its delivery state; a failed send offers Retry (`outbox.retry`) and the
-trash button cancels the send (`message.delete`). The status line at the
-bottom of the sidebar (on macOS a bar along the bottom of the window) shows
+trash button cancels the send (`message.delete`). The status line in the
+bar along the bottom of the window shows
 "Sending N messages…" from `SyncState.pendingOutbox` and "N messages not
 sent" from `SyncState.failedOutbox`; clicked, it opens a popover with each
 account's state, last sync and action (sign in, edit, try again, check),

@@ -48,6 +48,7 @@ func TestCalendarGTKSmoke(t *testing.T) {
 		toasts:            adw.NewToastOverlay(),
 		dateWeekStart:     time.Monday,
 	}
+	w.bindStatusBar(wb)
 	defer w.Destroy()
 	src := calendardata.NewSampleSource(time.Now(), time.Local, glibLoop{})
 	w.cal.source = src
@@ -87,7 +88,7 @@ func TestCalendarGTKSmoke(t *testing.T) {
 		t.Logf("LAYOUT: %s page=%dx%d sidebar=%dx%d content=%dx%d header=%d(min %d) stack=%q view=%q title=%q subtitle=%q status=%q note=%q",
 			step, p.root.Width(), p.root.Height(), p.sidebarBin.Width(), p.sidebarBin.Height(),
 			p.stack.Width(), p.stack.Height(), p.header.Width(), headerMin(), p.stack.VisibleChildName(), p.viewSwitch.ActiveName(),
-			p.title.Title(), p.title.Subtitle(), p.statusLabel.Label(), p.statusNote.Label())
+			p.title.Title(), p.title.Subtitle(), p.w.syncLabel.Label(), p.w.statusNote.Label())
 	}
 	if _, empty := p.ctl.EmptyKind(); empty {
 		t.Fatal("the sample calendar shows the empty state")
@@ -98,8 +99,8 @@ func TestCalendarGTKSmoke(t *testing.T) {
 	if !p.split.ShowSidebar() || p.split.Collapsed() {
 		t.Errorf("sidebar not shown beside the content at 1280 px (shown %v, collapsed %v)", p.split.ShowSidebar(), p.split.Collapsed())
 	}
-	if p.statusLabel.Label() == "" {
-		t.Error("the status strip has no calendar line")
+	if p.w.syncLabel.Label() == "" {
+		t.Error("the status bar has no calendar line")
 	}
 	if p.today.Label() == "" {
 		t.Error("Today has no label")

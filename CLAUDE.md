@@ -370,8 +370,7 @@ app spouští `malachid` z bundlu s `--config`/`--store` v
 démona, `malachi-mcp` je v bundlu. Gmail a Microsoft 365 jdou přes
 vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
 doplňování příjemců jen ze sebraných adres. Odchylky od GTK jen z tabulky
-v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
-stavový pruh přes spodek okna místo patičky sidebaru, bez tlačítka
+v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět, bez tlačítka
 hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, hledací pole v toolbaru s pruhem rozsahu, bez hledání sbalené na lupu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
@@ -453,8 +452,7 @@ kontroluje u souboru s klíčem navíc vlastníka a DACL. Démon dostal jen
 platformně neutrální opravy (`exec.LookPath` pro helper, zavírání surových
 souborů před smazáním, `malachi-mcp --claude-desktop-config/--command`,
 `.gitattributes` a přenositelné Go testy). Odchylky od GTK jen z tabulky
-ve `windows/README.md` (hledání v titulkové liště, stavový pruh přes spodek
-okna, skládání panelů při 900/600 px s tlačítky v titulkové liště, menu `…`
+ve `windows/README.md` (hledání v titulkové liště, skládání panelů při 900/600 px s tlačítky v titulkové liště, menu `…`
 s Přidat účet a Konec, klávesy Windows s volbou `ctrl-r`, přístupové
 klávesy místo mnemonik, pořadí tlačítek ContentDialog, bannery InfoBar,
 kontextová menu, vlastní náhled příloh, Mark of the Web, Uložit vše bez
@@ -580,6 +578,19 @@ Ověřeno 2026-11-02: GTK v kontejneru (build, celé `test-ui`, smoke, `make po`
 Windows ARM64 (`build.ps1 app`/`lint`, `test` 9100 se čtyřmi selháními
 prostředí jako na `main`), vlastník prošel všechny tři nad dvěma účty
 z `malachi-devmail`; podrobnosti v „As built“ plánu.
+
+Stavový pruh přes spodek okna a Nahlásit problém (2026-11-04, všechny
+tři klienty, necommitnuté; rozhodnutí vlastníka). GTK přesunulo stavový
+řádek z patičky postranního panelu do pruhu přes celou šířku okna pod
+všemi režimy (`window.blp` `status_bar` pod `mode_stack`), jako macOS
+a Windows, takže to už není jejich odchylka; pruhy Nástěnky a Kalendáře
+zmizely, text a poznámku podle režimu počítá `status.go` `statusTexts`
+(Nástěnka: poznámka triage přebije řádek, Kalendář: stav kalendářů
+a nezodpovězené pozvánky v `status_note`). Na konci pruhu ve všech
+třech klientech „Nahlásit problém“ (msgid „Report an Issue“, ikona
+`malachi-report-symbolic` / `exclamationmark.bubble` / Feedback ED15),
+který otevře https://malachimail.app/#report jako O aplikaci (GTK
+`app.report-issue`, macOS a Windows `AppLinks`).
 
 Pravidla pošty (2026-11-02, všechny tři klienty, v PR do `main`;
 plán, rozhodnutí R1–R14 a stav ověření v `docs/plans/rules.md`, API

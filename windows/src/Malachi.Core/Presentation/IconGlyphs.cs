@@ -150,6 +150,10 @@ public static class IconGlyphs
         // D9; macOS bubble.left.and.bubble.right, GTK's own
         // malachi-chat-symbolic): ChatBubbles.
         ["malachi-chat"] = G(0xE8F2),
+        // Report an Issue at the end of the status line (window.blp; macOS
+        // exclamationmark.bubble, GTK's own malachi-report-symbolic):
+        // Feedback.
+        ["malachi-report"] = G(0xED15),
         // The quick-reply bar's Open in a Window (docs/plans/chat-view.md
         // Q2; macOS arrow.up.forward.square): OpenInNewWindow.
         ["window-new"] = G(0xE8A7),

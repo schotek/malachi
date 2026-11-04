@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 08:43+0000\n"
+"POT-Creation-Date: 2026-11-04 09:09+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:289
+#: ui/main.go:298
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -80,7 +80,7 @@ msgid ""
 "Accounts, then come back here."
 msgstr ""
 
-#: ui/internal/accountwizard/linked.go:177 ui/internal/window/sync.go:485
+#: ui/internal/accountwizard/linked.go:177 ui/internal/window/sync.go:491
 msgid "Could not open Online Accounts; open GNOME Settings yourself"
 msgstr ""
 
@@ -103,7 +103,7 @@ msgid "_Sign In with %s"
 msgstr ""
 
 #. TRANSLATORS: progressive form for the RPC error text
-#: ui/internal/accountwizard/oauth.go:140 ui/internal/window/sync.go:513
+#: ui/internal/accountwizard/oauth.go:140 ui/internal/window/sync.go:519
 #: ui/internal/window/contacts_consent.go:32
 msgid "Starting the sign-in"
 msgstr ""
@@ -1577,7 +1577,7 @@ msgstr ""
 
 #: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
 #: ui/internal/calendar/detail.go:256 ui/internal/contacts/text.go:131
-#: ui/data/ui/window.ui:600
+#: ui/data/ui/window.ui:513
 msgid "Edit"
 msgstr ""
 
@@ -1589,30 +1589,30 @@ msgstr ""
 #: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
 #: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:302
 #: ui/internal/window/quick_reply_bar.go:194 ui/data/ui/message_window.ui:44
-#: ui/data/ui/window.ui:485
+#: ui/data/ui/window.ui:398
 msgid "Reply"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:59
 #: ui/internal/window/conversation_card.go:303
 #: ui/internal/window/quick_reply_bar.go:192 ui/data/ui/message_window.ui:50
-#: ui/data/ui/window.ui:492
+#: ui/data/ui/window.ui:405
 msgid "Reply All"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:61
 #: ui/internal/window/conversation_card.go:304 ui/data/ui/message_window.ui:56
-#: ui/data/ui/window.ui:499
+#: ui/data/ui/window.ui:412
 msgid "Forward"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:592
-#: ui/data/ui/window.ui:1198
+#: ui/data/ui/window.ui:1251
 msgid "Mark as _Read"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
-#: ui/data/ui/window.ui:1194
+#: ui/data/ui/window.ui:1247
 msgid "Mark as _Unread"
 msgstr ""
 
@@ -1622,13 +1622,13 @@ msgid "Unstar"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:70 ui/internal/window/actions.go:67
-#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:526
+#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:439
 msgid "Star"
 msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
 #: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1214
+#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1267
 msgid "Change Status"
 msgstr ""
 
@@ -1636,7 +1636,7 @@ msgstr ""
 #. archive.
 #: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:824
 #: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:132
-#: ui/data/ui/window.ui:586
+#: ui/data/ui/window.ui:499
 msgid "Archive"
 msgstr ""
 
@@ -1646,7 +1646,7 @@ msgid "Move To"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:582
-#: ui/data/ui/window.ui:1188
+#: ui/data/ui/window.ui:1241
 msgid "Mark as Junk"
 msgstr ""
 
@@ -1655,12 +1655,12 @@ msgid "Cancel Sending"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:83 ui/internal/window/outbox.go:242
-#: ui/data/ui/message_window.ui:125 ui/data/ui/window.ui:578
+#: ui/data/ui/message_window.ui:125 ui/data/ui/window.ui:491
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:95 ui/internal/window/status.go:269
-#: ui/data/ui/preferences.ui:257 ui/data/ui/window.ui:258
+#: ui/internal/contextmenu/text.go:95 ui/internal/window/status.go:270
+#: ui/data/ui/preferences.ui:257 ui/data/ui/window.ui:171
 msgid "Check for New Mail"
 msgstr ""
 
@@ -1918,7 +1918,7 @@ msgid "The Jira site rejected the token of %s"
 msgstr ""
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
-#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:813
+#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:726
 msgid "Add _Jira Account…"
 msgstr ""
 
@@ -3417,7 +3417,7 @@ msgid "The conversation could not be loaded."
 msgstr ""
 
 #: ui/internal/board/text.go:766 ui/internal/window/assistant_panel.go:707
-#: ui/internal/window/status.go:324 ui/data/ui/window.ui:454
+#: ui/internal/window/status.go:323 ui/data/ui/window.ui:367
 msgid "Try Again"
 msgstr ""
 
@@ -4254,8 +4254,8 @@ msgid ""
 "Preferences → Calendar."
 msgstr ""
 
-#: ui/internal/calendar/text.go:196 ui/internal/window/sync.go:566
-#: ui/data/ui/window.ui:341
+#: ui/internal/calendar/text.go:196 ui/internal/window/sync.go:572
+#: ui/data/ui/window.ui:254
 msgid "Open Preferences"
 msgstr ""
 
@@ -6772,19 +6772,19 @@ msgstr ""
 msgid "Removing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:432 ui/internal/window/status.go:77
-#: ui/internal/window/sync.go:214
+#: ui/internal/window/accounts_page.go:432 ui/internal/window/status.go:78
+#: ui/internal/window/sync.go:220
 msgid "Paused"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:434 ui/internal/window/status.go:113
+#: ui/internal/window/accounts_page.go:434 ui/internal/window/status.go:114
 msgid "Syncing…"
 msgstr ""
 
 #. TRANSLATORS: account status in Settings → Accounts; %s says why.
 #. TRANSLATORS: status line of an account that cannot reach its
 #. server and keeps trying; %s is an account name.
-#: ui/internal/window/accounts_page.go:438 ui/internal/window/sync.go:248
+#: ui/internal/window/accounts_page.go:438 ui/internal/window/sync.go:254
 #, c-format
 msgid "Offline: %s"
 msgstr ""
@@ -6793,8 +6793,8 @@ msgstr ""
 msgid "Offline"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:442 ui/internal/window/status.go:121
-#: ui/internal/window/sync.go:229
+#: ui/internal/window/accounts_page.go:442 ui/internal/window/status.go:122
+#: ui/internal/window/sync.go:235
 msgid "Sign-in required"
 msgstr ""
 
@@ -6925,7 +6925,7 @@ msgstr ""
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1162
+#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1215
 msgid "_New Message"
 msgstr ""
 
@@ -6939,7 +6939,7 @@ msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr ""
 
 #: ui/internal/window/attachments.go:201 ui/data/ui/message_window.ui:62
-#: ui/data/ui/window.ui:514
+#: ui/data/ui/window.ui:427
 msgid "More Actions"
 msgstr ""
 
@@ -7050,19 +7050,19 @@ msgstr ""
 
 #: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
-#: ui/data/ui/window.ui:884
+#: ui/data/ui/window.ui:797
 msgid "From"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
-#: ui/data/ui/window.ui:910
+#: ui/data/ui/window.ui:823
 msgid "To"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
-#: ui/data/ui/window.ui:938
+#: ui/data/ui/window.ui:851
 msgid "Cc"
 msgstr ""
 
@@ -7075,22 +7075,22 @@ msgstr ""
 
 #: ui/internal/window/conversation_card.go:797 ui/data/ui/embedded_window.ui:61
 #: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
-#: ui/data/ui/window.ui:722 ui/data/ui/window.ui:1204
+#: ui/data/ui/window.ui:635 ui/data/ui/window.ui:1257
 msgid "Load _Images"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:265
-#: ui/data/ui/window.ui:728
+#: ui/data/ui/window.ui:641
 msgid "Always From This _Sender"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:799 ui/data/ui/message_window.ui:267
-#: ui/data/ui/window.ui:730
+#: ui/data/ui/window.ui:643
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:819 ui/data/ui/message_window.ui:296
-#: ui/data/ui/window.ui:759
+#: ui/data/ui/window.ui:672
 msgid "_Download Pictures"
 msgstr ""
 
@@ -7186,7 +7186,7 @@ msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:792
+#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:705
 msgid "No Accounts"
 msgstr ""
 
@@ -7294,7 +7294,7 @@ msgstr ""
 msgid "Sending the message"
 msgstr ""
 
-#: ui/internal/window/outbox.go:75 ui/data/ui/window.ui:335
+#: ui/internal/window/outbox.go:75 ui/data/ui/window.ui:248
 msgid "Retry"
 msgstr ""
 
@@ -7462,7 +7462,7 @@ msgid "Loading more results"
 msgstr ""
 
 #: ui/internal/window/search.go:320 ui/internal/window/search_ownwords.go:154
-#: ui/data/ui/window.ui:282
+#: ui/data/ui/window.ui:195
 msgid "Search Mail"
 msgstr ""
 
@@ -7554,90 +7554,90 @@ msgid ""
 msgstr ""
 
 #. TRANSLATORS: %s is a folder or account name, %d the progress in percent.
-#: ui/internal/window/status.go:116 ui/internal/window/sync.go:220
+#: ui/internal/window/status.go:117 ui/internal/window/sync.go:226
 #, c-format
 msgid "Syncing %s… %d %%"
 msgstr ""
 
 #. TRANSLATORS: %s is a folder or account name.
-#: ui/internal/window/status.go:119 ui/internal/window/sync.go:223
+#: ui/internal/window/status.go:120 ui/internal/window/sync.go:229
 #, c-format
 msgid "Syncing %s…"
 msgstr ""
 
-#: ui/internal/window/status.go:134 ui/internal/window/sync.go:243
+#: ui/internal/window/status.go:135 ui/internal/window/sync.go:249
 msgid "Sync error"
 msgstr ""
 
-#: ui/internal/window/status.go:139 ui/internal/window/sync.go:250
+#: ui/internal/window/status.go:140 ui/internal/window/sync.go:256
 msgid "Offline, retrying"
 msgstr ""
 
 #. TRANSLATORS: state of an account; %s is the time of its last
 #. check for new mail, e.g. "15:04", or its date when that was
 #. before today.
-#: ui/internal/window/status.go:145
+#: ui/internal/window/status.go:146
 #, c-format
 msgid "Last synced %s"
 msgstr ""
 
-#: ui/internal/window/status.go:147 ui/internal/window/sync.go:257
+#: ui/internal/window/status.go:148 ui/internal/window/sync.go:263
 msgid "Up to date"
 msgstr ""
 
-#: ui/internal/window/status.go:184
+#: ui/internal/window/status.go:185
 msgid "Connecting to backend…"
 msgstr ""
 
-#: ui/internal/window/status.go:186
+#: ui/internal/window/status.go:187
 msgid "Backend unavailable"
 msgstr ""
 
-#: ui/internal/window/status.go:190
+#: ui/internal/window/status.go:191
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr ""
 
-#: ui/internal/window/status.go:196
+#: ui/internal/window/status.go:197
 msgid "Not syncing"
 msgstr ""
 
-#: ui/internal/window/status.go:202
+#: ui/internal/window/status.go:203
 msgid "Connected, but system.info failed"
 msgstr ""
 
-#: ui/internal/window/status.go:204
+#: ui/internal/window/status.go:205
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr ""
 
 #. TRANSLATORS: banner button
-#: ui/internal/window/status.go:328 ui/internal/window/sync.go:564
-#: ui/data/ui/window.ui:347
+#: ui/internal/window/status.go:327 ui/internal/window/sync.go:570
+#: ui/data/ui/window.ui:260
 msgid "_Edit Account…"
 msgstr ""
 
 #. TRANSLATORS: status line; %s is an account name.
-#: ui/internal/window/sync.go:227
+#: ui/internal/window/sync.go:233
 #, c-format
 msgid "Sign-in required: %s"
 msgstr ""
 
 #. TRANSLATORS: status line; %s is an account name.
-#: ui/internal/window/sync.go:241
+#: ui/internal/window/sync.go:247
 #, c-format
 msgid "Sync error: %s"
 msgstr ""
 
 #. TRANSLATORS: status line; %s is the time of the last check for
 #. new mail, e.g. "15:04", or its date when that was before today.
-#: ui/internal/window/sync.go:255
+#: ui/internal/window/sync.go:261
 #, c-format
 msgid "Up to date · %s"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages waiting in the outbox.
-#: ui/internal/window/sync.go:264
+#: ui/internal/window/sync.go:270
 #, c-format
 msgid "Sending %d message…"
 msgid_plural "Sending %d messages…"
@@ -7646,7 +7646,7 @@ msgstr[1] ""
 
 #. TRANSLATORS: status line; %d is the number of messages in the outbox
 #. whose sending failed.
-#: ui/internal/window/sync.go:272
+#: ui/internal/window/sync.go:278
 #, c-format
 msgid "%d message not sent"
 msgid_plural "%d messages not sent"
@@ -7654,83 +7654,83 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: account status (sidebar, Settings → Accounts)
-#: ui/internal/window/sync.go:280
+#: ui/internal/window/sync.go:286
 msgid "Certificate changed"
 msgstr ""
 
 #. TRANSLATORS: account status (sidebar, Settings → Accounts)
-#: ui/internal/window/sync.go:283
+#: ui/internal/window/sync.go:289
 msgid "Certificate problem"
 msgstr ""
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:328
+#: ui/internal/window/sync.go:334
 #, c-format
 msgid "The certificate of %s has changed"
 msgstr ""
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:331
+#: ui/internal/window/sync.go:337
 #, c-format
 msgid "The certificate of %s is not trusted"
 msgstr ""
 
-#: ui/internal/window/sync.go:381
+#: ui/internal/window/sync.go:387
 msgid "Checking for new mail…"
 msgstr ""
 
-#: ui/internal/window/sync.go:397
+#: ui/internal/window/sync.go:403
 msgid "Checking for new mail"
 msgstr ""
 
-#: ui/internal/window/sync.go:558 ui/data/ui/account_wizard.ui:308
+#: ui/internal/window/sync.go:564 ui/data/ui/account_wizard.ui:308
 msgid "Open Online Accounts"
 msgstr ""
 
 #. TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
-#: ui/internal/window/sync.go:561
+#: ui/internal/window/sync.go:567
 msgctxt "button"
 msgid "Sign In"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:586
+#: ui/internal/window/sync.go:592
 #, c-format
 msgid "Sign in to %s again in your browser"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:594
+#: ui/internal/window/sync.go:600
 #, c-format
 msgid "GNOME Online Accounts is not available; %s cannot sign in"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:597
+#: ui/internal/window/sync.go:603
 #, c-format
 msgid "Sign in to %s again in Settings → Online Accounts"
 msgstr ""
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:606
+#: ui/internal/window/sync.go:612
 #, c-format
 msgid "No password is stored for %s"
 msgstr ""
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:609
+#: ui/internal/window/sync.go:615
 #, c-format
 msgid "The server rejected the password of %s"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:612
+#: ui/internal/window/sync.go:618
 #, c-format
 msgid "The system keyring is unavailable; %s cannot sign in"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:615
+#: ui/internal/window/sync.go:621
 #, c-format
 msgid "%s needs attention"
 msgstr ""
@@ -7739,19 +7739,19 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1058
+#: ui/internal/window/window.go:1055
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1131 ui/data/ui/window.ui:265
+#: ui/internal/window/window.go:1128 ui/data/ui/window.ui:178
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:1137 ui/data/ui/window.ui:235
+#: ui/internal/window/window.go:1134 ui/data/ui/window.ui:148
 msgid "Messages"
 msgstr ""
 
-#: ui/internal/maildate/groups.go:37 ui/data/ui/window.ui:372
+#: ui/internal/maildate/groups.go:37 ui/data/ui/window.ui:285
 msgid "Flagged"
 msgstr ""
 
@@ -9524,7 +9524,7 @@ msgid "Right"
 msgstr ""
 
 #: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:1048
+#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:961
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
@@ -9533,11 +9533,11 @@ msgstr ""
 msgid "Attached Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:476
+#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:389
 msgid "Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1208
+#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1261
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -9810,78 +9810,82 @@ msgstr ""
 msgid "New Message (Ctrl+N)"
 msgstr ""
 
-#: ui/data/ui/window.ui:144
-msgid "Sync Status"
-msgstr ""
-
-#: ui/data/ui/window.ui:244 ui/data/ui/window.ui:252
+#: ui/data/ui/window.ui:157 ui/data/ui/window.ui:165
 msgid "Inbox"
 msgstr ""
 
-#: ui/data/ui/window.ui:304
+#: ui/data/ui/window.ui:217
 msgctxt "search scope"
 msgid "Folder"
 msgstr ""
 
-#: ui/data/ui/window.ui:310
+#: ui/data/ui/window.ui:223
 msgctxt "search scope"
 msgid "Account"
 msgstr ""
 
-#: ui/data/ui/window.ui:316
+#: ui/data/ui/window.ui:229
 msgctxt "search scope"
 msgid "All Accounts"
 msgstr ""
 
-#: ui/data/ui/window.ui:334
+#: ui/data/ui/window.ui:247
 msgid "The mail backend (malachid) is not running."
 msgstr ""
 
-#: ui/data/ui/window.ui:360
+#: ui/data/ui/window.ui:273
 msgid "All"
 msgstr ""
 
-#: ui/data/ui/window.ui:366
+#: ui/data/ui/window.ui:279
 msgid "Unread"
 msgstr ""
 
-#: ui/data/ui/window.ui:415
+#: ui/data/ui/window.ui:328
 msgid "Load More"
 msgstr ""
 
-#: ui/data/ui/window.ui:599
+#: ui/data/ui/window.ui:512
 msgid "This message is a draft"
 msgstr ""
 
-#: ui/data/ui/window.ui:780
+#: ui/data/ui/window.ui:693
 msgid "No Message Selected"
 msgstr ""
 
-#: ui/data/ui/window.ui:781
+#: ui/data/ui/window.ui:694
 msgid "Select a message to read it here."
 msgstr ""
 
-#: ui/data/ui/window.ui:793
+#: ui/data/ui/window.ui:706
 msgid "Add a mail account to start reading and sending mail."
 msgstr ""
 
-#: ui/data/ui/window.ui:801
+#: ui/data/ui/window.ui:714
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:1166
+#: ui/data/ui/window.ui:1081
+msgid "Sync Status"
+msgstr ""
+
+#: ui/data/ui/window.ui:1196
+msgid "Report an Issue"
+msgstr ""
+
+#: ui/data/ui/window.ui:1219
 msgid "_Contacts"
 msgstr ""
 
-#: ui/data/ui/window.ui:1172
+#: ui/data/ui/window.ui:1225
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:1176
+#: ui/data/ui/window.ui:1229
 msgid "_Keyboard Shortcuts"
 msgstr ""
 
-#: ui/data/ui/window.ui:1180
+#: ui/data/ui/window.ui:1233
 msgid "_About Malachi Mail"
 msgstr ""
 

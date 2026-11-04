@@ -78,12 +78,15 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// across at one digit (8px of text box and 4px either side) and a
 	// capsule with more; bold, so the small caption still reads at a glance.
 	b.WriteString("label.unread-badge { min-width: 8px; min-height: 16px; padding: 0 4px; border-radius: 99px; font-weight: bold; background-color: @accent_bg_color; color: @accent_fg_color; }\n")
-	// The status line at the bottom of the sidebar (window.blp) is a menu
+	// The status line at the bottom of the window (window.blp) is a menu
 	// button that opens the accounts' states, but it reads as a line of
 	// text: the button loses the height and padding a stand-alone one
 	// claims and the bold weight Adwaita gives buttons, and its label keeps
 	// to the left over the full width (hexpand and xalign in window.blp).
 	b.WriteString("menubutton.status-line > button { min-height: 0; padding: 4px 6px; font-weight: normal; }\n")
+	// Report an Issue at the end of the status bar (window.blp) reads as
+	// the same line of text.
+	b.WriteString("button.status-line { min-height: 0; padding: 4px 6px; font-weight: normal; }\n")
 	// The accounts in the status popover (window.blp status_accounts), as
 	// the Windows client draws them: a flat card with a hairline border and
 	// a radius of 8 instead of Adwaita's raised boxed list (radius 12 and a

@@ -426,7 +426,7 @@ func (p *calendarPage) layoutLine(step string) string {
 	return fmt.Sprintf("LAYOUT: %s page=%dx%d sidebar=%dx%d content=%dx%d header=%d(min %d) stack=%q view=%q title=%q subtitle=%q status=%q note=%q",
 		step, p.root.Width(), p.root.Height(), p.sidebarBin.Width(), p.sidebarBin.Height(),
 		p.stack.Width(), p.stack.Height(), p.header.Width(), m, p.stack.VisibleChildName(), p.viewSwitch.ActiveName(),
-		p.title.Title(), p.title.Subtitle(), p.statusLabel.Label(), p.statusNote.Label())
+		p.title.Title(), p.title.Subtitle(), p.w.syncLabel.Label(), p.w.statusNote.Label())
 }
 
 // devPrintWidget prints a widget's bounds in its window.
@@ -489,7 +489,7 @@ func (p *calendarPage) minLine() string {
 	return fmt.Sprintf("LAYOUT: min page=%d split=%d sidebar=%d header=%d stack=%d week=%d day=%d month=%d agenda=%d search=%d empty=%d status=%d banner=%d",
 		devMinWidth(p.root), devMinWidth(p.split), devMinWidth(p.sidebarBin), devMinWidth(p.header), devMinWidth(p.stack),
 		devMinWidth(p.weekBin), devMinWidth(p.dayBin), devMinWidth(p.monthBin), devMinWidth(p.agendaBin), devMinWidth(p.searchBin),
-		devMinWidth(p.empty), devMinWidth(p.statusButton), devMinWidth(p.banner))
+		devMinWidth(p.empty), devMinWidth(p.w.statusButton), devMinWidth(p.banner))
 }
 
 // modeMinLine is the minimum widths of the window's mode stack and each

@@ -40,6 +40,7 @@ func TestCSS(t *testing.T) {
 		"row.folder-row:hover button.folder-star",
 		"row.folder-row:not(.favourite) button.folder-star.starred",
 		"menubutton.status-line > button { min-height: 0;",
+		"button.status-line { min-height: 0;",
 		"box.remote-bar",
 		"button.quoted-text { min-height: 0;",
 		"button.fold-all { min-height: 0;",

@@ -169,102 +169,6 @@ Adw.ApplicationWindow main_window {
                 child: Adw.StatusPage folder_status_page {};
               }
             };
-
-            // One line for the state of every account (window/sync.go), or of
-            // the connection to the daemon while there is none; the icon shows
-            // only then. The line opens a popover with each account's state and
-            // action, and the daemon at the bottom (window/status.go). A screen
-            // reader reads the line itself, not the tooltip.
-            [bottom]
-            MenuButton status_button {
-              // TRANSLATORS: tooltip of the status line at the bottom of the
-              // folder list, which opens the state of every account.
-              tooltip-text: _("Sync Status");
-              direction: up;
-              margin-start: 6;
-              margin-end: 6;
-              margin-top: 6;
-              margin-bottom: 6;
-
-              accessibility {
-                labelled-by: sync_label;
-              }
-
-              styles [
-                "flat",
-                "status-line",
-              ]
-
-              child: Box {
-                spacing: 8;
-
-                Adw.Spinner sync_spinner {
-                  visible: false;
-                  valign: center;
-                }
-
-                Image connection_icon {
-                  visible: false;
-                }
-
-                Label sync_label {
-                  ellipsize: end;
-                  xalign: 0;
-                  hexpand: true;
-
-                  styles [
-                    "caption",
-                    "dim-label",
-                  ]
-                }
-              };
-
-              // Rows are built from Go, one per account (plus one for its
-              // unsent messages); status_daemon names the connected daemon.
-              // The clamp holds the width: a wrapping label asks for the width
-              // of its whole text, and the reasons in the rows are sentences.
-              // As in the Windows client (a flyout at TopEdgeAlignedLeft):
-              // no arrow, the popover's start edge on the line's.
-              popover: Popover status_popover {
-                has-arrow: false;
-                halign: start;
-
-                child: Adw.Clamp {
-                  maximum-size: 320;
-                  tightening-threshold: 320;
-
-                  child: Box {
-                    orientation: vertical;
-                    spacing: 12;
-                    width-request: 320;
-                    margin-start: 6;
-                    margin-end: 6;
-                    margin-top: 6;
-                    margin-bottom: 6;
-
-                    ListBox status_accounts {
-                      selection-mode: none;
-                      overflow: hidden;
-
-                      styles [
-                        "boxed-list",
-                        "status-accounts",
-                      ]
-                    }
-
-                    Label status_daemon {
-                      xalign: 0;
-                      wrap: true;
-
-                      styles [
-                        "caption",
-                        "dim-label",
-                      ]
-                    }
-                  };
-                };
-              };
-            }
           };
         };
 
@@ -1231,6 +1135,162 @@ Adw.ApplicationWindow main_window {
         // The Calendar mode's page (docs/calendar.md §6.5): empty until
         // window/calendar.go puts calendar_page.blp's root into this bin.
         child: Adw.Bin calendar_page_bin {};
+      }
+    }
+
+    // The status bar across the bottom of the window, under every mode as
+    // on macOS and Windows: one line for the state of every account
+    // (window/sync.go), or of the connection to the daemon while there is
+    // none; the icon shows only then. The line opens a popover with each
+    // account's state and action, and the daemon at the bottom
+    // (window/status.go). In Board the triage's note takes the line over,
+    // in Calendar the calendars' state does (status.go statusTexts). A
+    // screen reader reads the line itself, not the tooltip.
+    Separator {}
+
+    Box status_bar {
+      spacing: 8;
+      margin-start: 6;
+      margin-end: 6;
+      margin-top: 2;
+      margin-bottom: 2;
+
+      MenuButton status_button {
+        // TRANSLATORS: tooltip of the status line at the bottom of the
+        // window, which opens the state of every account.
+        tooltip-text: _("Sync Status");
+        direction: up;
+        hexpand: true;
+
+        accessibility {
+          labelled-by: sync_label;
+        }
+
+        styles [
+          "flat",
+          "status-line",
+        ]
+
+        child: Box {
+          spacing: 8;
+
+          Adw.Spinner sync_spinner {
+            visible: false;
+            valign: center;
+          }
+
+          Image connection_icon {
+            visible: false;
+          }
+
+          Label sync_label {
+            ellipsize: end;
+            xalign: 0;
+            hexpand: true;
+
+            styles [
+              "caption",
+              "dim-label",
+            ]
+          }
+        };
+
+        // Rows are built from Go, one per account (plus one for its
+        // unsent messages); status_daemon names the connected daemon.
+        // The clamp holds the width: a wrapping label asks for the width
+        // of its whole text, and the reasons in the rows are sentences.
+        // As in the Windows client (a flyout at TopEdgeAlignedLeft):
+        // no arrow, the popover's start edge on the line's.
+        popover: Popover status_popover {
+          has-arrow: false;
+          halign: start;
+
+          child: Adw.Clamp {
+            maximum-size: 320;
+            tightening-threshold: 320;
+
+            child: Box {
+              orientation: vertical;
+              spacing: 12;
+              width-request: 320;
+              margin-start: 6;
+              margin-end: 6;
+              margin-top: 6;
+              margin-bottom: 6;
+
+              ListBox status_accounts {
+                selection-mode: none;
+                overflow: hidden;
+
+                styles [
+                  "boxed-list",
+                  "status-accounts",
+                ]
+              }
+
+              Label status_daemon {
+                xalign: 0;
+                wrap: true;
+
+                styles [
+                  "caption",
+                  "dim-label",
+                ]
+              }
+            };
+          };
+        };
+      }
+
+      // The board's triage and the Calendar's unanswered invitations at
+      // the end of the line (window/status.go statusTexts; macOS
+      // noteLabel): it gives way first when the window is narrow.
+      Label status_note {
+        use-markup: false;
+        ellipsize: end;
+        xalign: 1;
+        visible: false;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+
+      // Report an Issue opens the website's report form, the About
+      // dialog's issue link (main.go app.report-issue).
+      Button {
+        action-name: "app.report-issue";
+        valign: center;
+
+        styles [
+          "flat",
+          "status-line",
+        ]
+
+        child: Box {
+          spacing: 8;
+
+          Image {
+            icon-name: "malachi-report-symbolic";
+
+            styles [
+              "dim-label",
+            ]
+          }
+
+          Label {
+            // TRANSLATORS: at the end of the status bar: opens the form
+            // for reporting a problem with the app on its website, the
+            // About dialog's Report an Issue.
+            label: _("Report an Issue");
+
+            styles [
+              "caption",
+              "dim-label",
+            ]
+          }
+        };
       }
     }
   };

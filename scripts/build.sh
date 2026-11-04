@@ -75,6 +75,10 @@ if [[ "${1:-}" == "install" ]]; then
     # conversation_host.go); the theme has no pair of speech bubbles.
     install -Dm644 ui/data/icons/malachi-chat-symbolic.svg \
         "$DESTDIR$PREFIX/share/icons/hicolor/scalable/actions/malachi-chat-symbolic.svg"
+    # Report an Issue at the end of the status line (window.blp); the
+    # theme has no speech bubble with an exclamation mark.
+    install -Dm644 ui/data/icons/malachi-report-symbolic.svg \
+        "$DESTDIR$PREFIX/share/icons/hicolor/scalable/actions/malachi-report-symbolic.svg"
     # Staging for a package: the schema is compiled by the package manager
     # (dpkg triggers on /usr/share/glib-2.0/schemas), and a compiled cache
     # inside the package would collide with every other application's.

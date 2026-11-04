@@ -52,7 +52,14 @@ public sealed partial class StatusBarView : UserControl
         InitializeComponent();
         FlyoutContent.Tag = this;
         AccountRows.ItemsSource = popover.Rows;
+        ReportIcon.Glyph = Icons.Glyph("malachi-report");
+        ReportIcon.FontFamily = Icons.SymbolFont;
     }
+
+    /// <summary>Report an Issue was clicked (main.go app.report-issue): the window opens the report form.</summary>
+    public event EventHandler? ReportIssueRequested;
+
+    private void OnReportClick(object sender, RoutedEventArgs e) => ReportIssueRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>An account's row asked for its action (status.go onStatusAction), after the flyout closed.</summary>
     public event EventHandler<AccountStatus>? ActionRequested;
