@@ -4585,6 +4585,77 @@ inside a `UserControl`, a `SettingsCard` whose `Description` is a panel,
 
 Board card badge (2026-11-03): `BoardMessage.Signature` (board.get) reaches `Board.CaseMessage` and `Board.MessageCard` (compared by value), `ConversationCards.Key` carries each member's verdict (`VerdictOf`) so a changed one updates the cards in place, `DaemonBoardSource.SignaturesChanged` asks the shown conversation again, and `BoardMessageCardView` holds the same `SignatureBadgeButton` under an open card's header (no badge in a chat bubble); written without .NET, see `docs/plans/signatures.md` "Board card badge (Windows)".
 
+### 11.19 Print (2026-11-04)
+
+Port of macOS's print (docs/plans/toolbar-customization.md §8 and §16; Go
+reference `ui/internal/printing`).
+
+**Core.** `Malachi.Core/Printing`:
+
+- `Print` is the 1:1 port of `printing.go`. Go's `Event` is `PrintedEvent`
+  (CA1716) and its `Single` layout is `One` (CA1720).
+- `PrintComposer` holds macOS `PrintController`'s Mail and Calendar parts,
+  testable over a FakeDaemon:
+  - the header comes from `message.get` through the cache;
+  - the body comes from `message.body` without `trimQuoted`, asked directly
+    and never through the cache's variant switch;
+  - Bcc is printed only for folders of role Sent, Drafts or Outbox;
+  - a conversation prints oldest first, and at most 50 messages print;
+  - the event comes from `Cal.DetailOf`, the day from `Cal.Agenda`.
+- `MessageActionRouter.PrintSelection` and `CanPrint` read the selection.
+- `ShortcutCommand.Print` is Ctrl+P, in the main window and in message
+  windows.
+
+**App.**
+
+- **Entry points.** The window command `Print` is set up by
+  `MainWindow.Print.cs`: Mail prints the selection, the Calendar prints the
+  selected event or else the day, and the Board prints nothing.
+  `MessageWindow` prints its own message.
+- **Where Print appears.** Besides the key, Print is in More Actions and at
+  the end of a message's context menu in the list. That is the owner's
+  addition to P4 until the toolbar gets its Print item. Print is never in
+  the primary menu.
+- **Printing.** `Printing/PrintJob` keeps one hidden `MessageWebView` per
+  window: transparent, out of the tree's hit test and UI Automation, with
+  the reader's policy. Once the document has loaded, the job runs these
+  steps:
+  1. `PrintToPdfStreamAsync` lays the document out as a PDF in memory: A4,
+     or Letter where `RegionInfo.IsMetric` is false. The header carries the
+     title and the date, the footer the page numbers, and the URI is blanked.
+  2. `Printing/PrintPages` draws its pages with `Windows.Data.Pdf` into
+     `BitmapImage`s: 96 dpi for the preview, 200 dpi for the printer.
+  3. The sheets are laid out in a transparent canvas, scaled to the sheet's
+     `ImageableRect`.
+  4. A XAML `PrintDocument` hands them to `PrintManagerInterop` of the
+     window. The dialog shows the preview and the job's title.
+- **Development aid.** `MALACHI_PRINT_PDF=<path>` saves the PDF instead of
+  opening the dialog.
+
+**Measured.**
+
+- WebView2's `ShowPrintUI(System)` opened a dialog called "Microsoft Edge
+  WebView2 – Print" with no preview, and its Browser dialog draws over the
+  hidden view. That is why Print uses XAML printing.
+- XAML print draws no `SoftwareBitmapSource` (a blank preview), and a sheet
+  must be in the tree.
+
+**Verified on Windows 11 x64.**
+
+- `build.ps1 app` and `lint` passed.
+- `PrintTests` and `PrintComposerTests` passed (with the shortcut and router
+  tests, 47 in all).
+- An isolated run with the Calendar samples printed a day to PDF (one A4
+  page with its header and footer) and showed the dialog with its preview.
+
+**Not verified.**
+
+- Printing on paper.
+- Mail printing on the owner's data: a message, a conversation, a selection.
+- `cid:` pictures.
+- Other display scales.
+- ARM64.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

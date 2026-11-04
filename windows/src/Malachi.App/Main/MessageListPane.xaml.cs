@@ -964,6 +964,15 @@ public sealed partial class MessageListPane : UserControl
                 menu.Items.Add(MessageMenuItem(it, labels, c, rows, assistant));
             }
         }
+        // Print (Ctrl+P) of the selection: a Windows addition to
+        // ui/internal/contextmenu (the owner's, 2026-11-04), until the
+        // toolbar's Print item; Windows-only string: the key name.
+        var print = new MenuFlyoutItem { KeyboardAcceleratorTextOverride = "Ctrl+P" };
+        MnemonicLabel.Apply(print, Core.Printing.Print.MenuTitle);
+        AutomationProperties.SetAutomationId(print, "ContextPrint");
+        CommandBinding.Bind(print, c.Print);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(print);
         e.Handled = true;
         if (MessageList.ContainerFromItem(row) is not ListViewItem container)
         {

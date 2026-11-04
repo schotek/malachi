@@ -210,6 +210,14 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem x:Name="MenuLoadImages" l:MnemonicLabel.Text="{l:T Msgid='Load _Images'}" />
                         <MenuFlyoutItem x:Name="MenuTrustSender" l:MnemonicLabel.Text="{l:T Msgid='Always Load Images From This _Sender'}" />
+                        <!-- Print (Ctrl+P), the owner's addition of 2026-11-04 until the
+                             toolbar's Print item; Windows-only string: the key name. -->
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem
+                            x:Name="MenuPrint"
+                            AutomationProperties.AutomationId="MenuPrint"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Print…'}"
+                            KeyboardAcceleratorTextOverride="Ctrl+P" />
                         <!-- The status of a Jira issue (hidden-when: action-disabled). -->
                         <MenuFlyoutSeparator x:Name="MenuChangeStatusSeparator" Visibility="Collapsed" />
                         <MenuFlyoutItem x:Name="MenuChangeStatus" Text="{l:T Msgid='Change Status'}" Visibility="Collapsed" />

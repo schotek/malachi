@@ -53,6 +53,7 @@ public sealed partial class MessageCommandBar : UserControl
         CommandBinding.Bind(MenuMarkRead, windowCommands.MarkRead);
         CommandBinding.Bind(MenuLoadImages, windowCommands.LoadImages);
         CommandBinding.Bind(MenuTrustSender, windowCommands.TrustSender);
+        CommandBinding.Bind(MenuPrint, windowCommands.Print);
         CommandBinding.Bind(MenuChangeStatus, windowCommands.ChangeStatus);
         windowCommands.ChangeStatus.Command.CanExecuteChanged += (_, _) => ShowFlags();
         windowCommands.ToggleFlag.Command.CanExecuteChanged += (_, _) => ShowFlags();

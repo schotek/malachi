@@ -890,3 +890,20 @@ Schované zůstávají na svém místě (`Collapsed` v pořadí `ToolbarStrip`).
 - Neověřeno (pro vlastníka): obě opravy pádů, tisk zprávy, konverzace, výběru a události
   (vzorová data bez démona zprávy nemají), panel tisku, obrázky `cid:`
   a `data:` v tisku, okno zprávy.
+
+## 17a. As built (tisk na Windows, 2026-11-04)
+
+Port na větvi `feat/print-windows`, podrobnosti v `docs/windows-port.md` §11.19.
+
+- **Core:**
+  - `Malachi.Core/Printing/Print.cs` je port Go 1:1 (`Single` → `One`, `Event` → `PrintedEvent`);
+  - `PrintComposer` drží macOS `PrintController` (Pošta a Kalendář) a má testy nad FakeDaemonem;
+  - Ctrl+P (`ShortcutCommand.Print`).
+- **Tisk:**
+  1. Skrytý uzamčený `MessageWebView` vysází dokument do PDF v paměti (`PrintToPdfStreamAsync`).
+  2. `Windows.Data.Pdf` z něj vykreslí stránky.
+  3. Tiskové okno Windows s náhledem je dostane přes XAML `PrintDocument` a `PrintManagerInterop`.
+- **Proč ne tiskové okno WebView2:** nese jméno procesu WebView2 a náhled v něm chybí. Ukázal to průchod vlastníka.
+- **Vstupy:** Ctrl+P, Další akce a kontextové menu zprávy (rozhodnutí vlastníka 2026-11-04, doplněk P4 do příchodu položky lišty), nikdy hlavní nabídka „…“.
+- **Čtyři msgid** jsou z exclusions pryč.
+
