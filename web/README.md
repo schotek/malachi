@@ -23,24 +23,35 @@ the arrow keys and a click beside it to close. Every screenshot is a link
 to the picture itself (`a.shot`), which is what a browser without the
 script gets.
 
-`assets/report.js` (deferred, every page) turns "Report a problem with
-the app" in the footer (`[data-report]`; on `404.html` a line under the
-buttons) into the page's `<dialog class="report">`: name, e-mail, the
-description, an optional screenshot and a honeypot field `website`. The
-form goes as `multipart/form-data` to
-`https://admin.malachimail.app/api/v1/reports` (the admin's public
-endpoint, which allows only the origin `https://malachimail.app`), with
-the page's language and path; on `localhost` and `127.0.0.1` it goes to
-`http://localhost:8789/api/v1/reports` with Turnstile's test site key.
-Cloudflare Turnstile (`challenges.cloudflare.com`, action `report`) is
-loaded only when the form is opened for the first time, so a page that
-is only read talks to no one but this site. The screenshot is scaled in
-a canvas to at most 2560 px on its longest side and re-encoded as WebP
-(JPEG where the browser cannot), which drops its EXIF; at most 5 MiB.
-The site key in the script is the one of the Turnstile widget
+`assets/report.js` (deferred, every page) turns two links of the footer
+into the page's forms, each a `<dialog class="report" data-form="…">`
+over the page:
+
+- "Report a problem with the app" (`[data-report]`, `data-form="report"`;
+  on `404.html` a line under the buttons): name, e-mail, the description,
+  an optional screenshot and a honeypot field `website`, to
+  `https://admin.malachimail.app/api/v1/reports`;
+- "Suggest a feature" (`[data-idea]`, `data-form="idea"`; not on
+  `404.html`): the same fields without the screenshot, to
+  `https://admin.malachimail.app/api/v1/ideas`.
+
+Both go as `multipart/form-data` to the admin's public endpoints (which
+allow only the origin `https://malachimail.app`), with the page's language
+and path; on `localhost` and `127.0.0.1` they go to
+`http://localhost:8789/api/v1/…` with Turnstile's test site key.
+Cloudflare Turnstile (`challenges.cloudflare.com`) is loaded only when a
+form is opened for the first time, so a page that is only read talks to
+no one but this site; each form renders its own widget with its own
+action (`report`, `idea`), which the admin checks. The screenshot is
+scaled in a canvas to at most 2560 px on its longest side and re-encoded
+as WebP (JPEG where the browser cannot), which drops its EXIF; at most
+5 MiB. The site key in the script is the one of the Turnstile widget
 "Malachi report" (hostname `malachimail.app`) in the Cloudflare
-dashboard; its secret key is the admin's `TURNSTILE_SECRET`. Without the script the
-link goes to the GitHub issues.
+dashboard, shared by both forms; its secret key is the admin's
+`TURNSTILE_SECRET`. An address ending in `#report` or `#idea` opens that
+form when the page loads. The links themselves are `#report` and `#idea`
+(a hover shows only the page's own address); without the script they do
+nothing.
 
 | Page | English | Czech |
 |---|---|---|
@@ -63,8 +74,8 @@ The site is <https://malachimail.app>, a Cloudflare Worker with static
 assets (`wrangler.jsonc`): the files of this directory, except what
 `.assetsignore` names. `_headers` sets the security headers (a content
 security policy that allows only the site's own files, and for the
-report form Turnstile's script and frame from `challenges.cloudflare.com`,
-the POST to `admin.malachimail.app` and `blob:` pictures for the
+forms Turnstile's script and frame from `challenges.cloudflare.com`,
+the POSTs to `admin.malachimail.app` and `blob:` pictures for the
 screenshot's preview) and a day's
 caching for `assets/`; `_redirects` serves `/` and `/cs/` as their
 `index.html`, because `html_handling` is `none` so that the `.html`
@@ -174,7 +185,7 @@ and open <http://localhost:8765/>.
   by default.
 - `assets/` is cached for a day, so a changed `style.css` or script
   gets a new `?v=` on every page that links it (`style.css?v=5`,
-  `report.js?v=2`); otherwise a returning visitor sees the new pages with
+  `report.js?v=4`); otherwise a returning visitor sees the new pages with
   the old stylesheet.
 - Icons: `assets/icon-*.png` and `icon-512.webp` are rasterised from
   `docs/malachi_icon.svg`; `favicon.ico` wraps the 32 and 64 px PNGs.
