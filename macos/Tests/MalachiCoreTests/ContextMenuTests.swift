@@ -42,6 +42,10 @@ struct ContextMenuTests {
         issue.markRead = true; issue.toggleFlag = true; issue.changeStatus = true; issue.assistant = true
         var queuedComment = ContextMenu.MessageState()
         queuedComment.outbox = true; queuedComment.trash = true
+        var prints = mail
+        prints.offerPrint = true; prints.print = true
+        var tooMany = mail
+        tooMany.offerPrint = true
         let cases: [(String, ContextMenu.MessageState, String)] = [
             ("read mail", mail, "openMessage | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant"),
             ("unread mail, no Assistant", unread, "openMessage | reply replyAll forward | markRead toggleFlag | archive moveTo junk trash"),
@@ -53,6 +57,10 @@ struct ContextMenuTests {
             ("outbox", outbox, "openMessage | reply forward | toggleFlag- | archive- moveTo- junk- trash"),
             ("issue tracker", issue, "openMessage | reply forward | markRead toggleFlag changeStatus | assistant"),
             ("queued comment of an issue tracker", queuedComment, "openMessage | toggleFlag- | trash"),
+            ("a client that prints", prints,
+             "openMessage print | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant"),
+            ("too many rows to print", tooMany,
+             "openMessage print- | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant"),
         ]
         for (name, s, want) in cases {
             #expect(show(ContextMenu.messageItems(s)) == want, "\(name)")
@@ -160,6 +168,7 @@ struct ContextMenuTests {
         typealias L = ContextMenu.Labels
         let cases: [(ContextMenu.ItemID, L, String)] = [
             (.openMessage, L(), "Open in New Window"),
+            (.print, L(), "_Print…"),
             (.editDraft, L(), "Edit"),
             (.reply, L(), "Reply"),
             (.reply, L(comment: true), "Comment"),
