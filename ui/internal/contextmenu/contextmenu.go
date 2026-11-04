@@ -29,6 +29,10 @@ const (
 	// folder, which opens in the compose window.
 	OpenMessage ItemID = "open"
 	EditDraft   ItemID = "edit"
+	// Print prints the selection as the window's Print does
+	// (ui/internal/printing; a conversation as one, several rows page by
+	// page); disabled over printing.MaxMessages rows.
+	Print ItemID = "print"
 	// Reply is Comment on an issue tracker's account (Labels.Comment).
 	Reply    ItemID = "reply"
 	ReplyAll ItemID = "replyAll"
@@ -102,6 +106,9 @@ type MessageState struct {
 	// Draft: a message of the Drafts folder, which opens in the compose
 	// window.
 	Draft bool
+	// OfferPrint: the client prints (ui/internal/printing); Print: the
+	// selection can be printed now (at most printing.MaxMessages rows).
+	OfferPrint, Print bool
 	// Outbox: a queued message (Trash cancels its sending).
 	Outbox bool
 	// What the account offers at all (capabilities.Supported, the outbox
@@ -143,7 +150,8 @@ func (s *MessageState) SetCrm(o crm.Offer) {
 	s.OfferCrm, s.Crm, s.CrmSaved = o.Shown, o.Enabled, o.Saved
 }
 
-// MessageItems is the message menu in its groups: opening; answering;
+// MessageItems is the message menu in its groups: opening and printing;
+// answering;
 // eWay-CRM; read, star and status; where the message goes; Create Rule
 // from Message…; the Assistant. Empty groups are left out. For several rows Open opens each
 // (Labels.Count), Forward forwards them in one message, Save to eWay-CRM
@@ -159,6 +167,10 @@ func MessageItems(s MessageState) [][]Item {
 	open := Item{ID: OpenMessage, Enabled: !several || s.Open}
 	if s.Draft && !several {
 		open.ID = EditDraft
+	}
+	opening := []Item{open}
+	if s.OfferPrint {
+		opening = append(opening, Item{Print, s.Print})
 	}
 	var answer []Item
 	if s.OfferReply && !several {
@@ -210,7 +222,7 @@ func MessageItems(s MessageState) [][]Item {
 	if s.Assistant {
 		assistant = []Item{{Assistant, true}}
 	}
-	return groups([]Item{open}, answer, crmItems, mark, move, rule, assistant)
+	return groups(opening, answer, crmItems, mark, move, rule, assistant)
 }
 
 // FolderState is what the sidebar knows of the folder clicked.

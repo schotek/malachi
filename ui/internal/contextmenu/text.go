@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/schotek/malachi/ui/internal/crm"
+	"github.com/schotek/malachi/ui/internal/printing"
 )
 
 // Translator is what the texts need of the catalogue (i18n.Tr in GTK,
@@ -50,6 +51,8 @@ func Label(tr Translator, id ItemID, l Labels) string {
 		return tr.T("Open in New Window")
 	case EditDraft:
 		return tr.T("Edit")
+	case Print:
+		return printing.MenuTitle(tr)
 	case Reply:
 		if l.Comment {
 			return tr.T("Comment")

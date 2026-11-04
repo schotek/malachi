@@ -84,6 +84,14 @@ func TestMessageItems(t *testing.T) {
 		{"queued comment of an issue tracker", func(MessageState) MessageState {
 			return MessageState{Outbox: true, Trash: true}
 		}, "open | toggleFlag- | trash"},
+		{"a client that prints", func(s MessageState) MessageState {
+			s.OfferPrint, s.Print = true, true
+			return s
+		}, "open print | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant"},
+		{"too many rows to print", func(s MessageState) MessageState {
+			s.OfferPrint = true
+			return s
+		}, "open print- | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant"},
 	}
 	for _, c := range cases {
 		if got := show(MessageItems(c.s(mail))); got != c.want {
@@ -258,6 +266,7 @@ func TestLabels(t *testing.T) {
 		want string
 	}{
 		{OpenMessage, Labels{}, "Open in New Window"},
+		{Print, Labels{}, "_Print…"},
 		{EditDraft, Labels{}, "Edit"},
 		{Reply, Labels{}, "Reply"},
 		{Reply, Labels{Comment: true}, "Comment"},
