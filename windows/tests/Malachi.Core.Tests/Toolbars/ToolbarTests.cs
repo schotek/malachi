@@ -148,7 +148,7 @@ public sealed class ToolbarTests
     public void AllowedLeavesOutMissingFeatures()
     {
         var got = Allowed(Bar.Mail, Features.With(Feature.Assistant));
-        Assert.DoesNotContain(Crm, got);
+        Assert.DoesNotContain(Toolbar.Crm, got);
         Assert.DoesNotContain(Print, got);
         Assert.Contains(Assistant, got);
         Assert.Contains(Reply, got);
@@ -164,7 +164,7 @@ public sealed class ToolbarTests
         for (var i = 0; i < got.Count; i++)
         {
             Assert.Equal(l[i], got[i].Id);
-            Assert.Equal(got[i].Id == Crm, got[i].Hidden);
+            Assert.Equal(got[i].Id == Toolbar.Crm, got[i].Hidden);
         }
     }
 
@@ -186,7 +186,7 @@ public sealed class ToolbarTests
         // Only actions of the default toolbar: the palette's own are in the menus.
         Assert.Equal([ReplyAll, Forward, Trash, Star], MissingActions(Bar.Mail, l, Features.With(Feature.Crm)));
         // A hidden item is missing from the toolbar, but its feature is too.
-        Assert.DoesNotContain(Crm, MissingActions(Bar.Mail, l, Features.None));
+        Assert.DoesNotContain(Toolbar.Crm, MissingActions(Bar.Mail, l, Features.None));
         Assert.Empty(MissingActions(Bar.BoardList, DefaultLayout(Bar.BoardList), Features.None));
     }
 

@@ -49,7 +49,7 @@ public sealed class ToolbarVariant
                 Mode, NewMessage, FlexibleSpace,
                 Separator(Section.List), Refresh, FlexibleSpace, Search,
                 Separator(Section.Message), Reply, ReplyAll, Forward, FlexibleSpace,
-                Archive, Trash, Space, Crm, Space, Star, Assistant, MoreActions,
+                Archive, Trash, Space, Toolbar.Crm, Space, Star, Assistant, MoreActions,
             ],
             [Bar.BoardList] =
             [
@@ -92,7 +92,7 @@ public sealed class ToolbarVariant
                 Mode, NewMessage,
                 Separator(Section.List), Refresh, Filter,
                 Separator(Section.Message), Reply, ReplyAll, Forward, FlexibleSpace,
-                Archive, Trash, Space, Crm, Space, Star, Assistant, MoreActions, Search,
+                Archive, Trash, Space, Toolbar.Crm, Space, Star, Assistant, MoreActions, Search,
             ],
             [Bar.BoardList] =
             [

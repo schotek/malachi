@@ -131,7 +131,7 @@ public sealed class ToolbarVariantTests
     {
         var l = Ids("mode |list filter toggleSidebar refresh |message reply crm");
         Assert.Equal(
-            [new Shown(Mode), new Shown("|list"), new Shown(Refresh), new Shown("|message"), new Shown(Reply), new Shown(Crm, Hidden: true)],
+            [new Shown(Mode), new Shown("|list"), new Shown(Refresh), new Shown("|message"), new Shown(Reply), new Shown(Toolbar.Crm, Hidden: true)],
             PresentFor(ToolbarVariant.Gtk, Bar.Mail, l, Features.None));
         Assert.Equal(l.Length, PresentFor(ToolbarVariant.Windows, Bar.Mail, l, Features.None).Count);
     }

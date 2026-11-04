@@ -54,7 +54,7 @@ public sealed class ToolbarFitTests
     [Fact]
     public void HiddenTakesNoRoom()
     {
-        Shown[] sh = [new(Reply), new(Crm, Hidden: true), new(Star)];
+        Shown[] sh = [new(Reply), new(Toolbar.Crm, Hidden: true), new(Star)];
         var got = Fit(ToolbarVariant.Zero, Bar.Mail, sh, [30, 500, 30], 60);
         Assert.Equal([true, false, true], got.Visible);
         Assert.Empty(got.Overflow);

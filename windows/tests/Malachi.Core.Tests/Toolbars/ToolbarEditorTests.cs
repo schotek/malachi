@@ -51,7 +51,7 @@ public sealed class ToolbarEditorTests
         var e = new ToolbarEditor(ToolbarVariant.Windows, Bar.Mail, null, Features.None);
         foreach (var r in e.Sections().SelectMany(s => s.Rows))
         {
-            Assert.True(r.Unavailable == (r.Id is Crm or Assistant), $"{r.Id} unavailable = {r.Unavailable}");
+            Assert.True(r.Unavailable == (r.Id is Toolbar.Crm or Assistant), $"{r.Id} unavailable = {r.Unavailable}");
         }
         Assert.DoesNotContain(Print, e.Available(Section.Message));
     }
@@ -113,10 +113,10 @@ public sealed class ToolbarEditorTests
     public void AddAndAvailable()
     {
         var e = new ToolbarEditor(ToolbarVariant.Gtk, Bar.Mail, Ids("mode |list refresh |message reply"), Features.None);
-        Assert.Equal([NewMessage, Contacts, Search], e.Available(Section.List));
+        Assert.Equal([NewMessage, Toolbar.Contacts, Search], e.Available(Section.List));
         foreach (var id in e.Available(Section.Message))
         {
-            Assert.False(id is Reply or Crm or Print or Assistant or Filter, $"Available(message) offers {id}");
+            Assert.False(id is Reply or Toolbar.Crm or Print or Assistant or Filter, $"Available(message) offers {id}");
         }
         Assert.True(e.Add(Junk, Section.Message));
         Assert.Equal("mode |list refresh |message reply junk", LayoutOf(e));
@@ -145,7 +145,7 @@ public sealed class ToolbarEditorTests
         Assert.Equal(5, i);
         Assert.Equal(before, LayoutOf(e));
         // Before the mode switch is refused; after it is fine.
-        from = IndexOf(e, Contacts);
+        from = IndexOf(e, Toolbar.Contacts);
         Assert.False(e.CanDrop(from, 0));
         Assert.True(e.Drop(from, 1, out _));
         Assert.Equal("mode contacts |list refresh |message archive reply forward", LayoutOf(e));
