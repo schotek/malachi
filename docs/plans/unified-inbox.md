@@ -320,8 +320,11 @@ text a úroveň 0 jsou jen skládací hlavičky, úroveň 1 jen položky s ikono
   `MailboxController.toggleFavourites`/`setFavouritesCollapsed`; Windows
   `FolderTree.UnifiedEntry`, `FavouriteSection(…, collapsed, unified)`,
   `SidebarRow` s aktivní šipkou hlavičky, `SidebarPane.ToggleFold`.
-- Řádek položky je v sekci dvouřádkový jako řádky připnutých složek (macOS výška
-  řádku s podtitulkem, GTK a Windows prázdný podtitulek), aby sekce měla jeden rytmus.
+- Řádek položky je v sekci dvouřádkový jako řádky připnutých složek, bez podtitulku
+  a s názvem uprostřed (macOS výška řádku s podtitulkem, GTK výška změřená na vzorovém
+  řádku `twoLineRowHeight`, Windows `SidebarRow.TwoLines` a `TwoLineRowHeight` 40
+  s titulkem o řádkování 18), aby sekce měla jeden rytmus. Vlastník schválil macOS
+  a GTK na obrazovce 2026-11-04; Windows po sestavení ověří on.
 - Ověřeno: Go testy čistých balíčků, `swift build` a filtrované `swift test`,
   vlastník schválil macOS na obrazovce; GTK v kontejneru `gtk.sh make build`,
   `go test ./internal/window/...`, `make po` (jen odkazy), `make lint` a vlastník
