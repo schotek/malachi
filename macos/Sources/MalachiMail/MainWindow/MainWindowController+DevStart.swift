@@ -78,6 +78,8 @@ import MalachiCore
 //   MainWindowController+DevStartContacts.swift.
 //   `prefs-rules` and `rules-editor` (with MALACHI_RULES_SAMPLES=1):
 //   MainWindowController+DevStartRules.swift.
+//   `toolbar=<tokens>`, `toolbar-display=<mode>`, `toolbar-palette` and
+//   `toolbar-palette-end` (macOS 15+): MainWindowController+DevStartToolbar.swift.
 //   The assistant's scenes (`assistant-unread`, `assistant=`, `assistant-say=`,
 //   `board-select=`, `triage`, `suggest-reply`, `compose-new=`,
 //   `compose-rewrite=`, `reply`, `compose-write=`, `search-own=`, `prefs-ai`)
@@ -360,6 +362,9 @@ extension MainWindowController {
             return
         }
         if DevelopmentAssistant.step(step, in: self) {
+            return
+        }
+        if DevelopmentToolbar.step(step, in: self) {
             return
         }
         if step.hasPrefix("size=") {

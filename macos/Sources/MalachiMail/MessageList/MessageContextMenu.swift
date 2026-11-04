@@ -91,6 +91,15 @@ enum MessageContextMenu {
         return menu
     }
 
+    /// Move To of the toolbar (docs/plans/toolbar-customization.md, M5):
+    /// the selected rows' account's folders as the context menu has them;
+    /// nil without a selection.
+    static func moveToMenu(mailbox: MailboxController, rows: [ListRow]) -> NSMenu? {
+        guard let s = rows.first?.message else { return nil }
+        let folders = Set(rows.map(\.message.folderId))
+        return moveToMenu(mailbox: mailbox, account: s.accountId, current: folders.count == 1 ? folders.first : nil)
+    }
+
     /// Move To: the folders of the account in the sidebar's order,
     /// indented by depth (`ContextMenu.moveTargets`); the current folder
     /// (when all are in one) and the containers disabled.

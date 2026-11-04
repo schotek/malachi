@@ -104,6 +104,16 @@ public final class Settings {
         /// `ContactSearchScope`'s values, `account` (default) or `all`;
         /// passed as contact.search's `scope`.
         case contactsSuggestScope = "contacts-suggest-scope"
+        /// The user's arrangement of the main window's toolbars
+        /// (`Toolbar`, ui/internal/toolbar): the token list, empty for the
+        /// default toolbar (`toolbarLayout(_:)`).
+        case toolbarMail = "toolbar-mail"
+        case toolbarBoardList = "toolbar-board-list"
+        case toolbarBoardFlow = "toolbar-board-flow"
+        case toolbarCalendar = "toolbar-calendar"
+        /// What every toolbar's items show, `Toolbar.DisplayMode`'s nicks
+        /// (default icon).
+        case toolbarDisplayMode = "toolbar-display-mode"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
         /// macOS only: the size of the window text (`Typo`, Settings →
@@ -193,6 +203,11 @@ public final class Settings {
             Key.boardAccountFilter.rawValue: "",
             Key.calendarView.rawValue: Cal.defaultView.nick,
             Key.contactsSuggestScope.rawValue: ContactSearchScope.account.rawValue,
+            Key.toolbarMail.rawValue: [String](),
+            Key.toolbarBoardList.rawValue: [String](),
+            Key.toolbarBoardFlow.rawValue: [String](),
+            Key.toolbarCalendar.rawValue: [String](),
+            Key.toolbarDisplayMode.rawValue: Toolbar.DisplayMode.icon.rawValue,
             Key.commandR.rawValue: CommandR.reply.rawValue,
             Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
@@ -484,6 +499,34 @@ public final class Settings {
     public var boardLastModeNick: String {
         get { string(.boardLastMode) }
         set { set(.boardLastMode, newValue) }
+    }
+
+    /// The settings key of `bar`'s arrangement.
+    public static func key(_ bar: Toolbar.Bar) -> Key {
+        switch bar {
+        case .mail: .toolbarMail
+        case .boardList: .toolbarBoardList
+        case .boardFlow: .toolbarBoardFlow
+        case .calendar: .toolbarCalendar
+        }
+    }
+
+    /// `bar`'s arrangement, normalized (`Toolbar.normalize`: an empty or
+    /// unreadable list is the default); writing stores `Toolbar.stored`,
+    /// so the default is kept as nothing.
+    public func toolbarLayout(_ bar: Toolbar.Bar) -> Toolbar.Layout {
+        Toolbar.normalize(bar, stringList(Self.key(bar)))
+    }
+
+    public func setToolbarLayout(_ bar: Toolbar.Bar, _ layout: Toolbar.Layout) {
+        set(Self.key(bar), Toolbar.stored(bar, layout))
+    }
+
+    /// What every toolbar's items show (`Toolbar.parseDisplayMode`: an
+    /// unknown nick is icons only).
+    public var toolbarDisplayMode: Toolbar.DisplayMode {
+        get { Toolbar.parseDisplayMode(string(.toolbarDisplayMode)) }
+        set { set(.toolbarDisplayMode, newValue.rawValue) }
     }
 
     /// The calendar's view (`Cal.parseView`: an unknown nick is Week).

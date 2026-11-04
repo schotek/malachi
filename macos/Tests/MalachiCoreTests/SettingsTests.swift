@@ -68,7 +68,7 @@ private final class Scratch {
         #expect(s.boardAccountFilter == "")
         #expect(s.calendarView == .week)
         #expect(s.contactsSuggestScope == .account)
-        #expect(Settings.Key.allCases.count == 45)
+        #expect(Settings.Key.allCases.count == 50)
         let providerDefaults = Settings.registrationDefaults()
         #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
         #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")
@@ -383,5 +383,28 @@ private final class Scratch {
         let again = Settings(defaults: UserDefaults(suiteName: scratch.suite)!)
         #expect(again.textZoom == 140)
         #expect(again.favouriteFolders == ["a/b"])
+    }
+
+    @Test func toolbarLayouts() {
+        let scratch = Scratch()
+        let s = scratch.settings
+        // Nothing stored is the default toolbar.
+        for bar in Toolbar.Bar.allCases {
+            #expect(s.toolbarLayout(bar) == Toolbar.defaultLayout(bar), "\(bar)")
+        }
+        #expect(s.toolbarDisplayMode == .icon)
+        // A custom toolbar is kept normalized; the default is stored as nothing.
+        s.setToolbarLayout(.mail, ["mode", "|list", "refresh", "|message", "reply", "junk"].map(Toolbar.ID.init(rawValue:)))
+        #expect(scratch.defaults.stringArray(forKey: "toolbar-mail") == ["mode", "|list", "refresh", "|message", "reply", "junk"])
+        scratch.defaults.set(["bogus", "reply"], forKey: "toolbar-mail")
+        #expect(s.toolbarLayout(.mail) == ["mode", "|list", "|message", "reply"].map(Toolbar.ID.init(rawValue:)))
+        s.setToolbarLayout(.mail, Toolbar.defaultLayout(.mail))
+        #expect(scratch.defaults.stringArray(forKey: "toolbar-mail") == [])
+        #expect(s.toolbarLayout(.mail) == Toolbar.defaultLayout(.mail))
+        // The display mode: the gschema's ToolbarDisplayMode nicks; anything else is icons only.
+        scratch.defaults.set("x", forKey: "toolbar-display-mode")
+        #expect(s.toolbarDisplayMode == .icon)
+        s.toolbarDisplayMode = .iconAndLabel
+        #expect(scratch.defaults.string(forKey: "toolbar-display-mode") == "icon-and-label")
     }
 }

@@ -148,6 +148,10 @@ final class Integration {
             return MessageContextMenu.make(
                 state: self.state, mailbox: self.mailbox, rows: self.list.selectedRows, flags: self.messageActions.flags)
         }
+        mainWindow?.setMoveToMenu { [weak self] in
+            guard let self else { return nil }
+            return MessageContextMenu.moveToMenu(mailbox: self.mailbox, rows: self.list.selectedRows)
+        }
         sidebar.onMarkFolderRead = { [weak self] k in
             self?.actions.markFolderRead(k)
         }

@@ -103,3 +103,10 @@ The view the Calendar was shown in last	gschema: a key's summary or description,
 Day, Week, Month or Agenda, written whenever the user changes the Calendar's view; applied when the Calendar shows.	gschema: a key's summary or description, for dconf editors, not the UI
 Which address books complete recipients	gschema: a key's summary or description, for dconf editors, not the UI
 The address books of the account the message is written from (with the recently used addresses), or every address book; the scope of contact.search.	gschema: a key's summary or description, for dconf editors, not the UI
+The items of the Mail toolbar	gschema: a key's summary or description, for dconf editors, not the UI
+The items of the Board's toolbar in the List style	gschema: a key's summary or description, for dconf editors, not the UI
+The items of the Board's toolbar in the Columns and Today styles	gschema: a key's summary or description, for dconf editors, not the UI
+The items of the Calendar's toolbar	gschema: a key's summary or description, for dconf editors, not the UI
+The toolbar's items in order, as the user arranged them; empty for the default toolbar.	gschema: a key's summary or description, for dconf editors, not the UI
+What the toolbars' items show	gschema: a key's summary or description, for dconf editors, not the UI
+Icons only, icons with their labels or labels only, for every toolbar of the main window.	gschema: a key's summary or description, for dconf editors, not the UI

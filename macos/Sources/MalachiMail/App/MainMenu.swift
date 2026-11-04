@@ -251,6 +251,13 @@ enum MainMenu {
         // The assistant panel (ui/internal/assistant); the split view
         // validates the title.
         m.addItem(item(Assistant.panelTexts().show, Action.toggleInspector, id: ItemID.assistantPanel))
+        // The toolbar's palette (docs/plans/toolbar-customization.md, M7),
+        // from macOS 15 only; NSWindow validates it (off while the window's
+        // toolbar cannot be customized). English like the menu's other
+        // system items; the toolbar's context menu is AppKit's own.
+        if ToolbarCustomization.isAvailable {
+            m.addItem(item("Customize Toolbar…", #selector(NSWindow.runToolbarCustomizationPalette(_:)))) // macOS-only string
+        }
         m.addItem(.separator())
         // The list's filter, the toolbar's filter menu too.
         FilterMenu.items().forEach { m.addItem($0) }

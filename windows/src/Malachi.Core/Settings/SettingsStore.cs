@@ -51,6 +51,9 @@ public sealed class SettingsStore : IDisposable
     /// <summary>The step of the text zoom control.</summary>
     public const int TextZoomStep = 10;
 
+    /// <summary>The gschema enum ToolbarDisplayMode's nicks (ui/internal/toolbar DisplayMode).</summary>
+    public static readonly IReadOnlyList<string> ToolbarDisplayModeNicks = ["icon", "icon-and-label", "label"];
+
     // In SettingsKey order.
     private static readonly SettingsKeyInfo[] Keys =
     [
@@ -102,6 +105,11 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.BoardChatGptConsentVersion, "board-triage-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
         new(SettingsKey.CalendarView, "calendar-view", "s", "week", choices: Nicks<Cal.View>.All),
         new(SettingsKey.ContactsSuggestScope, "contacts-suggest-scope", "s", "account", choices: ContactBook.ScopeNicks),
+        new(SettingsKey.ToolbarMail, "toolbar-mail", "as", Array.Empty<string>()),
+        new(SettingsKey.ToolbarBoardList, "toolbar-board-list", "as", Array.Empty<string>()),
+        new(SettingsKey.ToolbarBoardFlow, "toolbar-board-flow", "as", Array.Empty<string>()),
+        new(SettingsKey.ToolbarCalendar, "toolbar-calendar", "as", Array.Empty<string>()),
+        new(SettingsKey.ToolbarDisplayMode, "toolbar-display-mode", "s", "icon", choices: ToolbarDisplayModeNicks),
         new(SettingsKey.CtrlR, "ctrl-r", "s", "reply", choices: Nicks<CtrlR>.All, windowsOnly: true),
     ];
 
