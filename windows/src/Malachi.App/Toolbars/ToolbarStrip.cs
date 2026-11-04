@@ -104,6 +104,15 @@ public sealed partial class ToolbarStrip : Panel
     /// <summary>Whether items give way when the strip is too narrow (off: it is clipped, as before).</summary>
     public bool FitsItems { get; set; } = true;
 
+    /// <summary>
+    /// Spaces a collapsed child as a Grid's ColumnSpacing does an empty Auto
+    /// column: it keeps its Spacing (T12, the bars that were a Grid before:
+    /// the Calendar's, whose hidden ✦ left a gap at its end, and the board
+    /// detail's, whose hidden Close one at its start). Off: a StackPanel's
+    /// spacing, between the children that show.
+    /// </summary>
+    public bool GridSpacing { get; set; }
+
     /// <summary>The items that gave way for the lack of room, in the layout's order.</summary>
     public IReadOnlyList<string> Overflow
     {
@@ -264,6 +273,11 @@ public sealed partial class ToolbarStrip : Panel
                 placed++;
                 lastSpace = false;
             }
+            else if (GridSpacing && child.Visibility == Visibility.Collapsed)
+            {
+                total += placed > 0 ? Spacing : 0;
+                placed++;
+            }
             height = Math.Max(height, size.Height);
         }
         if (stretch.Count > 0)
@@ -335,6 +349,11 @@ public sealed partial class ToolbarStrip : Panel
             }
             if (w <= 0)
             {
+                if (GridSpacing && child.Visibility == Visibility.Collapsed)
+                {
+                    x += placed > 0 ? Spacing : 0;
+                    placed++;
+                }
                 child.Arrange(new Rect(x, 0, 0, 0));
                 continue;
             }

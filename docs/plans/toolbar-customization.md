@@ -1149,6 +1149,33 @@ msgid: `Reply`, `Reply All`, `Forward`, `Archive`, `Move to Trash`,
   ikony (Q-W9); ✦ v přetoku se v „Další akce“ nenabízí; Zpět není zašedlé bez
   přesunu; sbalení postranního panelu Pošty se neukládá.
 
+
+- **Ověřeno na Windows 11 x64 (2026-11-04, Windows agent).**
+  - **Sestavení:** opraveno jedinou chybou překladu. `Toolbar.Crm` a
+    `Toolbar.Contacts` přes `using static` prohrávaly s jmennými prostory
+    `Malachi.Core.Crm` a testů (CS0118). Jinak se XAML i C# přeložily napoprvé.
+  - **Testy:** `build.ps1 app` a `lint` prošly (konvence 28/28). Sada Core
+    8 484 zelená. Jediné selhání je `UnifiedTests.TheModelListCoversItsInboxes`,
+    které padá i na `main`.
+  - **UI smoke:** `SmokeTests`, `BoardSmokeTests`, `Calendar*`, `RulesSmokeTests`,
+    s `MALACHI_DEVMAIL` i `DevmailTests` a `ConversationChatSmokeTests`, plus
+    nový `ToolbarSmokeTests`: 53/53. Nový test v editoru přes Přidat položku
+    vloží Kontakty do sekce Složky, tlačítko hned naskočí, Obnovit výchozí
+    ho odebere a dialog se zavře.
+- **T12 vizuálně:** stejná okna 1600×900 se vzorovými daty, `main` proti větvi,
+  porovnané pixel po pixelu.
+  - Pošta byla shodná hned.
+  - Kalendář (+ o 6 DIP vpravo) a řádek akcí detailu Nástěnky (o 8 DIP
+    vlevo) se lišily. Původně to byly `Grid` s `ColumnSpacing`, které dávaly
+    mezeru i za skrytý ✦ a za skryté Zavřít. Řeší to
+    `ToolbarStrip.GridSpacing` u těchto dvou pruhů.
+  - Potom shoda ve všech třech režimech. Zbývá jen čas vzorové zprávy.
+- **Doplněno:**
+  - `Feature.Print` zapnuté a tlačítka Tisk na lištách Pošty
+    a Kalendáře (`WindowCommands.Print`, glyf `document-print`).
+  - Port `3e08a4b5`: Tisk… v první skupině kontextového menu zprávy, hned za
+    Otevřít. Odpovídá Go, včetně testů.
+  - Sloučeno s `feat/print-windows`.
 ## 20. As built (tisk na Windows, 2026-11-04)
 
 Port na větvi `feat/print-windows`, podrobnosti v `docs/windows-port.md` §11.19.

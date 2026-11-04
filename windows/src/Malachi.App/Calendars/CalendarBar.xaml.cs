@@ -67,6 +67,8 @@ public sealed partial class CalendarBar : UserControl
         // clipped when too narrow, as before (the views become a menu).
         BarRoot.Bar = Toolbar.Bar.Calendar;
         BarRoot.FitsItems = false;
+        // T12: as the Grid it was, whose hidden ✦ kept its 6 DIP at the end.
+        BarRoot.GridSpacing = true;
         BarRoot.Add(Toolbar.Contacts, contactsButton);
         BarRoot.Add(Toolbar.Print, printButton);
         ApplyToolbar(Toolbar.PresentFor(ToolbarVariant.Windows, Toolbar.Bar.Calendar, Toolbar.DefaultFor(ToolbarVariant.Windows, Toolbar.Bar.Calendar), Toolbar.Features.None));

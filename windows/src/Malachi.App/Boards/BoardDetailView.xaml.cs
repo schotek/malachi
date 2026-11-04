@@ -76,6 +76,8 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         // what gave way); BoardPage applies its layout (Q-W6).
         ActionStrip.Bar = Malachi.Core.Toolbars.Toolbar.Bar.BoardList;
         ActionStrip.FitsItems = false;
+        // T12: as the Grid it was, whose hidden Close kept its 8 DIP.
+        ActionStrip.GridSpacing = true;
     }
 
     /// <summary>The detail's row (a right click on an empty spot offers Customize Toolbar…).</summary>
