@@ -45,6 +45,7 @@ using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
+using Malachi.Platform.Windows;
 using Malachi.Platform.Windows.Notifications;
 using Malachi.Platform.Windows.Registration;
 using Malachi.Platform.Windows.Sound;
@@ -183,7 +184,15 @@ public static partial class PlatformServices
         StartLaunchAtLogin(context, selfRegistration);
         if (selfRegistration)
         {
-            StartMailtoRegistration();
+            if (PackageIdentity.IsPackaged)
+            {
+                // The package's manifest declares mailto: (windows.protocol).
+                RemovePackagedMailtoRegistration();
+            }
+            else
+            {
+                StartMailtoRegistration();
+            }
         }
         foreach (var activation in held)
         {
@@ -344,6 +353,28 @@ public static partial class PlatformServices
         });
     }
 
+    // In an MSIX package: what an earlier package wrote into HKCU before its
+    // manifest declared mailto: names a package folder that is gone, so it
+    // goes (MailtoRegistration.IsFromAPackage); an unpackaged copy's stays.
+    private static void RemovePackagedMailtoRegistration()
+    {
+        var registration = Mailto;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                if (registration.IsFromAPackage && registration.Unregister())
+                {
+                    LogMailtoRemoved(logger);
+                }
+            }
+            catch (Exception e) when (e is UnauthorizedAccessException or IOException or SecurityException)
+            {
+                LogRegistryFailed(logger, "mailto: registration", e.Message);
+            }
+        });
+    }
+
     // A step on the way out: logged when it fails, so that the next one runs.
     private static void Quietly(string what, Action step)
     {
@@ -384,6 +415,9 @@ public static partial class PlatformServices
 
     [LoggerMessage(Level = LogLevel.Information, Message = "platform: mailto: registration written")]
     private static partial void LogMailtoRegistered(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "platform: the mailto: registration an earlier package wrote is removed; the manifest declares mailto:")]
+    private static partial void LogMailtoRemoved(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "platform: {Variable} is set; the mailto: registration and the Run value are left alone")]
     private static partial void LogNoSelfRegistration(ILogger logger, string variable);

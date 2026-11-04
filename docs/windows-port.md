@@ -5414,10 +5414,17 @@ cross-built, attaches them, and there is no zip (§13).
   that machine's environment, and `UnifiedTests.TheModelListCoversItsInboxes`,
   likely broken by All Inboxes moving into Favourites). Still to try:
   Run (start at sign-in), choosing the app in Default Apps, ARM64, and
-  whether the Store accepts `unvirtualizedResources`; to decide: declare
-  `mailto:` (`windows.protocol`) and the start at sign-in
-  (`windows.startupTask`) in the manifest instead of the app's own HKCU
-  entries.
+  whether the Store accepts `unvirtualizedResources`. Then (owner's
+  decision, 2026-11-04) the manifest declares `mailto:`
+  (`windows.protocol`): in a package the app writes no `mailto:` keys of
+  its own and removes the ones an earlier test package wrote
+  (`MailtoRegistration.IsFromAPackage`, only a command in a `WindowsApps`
+  folder, so an unpackaged copy's registration stays), and Preferences →
+  General asks whether the default is the package's ProgID
+  (`IsPackagedDefault`: an `AppX…` ProgID whose application the shell
+  names Malachi Mail). Unverified on Windows: the link's Protocol
+  activation, the package in Default Apps and the text in Preferences.
+  The start at sign-in stays the app's own Run value.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs

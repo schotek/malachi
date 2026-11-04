@@ -22,6 +22,15 @@
 // version, another language for the description); Unregister is for an
 // uninstaller. The registry root is injectable: the tests work under a key
 // of their own and tell no shell.
+//
+// An MSIX package (windows/msix, a trial of the Microsoft Store) declares
+// mailto: in its manifest instead (windows.protocol): Windows registers it
+// under a ProgID of its own (AppX…) and drops it with the package, and the
+// package folder in the command changes with every version, so the app
+// never writes these keys there. It removes only what an earlier package
+// wrote (IsFromAPackage: the command names a WindowsApps folder), never
+// what an unpackaged copy on the same machine keeps current, and asks
+// whether Windows' default is its own package (IsPackagedDefault).
 
 using System;
 using System.Collections.Generic;
@@ -65,10 +74,12 @@ public sealed class MailtoRegistration
     private readonly RegistryKey root;
     private readonly Action notifyShell;
     private readonly Func<string, string?> defaultProgId;
+    private readonly Func<string, string?> friendlyAppName;
 
     /// <summary>The registration of <paramref name="executablePath"/> for the current user.</summary>
     public MailtoRegistration(string executablePath)
-        : this(Registry.CurrentUser, executablePath, ShellAssociations.NotifyChanged, ShellAssociations.DefaultProgId)
+        : this(Registry.CurrentUser, executablePath, ShellAssociations.NotifyChanged, ShellAssociations.DefaultProgId,
+            ShellAssociations.FriendlyAppName)
     {
     }
 
@@ -76,9 +87,12 @@ public sealed class MailtoRegistration
     /// The registration under <paramref name="root"/> (HKEY_CURRENT_USER, or
     /// a test key). <paramref name="notifyShell"/> runs after every change
     /// (nothing when null); <paramref name="defaultProgId"/> answers which
-    /// ProgID handles a protocol by default (none when null).
+    /// ProgID handles a protocol by default (none when null);
+    /// <paramref name="friendlyAppName"/> the name the shell shows for a
+    /// ProgID's application (none when null).
     /// </summary>
-    public MailtoRegistration(RegistryKey root, string executablePath, Action? notifyShell = null, Func<string, string?>? defaultProgId = null)
+    public MailtoRegistration(RegistryKey root, string executablePath, Action? notifyShell = null, Func<string, string?>? defaultProgId = null,
+        Func<string, string?>? friendlyAppName = null)
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentException.ThrowIfNullOrEmpty(executablePath);
@@ -86,6 +100,7 @@ public sealed class MailtoRegistration
         ExecutablePath = Path.GetFullPath(executablePath);
         this.notifyShell = notifyShell ?? (() => { });
         this.defaultProgId = defaultProgId ?? (_ => null);
+        this.friendlyAppName = friendlyAppName ?? (_ => null);
     }
 
     /// <summary>The executable the links open.</summary>
@@ -168,6 +183,31 @@ public sealed class MailtoRegistration
     /// Settings → Default apps.
     /// </summary>
     public bool IsDefault => string.Equals(defaultProgId(Protocol), ProgId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether the user chose Malachi Mail's MSIX package for <c>mailto:</c>
+    /// links: the default is a ProgID Windows made for a package (AppX…)
+    /// whose application the shell names Malachi Mail.
+    /// </summary>
+    public bool IsPackagedDefault =>
+        defaultProgId(Protocol) is { } id && id.StartsWith("AppX", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(friendlyAppName(id), ApplicationName, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether the registration under these keys is one an MSIX package of
+    /// the app wrote before its manifest declared <c>mailto:</c>: its open
+    /// command names an executable in a <c>WindowsApps</c> folder, which
+    /// goes with that package's version.
+    /// </summary>
+    public bool IsFromAPackage
+    {
+        get
+        {
+            using var k = root.OpenSubKey(ProgIdPath + @"\shell\open\command");
+            return k?.GetValue("", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is string command
+                && command.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     /// <summary>
     /// Writes the registration when it is missing or stale; true when it

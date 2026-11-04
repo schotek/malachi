@@ -26,9 +26,15 @@ What the package changes for the app, and what the test is for:
   the package start an executable in its folder (Claude Code and Claude
   Desktop got EPERM), but anyone may start the alias, which keeps its path
   across updates. The app hands it out in a package (Paths.InPackage).
-- Not declared yet: mailto: (windows.protocol), the start at sign-in
-  (windows.startupTask). The app still writes its own HKCU registrations;
-  whether Windows honours them from a package is part of the test.
+- mailto: (windows.protocol, owner's decision 2026-11-04): Windows lists
+  the package in Default Apps under a ProgID of its own and drops it with
+  the package; the app in a package writes no mailto: keys of its own
+  (they named the versioned package folder and went stale with every
+  update) and removes the ones an earlier test package wrote
+  (MailtoRegistration.IsFromAPackage). A link arrives as a Protocol
+  activation (Program.RequestOf).
+- Not declared yet: the start at sign-in (windows.startupTask); the app
+  still writes its own Run value.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -78,6 +84,11 @@ What the package changes for the app, and what the test is for:
         <desktop:Extension Category="windows.toastNotificationActivation">
           <desktop:ToastNotificationActivation ToastActivatorCLSID="6F1B2C4A-8E37-4D5B-9A21-3C7E5F0D8B64" />
         </desktop:Extension>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="mailto">
+            <uap:DisplayName>Malachi Mail</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
         <uap3:Extension Category="windows.appExecutionAlias" Executable="malachi-mcp.exe" EntryPoint="Windows.FullTrustApplication">
           <uap3:AppExecutionAlias>
             <desktop:ExecutionAlias Alias="malachi-mcp.exe" />

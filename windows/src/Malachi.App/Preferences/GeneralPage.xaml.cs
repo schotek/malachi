@@ -40,6 +40,7 @@ using Malachi.Core.Api;
 using Malachi.Core.Controllers;
 using Malachi.Core.Model;
 using Malachi.Core.Settings;
+using Malachi.Platform.Windows;
 using Malachi.Platform.Windows.Startup;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -226,10 +227,13 @@ public sealed partial class GeneralPage : UserControl
         try
         {
             var mailto = PlatformServices.Mailto;
-            text = mailto.IsDefault
+            // In an MSIX package the manifest registers mailto:, under a
+            // ProgID Windows makes up.
+            var packaged = PackageIdentity.IsPackaged;
+            text = (packaged ? mailto.IsPackagedDefault : mailto.IsDefault)
                 // Windows-only string
                 ? "Malachi Mail is the default app for e-mail links"
-                : mailto.Exists
+                : packaged || mailto.Exists
                     // Windows-only string
                     ? "Another app opens e-mail links; choose Malachi Mail in Default apps"
                     // Windows-only string
