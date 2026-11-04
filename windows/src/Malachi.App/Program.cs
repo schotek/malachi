@@ -51,6 +51,7 @@ using Malachi.App.Shell;
 using Malachi.Core;
 using Malachi.Core.Daemon;
 using Malachi.Core.Presentation;
+using Malachi.Platform.Windows;
 using Malachi.Platform.Windows.Consoles;
 using Malachi.Platform.Windows.Files;
 using Malachi.Platform.Windows.Notifications;
@@ -120,6 +121,14 @@ public static partial class Program
         }
         using var log = new AppLog(logDirectory, console.Terminal);
         logger = log.CreateLogger("Program");
+        if (PackageIdentity.IsPackaged)
+        {
+            // An MSIX package: no process outside it may start the bridge in
+            // its folder, so the app hands out the package's alias of it.
+            var alias = Paths.BridgeAlias(ProcessEnvironment.Current());
+            paths = paths.InPackage(alias);
+            LogPackaged(logger, alias is not null && paths.McpBridge == alias);
+        }
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
         PlatformServices.InitializeEarly(OnNotificationInvoked, log);
@@ -350,6 +359,9 @@ public static partial class Program
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "an invitation's notification was answered ({Response})")]
     private static partial void LogInvitationInvoked(ILogger logger, InvitationNotificationResponse response);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "running in an MSIX package (the bridge is its alias: {Alias})")]
+    private static partial void LogPackaged(ILogger logger, bool alias);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "exited")]
     private static partial void LogExited(ILogger logger);

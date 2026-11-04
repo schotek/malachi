@@ -22,6 +22,12 @@
 // ClaudeCodeLocator.defaultDirectory, in the Caches directory there) is in
 // the data directory with the rest. Directories are made private by
 // IPrivateDirectoryFactory (a protected DACL) instead of mode 0700.
+// In an MSIX package (windows/msix, a trial of the Microsoft Store) the
+// bridge beside the app lies under C:\Program Files\WindowsApps, where
+// Windows lets no process outside the package start it (Claude Code and
+// Claude Desktop got EPERM, ERROR_ACCESS_DENIED): the app then hands out
+// the package's app execution alias of the bridge instead (InPackage),
+// which anyone may start and which keeps its path across updates.
 
 using System;
 using System.Collections.Generic;
@@ -130,6 +136,29 @@ public sealed record Paths
 
     /// <summary>The daemon's connection key beside the socket (api.KeyPath).</summary>
     public string KeyFile => RpcAuth.KeyPath(Socket);
+
+    /// <summary>
+    /// The app execution alias of the bridge that the MSIX package declares
+    /// (<c>windows/msix/AppxManifest.xml</c>):
+    /// <c>%LOCALAPPDATA%\Microsoft\WindowsApps\malachi-mcp.exe</c>; null
+    /// without a local application data folder.
+    /// </summary>
+    public static string? BridgeAlias(IReadOnlyDictionary<string, string?> environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        var local = ProcessEnvironment.NonEmpty(environment, "LOCALAPPDATA")
+            ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return string.IsNullOrEmpty(local) ? null : Path.Combine(local, "Microsoft", "WindowsApps", McpBridgeName);
+    }
+
+    /// <summary>
+    /// These paths for an app that runs in an MSIX package: the bridge is
+    /// <paramref name="alias"/> (<see cref="BridgeAlias"/>) when it is
+    /// there, since no process outside the package may start the bridge
+    /// in the package's folder; otherwise unchanged.
+    /// </summary>
+    public Paths InPackage(string? alias) =>
+        McpBridge is not null && !string.IsNullOrEmpty(alias) && IsProgram(alias) ? this with { McpBridge = alias } : this;
 
     /// <summary>The paths of this process: its environment and the directory of the app.</summary>
     public static Paths Resolve() => Resolve(ProcessEnvironment.Current(), AppContext.BaseDirectory);

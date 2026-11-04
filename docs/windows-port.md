@@ -5382,11 +5382,49 @@ cross-built, attaches them, and there is no zip (§13).
   still the app's own), signed with a self-signed certificate made for the
   run (its `.cer` in the artifact: import it into *Local Machine → Trusted
   People*, then open the `.msix`) or unsigned for Partner Center. Not a
-  release artefact. Unverified, to be tried on a Windows machine: that the
-  app starts packaged (MRT Core and `MalachiMail.pri`, WebView2), the data
-  and settings land where the unpackaged app keeps them, notifications and
-  their clicks, `mailto:`, Run, the Claude registration of `malachi-mcp`,
-  and whether the Store accepts `unvirtualizedResources`.
+  release artefact. Tried by the owner on x64 (2026-11-04): it installs
+  and starts, and the data and settings are the unpackaged app's. Found
+  there: Windows lets no process outside the package start an executable
+  in its folder under `C:\Program Files\WindowsApps`, so Claude Code (the
+  panel, `--mcp-config`) and Claude Desktop and Claude Code through the
+  registration got EPERM starting `malachi-mcp.exe`, while ChatGPT worked
+  (the app itself starts the bridge for Codex); and
+  `AppNotificationManager.Register(name, icon)` fails in a package
+  (0x8000000E). Fixed: the manifest declares an app execution alias of
+  the bridge (`%LOCALAPPDATA%\Microsoft\WindowsApps\malachi-mcp.exe`,
+  startable by anyone, the same path across updates), and in a package
+  (`PackageIdentity.IsPackaged`) the app hands out that alias
+  (`Paths.InPackage`, for the panel, Codex and `install --command`) and
+  registers the notifications without arguments. The owner installed the
+  fixed package over the first one (2026-11-04, after trusting its new
+  test certificate): the update kept the data, and the assistant works
+  with Claude Code, Claude Desktop and ChatGPT. The Windows agent then
+  checked 0.3.0.37 on the owner's x64 machine: the log says the bridge is
+  the alias, the registrations of Claude Desktop and Claude Code point at
+  it, a toast shows and its click opens the message both while the app
+  runs and after Quit (COM activation from the manifest), and `mailto:`
+  opens the compose window. Found: the app's own `mailto:` ProgId
+  (`io.github.schotek.Malachi.mailto`) names `MalachiMail.exe` in the
+  versioned package folder, so an update leaves it stale until the app
+  writes it again; after `Remove-AppxPackage` the data folder, the
+  settings key, that ProgId with `Clients\Mail` and `RegisteredApplications`,
+  the notification settings and the Claude registrations (pointing at the
+  removed alias) stay behind. `build.ps1 lint` passed; `build.ps1 test`
+  had 3 failures, none in what the branch changes (two key-file tests of
+  that machine's environment, and `UnifiedTests.TheModelListCoversItsInboxes`,
+  likely broken by All Inboxes moving into Favourites). Still to try:
+  Run (start at sign-in), choosing the app in Default Apps, ARM64, and
+  whether the Store accepts `unvirtualizedResources`. Then (owner's
+  decision, 2026-11-04) the manifest declares `mailto:`
+  (`windows.protocol`): in a package the app writes no `mailto:` keys of
+  its own and removes the ones an earlier test package wrote
+  (`MailtoRegistration.IsFromAPackage`, only a command in a `WindowsApps`
+  folder, so an unpackaged copy's registration stays), and Preferences →
+  General asks whether the default is the package's ProgID
+  (`IsPackagedDefault`: an `AppX…` ProgID whose application the shell
+  names Malachi Mail). Unverified on Windows: the link's Protocol
+  activation, the package in Default Apps and the text in Preferences.
+  The start at sign-in stays the app's own Run value.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs

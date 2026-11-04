@@ -167,6 +167,32 @@ public sealed class MailtoRegistrationTests : IDisposable
     }
 
     [Fact]
+    public void ThePackagedDefaultIsAnAppXProgIdNamedMalachiMail()
+    {
+        static MailtoRegistration With(TestRegistryRoot root, string exe, string? progId, string? name) =>
+            new(root.Key, exe, null, _ => progId, id => id == progId ? name : null);
+        Assert.True(With(root, exe, "AppXabc", "Malachi Mail").IsPackagedDefault);
+        Assert.True(With(root, exe, "appxabc", "Malachi Mail").IsPackagedDefault);
+        Assert.False(With(root, exe, "AppXabc", "Outlook").IsPackagedDefault);
+        Assert.False(With(root, exe, "io.github.schotek.Malachi.mailto", "Malachi Mail").IsPackagedDefault);
+        Assert.False(With(root, exe, null, "Malachi Mail").IsPackagedDefault);
+        Assert.False(new MailtoRegistration(root.Key, exe).IsPackagedDefault);
+    }
+
+    [Fact]
+    public void ARegistrationFromAPackageIsKnownByItsWindowsAppsFolder()
+    {
+        Assert.False(Make(exe).IsFromAPackage);
+        Make(exe).Register();
+        Assert.False(Make(exe).IsFromAPackage);
+        var packaged = Make(@"C:\Program Files\WindowsApps\io.github.schotek.Malachi_0.3.0.36_x64__dpwradazt1vw2\MalachiMail.exe");
+        packaged.Register();
+        Assert.True(Make(exe).IsFromAPackage);
+        Assert.True(Make(exe).Unregister());
+        Assert.False(Make(exe).IsFromAPackage);
+    }
+
+    [Fact]
     public void TheValuesNameOnlyItsOwnKeys()
     {
         var keys = Make(exe).Values.Select(v => v.Key).Distinct().ToList();
