@@ -5397,10 +5397,27 @@ cross-built, attaches them, and there is no zip (§13).
   (`Paths.InPackage`, for the panel, Codex and `install --command`) and
   registers the notifications without arguments. The owner installed the
   fixed package over the first one (2026-11-04, after trusting its new
-  test certificate): the update kept the data, and the assistant with
-  Claude works. Still to try: notifications and their clicks, `mailto:`,
-  Run, uninstalling, ARM64, and whether the Store accepts
-  `unvirtualizedResources`.
+  test certificate): the update kept the data, and the assistant works
+  with Claude Code, Claude Desktop and ChatGPT. The Windows agent then
+  checked 0.3.0.37 on the owner's x64 machine: the log says the bridge is
+  the alias, the registrations of Claude Desktop and Claude Code point at
+  it, a toast shows and its click opens the message both while the app
+  runs and after Quit (COM activation from the manifest), and `mailto:`
+  opens the compose window. Found: the app's own `mailto:` ProgId
+  (`io.github.schotek.Malachi.mailto`) names `MalachiMail.exe` in the
+  versioned package folder, so an update leaves it stale until the app
+  writes it again; after `Remove-AppxPackage` the data folder, the
+  settings key, that ProgId with `Clients\Mail` and `RegisteredApplications`,
+  the notification settings and the Claude registrations (pointing at the
+  removed alias) stay behind. `build.ps1 lint` passed; `build.ps1 test`
+  had 3 failures, none in what the branch changes (two key-file tests of
+  that machine's environment, and `UnifiedTests.TheModelListCoversItsInboxes`,
+  likely broken by All Inboxes moving into Favourites). Still to try:
+  Run (start at sign-in), choosing the app in Default Apps, ARM64, and
+  whether the Store accepts `unvirtualizedResources`; to decide: declare
+  `mailto:` (`windows.protocol`) and the start at sign-in
+  (`windows.startupTask`) in the manifest instead of the app's own HKCU
+  entries.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs
