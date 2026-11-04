@@ -12,6 +12,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/contacts"
+	"github.com/schotek/malachi/ui/internal/toolbar"
 )
 
 func TestMemoryDefaults(t *testing.T) {
@@ -459,5 +460,41 @@ func TestContactsSuggestScope(t *testing.T) {
 	s.SetContactsSuggestScope("all")
 	if got := s.ContactsSuggestScope(); got != "all" {
 		t.Errorf("ContactsSuggestScope = %q, want all", got)
+	}
+}
+
+func TestToolbarKeys(t *testing.T) {
+	s := NewMemory()
+	for _, bar := range toolbar.Bars {
+		if got := s.ToolbarLayout(bar); len(got) != 0 {
+			t.Errorf("%s default = %v, want empty", bar, got)
+		}
+	}
+	if got := s.ToolbarDisplayMode(); got != toolbar.DisplayIcon {
+		t.Errorf("display mode default = %q", got)
+	}
+	fired := 0
+	s.OnChanged(toolbar.Key(toolbar.BarCalendar), func() { fired++ })
+	s.SetToolbarLayout(toolbar.BarCalendar, []string{"mode", "|main", "calendarToday"})
+	if got := s.ToolbarLayout(toolbar.BarCalendar); len(got) != 3 || fired != 1 {
+		t.Errorf("calendar = %v, fired %d", got, fired)
+	}
+	got := s.ToolbarLayout(toolbar.BarCalendar)
+	got[0] = "changed"
+	if s.ToolbarLayout(toolbar.BarCalendar)[0] != "mode" {
+		t.Error("the returned list aliases the store")
+	}
+	s.SetToolbarLayout(toolbar.BarCalendar, nil)
+	if got := s.ToolbarLayout(toolbar.BarCalendar); len(got) != 0 || fired != 2 {
+		t.Errorf("reset = %v, fired %d", got, fired)
+	}
+	s.SetToolbarLayout("nonsense", []string{"x"})
+	if _, ok := s.mem[toolbar.Key("nonsense")]; ok {
+		t.Error("an unknown bar was stored")
+	}
+	s.SetToolbarDisplayMode(toolbar.DisplayLabel)
+	s.SetToolbarDisplayMode("bogus")
+	if got := s.ToolbarDisplayMode(); got != toolbar.DisplayLabel {
+		t.Errorf("display mode = %q", got)
 	}
 }

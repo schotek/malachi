@@ -25,8 +25,14 @@ enum ChangeStatusMenus {
     /// More Actions ▸ Change Status of the window whose toolbar this is
     /// (`MainToolbar.ID.moreActions`), for the message `subject` names.
     static func install(intoToolbar toolbar: NSToolbar?, state: AppState, subject: @escaping @MainActor () -> IssueActionsController.Subject?) {
-        guard let item = toolbar?.items.first(where: { $0.itemIdentifier == MainToolbar.ID.moreActions }) as? NSMenuToolbarItem
-        else { return }
+        let item = toolbar?.items.first(where: { $0.itemIdentifier == MainToolbar.ID.moreActions }) as? NSMenuToolbarItem
+        install(into: item, state: state, subject: subject)
+    }
+
+    /// Into More Actions' own item: the main window's, whose toolbar the
+    /// user may have arranged without it (the palette puts this item back).
+    static func install(into item: NSMenuToolbarItem?, state: AppState, subject: @escaping @MainActor () -> IssueActionsController.Subject?) {
+        guard let item else { return }
         let menu = IssueTransitionMenu(state: state, subject: subject)
         // Only for a message of an issue on an account that changes
         // statuses; for mail the menu ends as it did.

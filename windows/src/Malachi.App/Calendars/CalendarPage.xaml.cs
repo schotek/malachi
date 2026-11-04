@@ -167,7 +167,14 @@ public sealed partial class CalendarPage : UserControl
         if (commands is not null)
         {
             CommandBinding.Bind(bar.NewEvent, commands.NewEvent);
+            CommandBinding.Bind(bar.Contacts, commands.Contacts);
+            CommandBinding.Bind(bar.Print, commands.Print);
         }
+        if (toolbar is not null)
+        {
+            bar.ApplyToolbar(toolbar);
+        }
+        bar.Labels.Apply(displayMode);
         content.LayoutChanged += (_, _) => SyncBar();
         content.SidebarView.AddCalDAVRequested += (_, _) => AddCalDAVRequested?.Invoke(this, EventArgs.Empty);
         content.SidebarView.SyncMicrosoftRequested += (_, _) => SyncMicrosoftRequested?.Invoke(this, EventArgs.Empty);

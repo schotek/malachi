@@ -104,6 +104,10 @@ public sealed partial class MessageListPane : UserControl
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer calendarTimer;
     private (DateTime Day, TimeSpan Offset, DayOfWeek FirstDay) calendarStamp;
     private ListController? list;
+
+    // The toolbar-mail layout has the filter (Windows draws it as the row
+    // under the header, so only its presence counts; W.2).
+    private bool filterShown = true;
     private MailboxController? mailbox;
     private ActionsController? actions;
     private SettingsStore? settings;
@@ -187,6 +191,49 @@ public sealed partial class MessageListPane : UserControl
 
     /// <summary>The rows, in the list's order.</summary>
     public ObservableCollection<MessageRow> Rows => dateList.Rows;
+
+    /// <summary>The header's strip: the Message List section of the user's toolbar-mail layout (MainWindow.Toolbars.cs).</summary>
+    internal Toolbars.ToolbarStrip ToolbarStrip => HeaderStrip;
+
+    /// <summary>The header bar (a right click on an empty spot offers Customize Toolbar…).</summary>
+    internal FrameworkElement ToolbarBar => HeaderRow;
+
+    /// <summary>The header's Check for New Mail button (the display mode shows its label).</summary>
+    internal Button Refresh => RefreshButton;
+
+    /// <summary>Whether the layout has the filter: the row of All, Unread and Flagged shows (outside a search).</summary>
+    internal void SetFilterShown(bool shown)
+    {
+        if (filterShown == shown)
+        {
+            return;
+        }
+        filterShown = shown;
+        ShowFilter();
+    }
+
+    /// <summary>
+    /// The toolbar's Move To (and More Actions'): the folders of the
+    /// selection's account, as the list's context menu has them; nothing
+    /// without a selection that may move.
+    /// </summary>
+    internal void FillSelectionMoveTargets(IList<MenuFlyoutItemBase> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (list is not { } l || commands is not { } c || !c.Flags.Move)
+        {
+            return;
+        }
+        var rows = l.SelectedRows;
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        FillMoveTargets(items, rows[0].Message.AccountId, CommonFolder(rows));
+    }
+
+    // The title stays centred: the balance is as wide as the strip.
+    private void OnHeaderStripSizeChanged(object sender, SizeChangedEventArgs e) => HeaderBalance.Width = Math.Max(0, e.NewSize.Width);
 
     /// <summary>
     /// Installs the view-facing callbacks of the list half, the mailbox's
@@ -667,7 +714,7 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
-        FilterBar.Visibility = l.SearchActive ? Visibility.Collapsed : Visibility.Visible;
+        FilterBar.Visibility = l.SearchActive || !filterShown ? Visibility.Collapsed : Visibility.Visible;
         var item = FilterBar.Items[Math.Max(Array.IndexOf(Filters, l.ListFilter), 0)];
         if (!ReferenceEquals(FilterBar.SelectedItem, item))
         {
@@ -951,6 +998,8 @@ public sealed partial class MessageListPane : UserControl
         }
         // Create Rule from Message…: one message of a mail account, not in the outbox, drafts or sent mail.
         state = state with { OfferRule = rows.Count == 1 && CreateRule is not null && OffersRule(first.Message) };
+        // Print… right after Open (contextmenu.go OfferPrint; Windows prints).
+        state = state with { OfferPrint = true, Print = rows.Count <= Core.Printing.Print.MaxMessages };
         var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox, Count = rows.Count };
         var menu = new MenuFlyout();
         foreach (var group in ContextMenu.MessageItems(state))
@@ -1085,6 +1134,7 @@ public sealed partial class MessageListPane : UserControl
     // context_menus.go messageMenuActions: the window's command of an item.
     private static AppCommand? CommandOf(WindowCommands c, ContextMenu.ItemId id) => id switch
     {
+        ContextMenu.ItemId.Print => c.Print,
         ContextMenu.ItemId.Reply => c.Reply,
         ContextMenu.ItemId.ReplyAll => c.ReplyAll,
         ContextMenu.ItemId.Forward => c.Forward,

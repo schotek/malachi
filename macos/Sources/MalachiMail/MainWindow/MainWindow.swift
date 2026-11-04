@@ -42,6 +42,15 @@ final class MainWindow: NSWindow {
         return super.validateMenuItem(item)
     }
 
+    /// Whether the toolbar's Undo can do anything: the mail's newest move
+    /// (`mailUndoState`), else the window's own undo (typing).
+    var toolbarUndoEnabled: Bool {
+        if !textHasKeyboard, let enabled = mailUndoState?() {
+            return enabled
+        }
+        return undoManager?.canUndo ?? false
+    }
+
     /// Whether an editor of text has the keyboard: an editable text view (a
     /// field editor too) or a compose web view (the board's inline reply).
     private var textHasKeyboard: Bool {

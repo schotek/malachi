@@ -104,6 +104,8 @@ public sealed partial class MainWindow : Window
         InitializeMode();
         // The update check's banner and question (MainWindow.Updates.cs).
         InitializeUpdates();
+        // The bars as the user arranged them (MainWindow.Toolbars.cs).
+        InitializeToolbars();
     }
 
     /// <summary>The user asked to close the window (the caption's button, Alt+F4); the app decides.</summary>

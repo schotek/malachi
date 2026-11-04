@@ -172,7 +172,7 @@ public sealed partial class MainWindow
         AssistantSplit.Visibility = Visibility.Collapsed;
         CalendarView.Visibility = Visibility.Collapsed;
         BoardView.Visibility = Visibility.Visible;
-        SearchArea.Visibility = Visibility.Collapsed;
+        SyncSearchArea();
         AppTitleBar.IsPaneToggleButtonVisible = false;
         AppTitleBar.IsBackButtonVisible = false;
         MoveToasts(BoardView.ToastLayer);
@@ -190,7 +190,7 @@ public sealed partial class MainWindow
         AssistantSplit.Visibility = Visibility.Visible;
         BoardView.Visibility = Visibility.Collapsed;
         CalendarView.Visibility = Visibility.Collapsed;
-        SearchArea.Visibility = Visibility.Visible;
+        SyncSearchArea();
         MoveToasts(MessagePane);
         ApplyLayout();
         Title = mailCaption;

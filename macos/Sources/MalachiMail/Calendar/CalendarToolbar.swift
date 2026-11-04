@@ -40,6 +40,8 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
         static let search = NSToolbarItem.Identifier("calendarSearch")
         static let newEvent = NSToolbarItem.Identifier("calendarNewEvent")
         static let assistant = NSToolbarItem.Identifier("calendarAssistant")
+        /// Print (`printMail:`: the selected event, else the day).
+        static let print = NSToolbarItem.Identifier("print")
     }
 
     static let items: [NSToolbarItem.Identifier] = [
@@ -63,18 +65,44 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
         tb.displayMode = .iconOnly
         tb.allowsUserCustomization = false
         tb.autosavesConfiguration = false
+        customization?.attach(tb)
         return tb
     }()
+    /// The user's arrangement (docs/plans/toolbar-customization.md); nil:
+    /// the default toolbar.
+    let customization: ToolbarCustomization?
     private var made: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
     /// Whether ✦ is in the toolbar (`setAssistant(visible:)`).
     private var showsAssistant: Bool
     /// ✦ was clicked.
     var onAssistant: (@MainActor () -> Void)?
 
-    init(controller: CalendarController, showsAssistant: Bool) {
+    init(controller: CalendarController, showsAssistant: Bool, settings: Settings? = nil) {
         self.controller = controller
         self.showsAssistant = showsAssistant
+        customization = settings.map {
+            ToolbarCustomization(bar: .calendar, settings: $0, separators: [.main: .sidebarTrackingSeparator])
+        }
         super.init()
+        customization?.transient = { [weak self] in self?.temporarySearch == true ? [ID.search] : [] }
+        customization?.features = { [weak self] in
+            self?.showsAssistant == true ? Toolbar.Features(have: [.assistant, .print]) : Toolbar.Features(have: [.print])
+        }
+    }
+
+    /// From macOS 15 with the user's arrangement, ✦ keeps its place hidden
+    /// while the panel cannot be shown (T7).
+    private var hidesAssistant: Bool {
+        customization != nil && ToolbarCustomization.isAvailable
+    }
+
+    private func applyAssistantHidden() {
+        guard hidesAssistant, let item = made[ID.assistant] else { return }
+        if #available(macOS 15, *) {
+            if item.isHidden == showsAssistant {
+                item.isHidden = !showsAssistant
+            }
+        }
     }
 
     /// The mode switch, once made (the window keeps its selection).
@@ -104,6 +132,10 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
     /// Puts ✦ into the toolbar (at its end) or takes it out.
     func setAssistant(visible: Bool) {
         showsAssistant = visible
+        if hidesAssistant {
+            applyAssistantHidden()
+            return
+        }
         let current = toolbar.items.firstIndex { $0.itemIdentifier == ID.assistant }
         if visible, current == nil {
             toolbar.insertItem(withItemIdentifier: ID.assistant, at: toolbar.items.count)
@@ -114,29 +146,86 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
 
     /// Gives the search field the keyboard (⌘F in Calendar, M5).
     func focusSearch() {
+        if customization != nil, !toolbar.items.contains(where: { $0.itemIdentifier == ID.search }) {
+            // The user's arrangement has no search field: it goes at the
+            // end for this search and leaves once it is empty and has
+            // lost the keyboard (O5); the stored arrangement stays.
+            temporarySearch = true
+            let at = customization?.insertionIndex(of: Toolbar.ID.calendarSearch, in: toolbar) ?? toolbar.items.count
+            toolbar.insertItem(withItemIdentifier: ID.search, at: at)
+            DispatchQueue.main.async { [weak self] in
+                (self?.made[ID.search] as? NSSearchToolbarItem)?.beginSearchInteraction()
+            }
+            return
+        }
         guard let item = made[ID.search] as? NSSearchToolbarItem else { return }
         item.beginSearchInteraction()
+    }
+
+    /// The search field is in the toolbar for one search only (`focusSearch`).
+    private var temporarySearch = false
+
+    /// The field lost the keyboard: a temporary one leaves while empty.
+    func controlTextDidEndEditing(_ obj: Notification) {
+        guard temporarySearch, let field = obj.object as? NSSearchField, field.stringValue.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.temporarySearch,
+                  let at = self.toolbar.items.firstIndex(where: { $0.itemIdentifier == ID.search }) else { return }
+            self.temporarySearch = false
+            self.toolbar.removeItem(at: at)
+        }
     }
 
     // MARK: NSToolbarDelegate
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        showsAssistant ? Self.items : Self.items.filter { $0 != ID.assistant }
+        if let customization {
+            return customization.defaultIdentifiers(toolbar)
+        }
+        return showsAssistant ? Self.items : Self.items.filter { $0 != ID.assistant }
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        Self.items
+        customization?.allowedIdentifiers(toolbar) ?? Self.items
+    }
+
+    func toolbarImmovableItemIdentifiers(_ toolbar: NSToolbar) -> Set<NSToolbarItem.Identifier> {
+        customization?.immovableIdentifiers() ?? []
+    }
+
+    func toolbar(_ toolbar: NSToolbar, itemIdentifier: NSToolbarItem.Identifier, canBeInsertedAt index: Int) -> Bool {
+        customization?.canInsert(itemIdentifier, at: index, in: toolbar) ?? true
+    }
+
+    func toolbarWillAddItem(_ notification: Notification) {
+        guard let tb = notification.object as? NSToolbar else { return }
+        customization?.itemsChanged(tb)
+    }
+
+    func toolbarDidRemoveItem(_ notification: Notification) {
+        guard let tb = notification.object as? NSToolbar else { return }
+        customization?.itemsChanged(tb)
     }
 
     func toolbar(
         _ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
+        // The palette's own copy: never the toolbar's item, never cached.
+        if !flag, customization != nil {
+            if id == MainToolbar.ID.mode {
+                return ModeSwitch.paletteItem(id, selected: .calendar)
+            }
+            return make(id)
+        }
         if let item = made[id] {
             return item
         }
         let item = make(id)
         if let item {
             made[id] = item
+            if id == ID.assistant {
+                applyAssistantHidden()
+            }
             if id == ID.view || id == ID.search {
                 update()
             }
@@ -217,6 +306,17 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
             it.target = nil
             it.action = CalendarAction.newEvent
             it.visibilityPriority = .high
+            return it
+        case ID.print:
+            let it = NSToolbarItem(itemIdentifier: id)
+            it.image = Icon.symbol("printer", size: .toolbar, description: Printing.itemLabel)
+            it.label = Printing.itemLabel
+            it.paletteLabel = Printing.itemLabel
+            it.toolTip = Printing.itemLabel + " (⌘P)"
+            it.isBordered = true
+            it.target = nil
+            it.action = Action.printMail
+            it.visibilityPriority = .low
             return it
         case ID.assistant:
             let label = Assistant.texts().assistant

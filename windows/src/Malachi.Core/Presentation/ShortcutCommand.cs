@@ -10,7 +10,7 @@
 // window.close of the Escape shortcut controllers; accounts_reorder.go's
 // Ctrl+Up/Down; the primary menu's F10, GtkWindow's own key; the
 // calendar's keys.go ShowCalendarKey and New Event; win.undo of
-// window/undo.go), plus the Windows keys
+// window/undo.go; Print, macOS's ⌘P), plus the Windows keys
 // for Reply, Reply All and Forward (macOS's reply:, replyAll:, forward:).
 
 namespace Malachi.Core.Presentation;
@@ -98,4 +98,11 @@ public enum ShortcutCommand
 
     /// <summary>Moves the selected account down (Ctrl+Down).</summary>
     MoveDown,
+
+    /// <summary>
+    /// Print (Ctrl+P, macOS's ⌘P File ▸ Print…; docs/plans/toolbar-customization.md
+    /// §8): the main window prints the selection in Mail and the selected event
+    /// or the day in the Calendar, a message window its message.
+    /// </summary>
+    Print,
 }

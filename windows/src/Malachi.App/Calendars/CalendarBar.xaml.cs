@@ -16,9 +16,12 @@
 // way with ✦, the search field and then the segments).
 
 using System;
+using System.Collections.Generic;
+using Malachi.App.Toolbars;
 using Malachi.Core.Assistants;
 using Malachi.Core.Calendars;
 using Malachi.Core.Controllers;
+using Malachi.Core.Toolbars;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -30,6 +33,8 @@ namespace Malachi.App.Calendars;
 /// <summary>The calendar's controls in the page's bar (macOS <c>CalendarToolbar</c>).</summary>
 public sealed partial class CalendarBar : UserControl
 {
+    private readonly Button contactsButton = ToolbarButtons.Make("x-office-address-book-symbolic", Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.Contacts), "CalendarContacts", 36);
+    private readonly Button printButton = ToolbarButtons.Make("document-print-symbolic", Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.Print), "CalendarPrint", 36);
     private CalendarController? controller;
     private bool syncing;
 
@@ -57,7 +62,35 @@ public sealed partial class CalendarBar : UserControl
         AutomationProperties.SetName(AssistantButton, assistant);
         ToolTipService.SetToolTip(AssistantButton, assistant);
         SetSidebarShown(true);
+        // The user's toolbar-calendar layout (docs/plans/toolbar-customization.md
+        // W.2): the Windows default until the window applies it; the bar is
+        // clipped when too narrow, as before (the views become a menu).
+        BarRoot.Bar = Toolbar.Bar.Calendar;
+        BarRoot.FitsItems = false;
+        // T12: as the Grid it was, whose hidden ✦ kept its 6 DIP at the end.
+        BarRoot.GridSpacing = true;
+        BarRoot.Add(Toolbar.Contacts, contactsButton);
+        BarRoot.Add(Toolbar.Print, printButton);
+        ApplyToolbar(Toolbar.PresentFor(ToolbarVariant.Windows, Toolbar.Bar.Calendar, Toolbar.DefaultFor(ToolbarVariant.Windows, Toolbar.Bar.Calendar), Toolbar.Features.None));
+        Labels.Register(SidebarButton, () => Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.ToggleSidebar));
+        Labels.Register(NewEventButton, () => Cal.Text.NewEvent);
+        Labels.Register(AssistantButton, () => assistant);
+        Labels.Register(contactsButton, () => Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.Contacts));
+        Labels.Register(printButton, () => Toolbar.ItemLabel(Toolbar.Bar.Calendar, Toolbar.Print));
     }
+
+    /// <summary>Contacts (toolbar-calendar contacts), bound to the window's command by the page.</summary>
+    public Button Contacts => contactsButton;
+
+    /// <summary>Print (toolbar-calendar print), bound to the window's command by the page.</summary>
+    public Button Print => printButton;
+
+    /// <summary>The bar's icon buttons for the display mode (Today, the views and the title keep their own text).</summary>
+    internal ToolbarLabels Labels { get; } = new();
+
+    /// <summary>Shows the calendar's part of Toolbar.PresentFor (its two sections; the mode switch and the search are the title bar's).</summary>
+    public void ApplyToolbar(IReadOnlyList<Toolbar.Shown> shown) =>
+        BarRoot.Apply(shown.SectionRuns(Toolbar.Bar.Calendar, Toolbar.Section.Sidebar, Toolbar.Section.Main));
 
     /// <summary>The sidebar toggle: the page shows or folds its sidebar.</summary>
     public event EventHandler? SidebarToggleRequested;

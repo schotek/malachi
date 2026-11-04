@@ -55,6 +55,7 @@ public static partial class ContextMenu
             // TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
             : L10n.T("Open in New Window"),
         ItemId.EditDraft => L10n.T("Edit"),
+        ItemId.Print => Printing.Print.MenuTitle,
         ItemId.Reply => l.Comment ? L10n.T("Comment") : L10n.T("Reply"),
         ItemId.ReplyAll => L10n.T("Reply All"),
         ItemId.Forward => L10n.T("Forward"),

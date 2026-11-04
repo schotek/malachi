@@ -8,7 +8,8 @@ GTK: preferences.blp general_page. The Blueprint's groups in its order:
 Startup (launch_at_login, run_in_background), Updates (the update check's
 switch, status line and Check Now, after Startup as on macOS), Board (Show the Board,
 Board View, Open at Launch) and Keep cases for (a window per state;
-preferences_board.go bindBoard), Reading (mark_read_delay,
+preferences_board.go bindBoard), Toolbar (the display mode and Customize
+Toolbar…, docs/plans/toolbar-customization.md T13), Reading (mark_read_delay,
 0 to 60 s), Deleting (confirm_delete), Notifications
 (desktop_notifications, notification_sound) and the daemon's Mail group
 (mail_group: check_interval, remote_images, offline_days, attachment_days,
@@ -208,6 +209,32 @@ button with what Windows opens mailto: links with (windows/README.md).
                             SmallChange="1"
                             SpinButtonPlacementMode="Inline"
                             ValidationMode="InvalidInputOverwritten" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!--
+                    The toolbars (docs/plans/toolbar-customization.md T13,
+                    ui/internal/toolbar GroupTitle, DisplayModeTitle,
+                    CustomizeTitle; GeneralPage.Toolbar.cs): what the bars'
+                    buttons show (toolbar-display-mode) and Customize
+                    Toolbar…, the editor's dialog. The texts are Core's.
+                -->
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        x:Name="ToolbarHeading"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <tk:SettingsCard x:Name="ToolbarDisplayRow">
+                        <ComboBox
+                            x:Name="ToolbarDisplayBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="ToolbarDisplayMode" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="ToolbarCustomizeRow">
+                        <Button
+                            x:Name="ToolbarCustomizeButton"
+                            AutomationProperties.AutomationId="CustomizeToolbar"
+                            Click="OnCustomizeToolbarClick" />
                     </tk:SettingsCard>
                 </StackPanel>
 

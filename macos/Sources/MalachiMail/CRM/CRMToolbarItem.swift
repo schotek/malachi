@@ -82,7 +82,14 @@ final class CRMToolbarItem: NSToolbarItem {
         guard b != shown else { return }
         shown = b
         let hidden = b.state == .hidden
+        // From macOS 15 the item itself hides, and its view keeps the save
+        // button: a stack of hidden views has no size, which AppKit warned
+        // about at every measuring of the toolbar (B1 of
+        // docs/plans/toolbar-customization.md). On macOS 14 the item stays
+        // and only its contents go.
+        var emptiesView = true
         if #available(macOS 15, *) {
+            emptiesView = false
             if isHidden != hidden {
                 isHidden = hidden
             }
@@ -95,10 +102,10 @@ final class CRMToolbarItem: NSToolbarItem {
         } else {
             spinner.stopAnimation(nil)
         }
-        saveButton.isHidden = hidden || b.menu
+        saveButton.isHidden = (hidden && emptiesView) || (!hidden && b.menu)
         savedButton.isHidden = hidden || !b.menu
         // Every string here is a msgid's or the count; nothing from mail.
-        saveButton.title = b.label
+        saveButton.title = hidden ? CRM.buttonFor(.notSaved).label : b.label
         saveButton.toolTip = b.tooltip
         saveButton.isEnabled = b.enabled
         saveButton.setAccessibilityLabel(b.label)

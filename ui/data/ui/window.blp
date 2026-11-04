@@ -95,7 +95,7 @@ Adw.ApplicationWindow main_window {
 
           child: Adw.ToolbarView {
             [top]
-            Adw.HeaderBar {
+            Adw.HeaderBar folders_header {
               // No title: "Folders" does not fit beside the mode switch, New
               // Message and the menu at the sidebar's width in English and
               // showed as "Fold…"; the macOS and Windows sidebars have none.
@@ -127,7 +127,7 @@ Adw.ApplicationWindow main_window {
               }
 
               [start]
-              Button {
+              Button new_message_button {
                 icon-name: "mail-message-new-symbolic";
                 tooltip-text: _("New Message (Ctrl+N)");
                 action-name: "app.compose";
@@ -187,7 +187,7 @@ Adw.ApplicationWindow main_window {
 
               child: Adw.ToolbarView {
                 [top]
-                Adw.HeaderBar {
+                Adw.HeaderBar list_header {
                   // The selected folder, and under it its unread and total
                   // counts (window/folders.go refreshListTitle); the page's
                   // own title follows for the back button of a collapsed view.
@@ -430,7 +430,7 @@ Adw.ApplicationWindow main_window {
 
               child: Adw.ToolbarView {
                 [top]
-                Adw.HeaderBar {
+                Adw.HeaderBar message_header {
                   // Enabled from Go while a message is selected; the buttons
                   // with an action-name follow the win.* action's enabled state.
 
@@ -547,7 +547,7 @@ Adw.ApplicationWindow main_window {
                     icon-name: "user-trash-symbolic";
                     tooltip-text: _("Move to Trash");
                     action-name: "win.trash";
-                    margin-end: 12;
+                    // The gap after it is the arrangement's Space (toolbar_host.go).
                   }
 
                   [end]

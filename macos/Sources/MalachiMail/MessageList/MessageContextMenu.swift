@@ -22,6 +22,7 @@ enum MessageContextMenu {
     private static let actions: [ContextMenu.ItemID: Selector] = [
         .openMessage: Action.openMessage,
         .editDraft: Action.openMessage,
+        .print: Action.printMail,
         .reply: Action.reply,
         .replyAll: Action.replyAll,
         .forward: Action.forward,
@@ -53,6 +54,10 @@ enum MessageContextMenu {
         let role = mailbox.model.folderRole(FolderKey(account: s.accountId, folder: s.folderId))
         model.offerRule = rows.count == 1
             && state.rules.canCreateRule(from: s, role: role, account: mailbox.model.account(s.accountId))
+        // Print (docs/plans/toolbar-customization.md §8, P4 as changed):
+        // the window's printMail:, at most Printing.maxMessages rows.
+        model.offerPrint = true
+        model.print = rows.count <= Printing.maxMessages
         let labels = ContextMenu.Labels(comment: flags.comment, flagged: flags.flagged, outbox: flags.outbox, count: rows.count)
         // The folder all are in (Move To greys it out); none when they
         // differ (a search).
@@ -89,6 +94,15 @@ enum MessageContextMenu {
             }
         }
         return menu
+    }
+
+    /// Move To of the toolbar (docs/plans/toolbar-customization.md, M5):
+    /// the selected rows' account's folders as the context menu has them;
+    /// nil without a selection.
+    static func moveToMenu(mailbox: MailboxController, rows: [ListRow]) -> NSMenu? {
+        guard let s = rows.first?.message else { return nil }
+        let folders = Set(rows.map(\.message.folderId))
+        return moveToMenu(mailbox: mailbox, account: s.accountId, current: folders.count == 1 ? folders.first : nil)
     }
 
     /// Move To: the folders of the account in the sidebar's order,

@@ -85,6 +85,8 @@ public sealed partial class GeneralPage : UserControl
         // preferences_board.go bindBoard: Board View, Open at Launch, Show
         // the Board and the windows of the states.
         InitializeBoardGroup(bindings);
+        // The toolbars' display mode and Customize Toolbar… (GeneralPage.Toolbar.cs).
+        InitializeToolbarGroup(bindings);
         bindings.Number(MarkReadDelayBox, SettingsKey.MarkReadDelay, () => s.MarkReadDelay, v => s.MarkReadDelay = v);
         bindings.Toggle(ConfirmDeleteSwitch, SettingsKey.ConfirmDelete, () => s.ConfirmDelete, v => s.ConfirmDelete = v);
         bindings.Toggle(DesktopNotificationsSwitch, SettingsKey.DesktopNotifications, () => s.DesktopNotifications, v => s.DesktopNotifications = v);

@@ -97,7 +97,7 @@ public sealed partial class PreferencesWindow : Window
         accounts = new AccountsPage(state, this, ToastsHost);
         integrations = new IntegrationsPage(state, this, ToastsHost);
         rules = new RulesPage(state, this, ToastsHost);
-        general = new GeneralPage(state, bindings, ToastsHost);
+        general = new GeneralPage(state, bindings, ToastsHost) { HostWindow = this };
         calendar = new CalendarPreferencesPage(state, this, ToastsHost);
         contactsPage = new ContactsPreferencesPage(state, this, ToastsHost);
         security = new SecurityPage(state, this, ToastsHost);

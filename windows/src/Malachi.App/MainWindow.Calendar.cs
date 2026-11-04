@@ -97,7 +97,7 @@ public sealed partial class MainWindow
         mailSearchText = SearchBox.Text;
         SearchBox.PlaceholderText = Cal.Text.SearchEvents;
         SearchBox.Text = CalendarView.SearchText;
-        SearchArea.Visibility = Visibility.Visible;
+        SyncSearchArea();
         AppTitleBar.IsPaneToggleButtonVisible = false;
         AppTitleBar.IsBackButtonVisible = false;
         MoveToasts(CalendarView.ToastLayer);

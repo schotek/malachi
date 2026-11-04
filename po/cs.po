@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 09:09+0000\n"
+"POT-Creation-Date: 2026-11-04 12:54+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -527,7 +527,8 @@ msgid "The assistant stopped: %s"
 msgstr "Asistent skončil: %s"
 
 #. TRANSLATORS: The menu that hands the selected mail to Claude Desktop or Claude Code, and its settings group.
-#: ui/internal/assistant/assistant.go:476 ui/internal/contextmenu/text.go:85
+#: ui/internal/assistant/assistant.go:476 ui/internal/contextmenu/text.go:88
+#: ui/internal/toolbar/text.go:156
 msgid "Assistant"
 msgstr "Asistent"
 
@@ -1431,8 +1432,8 @@ msgid "The sender's server refused the request."
 msgstr "Server odesílatele žádost odmítl."
 
 #: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1048
-#: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:460
-#: ui/internal/window/assistant_panel.go:204
+#: ui/internal/toolbar/text.go:217 ui/internal/jira/settings.go:123
+#: ui/internal/contacts/form.go:460 ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36 ui/internal/rules/text.go:180
 #: ui/internal/rules/text.go:269
 msgid "Remove"
@@ -1446,8 +1447,8 @@ msgstr "Editor spadl; poslední text byl obnoven"
 msgid "Using placeholder account"
 msgstr "Používá se zástupný účet"
 
-#: ui/internal/compose/pane.go:612 ui/data/ui/compose.ui:10
-#: ui/data/ui/compose.ui:48
+#: ui/internal/compose/pane.go:612 ui/internal/toolbar/text.go:133
+#: ui/data/ui/compose.ui:10 ui/data/ui/compose.ui:48
 msgid "New Message"
 msgstr "Nová zpráva"
 
@@ -1666,7 +1667,7 @@ msgid "Recently used"
 msgstr "Nedávno použité"
 
 #. TRANSLATORS: In the menu of several selected messages: opens each in a window of its own; %d is their number.
-#: ui/internal/contextmenu/text.go:47
+#: ui/internal/contextmenu/text.go:48
 #, c-format
 msgid "Open %d Message in a New Window"
 msgid_plural "Open %d Messages in New Windows"
@@ -1675,151 +1676,156 @@ msgstr[1] "Otevřít %d zprávy v nových oknech"
 msgstr[2] "Otevřít %d zpráv v nových oknech"
 
 #. TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
-#: ui/internal/contextmenu/text.go:50
+#: ui/internal/contextmenu/text.go:51
 msgid "Open in New Window"
 msgstr "Otevřít v novém okně"
 
-#: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
+#: ui/internal/contextmenu/text.go:53 ui/internal/conversation/drafts.go:108
 #: ui/internal/calendar/detail.go:256 ui/internal/contacts/text.go:131
-#: ui/data/ui/window.ui:513
+#: ui/data/ui/window.ui:512
 msgid "Edit"
 msgstr "Upravit"
 
 #. TRANSLATORS: the Reply action of an issue: writes a comment.
-#: ui/internal/contextmenu/text.go:55 ui/internal/jira/compose.go:162
+#: ui/internal/contextmenu/text.go:58 ui/internal/jira/compose.go:162
 msgid "Comment"
 msgstr "Komentovat"
 
-#: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
-#: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:302
+#: ui/internal/contextmenu/text.go:60 ui/internal/toolbar/text.go:142
+#: ui/internal/jira/compose.go:164 ui/internal/board/text.go:374
+#: ui/internal/window/conversation_card.go:302
 #: ui/internal/window/quick_reply_bar.go:194 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:398
 msgid "Reply"
 msgstr "Odpovědět"
 
-#: ui/internal/contextmenu/text.go:59
+#: ui/internal/contextmenu/text.go:62 ui/internal/toolbar/text.go:144
 #: ui/internal/window/conversation_card.go:303
 #: ui/internal/window/quick_reply_bar.go:192 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:405
 msgid "Reply All"
 msgstr "Odpovědět všem"
 
-#: ui/internal/contextmenu/text.go:61
+#: ui/internal/contextmenu/text.go:64 ui/internal/toolbar/text.go:146
 #: ui/internal/window/conversation_card.go:304 ui/data/ui/message_window.ui:56
 #: ui/data/ui/window.ui:412
 msgid "Forward"
 msgstr "Přeposlat"
 
-#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:592
-#: ui/data/ui/window.ui:1253
+#: ui/internal/contextmenu/text.go:66 ui/internal/toolbar/text.go:163
+#: ui/data/ui/message_window.ui:592 ui/data/ui/window.ui:1252
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
-#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
-#: ui/data/ui/window.ui:1249
+#: ui/internal/contextmenu/text.go:68 ui/data/ui/message_window.ui:588
+#: ui/data/ui/window.ui:1248
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
-#: ui/internal/contextmenu/text.go:68 ui/internal/board/text.go:351
+#: ui/internal/contextmenu/text.go:71 ui/internal/board/text.go:351
 #: ui/internal/window/actions.go:64
 msgid "Unstar"
 msgstr "Odebrat hvězdičku"
 
-#: ui/internal/contextmenu/text.go:70 ui/internal/window/actions.go:67
-#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:439
+#: ui/internal/contextmenu/text.go:73 ui/internal/toolbar/text.go:154
+#: ui/internal/window/actions.go:62 ui/data/ui/message_window.ui:74
+#: ui/data/ui/window.ui:439
 msgid "Star"
 msgstr "Přidat hvězdičku"
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
-#: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1269
+#: ui/internal/contextmenu/text.go:75 ui/internal/jira/transitions.go:87
+#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1268
 msgid "Change Status"
 msgstr "Změnit stav"
 
 #. TRANSLATORS: After Answering, Move the Invitation Message: to the
 #. archive.
-#: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:824
-#: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:132
-#: ui/data/ui/window.ui:499
+#: ui/internal/contextmenu/text.go:77 ui/internal/toolbar/text.go:148
+#: ui/internal/board/text.go:824 ui/internal/calendar/preferences.go:318
+#: ui/data/ui/message_window.ui:132 ui/data/ui/window.ui:498
 msgid "Archive"
 msgstr "Archivovat"
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/contextmenu/text.go:76 ui/internal/board/text.go:1065
+#: ui/internal/contextmenu/text.go:79 ui/internal/toolbar/text.go:167
+#: ui/internal/board/text.go:1065
 msgid "Move To"
 msgstr "Přesunout do"
 
-#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:582
-#: ui/data/ui/window.ui:1243
+#: ui/internal/contextmenu/text.go:81 ui/internal/toolbar/text.go:165
+#: ui/data/ui/message_window.ui:582 ui/data/ui/window.ui:1242
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
 
-#: ui/internal/contextmenu/text.go:81 ui/internal/window/outbox.go:240
+#: ui/internal/contextmenu/text.go:84 ui/internal/window/outbox.go:240
 msgid "Cancel Sending"
 msgstr "Zrušit odeslání"
 
-#: ui/internal/contextmenu/text.go:83 ui/internal/window/outbox.go:242
-#: ui/data/ui/message_window.ui:125 ui/data/ui/window.ui:491
+#: ui/internal/contextmenu/text.go:86 ui/internal/toolbar/text.go:150
+#: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:125
+#: ui/data/ui/window.ui:491
 msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
-#: ui/internal/contextmenu/text.go:95 ui/internal/window/status.go:270
-#: ui/data/ui/preferences.ui:257 ui/data/ui/window.ui:171
+#: ui/internal/contextmenu/text.go:98 ui/internal/toolbar/text.go:140
+#: ui/internal/window/status.go:270 ui/data/ui/preferences.ui:257
+#: ui/data/ui/window.ui:171
 msgid "Check for New Mail"
 msgstr "Kontrolovat novou poštu"
 
 #. TRANSLATORS: In the menu of a folder in the sidebar.
-#: ui/internal/contextmenu/text.go:98
+#: ui/internal/contextmenu/text.go:101
 msgid "Mark All as Read"
 msgstr "Označit vše jako přečtené"
 
 #. TRANSLATORS: In the menu of the Junk folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:102
+#: ui/internal/contextmenu/text.go:105
 msgid "Empty Junk"
 msgstr "Vysypat nevyžádanou poštu"
 
 #. TRANSLATORS: In the menu of the Trash folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:105
+#: ui/internal/contextmenu/text.go:108
 msgid "Empty Trash"
 msgstr "Vysypat koš"
 
-#: ui/internal/contextmenu/text.go:108 ui/internal/window/favourites.go:113
+#: ui/internal/contextmenu/text.go:111 ui/internal/window/favourites.go:113
 msgid "Remove from Favourites"
 msgstr "Odebrat z oblíbených"
 
-#: ui/internal/contextmenu/text.go:110 ui/internal/window/favourites.go:111
+#: ui/internal/contextmenu/text.go:113 ui/internal/window/favourites.go:111
 msgid "Add to Favourites"
 msgstr "Přidat do oblíbených"
 
-#: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:441
+#: ui/internal/contextmenu/text.go:116 ui/internal/widget/message_row.go:441
 #: ui/internal/window/board_conversation.go:491
 #: ui/internal/window/conversation_card.go:482 ui/internal/window/folders.go:66
 msgid "Expand"
 msgstr "Rozbalit"
 
-#: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:437
+#: ui/internal/contextmenu/text.go:118 ui/internal/widget/message_row.go:437
 #: ui/internal/window/board_conversation.go:494
 #: ui/internal/window/conversation_card.go:480 ui/internal/window/folders.go:63
 msgid "Collapse"
 msgstr "Sbalit"
 
 #. TRANSLATORS: The heading of the question before the Trash is emptied.
-#: ui/internal/contextmenu/text.go:132
+#: ui/internal/contextmenu/text.go:135
 msgid "Empty the Trash?"
 msgstr "Vysypat koš?"
 
 #. TRANSLATORS: The button that empties the Trash or the Junk folder.
-#: ui/internal/contextmenu/text.go:134
+#: ui/internal/contextmenu/text.go:137
 msgid "_Empty"
 msgstr "_Vysypat"
 
 #. TRANSLATORS: The heading of the question before the Junk folder is emptied.
-#: ui/internal/contextmenu/text.go:138
+#: ui/internal/contextmenu/text.go:141
 msgid "Empty the Junk Folder?"
 msgstr "Vysypat nevyžádanou poštu?"
 
 #. TRANSLATORS: %d is the number of messages the folder shows.
-#: ui/internal/contextmenu/text.go:141
+#: ui/internal/contextmenu/text.go:144
 #, c-format
 msgid ""
 "%d message will be deleted for good. Older messages that are only on the "
@@ -1838,12 +1844,12 @@ msgstr[2] ""
 "serveru, tam zůstanou."
 
 #. TRANSLATORS: What failed when a message could not be moved to another folder.
-#: ui/internal/contextmenu/text.go:150
+#: ui/internal/contextmenu/text.go:153
 msgid "Moving the message"
 msgstr "Přesunutí zprávy"
 
 #. TRANSLATORS: What failed when messages could not be moved to another folder; %d is their number.
-#: ui/internal/contextmenu/text.go:153
+#: ui/internal/contextmenu/text.go:156
 #, c-format
 msgid "Moving %d message"
 msgid_plural "Moving %d messages"
@@ -1852,17 +1858,17 @@ msgstr[1] "Přesunutí %d zpráv"
 msgstr[2] "Přesunutí %d zpráv"
 
 #. TRANSLATORS: What failed when a folder could not be marked read.
-#: ui/internal/contextmenu/text.go:159
+#: ui/internal/contextmenu/text.go:162
 msgid "Marking the folder as read"
 msgstr "Označení složky jako přečtené"
 
 #. TRANSLATORS: What failed when the Junk folder could not be emptied.
-#: ui/internal/contextmenu/text.go:166
+#: ui/internal/contextmenu/text.go:169
 msgid "Emptying the Junk folder"
 msgstr "Vysypání nevyžádané pošty"
 
 #. TRANSLATORS: What failed when the Trash could not be emptied.
-#: ui/internal/contextmenu/text.go:169
+#: ui/internal/contextmenu/text.go:172
 msgid "Emptying the Trash"
 msgstr "Vysypání koše"
 
@@ -1898,6 +1904,295 @@ msgstr "Zobrazovat Všechny doručené"
 #: ui/internal/unified/text.go:31
 msgid "In the sidebar when you have more than one mail account"
 msgstr "V postranním panelu, když máte více než jeden poštovní účet"
+
+#. TRANSLATORS: File menu item that prints the selected message, conversation, event or day.
+#: ui/internal/printing/printing.go:37
+msgid "_Print…"
+msgstr "_Tisk…"
+
+#. TRANSLATORS: toolbar button that prints the selected message, conversation, event or day.
+#: ui/internal/printing/printing.go:43 ui/internal/toolbar/text.go:169
+msgid "Print"
+msgstr "Tisk"
+
+#: ui/internal/printing/printing.go:71 ui/data/ui/compose_pane.ui:172
+msgid "Subject"
+msgstr "Předmět"
+
+#: ui/internal/printing/printing.go:75
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
+#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
+#: ui/data/ui/window.ui:796
+msgid "From"
+msgstr "Od"
+
+#: ui/internal/printing/printing.go:76
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
+#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
+#: ui/data/ui/window.ui:822
+msgid "To"
+msgstr "Komu"
+
+#: ui/internal/printing/printing.go:77
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
+#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
+#: ui/data/ui/window.ui:850
+msgid "Cc"
+msgstr "Kopie"
+
+#: ui/internal/printing/printing.go:78 ui/data/ui/compose_pane.ui:138
+msgid "Bcc"
+msgstr "Skrytá kopie"
+
+#: ui/internal/printing/printing.go:79
+msgid "Date"
+msgstr "Datum"
+
+#: ui/internal/printing/printing.go:80
+msgid "Attachments"
+msgstr "Přílohy"
+
+#. TRANSLATORS: a group in Preferences → General with the toolbar's display mode and its editor.
+#: ui/internal/toolbar/text.go:26
+msgid "Toolbar"
+msgstr "Lišta"
+
+#. TRANSLATORS: a button in Preferences and a context menu item of a toolbar; it opens the toolbar editor.
+#: ui/internal/toolbar/text.go:33
+msgid "Customize Toolbar…"
+msgstr "Přizpůsobit lištu…"
+
+#. TRANSLATORS: the title of the dialog where the user arranges a toolbar's items.
+#: ui/internal/toolbar/text.go:39
+msgid "Customize Toolbar"
+msgstr "Přizpůsobit lištu"
+
+#. TRANSLATORS: a row in Preferences: whether the toolbar's buttons show icons, text or both.
+#: ui/internal/toolbar/text.go:45
+msgid "Toolbar Display"
+msgstr "Zobrazení lišty"
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with an icon and a label.
+#: ui/internal/toolbar/text.go:57
+msgid "Icons and Text"
+msgstr "Ikony a text"
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with a label and no icon.
+#: ui/internal/toolbar/text.go:60
+msgid "Text Only"
+msgstr "Jen text"
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with an icon and no label.
+#: ui/internal/toolbar/text.go:63
+msgid "Icons Only"
+msgstr "Jen ikony"
+
+#: ui/internal/toolbar/text.go:70 ui/internal/board/text.go:57
+#: ui/data/ui/preferences.ui:253
+msgid "Mail"
+msgstr "Pošta"
+
+#. TRANSLATORS: the toolbar of the Board in its List style, in the toolbar editor.
+#: ui/internal/toolbar/text.go:73
+msgid "Board – List"
+msgstr "Nástěnka – Seznam"
+
+#. TRANSLATORS: the toolbar of the Board in its Columns and Today styles, in the toolbar editor.
+#: ui/internal/toolbar/text.go:76
+msgid "Board – Columns and Today"
+msgstr "Nástěnka – Sloupce a Dnes"
+
+#. TRANSLATORS: the window's third mode beside Mail and Board: the calendar.
+#: ui/internal/toolbar/text.go:78 ui/internal/toolbar/text.go:105
+#: ui/internal/board/text.go:72
+msgid "Calendar"
+msgstr "Kalendář"
+
+#: ui/internal/toolbar/text.go:89 ui/internal/jira/settings.go:100
+#: ui/data/ui/window.ui:66
+msgid "Folders"
+msgstr "Složky"
+
+#: ui/internal/toolbar/text.go:94 ui/data/ui/preferences.ui:478
+msgid "Message List"
+msgstr "Seznam zpráv"
+
+#. TRANSLATORS: the part of the Board's toolbar over its list of cases, in the toolbar editor.
+#: ui/internal/toolbar/text.go:97
+msgid "Cases"
+msgstr "Případy"
+
+#: ui/internal/toolbar/text.go:99 ui/data/ui/message_window.ui:38
+#: ui/data/ui/window.ui:389
+msgid "Message"
+msgstr "Zpráva"
+
+#. TRANSLATORS: the part of the Board's toolbar over the shown case, in the toolbar editor.
+#: ui/internal/toolbar/text.go:102
+msgid "Case Detail"
+msgstr "Detail případu"
+
+#. TRANSLATORS: the window's second mode beside Mail: the conversations
+#. that need something, sorted into four states.
+#: ui/internal/toolbar/text.go:107 ui/internal/board/text.go:65
+#: ui/data/ui/preferences.ui:125 ui/data/ui/preferences.ui:689
+msgid "Board"
+msgstr "Nástěnka"
+
+#. TRANSLATORS: in the toolbar editor, the button that shows or hides the sidebar and the part of a toolbar over the sidebar.
+#: ui/internal/toolbar/text.go:114
+msgid "Sidebar"
+msgstr "Postranní panel"
+
+#. TRANSLATORS: a fixed gap between toolbar buttons, in the toolbar editor.
+#: ui/internal/toolbar/text.go:123
+msgid "Space"
+msgstr "Mezera"
+
+#. TRANSLATORS: a gap that takes the toolbar's free room, in the toolbar editor.
+#: ui/internal/toolbar/text.go:126
+msgid "Flexible Space"
+msgstr "Pružná mezera"
+
+#. TRANSLATORS: the toolbar's switch between Mail, Board and Calendar, in the toolbar editor.
+#: ui/internal/toolbar/text.go:131
+msgid "Mode Switch"
+msgstr "Přepínač režimu"
+
+#. TRANSLATORS: the Contacts window (address books of the user's
+#. accounts), its menu item and its Preferences page.
+#: ui/internal/toolbar/text.go:135 ui/internal/contacts/text.go:50
+msgid "Contacts"
+msgstr "Kontakty"
+
+#. TRANSLATORS: the toolbar item that filters the message list (All, Unread, Flagged), in the toolbar editor.
+#: ui/internal/toolbar/text.go:138
+msgid "Filter"
+msgstr "Filtr"
+
+#. TRANSLATORS: context menu of a message: opens the dialog that saves it to eWay-CRM.
+#: ui/internal/toolbar/text.go:152 ui/internal/crm/text.go:90
+msgid "Save to eWay-CRM…"
+msgstr "Uložit do eWay-CRM…"
+
+#: ui/internal/toolbar/text.go:158 ui/internal/window/attachments.go:201
+#: ui/data/ui/message_window.ui:62 ui/data/ui/window.ui:427
+msgid "More Actions"
+msgstr "Další akce"
+
+#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1135
+#: ui/data/ui/window.ui:178
+msgid "Search"
+msgstr "Hledat"
+
+#. TRANSLATORS: the button of a toast that takes back what was just
+#. done (an archive).
+#: ui/internal/toolbar/text.go:171 ui/internal/board/text.go:905
+#: ui/internal/undo/text.go:45
+msgid "Undo"
+msgstr "Zpět"
+
+#: ui/internal/toolbar/text.go:173 ui/internal/window/conversation_card.go:797
+#: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:259
+#: ui/data/ui/message_window.ui:598 ui/data/ui/window.ui:634
+#: ui/data/ui/window.ui:1258
+msgid "Load _Images"
+msgstr "Načíst _obrázky"
+
+#. TRANSLATORS: the Board's switch between its List, Columns and Today styles, in the toolbar editor.
+#: ui/internal/toolbar/text.go:176
+msgid "Board Style"
+msgstr "Styl nástěnky"
+
+#: ui/internal/toolbar/text.go:178 ui/internal/board/text.go:132
+msgctxt "account filter"
+msgid "All Accounts"
+msgstr "Všechny účty"
+
+#. TRANSLATORS: a button: the assistant reads the conversations on the
+#. board and adds notes (titles, summaries, tasks, deadlines).
+#: ui/internal/toolbar/text.go:180 ui/internal/board/text.go:384
+msgid "✦ Triage"
+msgstr "✦ Roztřídit"
+
+#. TRANSLATORS: the board's filter and section of the finished cases,
+#. and the button that marks a case finished.
+#: ui/internal/toolbar/text.go:182 ui/internal/board/text.go:138
+msgid "Done"
+msgstr "Hotovo"
+
+#. TRANSLATORS: a button that takes a case off the board until a
+#. chosen time.
+#: ui/internal/toolbar/text.go:184 ui/internal/board/text.go:370
+msgid "Remind…"
+msgstr "Připomenout…"
+
+#. TRANSLATORS: a button and menu item of the board: the case's received
+#. messages go to the trash and the case is done.
+#: ui/internal/toolbar/text.go:186 ui/internal/board/text.go:917
+#: ui/internal/calendar/detail.go:272 ui/internal/calendar/detail.go:313
+#: ui/internal/contacts/text.go:146
+msgid "Delete"
+msgstr "Smazat"
+
+#. TRANSLATORS: the board's style that shows the day (what needs the
+#. user, deadlines), a group of deadlines and a deadline's day.
+#. TRANSLATORS: the calendar's toolbar button that goes to today.
+#. TRANSLATORS: the heading of today's events in the agenda.
+#: ui/internal/toolbar/text.go:188 ui/internal/board/text.go:210
+#: ui/internal/calendar/text.go:44 ui/internal/calendar/agenda.go:107
+#: ui/internal/maildate/groups.go:39
+msgid "Today"
+msgstr "Dnes"
+
+#. TRANSLATORS: the Calendar's pair of buttons that step to the previous and next day, week or month, in the toolbar editor.
+#: ui/internal/toolbar/text.go:191
+msgid "Previous and Next"
+msgstr "Předchozí a další"
+
+#. TRANSLATORS: the Calendar's switch between Day, Week, Month and Agenda, in the toolbar editor.
+#: ui/internal/toolbar/text.go:194
+msgid "Calendar View"
+msgstr "Pohled kalendáře"
+
+#: ui/internal/toolbar/text.go:196 ui/internal/calendar/text.go:67
+msgid "Search Events"
+msgstr "Hledat události"
+
+#: ui/internal/toolbar/text.go:198 ui/internal/calendar/text.go:61
+msgid "New Event"
+msgstr "Nová událost"
+
+#. TRANSLATORS: the subtitle of a toolbar item in the editor whose feature is off at the moment (e.g. no eWay-CRM account).
+#: ui/internal/toolbar/text.go:207
+msgid "Hidden while unavailable"
+msgstr "Skryté, dokud není k dispozici"
+
+#. TRANSLATORS: a button of the toolbar editor that opens the list of items to add.
+#: ui/internal/toolbar/text.go:213
+msgid "Add Item…"
+msgstr "Přidat položku…"
+
+#. TRANSLATORS: a button of the toolbar editor that gives the chosen toolbar its default items back.
+#: ui/internal/toolbar/text.go:223
+msgid "Restore Defaults"
+msgstr "Obnovit výchozí"
+
+#. TRANSLATORS: the question before the toolbar editor restores the default toolbar.
+#: ui/internal/toolbar/text.go:229
+msgid "Restore the Default Toolbar?"
+msgstr "Obnovit výchozí lištu?"
+
+#. TRANSLATORS: %s is the toolbar's name, e.g. "Mail" or "Board – List".
+#: ui/internal/toolbar/text.go:235
+#, c-format
+msgid "Your changes to the “%s” toolbar will be lost."
+msgstr "Vaše úpravy lišty „%s“ se ztratí."
+
+#: ui/internal/toolbar/text.go:239 ui/internal/calendar/editor.go:245
+#: ui/internal/contacts/text.go:140 ui/internal/updates/updates.go:195
+msgid "Cancel"
+msgstr "Zrušit"
 
 #. TRANSLATORS: a comment on a service-desk request that the customer reads too.
 #: ui/internal/jira/compose.go:74
@@ -2032,7 +2327,7 @@ msgid "The Jira site rejected the token of %s"
 msgstr "Web Jira odmítl token účtu %s"
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
-#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:726
+#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:725
 msgid "Add _Jira Account…"
 msgstr "Přidat účet _Jira…"
 
@@ -2228,10 +2523,6 @@ msgstr "Synchronizace"
 #: ui/internal/jira/settings.go:99
 msgid "Show Status and Assignee Changes"
 msgstr "Zobrazovat změny stavu a řešitele"
-
-#: ui/internal/jira/settings.go:100 ui/data/ui/window.ui:66
-msgid "Folders"
-msgstr "Složky"
 
 #: ui/internal/jira/settings.go:101
 msgid "Closed Statuses"
@@ -2576,11 +2867,6 @@ msgid_plural "Save %d Messages to eWay-CRM…"
 msgstr[0] "Uložit %d zprávu do eWay-CRM…"
 msgstr[1] "Uložit %d zprávy do eWay-CRM…"
 msgstr[2] "Uložit %d zpráv do eWay-CRM…"
-
-#. TRANSLATORS: context menu of a message: opens the dialog that saves it to eWay-CRM.
-#: ui/internal/crm/text.go:90
-msgid "Save to eWay-CRM…"
-msgstr "Uložit do eWay-CRM…"
 
 #. TRANSLATORS: placeholder of the search field of the Save to eWay-CRM dialog.
 #: ui/internal/crm/text.go:119
@@ -2963,22 +3249,6 @@ msgstr "Otevřít v okně"
 msgid "Forward…"
 msgstr "Přeposlat…"
 
-#: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:253
-msgid "Mail"
-msgstr "Pošta"
-
-#. TRANSLATORS: the window's second mode beside Mail: the conversations
-#. that need something, sorted into four states.
-#: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:125
-#: ui/data/ui/preferences.ui:689
-msgid "Board"
-msgstr "Nástěnka"
-
-#. TRANSLATORS: the window's third mode beside Mail and Board: the calendar.
-#: ui/internal/board/text.go:72
-msgid "Calendar"
-msgstr "Kalendář"
-
 #. TRANSLATORS: a state of the board, its column and filter: the
 #. cases that need the user now (a deadline, an escalation).
 #: ui/internal/board/text.go:81
@@ -3007,17 +3277,6 @@ msgstr "Pro informaci"
 #: ui/internal/board/text.go:128
 msgid "Overview"
 msgstr "Přehled"
-
-#: ui/internal/board/text.go:132
-msgctxt "account filter"
-msgid "All Accounts"
-msgstr "Všechny účty"
-
-#. TRANSLATORS: the board's filter and section of the finished cases,
-#. and the button that marks a case finished.
-#: ui/internal/board/text.go:138
-msgid "Done"
-msgstr "Hotovo"
 
 #. TRANSLATORS: the number of cases on the board, after the account
 #. filter: "All Accounts · 23 cases".
@@ -3086,15 +3345,6 @@ msgstr "Příštích 7 dní"
 msgctxt "deadline"
 msgid "Later"
 msgstr "Později"
-
-#. TRANSLATORS: the board's style that shows the day (what needs the
-#. user, deadlines), a group of deadlines and a deadline's day.
-#. TRANSLATORS: the calendar's toolbar button that goes to today.
-#. TRANSLATORS: the heading of today's events in the agenda.
-#: ui/internal/board/text.go:210 ui/internal/calendar/text.go:44
-#: ui/internal/calendar/agenda.go:107 ui/internal/maildate/groups.go:39
-msgid "Today"
-msgstr "Dnes"
 
 #: ui/internal/board/text.go:239
 msgid "The daemon’s rules set the state and the assistant kept it."
@@ -3220,18 +3470,6 @@ msgstr "Proč je to tady?"
 #: ui/internal/board/text.go:364
 msgid "Move Back to Board"
 msgstr "Vrátit na nástěnku"
-
-#. TRANSLATORS: a button that takes a case off the board until a
-#. chosen time.
-#: ui/internal/board/text.go:370
-msgid "Remind…"
-msgstr "Připomenout…"
-
-#. TRANSLATORS: a button: the assistant reads the conversations on the
-#. board and adds notes (titles, summaries, tasks, deadlines).
-#: ui/internal/board/text.go:384
-msgid "✦ Triage"
-msgstr "✦ Roztřídit"
 
 #: ui/internal/board/text.go:388
 msgid "Not in this preview yet."
@@ -3676,22 +3914,9 @@ msgstr[0] "Archivována %d zpráva."
 msgstr[1] "Archivovány %d zprávy."
 msgstr[2] "Archivováno %d zpráv."
 
-#. TRANSLATORS: the button of a toast that takes back what was just
-#. done (an archive).
-#: ui/internal/board/text.go:905 ui/internal/undo/text.go:45
-msgid "Undo"
-msgstr "Zpět"
-
 #: ui/internal/board/text.go:910
 msgid "Could not undo the archive."
 msgstr "Archivaci se nepodařilo vrátit."
-
-#. TRANSLATORS: a button and menu item of the board: the case's received
-#. messages go to the trash and the case is done.
-#: ui/internal/board/text.go:917 ui/internal/calendar/detail.go:272
-#: ui/internal/calendar/detail.go:313 ui/internal/contacts/text.go:146
-msgid "Delete"
-msgstr "Smazat"
 
 #: ui/internal/board/text.go:924
 msgid "Marked as done. No received message was left to delete."
@@ -3741,7 +3966,7 @@ msgstr "Archivování"
 msgid "Changing the promise"
 msgstr "Uložení změny slibu"
 
-#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:277
+#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:280
 msgid "Removing the star"
 msgstr "Odebrání hvězdičky"
 
@@ -4378,17 +4603,9 @@ msgstr "Předchozí"
 msgid "Next"
 msgstr "Další"
 
-#: ui/internal/calendar/text.go:61
-msgid "New Event"
-msgstr "Nová událost"
-
 #: ui/internal/calendar/text.go:64
 msgid "Edit Event"
 msgstr "Upravit událost"
-
-#: ui/internal/calendar/text.go:67
-msgid "Search Events"
-msgstr "Hledat události"
 
 #. TRANSLATORS: an event without a title.
 #: ui/internal/calendar/text.go:73
@@ -5186,11 +5403,6 @@ msgstr[2] "Událost může mít nejvýš %d upozornění."
 #: ui/internal/calendar/editor.go:225
 msgid "Save and Send Invitations"
 msgstr "Uložit a odeslat pozvánky"
-
-#: ui/internal/calendar/editor.go:245 ui/internal/contacts/text.go:140
-#: ui/internal/updates/updates.go:195
-msgid "Cancel"
-msgstr "Zrušit"
 
 #: ui/internal/calendar/editor.go:256
 #, c-format
@@ -6125,12 +6337,6 @@ msgstr "Vybrat předchozí událost"
 #: ui/internal/calendar/keys.go:166
 msgid "Select Next Event"
 msgstr "Vybrat další událost"
-
-#. TRANSLATORS: the Contacts window (address books of the user's
-#. accounts), its menu item and its Preferences page.
-#: ui/internal/contacts/text.go:50
-msgid "Contacts"
-msgstr "Kontakty"
 
 #. TRANSLATORS: the Contacts window's sidebar row that lists the
 #. contacts of every address book.
@@ -7102,11 +7308,11 @@ msgstr[0] "Přesunout %d zprávu do koše?"
 msgstr[1] "Přesunout %d zprávy do koše?"
 msgstr[2] "Přesunout %d zpráv do koše?"
 
-#: ui/internal/window/actions.go:212
+#: ui/internal/window/actions.go:215
 msgid "Marking the message as read"
 msgstr "Označení zprávy jako přečtené"
 
-#: ui/internal/window/actions.go:214
+#: ui/internal/window/actions.go:217
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
@@ -7114,11 +7320,11 @@ msgstr[0] "Označení %d zprávy jako přečtené"
 msgstr[1] "Označení %d zpráv jako přečtených"
 msgstr[2] "Označení %d zpráv jako přečtených"
 
-#: ui/internal/window/actions.go:216
+#: ui/internal/window/actions.go:219
 msgid "Marking the message as unread"
 msgstr "Označení zprávy jako nepřečtené"
 
-#: ui/internal/window/actions.go:218
+#: ui/internal/window/actions.go:221
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
@@ -7126,11 +7332,11 @@ msgstr[0] "Označení %d zprávy jako nepřečtené"
 msgstr[1] "Označení %d zpráv jako nepřečtených"
 msgstr[2] "Označení %d zpráv jako nepřečtených"
 
-#: ui/internal/window/actions.go:273
+#: ui/internal/window/actions.go:276
 msgid "Starring the message"
 msgstr "Označení zprávy hvězdičkou"
 
-#: ui/internal/window/actions.go:275
+#: ui/internal/window/actions.go:278
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
@@ -7138,7 +7344,7 @@ msgstr[0] "Označení %d zprávy hvězdičkou"
 msgstr[1] "Označení %d zpráv hvězdičkou"
 msgstr[2] "Označení %d zpráv hvězdičkou"
 
-#: ui/internal/window/actions.go:279
+#: ui/internal/window/actions.go:282
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
@@ -7146,11 +7352,11 @@ msgstr[0] "Odebrání hvězdičky %d zprávě"
 msgstr[1] "Odebrání hvězdičky %d zprávám"
 msgstr[2] "Odebrání hvězdičky %d zprávám"
 
-#: ui/internal/window/actions.go:355
+#: ui/internal/window/actions.go:358
 msgid "Moving the message to Trash"
 msgstr "Přesunutí zprávy do koše"
 
-#: ui/internal/window/actions.go:357
+#: ui/internal/window/actions.go:360
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
@@ -7158,11 +7364,11 @@ msgstr[0] "Přesunutí %d zprávy do koše"
 msgstr[1] "Přesunutí %d zpráv do koše"
 msgstr[2] "Přesunutí %d zpráv do koše"
 
-#: ui/internal/window/actions.go:429
+#: ui/internal/window/actions.go:432
 msgid "Archiving the message"
 msgstr "Archivace zprávy"
 
-#: ui/internal/window/actions.go:431
+#: ui/internal/window/actions.go:434
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
@@ -7170,20 +7376,20 @@ msgstr[0] "Archivace %d zprávy"
 msgstr[1] "Archivace %d zpráv"
 msgstr[2] "Archivace %d zpráv"
 
-#: ui/internal/window/actions.go:432
+#: ui/internal/window/actions.go:435
 msgid "This account has no archive folder"
 msgstr "Tento účet nemá složku Archiv"
 
-#: ui/internal/window/actions.go:465 ui/internal/window/actions.go:479
+#: ui/internal/window/actions.go:468 ui/internal/window/actions.go:482
 msgid "This account has no junk folder"
 msgstr "Tento účet nemá složku pro nevyžádanou poštu"
 
-#: ui/internal/window/actions.go:468
+#: ui/internal/window/actions.go:471
 msgid "Mark as junk?"
 msgstr "Označit jako nevyžádanou poštu?"
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:471
+#: ui/internal/window/actions.go:474
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
@@ -7191,15 +7397,15 @@ msgstr[0] "Označit %d zprávu jako nevyžádanou?"
 msgstr[1] "Označit %d zprávy jako nevyžádané?"
 msgstr[2] "Označit %d zpráv jako nevyžádané?"
 
-#: ui/internal/window/actions.go:473
+#: ui/internal/window/actions.go:476
 msgid "Mark as _Junk"
 msgstr "Označit jako _nevyžádanou"
 
-#: ui/internal/window/actions.go:476
+#: ui/internal/window/actions.go:479
 msgid "Marking the message as junk"
 msgstr "Označení zprávy jako nevyžádané"
 
-#: ui/internal/window/actions.go:478
+#: ui/internal/window/actions.go:481
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
@@ -7215,7 +7421,7 @@ msgstr "Adresa zkopírována"
 msgid "_Copy Address"
 msgstr "_Kopírovat adresu"
 
-#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1215
+#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1214
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
@@ -7227,11 +7433,6 @@ msgstr "Otevření konceptu"
 #: ui/internal/window/attachments.go:102
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr "Soubory uvnitř přiložené zprávy zatím nelze otevřít ani uložit."
-
-#: ui/internal/window/attachments.go:201 ui/data/ui/message_window.ui:62
-#: ui/data/ui/window.ui:427
-msgid "More Actions"
-msgstr "Další akce"
 
 #: ui/internal/window/attachments.go:244 ui/internal/window/attachments.go:535
 msgid ""
@@ -7340,24 +7541,6 @@ msgstr "Příprava přeposílané zprávy"
 msgid "Preparing the reply"
 msgstr "Příprava odpovědi"
 
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
-#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
-#: ui/data/ui/window.ui:797
-msgid "From"
-msgstr "Od"
-
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
-#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
-#: ui/data/ui/window.ui:823
-msgid "To"
-msgstr "Komu"
-
-#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
-#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
-#: ui/data/ui/window.ui:851
-msgid "Cc"
-msgstr "Kopie"
-
 #: ui/internal/window/conversation_card.go:758
 #: ui/internal/window/message_view.go:339
 msgid ""
@@ -7367,24 +7550,18 @@ msgstr ""
 "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
 "text."
 
-#: ui/internal/window/conversation_card.go:797 ui/data/ui/embedded_window.ui:61
-#: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
-#: ui/data/ui/window.ui:635 ui/data/ui/window.ui:1259
-msgid "Load _Images"
-msgstr "Načíst _obrázky"
-
 #: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:265
-#: ui/data/ui/window.ui:641
+#: ui/data/ui/window.ui:640
 msgid "Always From This _Sender"
 msgstr "Vždy od tohoto _odesílatele"
 
 #: ui/internal/window/conversation_card.go:799 ui/data/ui/message_window.ui:267
-#: ui/data/ui/window.ui:643
+#: ui/data/ui/window.ui:642
 msgid "Load remote images now and whenever this sender writes"
 msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napíše"
 
 #: ui/internal/window/conversation_card.go:819 ui/data/ui/message_window.ui:296
-#: ui/data/ui/window.ui:672
+#: ui/data/ui/window.ui:671
 msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
 
@@ -7482,7 +7659,7 @@ msgstr[0] "%d nepřečtená z %d"
 msgstr[1] "%d nepřečtené z %d"
 msgstr[2] "%d nepřečtených z %d"
 
-#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:705
+#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:704
 msgid "No Accounts"
 msgstr "Žádné účty"
 
@@ -7618,76 +7795,76 @@ msgstr "_Neodesílat"
 msgid "Cancelling the send"
 msgstr "Rušení odeslání"
 
-#: ui/internal/window/preferences.go:380
+#: ui/internal/window/preferences.go:385
 msgid "Saving mail settings"
 msgstr "Uložení nastavení pošty"
 
-#: ui/internal/window/preferences.go:409
+#: ui/internal/window/preferences.go:414
 msgid "Loading mail settings"
 msgstr "Načtení nastavení pošty"
 
-#: ui/internal/window/preferences.go:472
+#: ui/internal/window/preferences.go:477
 msgid "Measuring the disk space"
 msgstr "Zjišťování obsazeného místa"
 
-#: ui/internal/window/preferences.go:508
+#: ui/internal/window/preferences.go:513
 msgid "Converting the stored mail in the background"
 msgstr "Uložená pošta se převádí na pozadí"
 
-#: ui/internal/window/preferences.go:510
+#: ui/internal/window/preferences.go:515
 msgid "Converting stopped: the disk is full"
 msgstr "Převod se zastavil: disk je plný"
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:514
+#: ui/internal/window/preferences.go:519
 #, c-format
 msgid "Compression saves %s"
 msgstr "Komprese šetří %s"
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:518
+#: ui/internal/window/preferences.go:523
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr "%s příloh je jen na serveru"
 
-#: ui/internal/window/preferences.go:656
+#: ui/internal/window/preferences.go:661
 msgid "The desktop portal refused to change autostart"
 msgstr "Portál pracovní plochy odmítl změnit automatické spouštění"
 
-#: ui/internal/window/preferences.go:659
+#: ui/internal/window/preferences.go:664
 msgid "Autostart needs xdg-desktop-portal"
 msgstr "Automatické spouštění vyžaduje xdg-desktop-portal"
 
-#: ui/internal/window/preferences.go:662
+#: ui/internal/window/preferences.go:667
 msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
 
-#: ui/internal/window/preferences.go:697
+#: ui/internal/window/preferences.go:702
 msgid "Not available in the Flatpak build"
 msgstr "V sestavení Flatpak není k dispozici"
 
-#: ui/internal/window/preferences.go:703
+#: ui/internal/window/preferences.go:708
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr "Most MCP (malachi-mcp) nebyl nalezen"
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:750
+#: ui/internal/window/preferences.go:755
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr "Most MCP neodpověděl: %s"
 
-#: ui/internal/window/preferences.go:795
+#: ui/internal/window/preferences.go:800
 msgid "No Claude app was found on this computer"
 msgstr "Na tomto počítači nebyla nalezena žádná aplikace Claude"
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:798
+#: ui/internal/window/preferences.go:803
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr "Most MCP se nepodařilo zaregistrovat: %s"
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:801
+#: ui/internal/window/preferences.go:806
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr "Most MCP se nepodařilo odregistrovat: %s"
@@ -8048,15 +8225,11 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:1055
+#: ui/internal/window/window.go:1062
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:1128 ui/data/ui/window.ui:178
-msgid "Search"
-msgstr "Hledat"
-
-#: ui/internal/window/window.go:1134 ui/data/ui/window.ui:148
+#: ui/internal/window/window.go:1141 ui/data/ui/window.ui:148
 msgid "Messages"
 msgstr "Zprávy"
 
@@ -9817,14 +9990,6 @@ msgstr "Vložit _obrázek…"
 msgid "Cc/Bcc"
 msgstr "Kopie/Skrytá"
 
-#: ui/data/ui/compose_pane.ui:138
-msgid "Bcc"
-msgstr "Skrytá kopie"
-
-#: ui/data/ui/compose_pane.ui:172
-msgid "Subject"
-msgstr "Předmět"
-
 #: ui/data/ui/compose_pane.ui:281
 msgid "Bold (Ctrl+B)"
 msgstr "Tučně (Ctrl+B)"
@@ -9902,7 +10067,7 @@ msgid "Right"
 msgstr "Vpravo"
 
 #: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:961
+#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:960
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr "Načítání zprávy"
@@ -9911,11 +10076,7 @@ msgstr "Načítání zprávy"
 msgid "Attached Message"
 msgstr "Přiložená zpráva"
 
-#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:389
-msgid "Message"
-msgstr "Zpráva"
-
-#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1263
+#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1262
 msgid "Always Load Images From This _Sender"
 msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 
@@ -9983,7 +10144,7 @@ msgstr "Mazání"
 msgid "Confirm Before Deleting"
 msgstr "Potvrdit před smazáním"
 
-#: ui/data/ui/preferences.ui:228 data/io.github.schotek.Malachi.gschema.xml:135
+#: ui/data/ui/preferences.ui:228 data/io.github.schotek.Malachi.gschema.xml:141
 msgid "Ask before moving a message to Trash"
 msgstr "Ptát se před přesunutím zprávy do koše"
 
@@ -9999,7 +10160,7 @@ msgstr "Zobrazovat oznámení na ploše"
 msgid "Play Sound"
 msgstr "Přehrát zvuk"
 
-#: ui/data/ui/preferences.ui:246 data/io.github.schotek.Malachi.gschema.xml:143
+#: ui/data/ui/preferences.ui:246 data/io.github.schotek.Malachi.gschema.xml:149
 msgid "Play the system new-mail sound"
 msgstr "Přehrát systémový zvuk nové pošty"
 
@@ -10108,10 +10269,6 @@ msgstr "Světlé"
 #: ui/data/ui/preferences.ui:468
 msgid "Dark"
 msgstr "Tmavé"
-
-#: ui/data/ui/preferences.ui:478
-msgid "Message List"
-msgstr "Seznam zpráv"
 
 #: ui/data/ui/preferences.ui:481
 msgid "Density"
@@ -10231,87 +10388,87 @@ msgstr "Nepřečtené"
 msgid "Load More"
 msgstr "Načíst další"
 
-#: ui/data/ui/window.ui:512
+#: ui/data/ui/window.ui:511
 msgid "This message is a draft"
 msgstr "Tato zpráva je koncept"
 
-#: ui/data/ui/window.ui:693
+#: ui/data/ui/window.ui:692
 msgid "No Message Selected"
 msgstr "Není vybrána žádná zpráva"
 
-#: ui/data/ui/window.ui:694
+#: ui/data/ui/window.ui:693
 msgid "Select a message to read it here."
 msgstr "Vyberte zprávu a přečtěte si ji zde."
 
-#: ui/data/ui/window.ui:706
+#: ui/data/ui/window.ui:705
 msgid "Add a mail account to start reading and sending mail."
 msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 
-#: ui/data/ui/window.ui:714
+#: ui/data/ui/window.ui:713
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:1081
+#: ui/data/ui/window.ui:1080
 msgid "Sync Status"
 msgstr "Stav synchronizace"
 
-#: ui/data/ui/window.ui:1196
+#: ui/data/ui/window.ui:1195
 msgid "Report an Issue"
 msgstr "Nahlásit problém"
 
-#: ui/data/ui/window.ui:1219
+#: ui/data/ui/window.ui:1218
 msgid "_Contacts"
 msgstr "_Kontakty"
 
-#: ui/data/ui/window.ui:1225
+#: ui/data/ui/window.ui:1224
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:1229
+#: ui/data/ui/window.ui:1228
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 
-#: ui/data/ui/window.ui:1235
+#: ui/data/ui/window.ui:1234
 msgid "_Quit"
 msgstr "Kone_c"
 
-#: data/io.github.schotek.Malachi.gschema.xml:77
+#: data/io.github.schotek.Malachi.gschema.xml:83
 msgid "Window width"
 msgstr "Šířka okna"
 
-#: data/io.github.schotek.Malachi.gschema.xml:81
+#: data/io.github.schotek.Malachi.gschema.xml:87
 msgid "Window height"
 msgstr "Výška okna"
 
-#: data/io.github.schotek.Malachi.gschema.xml:85
+#: data/io.github.schotek.Malachi.gschema.xml:91
 msgid "Window maximized state"
 msgstr "Maximalizace okna"
 
-#: data/io.github.schotek.Malachi.gschema.xml:89
+#: data/io.github.schotek.Malachi.gschema.xml:95
 msgid "Width of the folder sidebar"
 msgstr "Šířka postranního panelu složek"
 
-#: data/io.github.schotek.Malachi.gschema.xml:93
+#: data/io.github.schotek.Malachi.gschema.xml:99
 msgid "Width of the message list pane"
 msgstr "Šířka panelu se seznamem zpráv"
 
-#: data/io.github.schotek.Malachi.gschema.xml:102
+#: data/io.github.schotek.Malachi.gschema.xml:108
 msgid "Folders whose subfolders are hidden in the sidebar"
 msgstr "Složky, jejichž podsložky jsou v bočním panelu skryté"
 
-#: data/io.github.schotek.Malachi.gschema.xml:106
+#: data/io.github.schotek.Malachi.gschema.xml:112
 msgid "Accounts whose folders are hidden in the sidebar"
 msgstr "Účty, jejichž složky jsou v bočním panelu skryté"
 
-#: data/io.github.schotek.Malachi.gschema.xml:110
+#: data/io.github.schotek.Malachi.gschema.xml:116
 msgid "Folders pinned to the Favourites section of the sidebar"
 msgstr "Složky připnuté v sekci Oblíbené v bočním panelu"
 
-#: data/io.github.schotek.Malachi.gschema.xml:114
+#: data/io.github.schotek.Malachi.gschema.xml:120
 msgid "Show All Inboxes in the sidebar"
 msgstr "Zobrazovat Všechny doručené v postranním panelu"
 
-#: data/io.github.schotek.Malachi.gschema.xml:115
+#: data/io.github.schotek.Malachi.gschema.xml:121
 msgid ""
 "With two or more mail accounts, an item at the top of the sidebar lists the "
 "inboxes of all of them together."
@@ -10319,7 +10476,7 @@ msgstr ""
 "Při dvou a více poštovních účtech ukáže položka nahoře v postranním panelu "
 "doručenou poštu všech účtů dohromady."
 
-#: data/io.github.schotek.Malachi.gschema.xml:122
+#: data/io.github.schotek.Malachi.gschema.xml:128
 msgid ""
 "Start hidden in the background at login (mirrors the Background portal's "
 "autostart decision)"
@@ -10327,42 +10484,42 @@ msgstr ""
 "Spustit po přihlášení skrytě na pozadí (odráží rozhodnutí portálu Background "
 "o automatickém spouštění)"
 
-#: data/io.github.schotek.Malachi.gschema.xml:126
+#: data/io.github.schotek.Malachi.gschema.xml:132
 msgid "Closing the main window keeps the application running"
 msgstr "Zavření hlavního okna ponechá aplikaci běžet"
 
-#: data/io.github.schotek.Malachi.gschema.xml:131
+#: data/io.github.schotek.Malachi.gschema.xml:137
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 = immediately"
 msgstr ""
 "Počet sekund, po které musí být zpráva zobrazena, než se označí jako "
 "přečtená; 0 = ihned"
 
-#: data/io.github.schotek.Malachi.gschema.xml:139
+#: data/io.github.schotek.Malachi.gschema.xml:145
 msgid "Show a desktop notification for new mail"
 msgstr "Zobrazit oznámení na ploše při nové poště"
 
-#: data/io.github.schotek.Malachi.gschema.xml:149
+#: data/io.github.schotek.Malachi.gschema.xml:155
 msgid "Color scheme"
 msgstr "Barevné schéma"
 
-#: data/io.github.schotek.Malachi.gschema.xml:150
+#: data/io.github.schotek.Malachi.gschema.xml:156
 msgid "Follow the system preference, or force a light or dark appearance."
 msgstr "Řídit se nastavením systému, nebo vynutit světlý či tmavý vzhled."
 
-#: data/io.github.schotek.Malachi.gschema.xml:154
+#: data/io.github.schotek.Malachi.gschema.xml:160
 msgid "Message list density"
 msgstr "Hustota seznamu zpráv"
 
-#: data/io.github.schotek.Malachi.gschema.xml:158
+#: data/io.github.schotek.Malachi.gschema.xml:164
 msgid "Show a one-line preview under each message in the list"
 msgstr "Zobrazit jednořádkový náhled pod každou zprávou v seznamu"
 
-#: data/io.github.schotek.Malachi.gschema.xml:162
+#: data/io.github.schotek.Malachi.gschema.xml:168
 msgid "Group the message list by conversation"
 msgstr "Seskupovat seznam zpráv podle konverzací"
 
-#: data/io.github.schotek.Malachi.gschema.xml:163
+#: data/io.github.schotek.Malachi.gschema.xml:169
 msgid ""
 "Show one row per conversation in the selected folder; expanding it lists the "
 "messages the folder holds."
@@ -10370,22 +10527,22 @@ msgstr ""
 "Zobrazí jeden řádek na konverzaci ve vybrané složce; po rozbalení vypíše "
 "zprávy, které složka obsahuje."
 
-#: data/io.github.schotek.Malachi.gschema.xml:167
+#: data/io.github.schotek.Malachi.gschema.xml:173
 msgid "Show conversations as a chat"
 msgstr "Zobrazovat konverzace jako chat"
 
-#: data/io.github.schotek.Malachi.gschema.xml:168
+#: data/io.github.schotek.Malachi.gschema.xml:174
 msgid ""
 "Others' messages on the left, yours on the right, oldest first; off shows "
 "the timeline."
 msgstr ""
 "Zprávy ostatních vlevo, vaše vpravo, od nejstarší; vypnuto ukáže časovou osu."
 
-#: data/io.github.schotek.Malachi.gschema.xml:172
+#: data/io.github.schotek.Malachi.gschema.xml:178
 msgid "Render HTML in the chat layout"
 msgstr "Vykreslovat HTML v rozložení chat"
 
-#: data/io.github.schotek.Malachi.gschema.xml:173
+#: data/io.github.schotek.Malachi.gschema.xml:179
 msgid ""
 "In the chat layout of a conversation, show a message's HTML in a locked web "
 "view instead of its plain text; off shows the text."
@@ -10393,11 +10550,11 @@ msgstr ""
 "V rozložení chat konverzace ukázat HTML zprávy v uzamčeném webovém pohledu "
 "místo prostého textu; vypnuto ukazuje text."
 
-#: data/io.github.schotek.Malachi.gschema.xml:177
+#: data/io.github.schotek.Malachi.gschema.xml:183
 msgid "Shorten my messages in the chat layout"
 msgstr "Zkracovat moje zprávy v rozložení chat"
 
-#: data/io.github.schotek.Malachi.gschema.xml:178
+#: data/io.github.schotek.Malachi.gschema.xml:184
 msgid ""
 "In the chat layout of a conversation, show about three lines of each of the "
 "user's own messages in its bubble; a click shows the whole message."
@@ -10405,11 +10562,11 @@ msgstr ""
 "V rozložení chat konverzace ukázat z každé vlastní zprávy uživatele v "
 "bublině asi tři řádky; klepnutí ukáže celou zprávu."
 
-#: data/io.github.schotek.Malachi.gschema.xml:182
+#: data/io.github.schotek.Malachi.gschema.xml:188
 msgid "Shorten others' messages in the chat layout"
 msgstr "Zkracovat cizí zprávy v rozložení chat"
 
-#: data/io.github.schotek.Malachi.gschema.xml:183
+#: data/io.github.schotek.Malachi.gschema.xml:189
 msgid ""
 "In the chat layout of a conversation, show about three lines of each message "
 "of the other party in its bubble; a click shows the whole message."
@@ -10417,11 +10574,11 @@ msgstr ""
 "V rozložení chat konverzace ukázat z každé zprávy protistrany v bublině asi "
 "tři řádky; klepnutí ukáže celou zprávu."
 
-#: data/io.github.schotek.Malachi.gschema.xml:187
+#: data/io.github.schotek.Malachi.gschema.xml:193
 msgid "Where a search looks"
 msgstr "Kde se hledá"
 
-#: data/io.github.schotek.Malachi.gschema.xml:188
+#: data/io.github.schotek.Malachi.gschema.xml:194
 msgid ""
 "The selected folder, every folder of its account, or every account; the last "
 "choice made in the search bar."
@@ -10429,27 +10586,27 @@ msgstr ""
 "Vybraná složka, všechny složky jejího účtu, nebo všechny účty; poslední "
 "volba v liště hledání."
 
-#: data/io.github.schotek.Malachi.gschema.xml:192
+#: data/io.github.schotek.Malachi.gschema.xml:198
 msgid "Show sender avatars in the message list"
 msgstr "Zobrazit avatary odesílatelů v seznamu zpráv"
 
-#: data/io.github.schotek.Malachi.gschema.xml:196
+#: data/io.github.schotek.Malachi.gschema.xml:202
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr "Kreslit avatary neutrální šedou místo barvy pro každého odesílatele"
 
-#: data/io.github.schotek.Malachi.gschema.xml:200
+#: data/io.github.schotek.Malachi.gschema.xml:206
 msgid "Use a monospace font for plain-text message bodies"
 msgstr "Použít neproporcionální písmo pro těla zpráv v prostém textu"
 
-#: data/io.github.schotek.Malachi.gschema.xml:205
+#: data/io.github.schotek.Malachi.gschema.xml:211
 msgid "Message body text zoom in percent"
 msgstr "Přiblížení textu zprávy v procentech"
 
-#: data/io.github.schotek.Malachi.gschema.xml:211
+#: data/io.github.schotek.Malachi.gschema.xml:217
 msgid "Show the Assistant menu that hands mail to Claude"
 msgstr "Zobrazovat nabídku Asistent, která předává poštu do Claude"
 
-#: data/io.github.schotek.Malachi.gschema.xml:212
+#: data/io.github.schotek.Malachi.gschema.xml:218
 msgid ""
 "The menu opens Claude Desktop or Claude Code on this computer with a "
 "prepared question about the selected mail."
@@ -10457,11 +10614,11 @@ msgstr ""
 "Nabídka otevře Claude Desktop nebo Claude Code na tomto počítači s "
 "připraveným dotazem k vybrané poště."
 
-#: data/io.github.schotek.Malachi.gschema.xml:216
+#: data/io.github.schotek.Malachi.gschema.xml:222
 msgid "Where the Assistant menu opens Claude"
 msgstr "Kde nabídka Asistent otevírá Claude"
 
-#: data/io.github.schotek.Malachi.gschema.xml:217
+#: data/io.github.schotek.Malachi.gschema.xml:223
 msgid ""
 "Claude Desktop, Claude Code in a terminal, or the panel in the app; the last "
 "choice made in the Assistant menu or in the settings."
@@ -10469,19 +10626,19 @@ msgstr ""
 "Claude Desktop, Claude Code v terminálu, nebo panel v aplikaci; poslední "
 "volba v nabídce Asistent nebo v předvolbách."
 
-#: data/io.github.schotek.Malachi.gschema.xml:221
+#: data/io.github.schotek.Malachi.gschema.xml:227
 msgid "The model the assistant panel uses"
 msgstr "Model, který používá panel asistenta"
 
-#: data/io.github.schotek.Malachi.gschema.xml:222
+#: data/io.github.schotek.Malachi.gschema.xml:228
 msgid "Sonnet, Haiku or Opus, passed to Claude Code."
 msgstr "Sonnet, Haiku nebo Opus, předaný Claude Code."
 
-#: data/io.github.schotek.Malachi.gschema.xml:226
+#: data/io.github.schotek.Malachi.gschema.xml:232
 msgid "Where Claude Code is"
 msgstr "Kde je Claude Code"
 
-#: data/io.github.schotek.Malachi.gschema.xml:227
+#: data/io.github.schotek.Malachi.gschema.xml:233
 msgid ""
 "The claude executable the assistant panel runs; empty looks in the usual "
 "places."
@@ -10489,64 +10646,64 @@ msgstr ""
 "Spustitelný soubor claude, který panel asistenta spouští; prázdné hledá na "
 "obvyklých místech."
 
-#: data/io.github.schotek.Malachi.gschema.xml:231
+#: data/io.github.schotek.Malachi.gschema.xml:237
 msgid "The assistant panel may send mail to Claude"
 msgstr "Panel asistenta smí posílat poštu do Claude"
 
-#: data/io.github.schotek.Malachi.gschema.xml:232
+#: data/io.github.schotek.Malachi.gschema.xml:238
 msgid "Set when the user allowed it the first time."
 msgstr "Nastaví se, když to uživatel poprvé povolí."
 
-#: data/io.github.schotek.Malachi.gschema.xml:237
+#: data/io.github.schotek.Malachi.gschema.xml:243
 msgid "The provider of the assistant in the app"
 msgstr "Poskytovatel asistenta v aplikaci"
 
-#: data/io.github.schotek.Malachi.gschema.xml:238
+#: data/io.github.schotek.Malachi.gschema.xml:244
 msgid "The in-app provider; external Claude hand-off is independent."
 msgstr "Poskytovatel v aplikaci; předání do externího Claude je nezávislé."
 
-#: data/io.github.schotek.Malachi.gschema.xml:242
+#: data/io.github.schotek.Malachi.gschema.xml:248
 msgid "Where Codex is"
 msgstr "Kde je Codex"
 
-#: data/io.github.schotek.Malachi.gschema.xml:243
+#: data/io.github.schotek.Malachi.gschema.xml:249
 msgid "The native Codex executable; empty looks in the usual places."
 msgstr "Nativní spustitelný soubor Codexu; prázdné hledá na obvyklých místech."
 
-#: data/io.github.schotek.Malachi.gschema.xml:247
+#: data/io.github.schotek.Malachi.gschema.xml:253
 msgid "The model the ChatGPT provider uses"
 msgstr "Model, který používá poskytovatel ChatGPT"
 
-#: data/io.github.schotek.Malachi.gschema.xml:248
-#: data/io.github.schotek.Malachi.gschema.xml:259
+#: data/io.github.schotek.Malachi.gschema.xml:254
+#: data/io.github.schotek.Malachi.gschema.xml:265
 msgid "Empty uses the provider's model default."
 msgstr "Prázdné používá výchozí model poskytovatele."
 
-#: data/io.github.schotek.Malachi.gschema.xml:253
+#: data/io.github.schotek.Malachi.gschema.xml:259
 msgid "The accepted ChatGPT mail consent version"
 msgstr "Přijatá verze souhlasu s odesíláním pošty do ChatGPT"
 
-#: data/io.github.schotek.Malachi.gschema.xml:254
+#: data/io.github.schotek.Malachi.gschema.xml:260
 msgid "Zero means no permission to send mail to OpenAI."
 msgstr "Nula znamená, že odesílání pošty do OpenAI není povoleno."
 
-#: data/io.github.schotek.Malachi.gschema.xml:258
+#: data/io.github.schotek.Malachi.gschema.xml:264
 msgid "The model ChatGPT uses for the board"
 msgstr "Model, který ChatGPT používá pro nástěnku"
 
-#: data/io.github.schotek.Malachi.gschema.xml:264
+#: data/io.github.schotek.Malachi.gschema.xml:270
 msgid "The accepted OpenAI board consent version"
 msgstr "Přijatá verze souhlasu pro nástěnku v OpenAI"
 
-#: data/io.github.schotek.Malachi.gschema.xml:265
+#: data/io.github.schotek.Malachi.gschema.xml:271
 msgid "Zero means no permission to send board mail to OpenAI."
 msgstr "Nula znamená, že odesílání pošty z nástěnky do OpenAI není povoleno."
 
-#: data/io.github.schotek.Malachi.gschema.xml:272
+#: data/io.github.schotek.Malachi.gschema.xml:278
 msgid "The style the Board opens in"
 msgstr "Styl, ve kterém se Nástěnka otevírá"
 
-#: data/io.github.schotek.Malachi.gschema.xml:273
+#: data/io.github.schotek.Malachi.gschema.xml:279
 msgid ""
 "Last Used (the style in board-last-style), List, Columns or Today; a changed "
 "choice applies the next time the Board is shown, unless a style was already "
@@ -10556,11 +10713,11 @@ msgstr ""
 "změněná volba se projeví při dalším zobrazení Nástěnky, pokud v tomto běhu "
 "už nebyl zvolen styl, který pak platí do ukončení aplikace."
 
-#: data/io.github.schotek.Malachi.gschema.xml:277
+#: data/io.github.schotek.Malachi.gschema.xml:283
 msgid "The style the Board was shown in last"
 msgstr "Styl, ve kterém byla Nástěnka zobrazena naposledy"
 
-#: data/io.github.schotek.Malachi.gschema.xml:278
+#: data/io.github.schotek.Malachi.gschema.xml:284
 msgid ""
 "Written whenever the user changes the Board's style; read when board-default-"
 "style is Last Used."
@@ -10568,11 +10725,11 @@ msgstr ""
 "Zapisuje se při každé změně stylu Nástěnky; čte se, když je board-default-"
 "style Naposledy použité."
 
-#: data/io.github.schotek.Malachi.gschema.xml:282
+#: data/io.github.schotek.Malachi.gschema.xml:288
 msgid "What the main window shows at launch"
 msgstr "Co hlavní okno ukáže po spuštění"
 
-#: data/io.github.schotek.Malachi.gschema.xml:283
+#: data/io.github.schotek.Malachi.gschema.xml:289
 msgid ""
 "Mail, the Board, the Calendar, or the mode shown last (board-last-mode). The "
 "Board is replaced by Mail while it is turned off."
@@ -10580,11 +10737,11 @@ msgstr ""
 "Poštu, Nástěnku, Kalendář, nebo naposledy zobrazený režim (board-last-mode). "
 "Dokud je Nástěnka vypnutá, nahrazuje ji Pošta."
 
-#: data/io.github.schotek.Malachi.gschema.xml:287
+#: data/io.github.schotek.Malachi.gschema.xml:293
 msgid "The mode the main window showed last"
 msgstr "Režim, který hlavní okno ukazovalo naposledy"
 
-#: data/io.github.schotek.Malachi.gschema.xml:288
+#: data/io.github.schotek.Malachi.gschema.xml:294
 msgid ""
 "\"mail\", \"board\" or \"calendar\", written whenever the mode switches; "
 "read when board-start-mode is Last."
@@ -10592,11 +10749,11 @@ msgstr ""
 "„mail“, „board“ nebo „calendar“, zapisuje se při každém přepnutí režimu; čte "
 "se, když je board-start-mode Last."
 
-#: data/io.github.schotek.Malachi.gschema.xml:292
+#: data/io.github.schotek.Malachi.gschema.xml:298
 msgid "The account the Board is filtered to"
 msgstr "Účet, na který je Nástěnka filtrovaná"
 
-#: data/io.github.schotek.Malachi.gschema.xml:293
+#: data/io.github.schotek.Malachi.gschema.xml:299
 msgid ""
 "The daemon's account id, written whenever the Board's account filter "
 "changes; empty means every account. Applied when the Board shows while that "
@@ -10606,11 +10763,11 @@ msgstr ""
 "znamená všechny účty. Použije se při zobrazení Nástěnky, pokud účet ještě "
 "existuje."
 
-#: data/io.github.schotek.Malachi.gschema.xml:297
+#: data/io.github.schotek.Malachi.gschema.xml:303
 msgid "The Board's triage may send mail to Claude"
 msgstr "Třídění nástěnky smí posílat poštu do Claude"
 
-#: data/io.github.schotek.Malachi.gschema.xml:298
+#: data/io.github.schotek.Malachi.gschema.xml:304
 msgid ""
 "Set when the user allowed it the first time, apart from the assistant "
 "panel's consent."
@@ -10618,11 +10775,11 @@ msgstr ""
 "Nastaví se, když to uživatel poprvé povolí; nezávisle na souhlasu panelu "
 "asistenta."
 
-#: data/io.github.schotek.Malachi.gschema.xml:302
+#: data/io.github.schotek.Malachi.gschema.xml:308
 msgid "The model the Board's triage uses"
 msgstr "Model, který používá třídění nástěnky"
 
-#: data/io.github.schotek.Malachi.gschema.xml:303
+#: data/io.github.schotek.Malachi.gschema.xml:309
 msgid ""
 "Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant "
 "panel's model."
@@ -10630,11 +10787,11 @@ msgstr ""
 "Sonnet, Haiku nebo Opus, předaný Claude Code; nezávisle na modelu panelu "
 "asistenta."
 
-#: data/io.github.schotek.Malachi.gschema.xml:307
+#: data/io.github.schotek.Malachi.gschema.xml:313
 msgid "The view the Calendar was shown in last"
 msgstr "Zobrazení, ve kterém byl Kalendář zobrazen naposledy"
 
-#: data/io.github.schotek.Malachi.gschema.xml:308
+#: data/io.github.schotek.Malachi.gschema.xml:314
 msgid ""
 "Day, Week, Month or Agenda, written whenever the user changes the Calendar's "
 "view; applied when the Calendar shows."
@@ -10642,17 +10799,54 @@ msgstr ""
 "Den, Týden, Měsíc nebo Agenda; zapisuje se při každé změně zobrazení "
 "Kalendáře a použije se, když se Kalendář zobrazí."
 
-#: data/io.github.schotek.Malachi.gschema.xml:312
+#: data/io.github.schotek.Malachi.gschema.xml:318
 msgid "Which address books complete recipients"
 msgstr "Které adresáře doplňují příjemce"
 
-#: data/io.github.schotek.Malachi.gschema.xml:313
+#: data/io.github.schotek.Malachi.gschema.xml:319
 msgid ""
 "The address books of the account the message is written from (with the "
 "recently used addresses), or every address book; the scope of contact.search."
 msgstr ""
 "Adresáře účtu, ze kterého se zpráva píše (s nedávno použitými adresami), "
 "nebo všechny adresáře; rozsah contact.search."
+
+#: data/io.github.schotek.Malachi.gschema.xml:327
+msgid "The items of the Mail toolbar"
+msgstr "Položky lišty Pošty"
+
+#: data/io.github.schotek.Malachi.gschema.xml:328
+#: data/io.github.schotek.Malachi.gschema.xml:333
+#: data/io.github.schotek.Malachi.gschema.xml:338
+#: data/io.github.schotek.Malachi.gschema.xml:343
+msgid ""
+"The toolbar's items in order, as the user arranged them; empty for the "
+"default toolbar."
+msgstr ""
+"Položky lišty v pořadí, jak je uživatel uspořádal; prázdné pro výchozí lištu."
+
+#: data/io.github.schotek.Malachi.gschema.xml:332
+msgid "The items of the Board's toolbar in the List style"
+msgstr "Položky lišty Nástěnky ve stylu Seznam"
+
+#: data/io.github.schotek.Malachi.gschema.xml:337
+msgid "The items of the Board's toolbar in the Columns and Today styles"
+msgstr "Položky lišty Nástěnky ve stylech Sloupce a Dnes"
+
+#: data/io.github.schotek.Malachi.gschema.xml:342
+msgid "The items of the Calendar's toolbar"
+msgstr "Položky lišty Kalendáře"
+
+#: data/io.github.schotek.Malachi.gschema.xml:347
+msgid "What the toolbars' items show"
+msgstr "Co ukazují položky lišt"
+
+#: data/io.github.schotek.Malachi.gschema.xml:348
+msgid ""
+"Icons only, icons with their labels or labels only, for every toolbar of the "
+"main window."
+msgstr ""
+"Jen ikony, ikony s popisky nebo jen popisky, pro všechny lišty hlavního okna."
 
 #: data/io.github.schotek.Malachi.desktop.in:3
 msgid "Email Client"

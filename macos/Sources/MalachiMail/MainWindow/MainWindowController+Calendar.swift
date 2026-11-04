@@ -85,9 +85,15 @@ extension MainWindowController {
         if let t = calendarExtras.toolbar {
             return t
         }
-        let t = CalendarToolbar(controller: calendarController, showsAssistant: state.assistant.panelShown)
+        let t = CalendarToolbar(controller: calendarController, showsAssistant: state.assistant.panelShown,
+                                settings: state.settings)
         t.onAssistant = { [weak self] in
             self?.toggleCalendarAssistant()
+        }
+        t.customization?.onPaletteEnd = { tb in
+            BoardToolbar.rebindSidebarSeparator(in: tb)
+            BoardToolbar.keepSidebarToggle(in: tb)
+            tb.validateVisibleItems()
         }
         calendarExtras.toolbar = t
         return t

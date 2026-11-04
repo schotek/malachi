@@ -88,6 +88,15 @@ public sealed partial class SidebarPane : UserControl
     /// <summary>The folder list, for the keyboard (the overlay puts the focus there).</summary>
     public ListView List => FolderList;
 
+    /// <summary>The header's strip: the Folders section of the user's toolbar-mail layout (MainWindow.Toolbars.cs).</summary>
+    internal Toolbars.ToolbarStrip ToolbarStrip => HeaderStrip;
+
+    /// <summary>The header bar (a right click on an empty spot offers Customize Toolbar…).</summary>
+    internal FrameworkElement ToolbarBar => HeaderRow;
+
+    /// <summary>The header's New Message button (the display mode shows its label).</summary>
+    internal Button NewMessage => NewMessageButton;
+
     /// <summary>
     /// Installs the sidebar-facing callbacks of <paramref name="controller"/>
     /// and shows what it holds already; <paramref name="actionsController"/>

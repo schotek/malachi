@@ -206,6 +206,8 @@ func (p *boardPage) renderHeader(vm board.ViewModel) {
 		p.accountFilter.SetSelected(selected)
 	}
 	p.settingAccount = false
+	// The List and Columns/Today have their own toolbars (toolbar_board.go).
+	p.syncToolbar()
 }
 
 // boardAccountFactory renders one entry of the account filter: an eliding

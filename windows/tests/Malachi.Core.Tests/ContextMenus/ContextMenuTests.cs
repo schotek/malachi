@@ -89,6 +89,8 @@ public sealed class ContextMenuTests
         { "outbox", Queued, "open | reply forward | toggleFlag- | archive- moveTo- junk- trash" },
         { "issue tracker", Issue, "open | reply forward | markRead toggleFlag changeStatus | assistant" },
         { "queued comment of an issue tracker", new MessageState { Outbox = true, Trash = true }, "open | toggleFlag- | trash" },
+        { "a client that prints", Mail with { OfferPrint = true, Print = true }, "open print | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant" },
+        { "too many rows to print", Mail with { OfferPrint = true }, "open print- | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant" },
     };
 
     [Theory]
@@ -242,6 +244,7 @@ public sealed class ContextMenuTests
     {
         { ItemId.OpenMessage, new Labels(), "Open in New Window" },
         { ItemId.EditDraft, new Labels(), "Edit" },
+        { ItemId.Print, new Labels(), "_Print…" },
         { ItemId.Reply, new Labels(), "Reply" },
         { ItemId.Reply, new Labels { Comment = true }, "Comment" },
         { ItemId.ReplyAll, new Labels(), "Reply All" },
@@ -277,7 +280,7 @@ public sealed class ContextMenuTests
     {
         Assert.Equal("", Label((ItemId)999, new Labels()));
         Assert.Equal(
-            "open edit reply replyAll forward markRead markUnread toggleFlag changeStatus archive moveTo junk trash assistant "
+            "open edit print reply replyAll forward markRead markUnread toggleFlag changeStatus archive moveTo junk trash assistant "
             + "crmSave crmOpen crmEditLinks crmRemove createRule checkMail markAllRead empty favourite fold applyRules",
             string.Join(" ", Enum.GetValues<ItemId>().Select(Name)));
         Assert.Equal("", Name((ItemId)999));

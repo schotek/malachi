@@ -158,6 +158,21 @@ public enum SettingsKey
     /// <summary><c>contacts-suggest-scope</c>: <see cref="SettingsStore.ContactsSuggestScope"/>.</summary>
     ContactsSuggestScope,
 
+    /// <summary><c>toolbar-mail</c>: the user's arrangement of the Mail toolbar (<see cref="SettingsStore.ToolbarLayout"/>).</summary>
+    ToolbarMail,
+
+    /// <summary><c>toolbar-board-list</c>: the Board's toolbar in the List style.</summary>
+    ToolbarBoardList,
+
+    /// <summary><c>toolbar-board-flow</c>: the Board's toolbar in the Columns and Today styles.</summary>
+    ToolbarBoardFlow,
+
+    /// <summary><c>toolbar-calendar</c>: the Calendar's toolbar.</summary>
+    ToolbarCalendar,
+
+    /// <summary><c>toolbar-display-mode</c>: icon, icon-and-label or label for every toolbar.</summary>
+    ToolbarDisplayMode,
+
     /// <summary><c>ctrl-r</c>, Windows only: what Ctrl+R does.</summary>
     CtrlR,
 }

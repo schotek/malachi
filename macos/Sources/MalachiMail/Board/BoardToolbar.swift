@@ -94,6 +94,14 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
     private var made: [NSToolbar.Identifier: [NSToolbarItem.Identifier: NSToolbarItem]] = [:]
     /// Whether the List's toolbar has its detail section.
     private var showsDetailSection = true
+    /// The settings of the user's arrangements (the window sets them
+    /// before the toolbars are made); nil: the default toolbars.
+    var settings: Settings?
+    /// Each toolbar's arrangement (docs/plans/toolbar-customization.md).
+    private var customizations: [NSToolbar.Identifier: ToolbarCustomization] = [:]
+    /// The palette closed on one of the toolbars (the window rebinds the
+    /// tracking separators).
+    var onPaletteEnd: (@MainActor (NSToolbar) -> Void)?
 
     init(controller: BoardController, listSplitView: @escaping @MainActor () -> NSSplitView?) {
         self.controller = controller
@@ -107,7 +115,46 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
         tb.displayMode = .iconOnly
         tb.allowsUserCustomization = false
         tb.autosavesConfiguration = false
+        if let settings {
+            let list = id == Self.listIdentifier
+            let c = ToolbarCustomization(
+                bar: list ? .boardList : .boardFlow, settings: settings,
+                separators: list ? [.list: .sidebarTrackingSeparator, .detail: ID.detailSeparator] : [:])
+            c.features = { [weak self] in self?.features(list: list) ?? Toolbar.Features() }
+            c.onPaletteEnd = { [weak self] tb in self?.onPaletteEnd?(tb) }
+            customizations[id] = c
+            c.attach(tb)
+        }
         return tb
+    }
+
+    /// What the board has for the user's arrangement: Triage while it is
+    /// shown, the List's detail section while the detail is inline.
+    private func features(list: Bool) -> Toolbar.Features {
+        var f = Toolbar.Features()
+        if triageItem?().shown == true {
+            f.have.insert(.triage)
+        }
+        if list, !showsDetailSection {
+            f.hiddenSections.insert(.detail)
+        }
+        return f
+    }
+
+    /// From macOS 15 with the user's arrangement, Triage keeps its place
+    /// hidden while it is not shown (T7).
+    private var hidesTriage: Bool {
+        settings != nil && ToolbarCustomization.isAvailable
+    }
+
+    private func applyTriageHidden() {
+        guard hidesTriage else { return }
+        if #available(macOS 15, *) {
+            let hidden = triageItem?().shown != true
+            for item in triageItems where item.isHidden != hidden {
+                item.isHidden = hidden
+            }
+        }
     }
 
     /// The toolbar for what the board shows: the List's while the List
@@ -172,6 +219,10 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
     /// Puts Triage into the toolbars made so far (right after the account
     /// filter) or takes it out; not while a toolbar is being filled.
     private func setTriage(present: Bool) {
+        if hidesTriage {
+            applyTriageHidden()
+            return
+        }
         for (id, toolbar) in [(Self.listIdentifier, listToolbar), (Self.flowIdentifier, flowToolbar)]
         where made[id] != nil {
             let current = toolbar.items.firstIndex { $0.itemIdentifier == ID.boardTriage }
@@ -210,10 +261,12 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
         guard made[Self.listIdentifier] != nil else { return }
         let tb = listToolbar
         let start = tb.items.firstIndex { $0.itemIdentifier == ID.detailSeparator }
+        let customization = customizations[Self.listIdentifier]
+        defer { customization?.refreshAllowsCustomization(tb) }
         if visible {
             guard start == nil else { return }
             var at = tb.items.count
-            for id in Self.detailItems {
+            for id in detailSectionItems(customization) {
                 tb.insertItem(withItemIdentifier: id, at: at)
                 at += 1
             }
@@ -222,6 +275,20 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
                 tb.removeItem(at: start)
             }
         }
+    }
+
+    /// The arrangement of `toolbar`, one of these two.
+    func customization(for toolbar: NSToolbar) -> ToolbarCustomization? {
+        customizations[toolbar.identifier]
+    }
+
+    /// The detail section as the user arranged it: its separator and what
+    /// follows it (the section ends the toolbar).
+    private func detailSectionItems(_ customization: ToolbarCustomization?) -> [NSToolbarItem.Identifier] {
+        guard let customization else { return Self.detailItems }
+        let l = customization.layout
+        guard let at = l.firstIndex(of: Toolbar.separator(.detail)) else { return Self.detailItems }
+        return l[at...].map(customization.nativeID)
     }
 
     /// After the window put `toolbar` in place: AppKit's sidebar separator
@@ -267,6 +334,9 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
     // MARK: NSToolbarDelegate
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        if let customization = customizations[toolbar.identifier] {
+            return customization.defaultIdentifiers(toolbar)
+        }
         var ids: [NSToolbarItem.Identifier]
         if toolbar.identifier != Self.listIdentifier {
             ids = Self.flowItems
@@ -283,19 +353,60 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbar.identifier == Self.listIdentifier ? Self.listItems : Self.flowItems
+        if let customization = customizations[toolbar.identifier] {
+            return customization.allowedIdentifiers(toolbar)
+        }
+        return toolbar.identifier == Self.listIdentifier ? Self.listItems : Self.flowItems
+    }
+
+    func toolbarImmovableItemIdentifiers(_ toolbar: NSToolbar) -> Set<NSToolbarItem.Identifier> {
+        customizations[toolbar.identifier]?.immovableIdentifiers() ?? []
+    }
+
+    func toolbar(_ toolbar: NSToolbar, itemIdentifier: NSToolbarItem.Identifier, canBeInsertedAt index: Int) -> Bool {
+        customizations[toolbar.identifier]?.canInsert(itemIdentifier, at: index, in: toolbar) ?? true
+    }
+
+    func toolbarWillAddItem(_ notification: Notification) {
+        guard let tb = notification.object as? NSToolbar else { return }
+        customizations[tb.identifier]?.itemsChanged(tb)
+    }
+
+    func toolbarDidRemoveItem(_ notification: Notification) {
+        guard let tb = notification.object as? NSToolbar else { return }
+        customizations[tb.identifier]?.itemsChanged(tb)
     }
 
     func toolbar(
         _ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         let key = toolbar.identifier
+        // The palette's own copy: never the toolbar's item, never cached.
+        // Triage shows its plain title there, not the run's state, and
+        // keeps the standard priority: the default set's row is narrower
+        // than the Columns toolbar and AppKit squeezed it first ("Zas ta…", B1).
+        if !flag, customizations[key] != nil {
+            if id == MainToolbar.ID.mode {
+                return ModeSwitch.paletteItem(id, selected: .board, navigational: key != Self.listIdentifier)
+            }
+            let item = make(id, list: key == Self.listIdentifier)
+            if id == ID.boardTriage, let item {
+                item.title = Board.Text.triage
+                item.label = Board.Text.triage
+                item.paletteLabel = Board.Text.triage
+                item.visibilityPriority = .standard
+            }
+            return item
+        }
         if let item = made[key]?[id] {
             return item
         }
         let item = make(id, list: key == Self.listIdentifier)
         if let item {
             made[key, default: [:]][id] = item
+            if id == ID.boardTriage {
+                applyTriageHidden()
+            }
             if id == ID.boardStyle || id == ID.boardAccount || id == ID.boardDone {
                 updateItems()
             }

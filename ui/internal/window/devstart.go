@@ -20,6 +20,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/rules"
 	"github.com/schotek/malachi/ui/internal/rulesctl"
+	"github.com/schotek/malachi/ui/internal/toolbar"
 )
 
 // A development aid, not a feature (the macOS client's MALACHI_START,
@@ -45,7 +46,11 @@ import (
 // else of a new one; with MALACHI_RULES_SAMPLES=1 over invented rules and
 // accounts, no daemon), crm-dialog (the Save to eWay-CRM dialog over invented
 // suggestions, no daemon), eway-wizard (the eWay-CRM account assistant;
-// Next asks the daemon), size=WxH, quit.
+// Next asks the daemon), toolbar-editor[:<bar>] (the toolbar editor on
+// mail, board-list, board-flow or calendar, else on the window's bar),
+// prefs-general (Preferences on the General page, its Toolbar group
+// last), print (win.print; with MALACHI_PRINT_PDF=<path> saved there as
+// PDF, no dialog), size=WxH, quit.
 //
 // The scene steps of docs/screenshots.md §3, with the macOS names and
 // meaning: group=on|off and chat=on|off (the two settings), folder=<text>
@@ -87,6 +92,14 @@ const (
 	devRulesEditor
 	devCrmDialog
 	devEwayWizard
+	// devToolbarEditor opens the toolbar editor on a bar (Text, "" for
+	// the window's), devPrefsGeneral Preferences → General.
+	devToolbarEditor
+	devPrefsGeneral
+	// devToolbarWalk opens the editor on Mail and walks Contacts through
+	// the folders' and the list's sections (toolbar_devwalk.go).
+	devToolbarWalk
+	devToolbarDrag
 	devSize
 	devQuit
 	devGroup
@@ -97,6 +110,7 @@ const (
 	devComposeOpen
 	devCrmSave
 	devShot
+	devPrint
 )
 
 // devBusy counts the steps still at work after they returned (the
@@ -169,6 +183,14 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind = devCrmDialog
 		case name == "eway-wizard":
 			st.Kind = devEwayWizard
+		case name == "toolbar-editor" || strings.HasPrefix(name, "toolbar-editor:"):
+			st.Kind, st.Text = devToolbarEditor, strings.TrimPrefix(strings.TrimPrefix(name, "toolbar-editor"), ":")
+		case name == "prefs-general":
+			st.Kind = devPrefsGeneral
+		case name == "toolbar-walk":
+			st.Kind = devToolbarWalk
+		case name == "toolbar-drag":
+			st.Kind = devToolbarDrag
 		case strings.HasPrefix(name, "size="):
 			wh := strings.SplitN(strings.TrimPrefix(name, "size="), "x", 2)
 			if len(wh) != 2 {
@@ -182,6 +204,8 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind, st.Width, st.Height = devSize, w, h
 		case name == "quit":
 			st.Kind = devQuit
+		case name == "print":
+			st.Kind = devPrint
 		case strings.HasPrefix(name, "group="), strings.HasPrefix(name, "chat="):
 			key, val, _ := strings.Cut(name, "=")
 			if val != "on" && val != "off" {
@@ -358,6 +382,20 @@ func (w *Window) runDevStep(n int, st devStep) {
 		w.devRulesEditor()
 	case devCrmDialog:
 		w.showCrmSample()
+	case devToolbarEditor:
+		bar := w.currentToolbarBar()
+		if st.Text != "" {
+			bar = toolbar.Bar(st.Text)
+		}
+		w.openToolbarEditor(bar)
+	case devToolbarDrag:
+		w.devToolbarDrag()
+	case devToolbarWalk:
+		w.devToolbarWalk()
+	case devPrefsGeneral:
+		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
+		d.SetVisiblePageName("general")
+		d.Present(w)
 	case devEwayWizard:
 		accountwizard.NewEway(w.client, w.log).Present(w)
 	case devSize:
@@ -380,6 +418,14 @@ func (w *Window) runDevStep(n int, st devStep) {
 	case devComposeOpen:
 		if app := w.Application(); app != nil {
 			app.ActivateAction("compose", nil)
+		}
+	case devPrint:
+		// win.print (print.go); with MALACHI_PRINT_PDF the print is saved
+		// there without the dialog.
+		if a := w.actions["print"]; a != nil && a.Enabled() {
+			a.Activate(nil)
+		} else {
+			developmentPrint("MALACHI_GTK_START print: the action is off")
 		}
 	case devCrmSave:
 		if a := w.LookupAction(crmActionSave); a != nil && a.Enabled() {
