@@ -4,7 +4,7 @@
 // Port of macos/Sources/MalachiCore/Text/Format.swift; GTK:
 // ui/internal/widget/format.go (DisplayName, FormatAddress,
 // FormatParticipants, ThreadCountText, FormatDate, FormatTime,
-// FormatDateTime, FormatSize, strftime).
+// FormatDateTime, FormatSize, sizeNumber, strftime, AttachmentSummary).
 //
 // The small pure formatting helpers. Every input is attacker-controlled
 // text; callers show the results as plain text. Windows-only: names and
@@ -16,7 +16,8 @@
 // and AddressAsReceived. Dates are formatted with the
 // strftime msgids the GTK UI translates (Strftime), in the given time zone,
 // with the day and month names of the given culture (the regional format,
-// as LC_TIME is for GLib); numbers are Go's, whatever the culture (3.0 MiB).
+// as LC_TIME is for GLib); numbers are Go's, whatever the culture, sizes
+// with the translated decimal separator (3.0 MB, in Czech 3,0 MB).
 
 using System;
 using System.Collections.Generic;
@@ -188,27 +189,58 @@ public static class Format
 
     /// <summary>
     /// Renders a byte count for attachment chips and the disk space of the
-    /// preferences: GiB, MiB, KiB or B (IEC units).
+    /// preferences in decimal units, like Finder and Outlook: B, kB, MB or
+    /// GB, one decimal below 100 ("41.1 kB", "7.2 MB", "123 kB"), with the
+    /// translated decimal separator ("41,1 kB" in Czech).
     /// </summary>
     public static string FormatSize(long n)
     {
-        if (n >= 1L << 30)
+        if (n < 1000)
         {
-            // TRANSLATORS: file size in gibibytes.
-            return L10n.T("%.1f GiB", (double)n / (1L << 30));
+            // TRANSLATORS: file size in bytes.
+            return L10n.T("%d B", n);
         }
-        if (n >= 1L << 20)
+        double v = n;
+        if (n >= 999_500_000)
         {
-            // TRANSLATORS: file size in mebibytes.
-            return L10n.T("%.1f MiB", (double)n / (1L << 20));
+            // TRANSLATORS: file size in gigabytes; %s is the number with its
+            // decimal separator, e.g. "1.5".
+            return L10n.T("%s GB", SizeNumber(v / 1e9));
         }
-        if (n >= 1L << 10)
+        if (n >= 999_500)
         {
-            // TRANSLATORS: file size in kibibytes.
-            return L10n.T("%.0f KiB", (double)n / (1L << 10));
+            // TRANSLATORS: file size in megabytes; %s is the number with its
+            // decimal separator, e.g. "7.2".
+            return L10n.T("%s MB", SizeNumber(v / 1e6));
         }
-        // TRANSLATORS: file size in bytes.
-        return L10n.T("%d B", n);
+        // TRANSLATORS: file size in kilobytes; %s is the number with its
+        // decimal separator, e.g. "41.1".
+        return L10n.T("%s kB", SizeNumber(v / 1e3));
+    }
+
+    // v with one decimal below 100 and none from there, with the translated
+    // decimal separator (format.go sizeNumber).
+    private static string SizeNumber(double v)
+    {
+        var s = v.ToString(v >= 99.95 ? "F0" : "F1", CultureInfo.InvariantCulture);
+        // TRANSLATORS: the decimal separator of numbers such as file sizes
+        // ("41.1 kB"); "," in Czech.
+        var separator = L10n.C("decimal separator", ".");
+        var dot = s.IndexOf('.', StringComparison.Ordinal);
+        return dot < 0 ? s : string.Concat(s.AsSpan(0, dot), separator, s.AsSpan(dot + 1));
+    }
+
+    /// <summary>
+    /// The line over the attachment tiles of a message: how many there are
+    /// and their total size, "2 attachments · 255 kB" (format.go
+    /// AttachmentSummary).
+    /// </summary>
+    public static string AttachmentSummary(int count, long total)
+    {
+        var files = L10n.N("%d attachment", "%d attachments", count);
+        // TRANSLATORS: the line over the attachments of a message: the number
+        // of attachments and their total size, e.g. "2 attachments · 255 kB".
+        return L10n.Format(L10n.C("attachment summary", "%s · %s"), files, FormatSize(total));
     }
 
     // Go's IsZero once the value crossed the wire: any instant in year 1

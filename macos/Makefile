@@ -50,9 +50,10 @@ ARCHS         ?=
 SWIFT_BUILD   := $(strip swift build -c release $(foreach a,$(ARCHS),--arch $(a)))
 GO_DIR        ?= $(BUILD_DIR)
 
-# The disk image a release carries, named after the architectures it runs on.
-DMG_ARCH      := $(if $(word 2,$(ARCHS)),universal,$(or $(ARCHS),$(shell uname -m)))
-DMG           := $(BUILD_DIR)/Malachi-Mail-$(VERSION)-$(DMG_ARCH).dmg
+# The disk image a release carries, named after the architectures it runs on
+# as every release file is (docs/releasing.md §1): x86_64 is x64 there.
+DMG_ARCH      := $(subst x86_64,x64,$(if $(word 2,$(ARCHS)),universal,$(or $(ARCHS),$(shell uname -m))))
+DMG           := $(BUILD_DIR)/Malachi-Mail-$(VERSION)-macos-$(DMG_ARCH).dmg
 
 # Notarisation through notarytool: a keychain profile stored once with
 # `xcrun notarytool store-credentials` (NOTARY_PROFILE), or an App Store
@@ -172,7 +173,7 @@ app: build locale icon
 	codesign --verify --strict --deep "$(APP)"; \
 	echo "built $(APP) ($(VERSION), $(or $(ARCHS),$(shell uname -m)), languages: $(LANGS))"
 
-## dmg: put the bundle into build/Malachi-Mail-<version>-<arch>.dmg beside a link to /Applications
+## dmg: put the bundle into build/Malachi-Mail-<version>-macos-<arch>.dmg beside a link to /Applications
 # A Developer ID build signs the image as well. hdiutil on CI runners now
 # and then fails with "Resource busy"; a second attempt goes through.
 dmg: app

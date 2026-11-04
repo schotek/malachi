@@ -30,6 +30,24 @@ var skeletonFallback = map[string]string{
 	"skeleton-encrypted.eml":          "multipart/encrypted",
 }
 
+// fallback is skeletonFallback plus the signature fixtures
+// (testdata/signatures/make.go): every signed or wrapped one is refused,
+// the plain ones (inline, Autocrypt only, a forwarded signed message as an
+// attachment) reduce like any other message.
+func fallback(name string) (string, bool) {
+	if why, ok := skeletonFallback[name]; ok {
+		return why, true
+	}
+	switch name {
+	case "pgp-inline.eml", "pgp-autocrypt-bulk.eml", "smime-forwarded.eml":
+		return "", false
+	}
+	if strings.HasPrefix(name, "smime-") || strings.HasPrefix(name, "pgp-") {
+		return "signed (signature fixtures)", true
+	}
+	return "", false
+}
+
 // skeletonOf runs Skeleton over raw and returns what it wrote.
 func skeletonOf(raw []byte, omit map[string]bool, limits Limits) ([]byte, []string, error) {
 	var out bytes.Buffer
@@ -148,14 +166,14 @@ func TestSkeletonCorpus(t *testing.T) {
 				atts = append(atts, a.PartID)
 			}
 			sets := []map[string]bool{{}, setOf(atts...)}
-			if _, ok := skeletonFallback[e.Name()]; !ok {
+			if _, ok := fallback(e.Name()); !ok {
 				for _, id := range leafIDs(orig) {
 					sets = append(sets, setOf(id))
 				}
 			}
 			for _, omit := range sets {
 				skel, omitted, err := skeletonOf(raw, omit, DefaultLimits())
-				if why, ok := skeletonFallback[e.Name()]; ok {
+				if why, ok := fallback(e.Name()); ok {
 					if !errors.Is(err, ErrNotReducible) {
 						t.Fatalf("omit %v: want ErrNotReducible (%s), got %v", omit, why, err)
 					}
@@ -192,7 +210,7 @@ func TestSkeletonCorpus(t *testing.T) {
 					}
 				}
 			}
-			if _, ok := skeletonFallback[e.Name()]; !ok {
+			if _, ok := fallback(e.Name()); !ok {
 				reduced++
 			}
 		})

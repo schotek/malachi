@@ -10,7 +10,8 @@
 // not fetched, it gets its panel) and shows it in the one preview window,
 // made on first use, reused while it is open, and gone when closed.
 // Nothing changes on screen while the part is fetched; a failure is a
-// toast where the chip was.
+// toast where the chip was. A click on a tile of a compose window shows
+// the file it read back (DraftAttachmentPreview of AttachmentActions.swift).
 
 using System.Threading.Tasks;
 using Malachi.App.Shell;
@@ -49,6 +50,23 @@ public sealed class AttachmentPreview
         {
             return;
         }
+        Present(request);
+    }
+
+    /// <summary>
+    /// Shows <paramref name="request"/>, a file a compose window read back
+    /// (ComposeAttachmentsController.Preview), in the preview window.
+    /// </summary>
+    public void Show(PreviewRequest request)
+    {
+        if (!state.IsStopping)
+        {
+            Present(request);
+        }
+    }
+
+    private void Present(PreviewRequest request)
+    {
         if (window is null)
         {
             var w = new MessageWindows.PreviewWindow(state, opener);

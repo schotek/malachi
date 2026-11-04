@@ -278,6 +278,7 @@ final class ConversationChatViewController: NSViewController {
     /// Puts the rows of `model` (`Conversation.chatRows`) into the stack,
     /// reusing the views of the members, events and drafts shown already.
     private func apply(_ model: Conversation.Model) {
+        reportPhotos(model)
         issueBox.show(model)
         let rows = Conversation.chatRows(model, drafts: controller.drafts)
         let monochrome = state.settings.monochromeAvatars
@@ -317,13 +318,14 @@ final class ConversationChatViewController: NSViewController {
                     bubbles[id] = view
                 }
                 view.bubble.compactDate = compactDates
+                showInvitation(view, id)
                 view.bubble.setShortened(shortened(view))
                 view.bubble.showMessage(item, attachments: attachments(id))
                 if !view.bubble.showsText {
                     let lm = controller.loaded[id]
                     view.bubble.showBody(bubbleBody(lm, item), monospace: monospace(lm))
                 }
-                view.showAvatar(name: item.sender, monochrome: monochrome)
+                view.showAvatar(name: item.sender, monochrome: monochrome, photo: ConversationViewController.photoAvatar(item))
                 view.setColumn(column)
                 desired.append(view)
             case .event:
@@ -398,8 +400,27 @@ final class ConversationChatViewController: NSViewController {
         let i = model.index(id)
         guard i >= 0 else { return }
         let item = model.items[i]
+        showInvitation(row, id)
+        row.bubble.setShortened(shortened(row))
         row.bubble.showMessage(item, attachments: attachments(id))
         row.bubble.showBody(bubbleBody(lm, item), monospace: monospace(lm))
+    }
+
+    /// The invitation card of member `id` in its bubble (message.get's,
+    /// when the account shows invitation cards).
+    private func showInvitation(_ row: ConversationChatRow, _ id: MessageID) {
+        guard let s = controller.member(id) else { return }
+        if row.bubble.onOpenInvitationLink == nil {
+            row.bubble.onOpenInvitationLink = { [weak self] url in
+                self?.delegate?.openLink(url, links: [], from: self?.view.window)
+            }
+        }
+        row.bubble.showInvitation(s, controller.loaded[id]?.msg, cardOn: cardOn(s.accountId), state: state)
+    }
+
+    /// Whether account `id` shows invitation cards.
+    private func cardOn(_ id: AccountID) -> Bool {
+        showsInvitationCard(delegate?.account(id))
     }
 
     /// What the bubble of `item`, whose entry is `lm`, shows
@@ -414,7 +435,9 @@ final class ConversationChatViewController: NSViewController {
     /// summary at once, the number of the timeline's chips once
     /// message.get told it.
     private func attachments(_ id: MessageID) -> Conversation.BubbleAttachments {
-        Conversation.bubbleAttachmentBadge(summary: controller.member(id), loaded: controller.loaded[id])
+        let s = controller.member(id)
+        return Conversation.bubbleAttachmentBadge(
+            summary: s, loaded: controller.loaded[id], cardOn: s.map { cardOn($0.accountId) } ?? false)
     }
 
     private func detach(_ v: NSView) {
@@ -717,13 +740,37 @@ final class ConversationChatViewController: NSViewController {
         }
     }
 
+    // MARK: Contact photos
+
+    /// The photos' name of the chat (`ContactsPhotosController.show`).
+    static let photoView = "chat"
+
+    /// Tells the photos the senders of the bubbles on the left, newest
+    /// first (a conversation is short: all of them).
+    private func reportPhotos(_ model: Conversation.Model?) {
+        let senders = (model?.items ?? []).reversed().compactMap { ConversationViewController.photoAvatar($0)?.sender }
+            .filter { !$0.isEmpty }
+        AppContacts.shared?.photos.show(Self.photoView, senders: senders)
+    }
+
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        AppContacts.shared?.photos.show(Self.photoView)
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        reportPhotos(controller.model)
+    }
+
     private func applyAvatars() {
         guard let model = controller.model else { return }
         let monochrome = state.settings.monochromeAvatars
         for (id, row) in bubbles {
             let i = model.index(id)
             if i >= 0 {
-                row.showAvatar(name: model.items[i].sender, monochrome: monochrome)
+                row.showAvatar(name: model.items[i].sender, monochrome: monochrome,
+                               photo: ConversationViewController.photoAvatar(model.items[i]))
             }
         }
         for card in controller.drafts {
@@ -764,6 +811,11 @@ extension ConversationChatViewController {
             return true
         }
         let was = row.id.map { expanded.is($0) } ?? false
+        // The text of an invitation's bubble (the meeting's boilerplate
+        // under the card) starts shortened: the card says what matters.
+        if row.bubble.showsInvitation && !was {
+            return true
+        }
         let settings = state.settings
         return Conversation.bubbleShortened(
             mineOn: settings.conversationChatTruncateMine, othersOn: settings.conversationChatTruncateOthers,

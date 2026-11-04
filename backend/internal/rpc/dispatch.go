@@ -143,6 +143,87 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.registerCalendar(b)
 	s.registerCrm(b)
 	s.registerAssistant(b)
+	s.registerAddressBooks(b)
+	s.registerUpdate(b)
+	s.registerRules(b)
+	s.registerSignatures(b)
+}
+
+// registerRules binds the mail rules (docs/api.md §4.21).
+func (s *Server) registerRules(b api.Backend) {
+	r := b.Rules()
+	s.handlers[api.MethodRulesList] = wrap(r.List)
+	s.handlers[api.MethodRulesCreate] = wrap(r.Create)
+	s.handlers[api.MethodRulesUpdate] = wrap(r.Update)
+	s.handlers[api.MethodRulesDelete] = wrap(r.Delete)
+	s.handlers[api.MethodRulesReorder] = wrap(r.Reorder)
+	s.handlers[api.MethodRulesTest] = wrap(r.Test)
+	s.handlers[api.MethodRulesApply] = wrap(r.Apply)
+}
+
+// Server also implements the optional api.RulesNotifier.
+var _ api.RulesNotifier = (*Server)(nil)
+
+func (s *Server) RulesChanged(n api.RulesChangedNotification) {
+	s.broadcast(api.NotifyRulesChanged, n)
+}
+
+// registerSignatures binds the signature and OpenPGP key methods
+// (docs/api.md §4.22).
+func (s *Server) registerSignatures(b api.Backend) {
+	sig := b.Signatures()
+	s.handlers[api.MethodMessageSignature] = wrap(sig.Signature)
+	s.handlers[api.MethodMessageSignatureRevocation] = wrap(sig.Revocation)
+	pgp := b.PGP()
+	s.handlers[api.MethodPGPKeyImport] = wrap(pgp.KeyImport)
+	s.handlers[api.MethodPGPKeyVerify] = wrap(pgp.KeyVerify)
+	s.handlers[api.MethodPGPKeyList] = wrap(pgp.KeyList)
+	s.handlers[api.MethodPGPKeyRemove] = wrap(pgp.KeyRemove)
+}
+
+// Server also implements the optional api.SignatureNotifier.
+var _ api.SignatureNotifier = (*Server)(nil)
+
+func (s *Server) SignaturesChanged(n api.SignaturesChangedNotification) {
+	s.broadcast(api.NotifySignaturesChanged, n)
+}
+
+// registerAddressBooks binds the address book methods (docs/api.md §4.19).
+func (s *Server) registerAddressBooks(b api.Backend) {
+	ab := b.AddressBooks()
+	s.handlers[api.MethodAddressBookList] = wrap(ab.ListBooks)
+	s.handlers[api.MethodAddressBookSet] = wrap(ab.SetBook)
+	s.handlers[api.MethodContactList] = wrap(ab.ListContacts)
+	s.handlers[api.MethodContactGet] = wrap(ab.GetContact)
+	s.handlers[api.MethodContactLookup] = wrap(ab.Lookup)
+	s.handlers[api.MethodContactCreate] = wrap(ab.CreateContact)
+	s.handlers[api.MethodContactUpdate] = wrap(ab.UpdateContact)
+	s.handlers[api.MethodContactDelete] = wrap(ab.DeleteContact)
+	s.handlers[api.MethodContactPhoto] = wrap(ab.Photo)
+}
+
+// Server also implements the optional api.ContactsNotifier.
+var _ api.ContactsNotifier = (*Server)(nil)
+
+func (s *Server) ContactsChanged(n api.ContactsChangedNotification) {
+	s.broadcast(api.NotifyContactsChanged, n)
+}
+
+// registerUpdate binds the update check (docs/api.md §4.20).
+func (s *Server) registerUpdate(b api.Backend) {
+	u := b.Update()
+	s.handlers[api.MethodUpdateStatus] = wrap(u.Status)
+	s.handlers[api.MethodUpdateCheck] = wrap(u.Check)
+	s.handlers[api.MethodUpdateSetPrefs] = wrap(u.SetPrefs)
+	s.handlers[api.MethodUpdateDismiss] = wrap(u.Dismiss)
+	s.handlers[api.MethodUpdateDismissNotice] = wrap(u.DismissNotice)
+}
+
+// Server also implements the optional api.UpdateNotifier.
+var _ api.UpdateNotifier = (*Server)(nil)
+
+func (s *Server) UpdateChanged(n api.UpdateChangedNotification) {
+	s.broadcast(api.NotifyUpdateChanged, n)
 }
 
 // registerAssistant binds the assistant profile methods (docs/api.md

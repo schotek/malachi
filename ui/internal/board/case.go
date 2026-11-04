@@ -151,7 +151,10 @@ type CaseMessage struct {
 	ID     api.MessageID
 	Folder api.FolderID
 	From   string
-	Date   time.Time
+	// Address is From's address ("" for the samples): the chat bubble's
+	// avatar shows the photo of the contact with exactly this address.
+	Address string
+	Date    time.Time
 	// Text is plain text, never markup.
 	Text string
 	// Mine: the user wrote it.
@@ -159,6 +162,10 @@ type CaseMessage struct {
 	// Trimmed: the quoted history, the signature or the rest past the cap
 	// was cut off Text.
 	Trimmed bool
+	// Signature is the message's signature verdict (board.get's
+	// BoardMessage.Signature, as message.get's): the card's badge. nil
+	// without one.
+	Signature *api.SignatureSummary
 }
 
 // Annotation is what the assistant made of a case. Text an assistant

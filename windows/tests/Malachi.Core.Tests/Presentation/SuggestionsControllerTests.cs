@@ -314,6 +314,22 @@ public sealed class SuggestionsControllerTests
     }
 
     [Fact]
+    public async Task ASynchronisedBooksTooltipNamesTheBookAccountOnlyForItsRows()
+    {
+        await using var h = await Harness.StartAsync();
+        var jana = new Contact { Name = "Jana", Address = "jana@example.cz", Source = ContactSource.Contacts, Book = "Kontakty" };
+        h.Script.Answer = [jana, Andy];
+        h.Suggestions.Scope = () => ContactSearchScope.All;
+        h.Suggestions.BookAccount = () => "Microsoft 365 (jana@firma.cz)";
+        await h.Type("ja");
+        await h.PauseAsync();
+        Assert.Equal(ContactSearchScope.All, Assert.Single(h.Script.Queries).Scope);
+        Assert.Equal("Kontakty · Microsoft 365 (jana@firma.cz)", h.Suggestions.Rows[0].Tooltip);
+        // A system address book's row keeps its own name alone.
+        Assert.Equal("Work", h.Suggestions.Rows[1].Tooltip);
+    }
+
+    [Fact]
     public void RowsShowTheNameOverTheAddressAndTheirSource()
     {
         var named = SuggestionRow.For(Ann);

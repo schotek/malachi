@@ -83,6 +83,14 @@ struct SuggestTests {
         #expect(suggestionIcon(.addressBook) == "x-office-address-book-symbolic")
         #expect(suggestionIcon(.sent) == "document-open-recent-symbolic")
         #expect(suggestionTooltip(book) == "Contacts")
+        // A synchronised address book (docs/api.md §4.19): the book's icon,
+        // the book with its account in the tooltip.
+        let synced = Contact(address: "a@x.example", source: .contacts, book: "Kontakty", contactId: "p_1")
+        #expect(suggestionIcon(.contacts) == "x-office-address-book-symbolic")
+        #expect(suggestionTooltip(synced, account: "Microsoft 365 (jana@firma.cz)") == "Kontakty · Microsoft 365 (jana@firma.cz)")
+        #expect(suggestionTooltip(synced) == "Kontakty")
+        #expect(suggestionTooltip(Contact(address: "a@x.example", source: .contacts), account: "X") == "X")
+        #expect(suggestionTooltip(Contact(address: "a@x.example", source: .contacts)) == "Address book")
         #expect(!suggestionTooltip(unnamed).isEmpty)
         #expect(!suggestionTooltip(sent).isEmpty)
         #expect(suggestionTooltip(unnamed) != suggestionTooltip(sent))

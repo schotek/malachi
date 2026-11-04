@@ -11,8 +11,12 @@
 // pieces of the line join: each runs through its own row from edge to edge,
 // the gap included, and stops short of the marker. The gutter is
 // decoration: the card and the event row name their sender themselves.
+// The avatar shows the photo of the contact with exactly the sender's
+// address (docs/plans/address-book.md F10; ContactBook.AvatarOfSender),
+// never on the user's own message or a reply from Sent (PhotoSenderOf).
 
 using Malachi.App.Main;
+using Malachi.Core.Contacts;
 using Malachi.Core.Model;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -99,7 +103,8 @@ internal sealed partial class ConversationRow : Grid
     /// initials). A piece that is not drawn keeps its place, so the marker
     /// stays put.
     /// </summary>
-    public void Show(L.Rail rail, string name, bool monochrome)
+    /// <remarks><paramref name="photoSender"/> is the address whose contact's photo the avatar shows ("" none).</remarks>
+    public void Show(L.Rail rail, string name, bool monochrome, string photoSender = "")
     {
         above.Opacity = rail.Above ? 1 : 0;
         below.Opacity = rail.Below ? 1 : 0;
@@ -110,5 +115,19 @@ internal sealed partial class ConversationRow : Grid
         Avatar.Text = name;
         Avatar.Monochrome = monochrome;
         Avatar.Accent = rail.Accent;
+        Avatar.PhotoSender = rail.Accent ? "" : photoSender;
+    }
+
+    /// <summary>
+    /// The address whose contact's photo stands for an item's sender: the
+    /// first sender's; "" for the user's own message (Mine), a reply from
+    /// Sent and an item without one (contacts.AvatarOfSender).
+    /// </summary>
+    public static string PhotoSenderOf(ConversationItem item)
+    {
+        System.ArgumentNullException.ThrowIfNull(item);
+        return item.Message is { From.Count: > 0 } m
+            ? ContactBook.AvatarOfSender(m.From[0].Email, item.Sender, item.Mine || item.Sent).Sender
+            : "";
     }
 }

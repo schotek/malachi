@@ -32,22 +32,32 @@ Suggests:       gnome-online-accounts
 %global debug_package %{nil}
 
 %description
-Malachi Mail is two processes: a Go daemon that speaks IMAP, SMTP and
-Microsoft Graph and owns every mail decision, and a GTK4 user interface
-that talks to it over a unix socket. The interface starts the daemon
-itself; nothing needs to be enabled by hand.
+Malachi Mail is two processes: a Go daemon that speaks IMAP, SMTP,
+Microsoft Graph, the Jira REST API and CalDAV and owns every mail
+decision, and a GTK4 user interface that talks to it over a unix socket.
+The interface starts the daemon itself; nothing needs to be enabled by
+hand. The same daemon drives the native Malachi Mail apps for macOS and
+Windows.
+
+Mail is kept offline, grouped into conversations and searched; Jira
+issues are followed as conversations; a calendar keeps Microsoft 365 and
+CalDAV calendars and answers invitations from the message; the Board
+sorts what waits for you, what waits for others and what is just for
+your information.
 
 Received HTML is sanitised in the daemon and shown in a WebKitGTK view
 with JavaScript off, no network access and links opened only through the
 portal after the real destination has been displayed.
 
-Passwords and OAuth2 tokens are kept in the system keyring; Microsoft 365
-and Gmail sign in through GNOME Online Accounts, so this package carries
-no client credentials of its own.
+Passwords and OAuth2 tokens are kept in the system keyring. Microsoft 365
+signs in in the browser with the public client registration the daemon
+ships, Gmail with an app password or a Google client of your own; on
+GNOME both can also come from GNOME Online Accounts.
 
 The package also installs malachi-mcp, a Model Context Protocol server
-that gives an AI agent a gated view of the mail through the daemon. It is
-read-only unless its flags say otherwise and is never started on its own.
+that gives an AI agent a gated view of the mail, the calendar and the
+board through the daemon. It is read-only unless its flags say otherwise
+and is never started on its own.
 
 %install
 cp -a @STAGE@/. %{buildroot}/

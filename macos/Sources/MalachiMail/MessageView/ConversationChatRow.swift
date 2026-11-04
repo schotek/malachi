@@ -65,7 +65,10 @@ final class ConversationChatRow: NSView {
     /// The avatar of `name` (hostile text, only ever drawn as initials):
     /// monochrome as the list's setting says, the user's own tinted with
     /// the accent colour.
-    func showAvatar(name: String, monochrome: Bool) {
+    /// `photo` is whose contact photo replaces the initials (F10); a bubble
+    /// on the right, the user's own, never shows one.
+    func showAvatar(name: String, monochrome: Bool, photo: ContactBook.Avatar? = nil) {
+        avatar.photoSource = right ? nil : photo
         avatar.text = name
         avatar.monochrome = monochrome
         avatar.accent = right

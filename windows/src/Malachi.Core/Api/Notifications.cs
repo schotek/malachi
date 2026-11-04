@@ -5,7 +5,9 @@
 // backend/pkg/api/types.go ("Notifications (backend → client)";
 // DraftsChangedNotification a Windows addition ahead of Swift) and
 // board.go (BoardChangedNotification, a Windows addition ahead of Swift);
-// contract: docs/api.md §5.
+// contract: docs/api.md §5. notify.contactsChanged
+// (ContactsChangedNotification, ContactsBook.cs) is a case here, where Swift
+// decodes it beside DaemonNotification (ContactsChangedNotification.decode).
 //
 // Notifications, daemon to client. Best-effort: a client that misses one
 // resynchronises through sync.status, folder.list and message.list.
@@ -180,6 +182,36 @@ public abstract record DaemonNotification
     /// </summary>
     public sealed record AssistantProfileChanged : DaemonNotification;
 
+    /// <summary>
+    /// <c>notify.contactsChanged</c>: the contacts of some books changed
+    /// (<see cref="ContactsChangedNotification"/>, ContactsBook.cs); absent
+    /// params read as any book.
+    /// </summary>
+    /// <param name="Payload">The account and its books (empty = any).</param>
+    public sealed record ContactsChanged(ContactsChangedNotification Payload) : DaemonNotification;
+
+    /// <summary>
+    /// <c>notify.updateChanged</c>: the update status changed (Update.cs); no
+    /// params, the application's <c>UpdateStatusController</c> calls
+    /// <c>update.status</c> again.
+    /// </summary>
+    public sealed record UpdateChanged : DaemonNotification;
+
+    /// <summary>
+    /// <c>notify.rulesChanged</c>: a rule was added, changed, reordered,
+    /// deleted or disabled by the daemon, or its counts moved (Rules.cs); no
+    /// params, the application's rules controller calls <c>rules.list</c>
+    /// again.
+    /// </summary>
+    public sealed record RulesChanged : DaemonNotification;
+
+    /// <summary>
+    /// <c>notify.signaturesChanged</c>: trust changed (Signature.cs, docs/api.md
+    /// §4.22); no params, the windows read the messages they show, an open
+    /// details dialog and the key list again.
+    /// </summary>
+    public sealed record SignaturesChanged : DaemonNotification;
+
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
     public sealed record Unknown(string Method) : DaemonNotification;
@@ -228,6 +260,10 @@ public abstract record DaemonNotification
             API.Notify.EventAlert => new EventAlert(Params(method, parameters, ApiJsonContext.Wire.EventAlertNotification)),
             API.Notify.InvitationsChanged => new InvitationsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.InvitationsChangedNotification)),
             API.Notify.AssistantProfileChanged => new AssistantProfileChanged(),
+            API.Notify.ContactsChanged => new ContactsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.ContactsChangedNotification)),
+            API.Notify.UpdateChanged => new UpdateChanged(),
+            API.Notify.RulesChanged => new RulesChanged(),
+            API.Notify.SignaturesChanged => new SignaturesChanged(),
             _ => new Unknown(method),
         };
     }
@@ -235,7 +271,7 @@ public abstract record DaemonNotification
     private static bool HasParams(string method) =>
         method is API.Notify.NewMessage or API.Notify.SyncState or API.Notify.AuthRequired or API.Notify.MessagesChanged
             or API.Notify.BoardChanged or API.Notify.DraftsChanged or API.Notify.CalendarChanged or API.Notify.CalendarState
-            or API.Notify.EventAlert or API.Notify.InvitationsChanged;
+            or API.Notify.EventAlert or API.Notify.InvitationsChanged or API.Notify.ContactsChanged;
 
     // notify.boardChanged's params are all optional: absent or null = any account.
     private static BoardChangedNotification BoardChangedParams(string method, JsonElement? parameters) =>
@@ -244,7 +280,8 @@ public abstract record DaemonNotification
             : Params(method, parameters, ApiJsonContext.Wire.BoardChangedNotification);
 
     // Params that are all optional (notify.calendarChanged,
-    // notify.invitationsChanged): absent or null = every member left out.
+    // notify.invitationsChanged, notify.contactsChanged): absent or null =
+    // every member left out.
     private static T OptionalParams<T>(string method, JsonElement? parameters, JsonTypeInfo<T> info)
         where T : class, new() =>
         parameters is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined }

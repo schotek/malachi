@@ -1,0 +1,13 @@
+# Response headers for the whole site (Cloudflare Workers static assets).
+# The pages load only their own stylesheet, scripts, pictures and icons;
+# inline style attributes are used for small layout tweaks. The two forms
+# (assets/report.js) add Cloudflare Turnstile's script and frame, their POSTs
+# to admin.malachimail.app and blob: for the screenshot's preview.
+/*
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://admin.malachimail.app; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+
+/assets/*
+  Cache-Control: public, max-age=86400

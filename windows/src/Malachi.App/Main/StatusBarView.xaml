@@ -9,11 +9,12 @@ status_popover (a clamp of 320: status_accounts, a boxed list with one row
 per account and one for its unsent messages, and status_daemon); macOS:
 MainWindow/StatusBarViewController.swift (a bar across the window's
 bottom edge, 26 high with its top line, inset 12) and
-StatusPopoverViewController.swift. Where GTK has the line at the bottom of
-the sidebar, it spans the window here, so that it stays in sight with the
-sidebar folded away (windows/README.md). The line and the rows are Core's
+StatusPopoverViewController.swift. As GTK's (window.blp status_bar), it spans
+the window, so that it stays in sight with the sidebar folded away. The line and the rows are Core's
 (SyncController.Line, StatusPopover); account names and the backend's
-details are plain text.
+details are plain text. At the end, Report an Issue (window.blp's button
+after the status line, app.report-issue; macOS reportButton) opens the
+website's report form, About's link (AppLinks.ReportIssue).
 -->
 <UserControl
     x:Class="Malachi.App.Main.StatusBarView"
@@ -25,11 +26,37 @@ details are plain text.
     xmlns:res="using:Malachi.App.Resources"
     IsTabStop="False">
     <Grid Height="26">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
         <!-- The top line between the panes and the bar. -->
         <Rectangle
+            Grid.ColumnSpan="2"
             Height="1"
             VerticalAlignment="Top"
             Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+        <Button
+            x:Name="ReportButton"
+            Grid.Column="1"
+            Margin="0,1,6,0"
+            Padding="6,0"
+            VerticalAlignment="Stretch"
+            AutomationProperties.AutomationId="ReportIssue"
+            Click="OnReportClick"
+            Style="{StaticResource SubtleButtonStyle}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon
+                    x:Name="ReportIcon"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="14"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    Text="{l:T Msgid='Report an Issue'}" />
+            </StackPanel>
+        </Button>
         <Button
             x:Name="StatusButton"
             Margin="6,1,6,0"

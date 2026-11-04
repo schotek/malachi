@@ -80,6 +80,15 @@ func TestNormaliseServiceURL(t *testing.T) {
 			t.Errorf("%q: %v, want invalidArgument", in, err)
 		}
 	}
+	for raw, want := range map[string]string{
+		"http://127.0.0.1:8765/acme/": "http://127.0.0.1:8765/acme",
+		"http://localhost/acme":       "http://localhost/acme",
+		"http://[::1]:80/acme":        "http://[::1]/acme",
+	} {
+		if got, err := NormaliseServiceURL(raw); err != nil || got != want {
+			t.Errorf("%s: %q, %v, want %q (http on a loopback host)", raw, got, err, want)
+		}
+	}
 	if _, err := NormaliseServiceURL("http://crm.example.org"); err == nil || !strings.Contains(err.Error(), ErrHTTPOnly) {
 		t.Errorf("http: %v", err)
 	}

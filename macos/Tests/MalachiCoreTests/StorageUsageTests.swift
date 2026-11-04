@@ -89,29 +89,29 @@ private final class Harness {
     @Test func storageTextsTest() {
         #expect(storageTexts(SystemStorageResult()) == (value: "0 B", details: ""))
         let plain = SystemStorageResult(totalBytes: 44_470_272 + 909_800_000, messageBytes: 909_800_000, messageUncompressedBytes: 909_800_000)
-        #expect(storageTexts(plain) == (value: "910.1 MiB", details: ""), "no compression, nothing on the server")
+        #expect(storageTexts(plain) == (value: "954 MB", details: ""), "no compression, nothing on the server")
         let both = SystemStorageResult(totalBytes: 734_003_200, savedBytes: 363_100_000, remoteAttachmentBytes: 312_000_000)
         #expect(storageTexts(both) == (
-            value: "700.0 MiB",
-            details: "Compression saves 346.3 MiB\n297.5 MiB of attachments are on the server only"))
+            value: "734 MB",
+            details: "Compression saves 363 MB\n312 MB of attachments are on the server only"))
         let remoteOnly = SystemStorageResult(totalBytes: 5 << 30, remoteAttachmentBytes: 2 << 30)
-        #expect(storageTexts(remoteOnly) == (value: "5.0 GiB", details: "2.0 GiB of attachments are on the server only"))
+        #expect(storageTexts(remoteOnly) == (value: "5.4 GB", details: "2.1 GB of attachments are on the server only"))
         // preferences_test.go TestStorageTexts.
         #expect(storageTexts(SystemStorageResult(totalBytes: 700 << 20, messageBytes: 650 << 20, messageUncompressedBytes: 650 << 20))
-            == (value: "700.0 MiB", details: ""))
+            == (value: "734 MB", details: ""))
         #expect(storageTexts(SystemStorageResult(totalBytes: 3 << 30, savedBytes: 512 << 20))
-            == (value: "3.0 GiB", details: "Compression saves 512.0 MiB"))
+            == (value: "3.2 GB", details: "Compression saves 537 MB"))
         #expect(storageTexts(SystemStorageResult(totalBytes: 1 << 30 + 512 << 20, savedBytes: 300 << 10, remoteAttachmentBytes: 40 << 20))
-            == (value: "1.5 GiB", details: "Compression saves 300 KiB\n40.0 MiB of attachments are on the server only"))
+            == (value: "1.6 GB", details: "Compression saves 307 kB\n41.9 MB of attachments are on the server only"))
         let savedOnly = SystemStorageResult(totalBytes: 2048, savedBytes: 1024)
-        #expect(storageTexts(savedOnly) == (value: "2 KiB", details: "Compression saves 1 KiB"))
+        #expect(storageTexts(savedOnly) == (value: "2.0 kB", details: "Compression saves 1.0 kB"))
         // A negative saving (a store converting back) says nothing.
         #expect(storageTexts(SystemStorageResult(totalBytes: 10, savedBytes: -5)).details == "")
         // The background conversion comes first while it runs or stopped.
         #expect(storageTexts(SystemStorageResult(totalBytes: 3 << 30, savedBytes: 512 << 20, conversion: .running))
-            == (value: "3.0 GiB", details: "Converting the stored mail in the background\nCompression saves 512.0 MiB"))
+            == (value: "3.2 GB", details: "Converting the stored mail in the background\nCompression saves 537 MB"))
         #expect(storageTexts(SystemStorageResult(totalBytes: 3 << 30, conversion: .noSpace))
-            == (value: "3.0 GiB", details: "Converting stopped: the disk is full"))
+            == (value: "3.2 GB", details: "Converting stopped: the disk is full"))
         #expect(storageTexts(SystemStorageResult(totalBytes: 5, conversion: .idle)).details == "")
     }
 

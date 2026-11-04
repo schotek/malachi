@@ -98,4 +98,41 @@ public static class RpcTimeouts
     /// to the sender's server (15 s) first (bulk.go <c>unsubscribeTimeout</c>).
     /// </summary>
     public static readonly TimeSpan Unsubscribe = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// <c>contact.create</c>, <c>contact.update</c> and <c>contact.delete</c>:
+    /// the daemon writes to the server first (contactsctl
+    /// <c>WriteTimeout</c>; Swift's descriptors' 60 s).
+    /// </summary>
+    public static readonly TimeSpan ContactWrite = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// <c>contact.photo</c>: the daemon may download a Microsoft 365 photo
+    /// (api.ContactPhotoTimeout, 15 s) first (contactsctl <c>PhotoTimeout</c>).
+    /// </summary>
+    public static readonly TimeSpan ContactPhoto = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// <c>update.check</c>: the daemon asks the manifest's API and then the
+    /// GitHub asset within 70 s (core's updateCheckLimit) before it answers.
+    /// </summary>
+    public static readonly TimeSpan UpdateCheck = TimeSpan.FromSeconds(75);
+
+    /// <summary>
+    /// <c>rules.test</c>: the daemon matches the rule against the folder's
+    /// stored messages, reading their bodies for a body condition.
+    /// </summary>
+    public static readonly TimeSpan RulesTest = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// <c>rules.apply</c>: the daemon runs the rules over a folder's stored
+    /// messages in batches and sends the changes to the server.
+    /// </summary>
+    public static readonly TimeSpan RulesApply = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// <c>message.signatureRevocation</c>: the daemon gives the check 15 s
+    /// (api.RevocationTimeout); the client waits 20 s (docs/api.md §4.22).
+    /// </summary>
+    public static readonly TimeSpan SignatureRevocation = TimeSpan.FromSeconds(20);
 }

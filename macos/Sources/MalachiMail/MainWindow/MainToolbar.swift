@@ -25,12 +25,15 @@ import MalachiCore
 /// "Converting the search…" and takes no typing (`beginConverting`,
 /// `endConverting`).
 @MainActor
-final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSMenuItemValidation {
+final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSMenuItemValidation, NSMenuDelegate {
     enum ID {
         static let toolbar = NSToolbar.Identifier("main")
         /// The Mail/Board switch (`ModeSwitch`), the main window's only.
         static let mode = NSToolbarItem.Identifier("mode")
         static let newMessage = NSToolbarItem.Identifier("newMessage")
+        /// Contacts (Window ▸ Contacts), right after New Message; the
+        /// board's and the Calendar's toolbars have it too (`contactsItem`).
+        static let contacts = NSToolbarItem.Identifier("contacts")
         static let refresh = NSToolbarItem.Identifier("refresh")
         static let filter = NSToolbarItem.Identifier("filter")
         static let search = NSToolbarItem.Identifier("search")
@@ -46,6 +49,17 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         /// hidden without an eWay-CRM account.
         static let crm = NSToolbarItem.Identifier("crm")
         static let moreActions = NSToolbarItem.Identifier("moreActions")
+        // The palette's items (T10), not in the default toolbar.
+        /// Mark as Read or Unread, whichever the selection allows (O3).
+        static let markRead = NSToolbarItem.Identifier("markRead")
+        static let junk = NSToolbarItem.Identifier("junk")
+        /// Move To: the account's folders, as the context menu's.
+        static let moveTo = NSToolbarItem.Identifier("moveTo")
+        /// Undo the newest move of mail (Edit ▸ Undo, `MainWindow`).
+        static let undo = NSToolbarItem.Identifier("undo")
+        static let loadPictures = NSToolbarItem.Identifier("loadPictures")
+        /// Print (`printMail:`, §8 of the plan).
+        static let print = NSToolbarItem.Identifier("print")
     }
 
     /// The order of the plan: sidebar section, list section, message
@@ -82,7 +96,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         // (navigational, `BoardToolbar.keepSidebarToggle`).
         ID.mode, .flexibleSpace,
         .sidebarTrackingSeparator, .toggleSidebar,
-        ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
+        ID.newMessage, ID.contacts, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
         ID.archive, ID.trash, .space, ID.crm, .space, ID.star, ID.assistant, ID.moreActions, ID.search,
@@ -157,6 +171,24 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// set by the window controller; nil until the application installed
     /// one, and then the item stays hidden.
     var crmController: (@MainActor () -> CRMController?)?
+    /// Move To's menu for the selection (`MessageContextMenu.moveToMenu`),
+    /// nil without one; the window installs it.
+    var moveToMenu: (@MainActor () -> NSMenu?)?
+    /// Whether Undo can take a move back (or text its typing); the window
+    /// installs it.
+    var undoEnabled: (@MainActor () -> Bool)?
+    /// Whether the window allows an action now (Move To's item, which has
+    /// no action of its own); the window installs it.
+    var actionEnabled: (@MainActor (Selector) -> Bool)?
+    /// The search field was put into the toolbar for this search only,
+    /// the user's arrangement having none (⌘F, O5); it goes again once idle.
+    private var temporarySearch = false
+    /// The user's arrangement (the main window's toolbar only; nil for a
+    /// message window's, which is fixed). Docs/plans/toolbar-customization.md.
+    let customization: ToolbarCustomization?
+    /// Whether the list/message separator is in the toolbar
+    /// (`setListSeparator`).
+    private var showsListSeparator = true
 
     /// - Parameters:
     ///   - splitView: the split view whose dividers 0 and 1 the tracking
@@ -165,12 +197,25 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     ///   - showsAssistant: whether the button starts in the toolbar.
     ///   - showsPanel: whether the inspector section (the assistant
     ///     panel's toggle) starts in the toolbar.
-    init(splitView: NSSplitView?, assistantMenu: AssistantMenu? = nil, showsAssistant: Bool = false, showsPanel: Bool = false) {
+    ///   - settings: the settings of the user's arrangement; nil for a
+    ///     toolbar that cannot be customized (a message window's).
+    init(splitView: NSSplitView?, assistantMenu: AssistantMenu? = nil, showsAssistant: Bool = false, showsPanel: Bool = false,
+         settings: Settings? = nil) {
         self.splitView = splitView
         self.assistantMenu = assistantMenu
         self.showsAssistant = showsAssistant
         self.showsPanel = showsPanel && splitView != nil
+        if let settings, splitView != nil {
+            customization = ToolbarCustomization(
+                bar: .mail, settings: settings,
+                separators: [.list: .sidebarTrackingSeparator, .message: ID.listSeparator],
+                extras: [.inspectorTrackingSeparator, .toggleInspector])
+        } else {
+            customization = nil
+        }
         super.init()
+        customization?.features = { [weak self] in self?.features ?? Toolbar.Features() }
+        customization?.transient = { [weak self] in self?.temporarySearch == true ? [ID.search] : [] }
         let item = NSMenuItem(
             title: Assistant.searchTexts().ownWords, action: #selector(searchInOwnWords(_:)), keyEquivalent: "")
         item.target = self
@@ -188,7 +233,35 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         tb.allowsUserCustomization = false
         tb.autosavesConfiguration = false
         toolbar = tb
+        customization?.attach(tb)
         return tb
+    }
+
+    /// What the window has for the user's arrangement: eWay-CRM's item
+    /// hides itself (`CRMToolbarItem`), so it counts as there; printing
+    /// does not exist yet.
+    private var features: Toolbar.Features {
+        var f = Toolbar.Features(have: [.crm, .print])
+        if showsAssistant, assistantMenu != nil {
+            f.have.insert(.assistant)
+        }
+        if !showsListSeparator {
+            f.hiddenSeparators.insert(Toolbar.separator(.message))
+        }
+        return f
+    }
+
+    /// The More Actions item, made if the toolbar has not asked for it
+    /// yet (the user may have taken it off): Jira adds Change Status to its
+    /// menu once (`ChangeStatusMenus`), and the palette puts this very item
+    /// back.
+    var moreActionsItem: NSMenuToolbarItem? {
+        if let it = items[ID.moreActions] as? NSMenuToolbarItem {
+            return it
+        }
+        guard let it = make(ID.moreActions) as? NSMenuToolbarItem else { return nil }
+        items[ID.moreActions] = it
+        return it
     }
 
     /// The Mail/Board switch, once the toolbar made it; the window keeps
@@ -216,10 +289,13 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// reserved in the toolbar; the window removes it while the pane is
     /// away and its items merge into the message section (D3 of the plan).
     func setListSeparator(visible: Bool, in toolbar: NSToolbar) {
+        showsListSeparator = visible
+        defer { customization?.refreshAllowsCustomization(toolbar) }
         let current = toolbar.items.firstIndex { $0.itemIdentifier == ID.listSeparator }
         if visible {
             guard current == nil else { return }
-            let at = toolbar.items.firstIndex { $0.itemIdentifier == ID.reply } ?? toolbar.items.count
+            let at = customization?.insertionIndex(of: Toolbar.separator(.message), in: toolbar)
+                ?? toolbar.items.firstIndex { $0.itemIdentifier == ID.reply } ?? toolbar.items.count
             toolbar.insertItem(withItemIdentifier: ID.listSeparator, at: at)
         } else if let current {
             toolbar.removeItem(at: current)
@@ -239,6 +315,21 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         guard let current = toolbar.items.firstIndex(where: { $0.itemIdentifier == ID.assistant }) else { return }
         toolbar.removeItem(at: current)
         toolbar.insertItem(withItemIdentifier: ID.assistant, at: current)
+        hideIfMissing(ID.assistant)
+    }
+
+    /// From macOS 15 with the user's arrangement: an item whose feature is
+    /// missing stays in its place, hidden (T7).
+    private func hideIfMissing(_ id: NSToolbarItem.Identifier) {
+        // eWay-CRM's item hides itself (`CRMToolbarItem.apply`).
+        guard let customization, ToolbarCustomization.isAvailable, let item = items[id], !(item is CRMToolbarItem)
+        else { return }
+        if #available(macOS 15, *) {
+            let hidden = !customization.isShown(id)
+            if item.isHidden != hidden {
+                item.isHidden = hidden
+            }
+        }
     }
 
     @objc private func assistantPanelClicked(_ sender: Any?) {
@@ -249,6 +340,11 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// Actions) or takes it out, as the `assistant-menu` setting changes.
     func setAssistant(visible: Bool, in toolbar: NSToolbar) {
         showsAssistant = visible
+        // From macOS 15 the button keeps its place in the user's arrangement.
+        if customization != nil, ToolbarCustomization.isAvailable {
+            hideIfMissing(ID.assistant)
+            return
+        }
         let current = toolbar.items.firstIndex { $0.itemIdentifier == ID.assistant }
         if visible {
             guard current == nil, assistantMenu != nil else { return }
@@ -291,6 +387,9 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        if let customization {
+            return customization.defaultIdentifiers(toolbar) + (showsPanel ? Self.panelItems : [])
+        }
         var ids = splitView == nil ? Self.messageSectionItems : Self.defaultItems
         if !showsAssistant || assistantMenu == nil {
             ids.removeAll { $0 == ID.assistant }
@@ -302,20 +401,73 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        allItems
+        if let customization {
+            return customization.allowedIdentifiers(toolbar) + Self.panelItems.filter { $0 != .flexibleSpace }
+        }
+        return allItems
+    }
+
+    func toolbarImmovableItemIdentifiers(_ toolbar: NSToolbar) -> Set<NSToolbarItem.Identifier> {
+        customization?.immovableIdentifiers() ?? []
+    }
+
+    func toolbar(_ toolbar: NSToolbar, itemIdentifier: NSToolbarItem.Identifier, canBeInsertedAt index: Int) -> Bool {
+        customization?.canInsert(itemIdentifier, at: index, in: toolbar) ?? true
+    }
+
+    func toolbarWillAddItem(_ notification: Notification) {
+        guard let tb = notification.object as? NSToolbar else { return }
+        customization?.itemsChanged(tb)
+    }
+
+    func toolbarDidRemoveItem(_ notification: Notification) {
+        guard let tb = notification.object as? NSToolbar else { return }
+        customization?.itemsChanged(tb)
     }
 
     func toolbar(
         _ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
+        // The palette's own copy: never the toolbar's item, never cached.
+        if !flag, customization != nil {
+            return paletteItem(id)
+        }
         if let cached = items[id] {
             return cached
         }
         let item = make(id)
         if let item {
             items[id] = item
+            hideIfMissing(id)
         }
         return item
+    }
+
+    /// An item for the customization palette: the items whose making has
+    /// effects on this toolbar (the search field, the Assistant's menu)
+    /// or whose view is empty until used (eWay-CRM) as a plain image.
+    private func paletteItem(_ id: NSToolbarItem.Identifier) -> NSToolbarItem? {
+        func plain(_ symbol: NSImage, _ label: String) -> NSToolbarItem {
+            let it = NSToolbarItem(itemIdentifier: id)
+            it.image = symbol
+            it.label = label
+            it.paletteLabel = label
+            it.isBordered = true
+            return it
+        }
+        switch id {
+        case ID.search:
+            return plain(Icon.symbol("magnifyingglass", size: .toolbar, description: L10n.T("Search")), L10n.T("Search"))
+        case ID.assistant:
+            let label = Assistant.texts().assistant
+            return plain(Icon.symbol("sparkles", size: .toolbar, description: label), label)
+        case ID.crm:
+            return plain(Icon.crm, CRM.brand)
+        case ID.mode:
+            return ModeSwitch.paletteItem(id, selected: .mail)
+        default:
+            return make(id)
+        }
     }
 
     private func make(_ id: NSToolbarItem.Identifier) -> NSToolbarItem? {
@@ -328,6 +480,12 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             it.toolTip = mn(L10n.T("_New Message")) + " (⌘N)"
             // Ahead of the window title (the folder's name), like Finder's
             // back and forward buttons.
+            it.isNavigational = true
+            return it
+        case ID.contacts:
+            // Navigational like New Message, so it stays beside it ahead of
+            // the title.
+            let it = Self.contactsItem(id)
             it.isNavigational = true
             return it
         case ID.filter:
@@ -417,6 +575,55 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
                 return button
             }
             return it
+        case ID.markRead:
+            // Mark as Read or Unread, set by the window's validation
+            // (`MainWindowController.validateToolbarItem`).
+            let it = button(id, image: Icon.symbol("envelope.open", size: .toolbar), label: mn(L10n.T("Mark as _Read")),
+                            action: Action.markAsRead)
+            it.visibilityPriority = .low
+            return it
+        case ID.junk:
+            let it = button(id, image: Icon.symbol("xmark.bin", size: .toolbar), label: L10n.T("Mark as Junk"),
+                            action: Action.markAsJunk)
+            it.visibilityPriority = .low
+            return it
+        case ID.moveTo:
+            let it = MoveToToolbarItem(itemIdentifier: id)
+            let label = mn(L10n.T("Move To"))
+            it.image = Icon.symbol("folder", size: .toolbar, description: label)
+            it.label = label
+            it.paletteLabel = label
+            it.toolTip = label
+            it.showsIndicator = false
+            it.isBordered = true
+            it.provider = { [weak self] in self?.moveToMenu?() }
+            it.enabledProvider = { [weak self] in self?.actionEnabled?(Action.moveToFolder) ?? false }
+            it.visibilityPriority = .low
+            return it
+        case ID.undo:
+            let it = ProvidedToolbarItem(itemIdentifier: id)
+            let label = L10n.T("Undo")
+            it.image = Icon.symbol("arrow.uturn.backward", size: .toolbar, description: label)
+            it.label = label
+            it.paletteLabel = label
+            it.toolTip = label + " (⌘Z)"
+            it.isBordered = true
+            it.target = nil
+            it.action = Selector(("undo:"))
+            it.enabledProvider = { [weak self] in self?.undoEnabled?() ?? false }
+            it.visibilityPriority = .low
+            return it
+        case ID.print:
+            let it = button(id, image: Icon.symbol("printer", size: .toolbar), label: Printing.itemLabel,
+                            action: Action.printMail)
+            it.toolTip = Printing.itemLabel + " (⌘P)"
+            it.visibilityPriority = .low
+            return it
+        case ID.loadPictures:
+            let it = button(id, image: Icon.symbol("photo", size: .toolbar), label: mn(L10n.T("Load _Images")),
+                            action: Action.loadImages)
+            it.visibilityPriority = .low
+            return it
         case ID.moreActions:
             let it = NSMenuToolbarItem(itemIdentifier: id)
             it.image = Icon.moreActions
@@ -425,6 +632,10 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             it.showsIndicator = false
             it.isBordered = true
             it.menu = messageMenu()
+            // The actions the user took off the toolbar come first (M6).
+            if customization != nil {
+                it.menu.delegate = self
+            }
             return it
         default:
             return nil
@@ -463,6 +674,14 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// Unfolds the lens into the field (in its place in the toolbar) and,
     /// with `focus`, gives the field the keyboard.
     private func expandSearch(focus: Bool) {
+        if !toolbarHasSearch, insertTemporarySearch() {
+            if focus {
+                DispatchQueue.main.async { [weak self] in
+                    self?.searchItem?.beginSearchInteraction()
+                }
+            }
+            return
+        }
         guard let item = searchItem else { return }
         guard !searchExpanded else {
             if focus {
@@ -489,8 +708,42 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
                   let field = self.searchField, field.stringValue.isEmpty, field.currentEditor() == nil
             else { return }
             self.searchExpanded = false
-            self.swapSearchItems()
+            if self.temporarySearch {
+                self.removeTemporarySearch()
+            } else {
+                self.swapSearchItems()
+            }
         }
+    }
+
+    /// Whether the toolbar holds the search field or its lens.
+    private var toolbarHasSearch: Bool {
+        toolbar?.items.contains { $0.itemIdentifier == ID.search } ?? false
+    }
+
+    /// ⌘F (or text the app puts in) while the user's arrangement has no
+    /// search: the field goes, unfolded, at the end of the message
+    /// section for this search (`Toolbar.searchIndex`); the stored
+    /// arrangement stays as it is. False for a toolbar without the user's
+    /// arrangement.
+    private func insertTemporarySearch() -> Bool {
+        guard let toolbar, let customization else { return false }
+        temporarySearch = true
+        searchExpanded = true
+        items[ID.search] = nil
+        let at = customization.insertionIndex(of: Toolbar.ID.search, in: toolbar)
+        toolbar.insertItem(withItemIdentifier: ID.search, at: at)
+        return true
+    }
+
+    /// The temporary field leaves the toolbar; the lens is what the
+    /// palette puts back later.
+    private func removeTemporarySearch() {
+        temporarySearch = false
+        if let at = toolbar?.items.firstIndex(where: { $0.itemIdentifier == ID.search }) {
+            toolbar?.removeItem(at: at)
+        }
+        items[ID.search] = searchLens
     }
 
     /// Puts the item `searchExpanded` asks for in `ID.search`'s place.
@@ -534,6 +787,17 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         field.stringValue = text ?? typedWords
         typedWords = ""
         if field.stringValue.isEmpty {
+            scheduleSearchCollapse()
+        } else {
+            expandSearch(focus: false)
+        }
+    }
+
+    /// DEVELOPMENT AID (MALACHI_START `search-own`): the field unfolded
+    /// with the words in it, as typed.
+    func developmentSetSearch(_ words: String) {
+        searchField?.stringValue = words
+        if words.isEmpty {
             scheduleSearchCollapse()
         } else {
             expandSearch(focus: false)
@@ -624,6 +888,26 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         scheduleSearchCollapse()
     }
 
+    /// The Contacts button of the main window's toolbars in every mode
+    /// (a macOS deviation, macos/README.md; GTK and Windows keep it in
+    /// their menus): opens the one Contacts window through the responder
+    /// chain, as Window ▸ Contacts does (`Action.showContacts`, the
+    /// application delegate validates it). No shortcut. It gives way to
+    /// the overflow menu before the mode's own items.
+    static func contactsItem(_ id: NSToolbarItem.Identifier) -> NSToolbarItem {
+        let label = ContactBook.windowTitle
+        let it = NSToolbarItem(itemIdentifier: id)
+        it.image = Icon.symbol("person.text.rectangle", size: .toolbar, description: label)
+        it.label = label
+        it.paletteLabel = label
+        it.toolTip = label
+        it.isBordered = true
+        it.target = nil
+        it.action = Action.showContacts
+        it.visibilityPriority = .low
+        return it
+    }
+
     private func button(_ id: NSToolbarItem.Identifier, image: NSImage, label: String, action: Selector) -> NSToolbarItem {
         let it = NSToolbarItem(itemIdentifier: id)
         it.image = image
@@ -634,6 +918,55 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         it.target = nil
         it.action = action
         return it
+    }
+
+    /// Marks the items More Actions adds for what the toolbar lacks.
+    private static let missingMarker = NSUserInterfaceItemIdentifier("malachi.toolbar.missing")
+
+    /// More Actions opens: the actions of the default toolbar that the
+    /// user's arrangement does not show come first
+    /// (`Toolbar.missingActions`, T8), validated by the window like the
+    /// menu bar's. AppKit's own overflow menu (») lists what did not fit.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard let customization, let toolbar,
+              menu === (items[ID.moreActions] as? NSMenuToolbarItem)?.menu else { return }
+        while let first = menu.items.first, first.identifier == Self.missingMarker {
+            menu.removeItem(first)
+        }
+        let layout = toolbar.items.compactMap { customization.modelID($0.itemIdentifier) }
+        // eWay-CRM only while its button would show (an enabled account).
+        var f = features
+        if crmController?()?.offer.shown != true {
+            f.have.remove(.crm)
+        }
+        var added: [NSMenuItem] = []
+        for id in Toolbar.missingActions(.mail, layout, f) {
+            guard let item = missingItem(id) else { continue }
+            item.identifier = Self.missingMarker
+            added.append(item)
+        }
+        guard !added.isEmpty else { return }
+        let sep = NSMenuItem.separator()
+        sep.identifier = Self.missingMarker
+        for (i, item) in (added + [sep]).enumerated() {
+            menu.insertItem(item, at: i)
+        }
+    }
+
+    private func missingItem(_ id: Toolbar.ID) -> NSMenuItem? {
+        func item(_ title: String, _ action: Selector) -> NSMenuItem {
+            NSMenuItem(title: title, action: action, keyEquivalent: "")
+        }
+        switch id {
+        case .reply: return item(L10n.T("Reply"), Action.reply)
+        case .replyAll: return item(L10n.T("Reply All"), Action.replyAll)
+        case .forward: return item(L10n.T("Forward"), Action.forward)
+        case .archive: return item(L10n.T("Archive"), Action.archive)
+        case .trash: return item(L10n.T("Move to Trash"), Action.moveToTrash)
+        case .star: return item(L10n.T("Star"), Action.toggleFlag)
+        case .crm: return item(CRM.saveMenuLabel(1), Action.crmSave)
+        default: return nil
+        }
     }
 
     /// The hamburger of the folder header bar (window.blp `primary_menu`),
@@ -708,5 +1041,50 @@ final class StarToolbarItem: NSToolbarItem {
         toolTip = t
         button.toolTip = t
         label = t
+    }
+}
+
+/// A toolbar item whose enabled state comes from its own provider, not
+/// from its action's target (Undo: `MainWindow` answers `undo:` but
+/// validates only menu items).
+@MainActor
+final class ProvidedToolbarItem: NSToolbarItem {
+    var enabledProvider: (@MainActor () -> Bool)?
+
+    override func validate() {
+        guard let enabledProvider else {
+            super.validate()
+            return
+        }
+        isEnabled = enabledProvider()
+    }
+}
+
+/// Move To in the toolbar: the selection's folders, built when the menu
+/// opens (`MessageContextMenu.moveToMenu`); disabled without them.
+@MainActor
+final class MoveToToolbarItem: NSMenuToolbarItem, NSMenuDelegate {
+    var provider: (@MainActor () -> NSMenu?)?
+    var enabledProvider: (@MainActor () -> Bool)?
+
+    override init(itemIdentifier: NSToolbarItem.Identifier) {
+        super.init(itemIdentifier: itemIdentifier)
+        let m = NSMenu()
+        m.autoenablesItems = false
+        m.delegate = self
+        menu = m
+    }
+
+    override func validate() {
+        isEnabled = enabledProvider?() ?? false
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        guard let source = provider?() else { return }
+        for item in source.items {
+            source.removeItem(item)
+            menu.addItem(item)
+        }
     }
 }

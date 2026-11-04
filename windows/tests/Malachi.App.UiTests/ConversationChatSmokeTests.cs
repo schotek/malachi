@@ -225,9 +225,20 @@ public sealed class ConversationChatSmokeTests(ConversationChatFixture fixture) 
         Uia.WaitFor(() => server.Total("Sent") == sent + 1, "the reply's copy in the server's Sent", TimeSpan.FromSeconds(60));
         Uia.WaitFor(() => server.Total("INBOX") == inbox + 1, "the reply in the server's INBOX", TimeSpan.FromSeconds(60));
 
-        // The reply makes the row a conversation, shown as chat with the bar;
-        // what is typed there stays through the timeline, which has none.
-        var chat = Uia.Find(main, "ConversationChat", TimeSpan.FromSeconds(120));
+        // The reply makes the row a conversation. It lands in the Inbox too
+        // (Reply-To is the user), so the message being read stays selected as
+        // a member under the conversation's row (thread_model.go: no jump to
+        // the reply); that row, the one with the expander in the tree, shows
+        // the chat with the bar. What is typed there stays through the
+        // timeline, which has none.
+        var head = Uia.Until(
+            () => Uia.All(list, ControlType.ListItem).Cast<AutomationElement>()
+                .FirstOrDefault(r => r.Current.Name.Contains(fixture.SingleSubject, StringComparison.Ordinal)
+                    && Uia.All(r, ControlType.Button).Count > 0),
+            TimeSpan.FromSeconds(120),
+            "the lone message's conversation row");
+        Uia.Select(head);
+        var chat = Uia.Find(main, "ConversationChat", TimeSpan.FromSeconds(30));
         Uia.WaitFor(() => Bubbles(chat).Length >= 2, "the lone message's conversation in the chat", TimeSpan.FromSeconds(120));
         bar = Uia.Find(main, "QuickReplyBar", TimeSpan.FromSeconds(30));
         field = Uia.Find(bar, "QuickReplyText");

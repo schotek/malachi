@@ -130,6 +130,9 @@ final class ConversationCardView: NSView {
     private var chips: FlowView?
     private var hintLabel: NSTextField?
     private var bulkBar: BannerView?
+    /// The badge of a signed message (docs/plans/signatures.md §6), made
+    /// for the first message.get with a verdict.
+    private var signatureBadge: SignatureBadgeView?
     /// The bar of a message saved in eWay-CRM, made when first needed.
     private var crmBar: CRMBarView?
     private var banner: BannerView?
@@ -165,7 +168,7 @@ final class ConversationCardView: NSView {
 
     /// The places in `content`, under the header and the preview.
     private enum Slot: Int, CaseIterable {
-        case invitation, bulk, crm, banner, remote, pictures, text, body, quoted
+        case invitation, signature, bulk, crm, banner, remote, pictures, text, body, quoted
     }
 
     /// The hairline around the card. What the card holds keeps inside it:
@@ -590,6 +593,7 @@ final class ConversationCardView: NSView {
     func render(_ lm: LoadedMessage?) {
         guard !folded else { return }
         renderInvitation(lm?.msg)
+        renderSignature(lm?.msg)
         renderDetails(lm?.msg)
         renderOutbox(lm?.msg)
         renderBody(lm)
@@ -620,6 +624,32 @@ final class ConversationCardView: NSView {
             invitation = p
         }
         invitation?.show(summary, m, cardOn: on, state: state)
+    }
+
+    /// The badge of the verdict message.get carries (`m`), made when first
+    /// needed and not at all for an unsigned message; an entry let go (nil)
+    /// keeps the badge as it was. Not shown in a chat bubble or an attached
+    /// message, which are not cards.
+    private func renderSignature(_ m: Message?) {
+        guard let m else { return }
+        let s = m.signature
+        guard s != nil || signatureBadge != nil else { return }
+        changingHeight {
+            let b = signatureBadge ?? makeSignatureBadge()
+            b.show(s)
+        }
+    }
+
+    private func makeSignatureBadge() -> SignatureBadgeView {
+        let b = SignatureBadgeView(insets: NSEdgeInsets(
+            top: 0, left: Self.paddingH, bottom: Self.headerBottom, right: Self.paddingH))
+        b.onClick = { [weak self] anchor in
+            guard let self else { return }
+            self.host?.delegate?.showSignature(of: self.summary, relativeTo: anchor)
+        }
+        signatureBadge = b
+        install(b, .signature)
+        return b
     }
 
     /// The "•••" under the body for what `lm` holds: Show Quoted Text when
@@ -757,7 +787,7 @@ final class ConversationCardView: NSView {
         guard !folded else { return }
         let focus = ChipFocus(chipViews, in: window)
         defer { focus.restore(to: chipViews, else: bodyView) }
-        let plan = ChipPlan(lm?.msg, lm?.body)
+        let plan = ChipPlan(lm?.msg, lm?.body, cardOn: showsInvitationCard(host?.delegate?.account(summary.accountId)))
         if plan.isEmpty {
             chips?.removeAllViews()
             chipViews = []

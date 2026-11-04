@@ -5,6 +5,7 @@ package eway
 
 import (
 	"encoding/base64"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
@@ -20,10 +21,12 @@ const MaxServiceURLBytes = 2048
 const ErrHTTPOnly = "eway: only https service addresses are supported"
 
 // NormaliseServiceURL makes the user's service address an EwayConfig
-// ServiceURL: https (assumed when no scheme is given; http is refused), no
-// user info, the query and fragment dropped, a trailing "/API.svc",
-// "/API.svc/…" or "/InsecureAPI.svc…" the user pasted cut off, the host
-// lower case, no trailing slash. Errors are invalidArgument.
+// ServiceURL: https (assumed when no scheme is given; http is refused,
+// except on a loopback host, where a development instance such as
+// cmd/malachi-devmail's listens), no user info, the query and fragment
+// dropped, a trailing "/API.svc", "/API.svc/…" or "/InsecureAPI.svc…" the
+// user pasted cut off, the host lower case, no trailing slash. Errors are
+// invalidArgument.
 func NormaliseServiceURL(raw string) (string, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -39,10 +42,13 @@ func NormaliseServiceURL(raw string) (string, error) {
 	if err != nil || u.Opaque != "" {
 		return "", api.NewError(api.CodeInvalidArgument, "eway: service address does not parse")
 	}
-	switch strings.ToLower(u.Scheme) {
+	scheme := strings.ToLower(u.Scheme)
+	switch scheme {
 	case "https":
 	case "http":
-		return "", api.NewError(api.CodeInvalidArgument, ErrHTTPOnly)
+		if !IsLoopbackHost(u.Hostname()) {
+			return "", api.NewError(api.CodeInvalidArgument, ErrHTTPOnly)
+		}
 	default:
 		return "", api.NewError(api.CodeInvalidArgument, "eway: service address must be https")
 	}
@@ -56,7 +62,7 @@ func NormaliseServiceURL(raw string) (string, error) {
 	if strings.Contains(host, ":") {
 		host = "[" + host + "]"
 	}
-	if p := u.Port(); p != "" && p != "443" {
+	if p := u.Port(); p != "" && p != defaultPort(scheme) {
 		host += ":" + p
 	}
 	path := u.EscapedPath()
@@ -67,7 +73,25 @@ func NormaliseServiceURL(raw string) (string, error) {
 		}
 	}
 	path = strings.TrimRight(path, "/")
-	return "https://" + host + path, nil
+	return scheme + "://" + host + path, nil
+}
+
+// IsLoopbackHost reports a host name or address of this machine's own
+// loopback interface: "localhost", 127.0.0.0/8 or ::1.
+func IsLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
+}
+
+// defaultPort is the port a scheme implies.
+func defaultPort(scheme string) string {
+	if scheme == "http" {
+		return "80"
+	}
+	return "443"
 }
 
 // apiBase is the service's API endpoint.

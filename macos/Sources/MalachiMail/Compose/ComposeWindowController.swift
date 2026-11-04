@@ -4,6 +4,7 @@
 import AppKit
 import MalachiCore
 import os
+import Quartz
 
 /// One compose window (compose.blp, ui/internal/compose/compose.go): the
 /// toolbar with Attach, the draft menu and Send; the card of header fields;
@@ -59,6 +60,12 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
     /// on first use, and the popover while it is shown.
     private var rewrite: ComposeRewriteController?
     private var rewritePopover: NSPopover?
+    /// DEVELOPMENT AID (MALACHI_START `compose-rewrite`): the open rewrite
+    /// popover's view controller, nil while none shows.
+    var developmentRewrite: ComposeRewriteViewController? {
+        guard let p = rewritePopover, p.isShown else { return nil }
+        return p.contentViewController as? ComposeRewriteViewController
+    }
     /// The assistant's bar: its one-shot request, made on first use.
     private var writingRequest: AssistantRequest?
     /// The Assistant button was clicked and the popover is on its way
@@ -127,6 +134,22 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
     /// editor.GrabFocus: the keyboard back to the page.
     func focusEditor() {
         pane.focusEditor()
+    }
+
+    // An attachment tile's preview (DraftAttachmentPreview): the panel asks
+    // the key window's responder chain for a controller, and a tile is
+    // seldom first responder, so this controller answers for it, as the
+    // main and the message windows do.
+    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
+        MainActor.assumeIsolated { AttachmentPreview.shared.accepts }
+    }
+
+    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { AttachmentPreview.shared.begin(panel) }
+    }
+
+    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { AttachmentPreview.shared.end(panel) }
     }
 
     // MARK: Assistant

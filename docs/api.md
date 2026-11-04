@@ -229,12 +229,16 @@ can read the key file.
 | 1107 | calendarNotFound | no calendar with that id (removed, its account gone or its sync switched off) |
 | 1108 | eventNotFound | no stored event with that id, or `recurrenceId` names no occurrence of it |
 | 1109 | crmItemNotFound | a CRM item named in `crm.save` (`link`, `superior`) is not an item of that CRM account, or for `crm.remove` the message is not saved there (§4.17) |
+| 1110 | contactNotFound | no stored contact with that id (deleted, its address book gone or its account's contacts switched off; §4.19) |
+| 1111 | addressBookNotFound | no address book with that id (§4.19) |
+| 1112 | ruleNotFound | no mail rule with that id (§4.21) |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
 | 1203 | oauthClientMissing | the backend's own sign-in needs an OAuth client id for the provider and none is configured (§4.1) |
 | 1204 | calendarConsentRequired | the account's sign-in does not allow calendar access (Microsoft scope missing, consent withdrawn, GOA calendar disabled); `data` = `{ "accountId", "signIn": bool }` — `signIn` true when `account.oauthStart` with `calendar: true` can fix it (source `daemon`), false for GOA (the desktop's Online Accounts settings) |
 | 1205 | crmSignInUnsupported | the CRM instance cannot be signed in to by this version: `data` = `{ "reason": "microsoft" \| "plan" }` — `microsoft`: it signs in through Microsoft Entra; `plan`: its plan has no API access (§4.17) |
+| 1206 | contactsConsentRequired | the account's sign-in does not allow contacts access (Microsoft scope `Contacts.ReadWrite` missing, consent withdrawn, GOA contacts disabled); `data` = `{ "accountId", "signIn": bool }` — `signIn` true when `account.oauthStart` with `contacts: true` can fix it (source `daemon`), false for GOA (§4.19) |
 | 1300 | offline | daemon is in offline mode |
 | 1301 | networkError | connection failed |
 | 1302 | serverError | IMAP/SMTP server returned an error |
@@ -243,6 +247,7 @@ can read the key file.
 | 1305 | messageGone | the mail server no longer has the message (another client deleted or moved it); the next sync removes the local copy |
 | 1306 | eventGone | the server no longer has the event (deleted or moved elsewhere); the next pass removes the local copy |
 | 1307 | crmDuplicate | the CRM refused the message as a duplicate of an item the daemon cannot find (one saved privately by someone else, or without a Message-ID; §4.17) |
+| 1308 | contactConflict | `contact.update` or `contact.delete` named a `revision` that is not the server's current one (CardDAV `412` on `If-Match`, a changed Graph `changeKey`); `data` = `{ "server": ContactCard }` with the server's version (§4.19) |
 | 1400 | storageError | SQLite failure |
 | 1401 | migrationFailed | store schema could not be upgraded |
 | 1500 | malformedMessage | MIME unparsable even leniently |
@@ -254,11 +259,14 @@ can read the key file.
 | 1506 | quoteNotFound | `board.annotate` or `board.commit` quoted text the daemon did not find verbatim where it must be; `data` = `{ "field": "due" \| "commitment" }` (§4.13) |
 | 1507 | malformedCalendar | an iCalendar object or a server's calendar answer could not be read even leniently; the data is withheld |
 | 1508 | recurrenceUnsupported | the event's recurrence rule is outside what the daemon expands or edits; the event shows its first instance only and may be edited with scope `all` only |
+| 1509 | addressBookReadOnly | the address book or contact cannot be changed by the user: the recent book, a server's read-only collection or folder (§4.19) |
+| 1510 | revocationFailed | `message.signatureRevocation` got no answer it trusts from the certificate's OCSP responder or CRL; `data` = `{ "reason": "network" \| "timeout" \| "server" \| "response" \| "address" }` (§4.22); `message` is not for display |
 
 `offline`, `networkError`, `serverError`, `serverTimeout`, `tlsError` (with
 `TLSErrorData` for CalDAV endpoints too), `authRequired`, `authFailed` and
 `keyringError` keep their meanings for the calendar methods (§4.14–§4.16).
-They keep them for the CRM methods (§4.17) too, where `serverError` is
+They keep them for the CRM methods (§4.17) and the address-book methods
+(§4.19) too, where `serverError` is
 also any answer of the CRM other than success (only its return code is
 in `message`, never the CRM's own text).
 
@@ -323,9 +331,20 @@ Time      RFC 3339 string, UTC
   "issue": MessageIssue (opt),
   "bulk": BulkInfo (opt),
   "invitation": InvitationSummary (opt),
-  "crmSaved": true (opt)
+  "crmSaved": true (opt),
+  "signature": MessageSignature (opt)
 }
 ```
+
+`signature` is present when the message has a signature of the whole
+message and the daemon has its verdict (§4.22): `{ "kind": "smime|pgp",
+"status": … }`, what the list's icon needs. It is absent for a message
+without such a signature and while the verdict is pending (it is computed
+after the message is stored; `notify.messagesChanged` follows).
+Listings, `thread.get`, `search.query` and `thread.list`'s `latest` carry
+it; `notify.newMessage` carries it only when the verdict was already
+there. `thread.list` has no aggregate of its own: a collapsed thread row
+shows `latest.signature`.
 
 `crmSaved` is present (true) when the daemon's record says the message is
 saved in an enabled CRM account (§4.17): any copy with the same
@@ -444,7 +463,12 @@ BulkInfo { "kind": "newsletter|list|automated",
 `MessageSummary` plus `cc`, `bcc`, `replyTo`, `rfcMessageId`, `inReplyTo`,
 `references`, `attachments: [Attachment]`, `headers`, a curated
 map of a few interesting headers (`List-Unsubscribe`, `Auto-Submitted`, …),
-`unsubscribe` (below), `invitation` and `crm`. The raw header block is never returned.
+`unsubscribe` (below), `invitation`, `crm` and `signature`. The raw header block is never returned.
+
+`signature` of `message.get` and `message.download` is the
+`SignatureSummary` (§4.22: kind, status, signer, notes, the signature's
+part), which takes the place of the summary's `MessageSignature` under
+the same key; the header's badge is built from it.
 
 `crm` (`message.get` only) is the message's `CrmRecord` (§4.17) in each
 enabled CRM account where the daemon's record says it is saved; absent
@@ -651,7 +675,9 @@ ServerConfig { "host": "imap.example.org", "port": 993, "security": "tls|starttl
 OAuth2Config { "source": "goa|daemon" (opt), "goaAccountId": "account_1788683507_0" (with source goa),
                "provider": "google|office365|custom", "clientId" (opt), "tenantId" (opt),
                "authUrl" (opt), "tokenUrl" (opt), "scopes": [] (opt) }
-GraphConfig  { "source": "goa|daemon", "goaAccountId": "account_1788512854_0" (with source goa) }
+GraphConfig  { "source": "goa|daemon", "goaAccountId": "account_1788512854_0" (with source goa),
+               "contacts": ContactsConfig (opt) }   // §4.19; absent = contacts sync off
+ContactsConfig { "sync": bool }                     // synchronise the contact folders (default false)
 JiraConfig {
   "siteUrl": "https://acme.atlassian.net", "deployment": "cloud|datacenter",
   "cloudId": "UUID" (opt; cloud only), "login": "me@example.org" (cloud only),
@@ -673,7 +699,9 @@ CalDAVConfig {
   "username": "jana",
   "certificateSha256": "64 hex digits" (opt),                // the pin, as ServerConfig
   "mailAccountId": "acc_2" (opt),     // the mail account invitations and replies leave from (client scheduling)
-  "scheduling": "auto|server|client" (opt, default auto)
+  "scheduling": "auto|server|client" (opt, default auto),
+  "addressBookHomeSetUrl": "https://…/addressbooks/users/jana/" (opt),  // from account.listCalDAVCalendars
+  "contacts": bool (opt, default false)  // synchronise the CardDAV address books (§4.19)
 }
 EwayConfig {
   "serviceUrl": "https://hosting.eway-crm.com/company",      // normalised (account.detectEway)
@@ -682,7 +710,7 @@ EwayConfig {
   "followThreads": bool                                      // save later messages of saved conversations (§4.17)
 }
 CalendarConfig {
-  "sync": bool,                       // graph: synchronise the calendars (default false); caldav: always true
+  "sync": bool,                       // graph: synchronise the calendars (default false); caldav: true, false only with caldav.contacts (no calendars)
   "disabledCalendars": ["remote id or href"] (opt),          // ≤ 200; not synchronised
   "defaultCalendar": "remote id or href" (opt),              // new events of this account
   "keepDays": 365 (opt; 30, 90, 180, 365 or 730; 0 = 365),
@@ -809,6 +837,15 @@ keyring keeps it). Rules, checked by `account.add`, `account.update` and
   mail from `mailAccountId`.
 - `calendar` only on `graph` and `caldav` accounts (`invalidArgument`
   elsewhere); `disabledCalendars` ≤ 200 entries of ≤ 2048 bytes.
+- `contacts: true` makes the account an address-book source (§4.19);
+  `addressBookHomeSetUrl` follows the same origin rules as the calendar
+  home set. An account may have address books without calendars: the
+  CardDAV server need not be a CalDAV server. `account.update` that
+  switches `contacts` (or `graph.contacts.sync`) off, or changes
+  `serverUrl`/`username`, deletes the cached contacts of the account; a
+  Graph account whose sign-in lacks `Contacts.ReadWrite` answers
+  `contactsConsentRequired` from the contact methods (no error from
+  `account.update`).
 - The `SyncState` of a `caldav` account (`account.list`, `sync.status`,
   `notify.syncState`) is its calendar state mapped onto the mail
   statuses; a Graph account's `SyncState` stays the mail's and its
@@ -843,7 +880,8 @@ own `serviceUrl`). Rules, checked by `account.add`, `account.update` and
   one must be valid); `name` is required (a client offers the last path
   segment of `serviceUrl`).
 - `serviceUrl`: `https` only (`http` is invalidArgument, whose message
-  says so), no user info; query and fragment dropped; a trailing
+  says so), except on a loopback host (`localhost`, `127.0.0.0/8`, `::1`),
+  where `http` is accepted for a development instance; no user info; query and fragment dropped; a trailing
   `/API.svc` (with anything after it) or `/InsecureAPI.svc` cut off; host
   lower case; no trailing slash; ≤ 2048 bytes. The account's realm is the
   lower-case host[:port] + path of `serviceUrl`, so it may share its
@@ -872,11 +910,17 @@ derives it from `kind`:
 | `transition` | the status of its issues can be changed (`issue.transitions`, `issue.transition`, §4.12) |
 | `calendar` | the account can have calendars (§4.14); it does not change with consent or sync state |
 | `crm` | messages of mail accounts can be saved to the account (§4.17) |
+| `contacts` | the account can have address books (§4.19): a `graph` account, a `caldav` account with `caldav.contacts`; it does not change with consent or sync state |
 
 `imap` and `graph` accounts have `["compose", "reply", "replyAll",
 "forward", "move", "delete"]`, a `graph` account `"calendar"` too; a
 `jira` account `["comment", "forward", "transition"]`; a `caldav` account
-exactly `["calendar"]`; an `eway` account exactly `["crm"]`.
+`["calendar"]`, plus `"contacts"` with `caldav.contacts` — or `["contacts"]`
+alone when its contacts are on and `calendar.sync` is false (a
+CardDAV-only server: `account.add` sets it so when the signed-in listing
+finds no calendar home set); an `eway`
+account exactly `["crm"]`. A `graph` account has `"contacts"` too
+(address books, §4.19).
 Flags (`message.flag`) are always allowed, and so is `message.delete` of
 an account's outbox messages (cancelling a queued send or comment). Archiving and
 marking as junk still depend on folders with those roles, which a `jira`
@@ -1278,7 +1322,7 @@ token, which must carry `email_verified: true`; Microsoft: Graph `/me`'s
 page and closes the listener.
 
 - params: `{ "config": AccountConfig (opt), "accountId": "acc_1" (opt), "browserPage": OAuthBrowserPage (opt),
-  "calendar": bool (opt) }` — exactly one of `config` and `accountId`
+  "calendar": bool (opt), "contacts": bool (opt) }` — exactly one of `config` and `accountId`
 - result: `{ "sessionId": "s_…", "authUrl": "https://accounts.google.com/…", "expiresAt": "2026-09-25T10:10:00Z" }`
 - errors: invalidArgument (neither or both of `config`/`accountId`, a
   config that is not source `daemon` or fails `account.add` validation,
@@ -1313,6 +1357,11 @@ asks for the calendar scopes, Microsoft `Calendars.ReadWrite` and
 a sign-in without them leaves the account's calendar in state
 `consentRequired` and its mail running. Users who do not want the
 calendar never see a new consent screen.
+
+`contacts: true` (only a sign-in made for the contacts sets it: the
+Contacts switch, or a `contactsConsentRequired` with `signIn: true`)
+likewise asks for Microsoft `Contacts.ReadWrite` (§4.19); a grant without
+it leaves the account's mail and calendar running.
 
 #### `account.oauthWait`
 Waits for a session to finish.
@@ -1411,10 +1460,17 @@ Nothing is stored and nothing is authenticated.
 
 - params: `{ "url": "cloud.example.org", "certificateSha256": "64 hex digits" (opt) }` — a host or a full URL; `https` assumed
 - result: `{ "serverUrl": "https://cloud.example.org/remote.php/dav", "foundVia": "wellKnown|srv|url",
-  "needsCredentials": true, "certificate": CertificateInfo (opt) }`
+  "needsCredentials": true, "certificate": CertificateInfo (opt),
+  "calendars": bool (opt), "addressBooks": bool (opt) }`
 - errors: invalidArgument (not a usable URL), networkError, tlsError
   (with `TLSErrorData`: the certificate-trust flow), serverTimeout,
   serverError (the server answered but is not CalDAV)
+
+`calendars` and `addressBooks` say what the anonymous `OPTIONS` showed
+(`calendar-access`, `addressbook` in `DAV`); a server that authenticates
+before it answers sets neither, and `account.listCalDAVCalendars` decides.
+Discovery also follows `/.well-known/carddav` and SRV `_carddavs._tcp`
+(§4.19); a server with CardDAV and no CalDAV counts.
 
 `certificate` describes the certificate the server presented when it was
 verified (its `issuer` for a "Verified" row). `serverUrl` may name
@@ -1436,7 +1492,8 @@ account settings choose from. Nothing is stored.
 - params: `{ "accountId" (opt), "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
 - result: `{ "principalUrl": "…", "homeSetUrl": "…", "displayName": "Jana" (opt),
   "addresses": ["jana@example.org"], "scheduling": "server|client",
-  "calendars": [CalDAVCalendar] }`
+  "calendars": [CalDAVCalendar],
+  "addressBookHomeSetUrl": "…" (opt), "addressBooks": [CardDAVAddressBook] }`
 - errors: invalidArgument (`config` not of kind `caldav`, its
   connection fields fail the rules above, or `accountId` names an
   account of another realm), authRequired (no password and no
@@ -1447,7 +1504,18 @@ account settings choose from. Nothing is stored.
 CalDAVCalendar { "href": "/remote.php/dav/calendars/jana/personal/", "name": "Personal",
                  "color": "#0082c9" (opt), "access": "owner|write|read",
                  "isDefault": true (opt) }        // the server's schedule-default-calendar-URL
+CardDAVAddressBook { "href": "/remote.php/dav/addressbooks/users/jana/contacts/", "name": "Contacts",
+                     "readOnly": true (opt) }
 ```
+
+`addressBooks` are the collections of the principal's
+`addressbook-home-set` (at most 200, `api.MaxAddressBooksPerAccount`;
+`[]` when there is none). A home set on another host of the server's site
+over https (iCloud's and Fastmail's contacts hosts) is listed; one on
+another site is left out without a request with the password. A
+CardDAV-only server (no calendar home set) answers `calendars: []`,
+`homeSetUrl` empty and `scheduling` `client`; a server with neither
+calendars nor address books is serverError.
 
 `addresses` are the `mailto:` values of the principal's
 `calendar-user-address-set` (a client offers the first as `email`).
@@ -1581,12 +1649,14 @@ anything deleted the daemon nudges the syncer and sends
 
 #### `message.list`
 - params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
-  "filter": MessageFilter (opt), "unreadOnly": bool (opt, deprecated) }`
+  "filter": MessageFilter (opt), "unreadOnly": bool (opt, deprecated),
+  "unified": FolderRole (opt) }`
 - result: `{ "messages": [MessageSummary], "page": PageInfo }`
 
 - errors: invalidArgument (missing ids, unknown `sort`, unknown `filter`,
-  bad cursor), accountNotFound, folderNotFound (unknown or another account's
-  folder), storageError
+  bad cursor, `unified` with `accountId` or `folderId`, `unified` not one
+  of `UnifiedRoles`), accountNotFound, folderNotFound (unknown or another
+  account's folder), storageError
 
 `filter` narrows the listing to messages without the `seen` flag (`unread`)
 or with the `flagged` flag (`flagged`). `unreadOnly` is the older spelling of
@@ -1611,6 +1681,27 @@ other accounts a locally computed one; see `docs/architecture.md` §3.4). It is 
 message stored by an older daemon that has not been linked yet, and it
 can change when two partial conversations turn out to be one (the larger
 keeps its id).
+
+**Unified listing.** With `unified` set to a folder role, `accountId` and
+`folderId` stay empty (otherwise invalidArgument) and the page lists the
+folders of that role of every enabled mail account at once: the client's
+"All Inboxes". Mail accounts are those of kind `imap` and `graph`; `jira`,
+`caldav` and `eway` accounts never join, nor do disabled accounts,
+folders that are not `synced` and virtual folders. The only accepted role
+today is `inbox` (`api.UnifiedRoles`); other roles may join later without
+a change of the contract, any other value is invalidArgument. The rows
+are the same `MessageSummary` a listing of their own folder returns
+(`accountId` and `folderId` say where each one is; never `outbox`), merged
+by date and then id, which is unique across accounts; `page.total` counts
+every folder in scope after `filter`. Unified cursors are their own: a
+cursor of a single-folder listing is invalidArgument in a unified one and
+vice versa, and a cursor is bound to `sort` as above. With no mail account
+the page is empty. There is no notification of its own: a client refreshes
+a unified list on `notify.newMessage` and `notify.messagesChanged` of any
+folder in its scope (it knows the roles from `folder.list`) and adds up
+the badge from the folders' `unread`. Actions on its rows go to the
+account of each row as always (a client splits a selection across
+accounts into one call per account).
 
 #### `message.get`
 - params: `{ "accountId", "messageId" }`
@@ -2182,10 +2273,11 @@ member of any thread listing.
 
 #### `thread.list`
 - params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
-  "filter": MessageFilter (opt) }`
+  "filter": MessageFilter (opt), "unified": FolderRole (opt) }`
 - result: `{ "threads": [ThreadSummary], "page": PageInfo }`
 - errors: invalidArgument (missing ids, unknown `sort` or `filter`, bad
-  cursor), accountNotFound, folderNotFound, storageError
+  cursor, `unified` with `accountId` or `folderId`, `unified` not one of
+  `UnifiedRoles`), accountNotFound, folderNotFound, storageError
 
 ```jsonc
 ThreadSummary { "id": "t_9", "accountId": "acc_1",
@@ -2244,6 +2336,16 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
 - Cursors follow §4.3: bound to `sort`, not to `filter`, stable across
   syncs. A cursor from `message.list` is rejected here (invalidArgument)
   and vice versa.
+- **Unified listing**: `unified` lists the conversations of the folders
+  of a role of every enabled mail account, with the scope, the refusals
+  and the separate cursors of `message.list`'s unified listing (§4.3).
+  Each row is one thread in one folder, exactly as `thread.list` of that
+  folder reports it: its aggregates, `sentCount` and `draftCount` are
+  the folder's, `accountId` names the account, `folderIds` and
+  `latest.folderId` the folder (a client passes that folder to
+  `thread.get`). Rows are ordered by the date of the latest member, ties
+  by folder id and then thread id (thread ids are unique only within an
+  account).
 
 #### `thread.get`
 - params: `{ "accountId", "threadId", "folderId" (opt), "withSent": bool (opt),
@@ -2653,7 +2755,8 @@ Nothing is stored.
 ### 4.6 search
 
 #### `search.query`
-- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…", "page": Page }`
+- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…",
+  "withSent": bool (opt), "page": Page }`
 - result: `{ "results": [SearchResult], "page": PageInfo }`
 - errors: invalidArgument (empty or blank `query`, longer than
   `api.MaxSearchQueryBytes` = 1024 bytes, more than `api.MaxSearchTerms` =
@@ -2679,6 +2782,19 @@ views of a `jira` account (§4.2) hold copies of messages of its space
 folders and are searched only when the scope names them (`folderId` or
 `in:`), so a message is found once. A hidden message (§4.1
 `notificationMail`) is never found.
+
+`withSent` (with `folderId`; ignored without it) also finds the user's
+replies to the folder's conversations, by the rule of `thread.get`
+`withSent` (§4.4): the matching visible rows in the account's folders of
+role `sent` whose thread has a visible member in the folder. A sent row
+whose `Message-ID` a visible member of the folder already has (a Bcc to
+oneself, a Gmail label) is left out, the folder's copy is the result; of
+the sent rows sharing a `Message-ID` only the one with the lowest `id` is
+found; a row without a thread id never is. Nothing is added when the
+folder is a sent folder, the outbox or a view of a `jira` account, or when
+the query has an `in:` filter (it names the folders itself). Ordering,
+paging, `page.total` and the excerpt are the same for both kinds of row;
+each result's `message.folderId` says where it lies.
 
 Query syntax (parsed by the backend, compiled to a parameterised FTS5
 expression; nothing typed is ever operator syntax):
@@ -2930,15 +3046,26 @@ read from Evolution Data Server over D-Bus; on Microsoft 365 that includes
 the organisation directory and recent people). `name` and `book` are
 untrusted display text.
 
+A third source is the address books the daemon synchronises
+(`"source": "contacts"`, §4.19): `book` is the book's name and
+`contactId` names the contact (`contact.get`). Which books are read is
+`scope`: `account` (the default) the books of the sending account and
+the recent book, `all` every visible book of every enabled account.
+Hidden books (`addressBook.set`) are never read. The Evolution Data
+Server books of an account whose contacts the daemon synchronises are
+skipped (they would repeat them). Another `scope` is invalidArgument.
+
 ```jsonc
 Contact { "name": "Alice Example" (opt), "address": "alice@example.org",
-          "source": "sent" | "addressBook", "book": "Contacts" (opt) }
+          "source": "sent" | "addressBook" | "contacts", "book": "Contacts" (opt),
+          "contactId": "p_…" (opt; source contacts) }
 ```
 
 #### `contact.search`
-- params: `{ "accountId", "query", "limit": 10 (opt, max 50) }`
+- params: `{ "accountId", "query", "limit": 10 (opt, max 50), "scope": "account|all" (opt, default account) }`
 - result: `{ "contacts": [Contact] }` — best match first; the same address
-  from both sources is one entry, reported as the address book's
+  from several sources is one entry, reported as a synchronised book's
+  (`contacts`), else the system address book's
 - errors: invalidArgument (empty query, over 256 bytes, control
   characters), accountNotFound, storageError
 
@@ -3259,7 +3386,8 @@ BoardCommitment { "id": "k_1", "caseId": "c_…", "accountId": "acc_1",
                   "closedReason": "replied" | "done" (opt),   // with "closed"
                   "at": Time }
 BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time,
-               "mine": false, "text": "…", "trimmed": true (opt) }
+               "mine": false, "text": "…", "trimmed": true (opt),
+               "signature": SignatureSummary (opt) }
 ```
 
 - `person`: the sender of the newest inbound member that counts, else the
@@ -3339,6 +3467,11 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
 - `version` changes whenever anything of the case changes, the members
   `board.get` returns included; a client caches `board.get` by `(id,
   version)`.
+- `BoardMessage.signature`: the member's signature verdict exactly as
+  `Message.signature` of `message.get` (§4.22: kind, status, signer,
+  notes, partId), absent when it has none (no signature, not verified
+  yet, a Jira item); the clients show it as the badge of the board's
+  conversation card, and its details come from `message.signature`.
 - `BoardMessage.text`: the message's own text — its quoted history cut
   off as `message.body` with `trimQuoted` cuts it: the stored plain text
   cut by the plain-text rules when they find the quote in it, else, when
@@ -4214,8 +4347,11 @@ InvitationSummary {
   "title": "Q4 planning", "start": Time (opt), "end": Time (opt),
   "startDate": Date (opt), "allDay": bool (opt),
   "organizer": Address (opt), "replyFrom": Address (opt),  // reply: the attendee who answered
+  "replyResponse": EventResponse (opt), // reply: the attendee's answer (a card's "response" says the same)
   "ownEvent": bool (opt)              // the organiser is one of the user's addresses: a request is processed
 }
+// A message whose calendar part was read has "hasAttachments" without that
+// part: the card shows it (true only for other non-inline attachments).
 
 Message += { "invitation": InvitationCard (opt) }   // message.get, message.download
 InvitationCard = InvitationSummary + {
@@ -4594,6 +4730,676 @@ Accepting appends the proposal's text — or `text`, the user's edit of
 it — to the profile's text (or the account's note) as a new line.
 Dismissing drops it. Either way `notify.assistantProfileChanged` follows.
 
+### 4.19 addressBook and contact
+
+The address books of connected services and their contacts: Microsoft
+Graph contact folders of a `graph` account with `graph.contacts.sync`,
+CardDAV collections of a `caldav` account with `caldav.contacts`, and the
+virtual book of recently used addresses (`id` `"recent"`, the collected
+addresses of §4.11, read only). The design is
+`docs/plans/address-book.md`. The daemon keeps a cache of the server's
+books (the server is the authority: switching contacts off, changing
+the server or user, or removing the account deletes it); only
+`visible` is the user's. A pass runs at the account's start, every
+15 minutes, on `addressBook.list` when the last pass is older than a
+minute, and right after an own write. Writes go to the server first
+(online only, no offline queue) and change the cache only after the
+server accepted them; offline is `offline`. Every string of a book or
+contact is untrusted display text, cleaned by the daemon (control,
+bidi and invisible characters removed) and shown as plain text; no HTML
+or URL of a contact is ever fetched, nor a photo named by a link (see
+*Photos* below). The daemon logs counts and ids only.
+
+```jsonc
+AddressBook    { "id": "b_…" | "recent", "accountId": "acc_1" (opt; absent for recent),
+                 "name": "Contacts", "kind": "graph|carddav|recent",
+                 "readOnly": bool, "searchOnly": bool (opt), "visible": bool,
+                 "count": 120, "lastSyncAt": Time (opt) }
+ContactSummary { "id": "p_…", "bookId": "b_…", "displayName": "Jana Nováková",
+                 "sortKey": "nováková jana", "section": "N",
+                 "org": "Acme" (opt), "email": "jana@example.org" (opt),
+                 "photo": "ready|remote" (opt) }   // absent = no photo
+ContactCard    { "id", "bookId", "readOnly": bool,
+                 "revision": "…",              // CardDAV ETag or Graph changeKey, opaque
+                 "name": { "given", "family", "middle", "prefix", "suffix" },   // each (opt)
+                 "displayName", "nickname" (opt), "org" (opt), "title" (opt),
+                 "emails":    [{ "label" (opt), "address" }],
+                 "phones":    [{ "label" (opt), "number" }],
+                 "addresses": [{ "label" (opt), "street", "city", "region", "postcode", "country" }],   // each (opt)
+                 "urls":      [{ "label" (opt), "url" }],
+                 "birthday":  { "year" (opt), "month", "day" } (opt),
+                 "note" (opt),
+                 "photo": "ready|remote" (opt) }   // as ContactSummary; ignored as input
+```
+
+`kind` is an open enum: an unknown value is a read-only book of an
+unknown source. `searchOnly` books (none in this version) are not listed
+whole, only searched. `count` is the number of stored contacts.
+`sortKey` orders the list (family name first when known; a client
+compares it with its own collation); `section` is its index letter,
+upper case, or `#`. A label is `home`, `work`, `other`, and for phones
+`mobile`, `fax`, `pager`, `main`; any other value is the server's own
+label (display text, ≤ 64 bytes); absent = none. A client opens only
+`http`/`https` URLs, through its "Open this link?"; a phone number is
+only copied. As input (`contact.create`, `contact.update`) `id`,
+`bookId`, `readOnly` and `revision` of the card are ignored.
+
+Limits (`api.*`): `MaxVCardBytes` 1 MiB (one vCard), `MaxVCardProperties`
+500, `MaxContactNameBytes` 256 (each name part, `displayName`,
+`nickname`), `MaxContactFieldBytes` 1024 (`org`, `title`, every other
+string), `MaxContactLabelBytes` 64, `MaxContactNoteBytes` 32 KiB,
+`MaxContactEmails` 50, `MaxContactPhones` 50, `MaxContactAddresses` 20,
+`MaxContactURLs` 20, `MaxContactListLimit` 500 (default 100),
+`MaxContactLookupAddresses` 200, `MaxAddressBooksPerAccount` 200,
+`MaxContactsPerBook` 50 000, `MaxContactPhotoBytes` 64 KiB and
+`MaxContactPhotoPixels` 256 (a photo), `ContactPhotoTimeout` 15 s. An
+input over a limit is invalidArgument; a server's contact over a limit
+is truncated, a vCard over 1 MiB skipped.
+
+An **update is a patch**: the daemon changes only the properties the
+card changed and sends every other line of the stored vCard back
+byte for byte (groups, `X-…` properties, photos, unknown properties); on
+Graph it `PATCH`es the changed fields only. A new card uses the vCard
+version the book uses.
+
+#### `addressBook.list`
+- params: `{ "accountId": "acc_1" (opt) }` — absent: every account with
+  the `contacts` capability whose contacts are on, and the recent book
+- result: `{ "books": [AddressBook] }` — per account in `account.list`
+  order, server order within it, the recent book last
+- errors: accountNotFound, contactsConsentRequired (the account's books
+  cannot be read; with `accountId` only, otherwise the account is left
+  out), storageError
+
+The recent book has `name` `""` (clients name it from its `kind`) and
+`count` the number of collected addresses; its contacts have ids `r_…`
+valid for `contact.get` only (read only, revision `""`).
+
+#### `addressBook.set`
+The user's choice of one book; nothing goes to the server. Hiding a book
+deletes its cached contacts at once (a hidden book is not synchronised
+at all); showing it again asks for a pass. The recent book is always
+shown (invalidArgument).
+
+- params: `{ "bookId", "visible": bool }`
+- result: `{ "book": AddressBook }`
+- errors: addressBookNotFound, storageError
+
+Followed by `notify.contactsChanged` naming the book.
+
+#### `contact.list`
+- params: `{ "bookId": "b_…" | "recent" | "all", "query": "…" (opt), "offset": 0 (opt), "limit": 100 (opt, max 500) }`
+- result: `{ "contacts": [ContactSummary], "total": 120 }` — by `sortKey`;
+  `total` counts every match
+- errors: invalidArgument (`query` over 256 bytes or with control
+  characters, a negative `offset`), addressBookNotFound, storageError
+
+`all` lists every visible book. `query` matches words of the name, the
+organisation and the addresses (prefixes, as `search.query`).
+
+#### `contact.get`
+- params: `{ "contactId" }`
+- result: `{ "contact": ContactCard }`
+- errors: contactNotFound, storageError
+
+#### `contact.lookup`
+Which addresses have a contact: the address chip's *Show Contact* and
+*Add to Contacts…*.
+
+- params: `{ "addresses": ["jana@example.org"], "withPhotos": bool (opt) }` — at most 200
+- result: `{ "known": { "jana@example.org": "p_…" },
+  "photos": { "jana@example.org": { "contactId": "p_…", "state": "ready|remote" } } (opt) }`
+  — addresses normalised (lower case); unknown addresses are absent;
+  only visible books, never the recent book; the exact address only,
+  never a name
+- errors: invalidArgument (over 200 addresses), storageError
+
+`photos` comes only with `withPhotos: true` and is absent when empty: an
+address is in it when a contact of a visible book with that address has
+a photo (`ready`) or may have one (`remote`); with several such
+contacts, the first by `sortKey`. That contact may differ from the one
+`known` names (a contact without a photo sorts first). It is how a
+client puts the photo of a sender's contact on mail (one call for the
+addresses shown, in batches of 200): by the exact `From` address only,
+never by name, and never for the user's own mail. The address in `From`
+is not authenticated, so a photo there is no more proof of the sender
+than the name (`docs/security.md` §4.4).
+
+#### `contact.create`
+- params: `{ "bookId", "card": ContactCard }`
+- result: `{ "contactId": "p_…", "revision": "…" }`
+- errors: invalidArgument (a limit; no name, organisation or address at
+  all), addressBookNotFound, addressBookReadOnly,
+  contactsConsentRequired, offline, networkError, tlsError,
+  serverTimeout, serverError, authRequired, authFailed
+
+#### `contact.update`
+- params: `{ "contactId", "revision", "card": ContactCard }`
+- result: `{ "revision": "…" }`
+- errors: as `contact.create`, plus contactNotFound and
+  contactConflict (`data.server` is the server's version, now also in
+  the cache; a client offers Reload and keeps the fields the user
+  changed)
+
+`revision` must be the cached one (`contact.get`): another one is
+contactConflict at once, with the server's current version. The card is
+compared with the one `contact.get` shows, and only the difference is
+written: items past the list caps and the cut tail of a name or web
+address longer than its cap were never shown and stay on the server as
+they are (as do the vCard lines and Graph fields the card does not
+model, and a Microsoft address's own name). A Microsoft
+contact holds at most 3 e-mail addresses, one postal address each of
+`work`, `home` and other (any other label), one web address, and phones
+as business, home and one mobile (other labels become business phones);
+more is invalidArgument naming the field. Every invalidArgument that
+refuses one field of the card carries `data` = `{ "field": path }`, the
+path relative to the card (`emails[2].address`, `name.given`,
+`addresses[0]`, `emails` for the whole list); clients mark that field
+and never parse `message`. A birthday without a year is
+stored on Graph with the year 1604 and read back without one.
+
+#### `contact.delete`
+- params: `{ "contactId", "revision" }`
+- result: `{}`
+- errors: as `contact.update` (a contact already gone from the server
+  is deleted from the cache and answers `{}`)
+
+Every write is followed by `notify.contactsChanged` naming the book.
+A contact the server no longer has is removed from the cache and
+answers contactNotFound.
+
+#### Photos (read only)
+
+A contact's photo is shown in place of its initials; it cannot be set,
+changed or removed here, and `contact.update` leaves it on the server as
+it is (the vCard's `PHOTO` lines are copied byte for byte; a Graph
+`PATCH` never names it). The daemon never hands a client the server's
+bytes: every picture is checked before it is decoded (at most 4 MiB,
+40 Mpx), decoded as JPEG, PNG or GIF (first frame) only, cropped to its
+centred square, scaled to at most 256 × 256 px and encoded anew as JPEG
+(PNG when it has transparency) within 64 KiB, so no metadata survives.
+A picture that breaks a limit or does not decode is no photo.
+
+- **CardDAV**: the picture embedded in the card (vCard 3.0
+  `PHOTO;ENCODING=b;TYPE=JPEG`, 4.0 `PHOTO:data:image/…;base64,…`) comes
+  with the synchronisation; `photo` is `ready` or absent. A photo named
+  by a link (`PHOTO;VALUE=uri:https://…`) is never fetched: no photo.
+- **Microsoft 365**: Graph's contact data has no photo, so every Graph
+  contact is `remote` until `contact.photo` downloads its photo for the
+  contact's current `revision` (then `ready`, or absent when it has
+  none); a new revision makes it `remote` again. A client asks only for
+  contacts it shows.
+- The recent book never has photos.
+
+#### `contact.photo`
+- params: `{ "contactId" }`
+- result: `{ "state": "ready|none", "mime": "image/jpeg|image/png" (opt),
+  "data": "base64…" (opt), "revision": "…" }` — `mime` and `data` only
+  when `ready`; `revision` is the contact's version the photo was made
+  from (`ContactCard.revision`)
+- errors: contactNotFound, contactsConsentRequired, offline,
+  networkError, serverTimeout (15 s), serverError, authRequired,
+  authFailed, storageError, cancelled
+
+For a `remote` contact the daemon downloads the photo (at most 4
+downloads per account at a time, the account's Graph limits apply;
+concurrent requests for one contact share one download), stores the
+result — the photo, or none, which is remembered and not asked again
+for that revision — and answers it. No `notify.contactsChanged` follows
+(it would make every client ask again for the book's photos on screen);
+other lists show `ready` at their next listing. A failed download stores nothing and answers the
+error; the contact stays `remote`. A client keeps photos in memory by
+contact id and `revision` and asks again after `notify.contactsChanged`
+for the book shows another `revision` or `photo` state. `state` is an
+open enum: an unknown value is no photo.
+
+### 4.20 update
+
+The update check (the design is `docs/plans/update-check.md`, the service
+`docs/services.md` §2). Once a day the daemon asks the project's signed
+manifest of versions which exist and offers the newest one for the
+package the build was installed from (its **channel**, `macos-dmg`,
+`windows-setup-x64`, …, set when the package is built). It downloads and
+installs nothing: a client opens the offered package's `url` in the
+browser. The request carries only `User-Agent: MalachiMail/<version>`.
+
+```jsonc
+UpdateStatus { "enabled": bool, "channel": "macos-dmg" (opt), "current": "0.1.2",
+               "state": "disabled|unsupported|idle|checking|upToDate|available|failed",
+               "checkedAt": Time (opt), "failure": "network|server|signature|format" (opt),
+               "available": UpdateInfo (opt), "notice": UpdateNotice (opt) }
+UpdateInfo   { "version": "0.1.3", "publishedAt": Time, "security": bool,
+               "notes": "…", "infoUrl": "https://malachimail.app/…",
+               "url": "https://github.com/…", "size": 81234567,
+               "skipped": bool, "remindAfter": Time (opt), "prompt": bool }
+UpdateNotice { "id": "n-2026-11-02", "text": "…", "url": "https://malachimail.app/…" (opt) }
+```
+
+- `state`: `disabled` (the user turned it off; nothing else is filled
+  in), `unsupported` (no channel or a version that is not a plain
+  `MAJOR.MINOR.PATCH`, such as a development build; the daemon never
+  asks), `idle` (no check finished yet), `checking`, `upToDate`,
+  `available` (`available` is set), `failed` (the last check failed and
+  nothing is offered). `failure` is the class of the last check when it
+  failed, also beside `available`; `checkedAt` is when a check last
+  brought an answer.
+- `available` is the highest release newer than `current`, not
+  withdrawn, with a package for the channel. `security` is true when it
+  or a release it skips over fixes a security problem: then `skipped` is
+  always false, `remindAfter` absent, and `update.dismiss` accepts only
+  `prompted`; the client keeps its banner until the update is installed.
+  `prompt` is true for a security release no client has asked about yet:
+  the client asks once (download the installer, then quit) and calls
+  `update.dismiss` with `prompted`. `skipped`: the user skipped this
+  version; `remindAfter`: the user asked to be reminded later and it has
+  not passed yet. Clients show the banner only when neither applies.
+- `notes` and `notice.text` are in the language of `locale` (the tag,
+  then its language), else English: plain text with `\n`, never markup.
+  The daemon accepted them only if they had no control, format, bidi or
+  invisible character and were in NFC.
+- `notice` is a message of the project to the users of this version; it
+  is absent once `update.dismissNotice` dismissed its `id`.
+- Every method takes `locale` (opt) and returns the `UpdateStatus` after
+  it. Failures of a check are in the status, never an error.
+
+The daemon checks 5–15 minutes after it starts, but not before a day
+(± 2 hours) after its last check, then every day ± 2 hours, and never
+before a server's `Retry-After` (at most a day). It asks the API, then
+the GitHub asset, verifies the Ed25519 signature with the keys compiled
+into it and refuses a manifest older than the last one it accepted or
+more than a day in the future (`docs/services.md` §2.2–§2.5); a refused
+manifest leaves the last accepted one in place.
+
+#### `update.status`
+- params: `{ "locale" (opt) }`
+- result: `UpdateStatus`
+
+#### `update.check`
+Checks now, for *Check Now* in Preferences → General → Updates. The reply
+comes when the check ends, up to 70 s: clients give this call a longer
+timeout (75 s).
+
+- params: `{ "locale" (opt) }`
+- result: `UpdateStatus` after the check
+
+It ends a `later` of the offered version (the user asked to see what
+there is); a skipped version stays skipped. Within a minute of the last
+`update.check` (`api.UpdateCheckInterval`) nothing is asked; the status
+is returned as it is. Disabled or
+unsupported: nothing is asked.
+
+#### `update.setPrefs`
+- params: `{ "enabled": bool (opt), "locale" (opt) }`
+- result: `UpdateStatus`
+
+`enabled` defaults to true. Turned off, the daemon asks nothing, also not
+after its start.
+
+#### `update.dismiss`
+- params: `{ "version", "action": "skip|later|prompted", "locale" (opt) }`
+- result: `UpdateStatus`
+- errors: invalidArgument (`version` is not the offered one, an unknown
+  `action`, `skip` or `later` of a security release)
+
+`skip` hides the version for good (a newer one is offered again),
+`later` for three days (`api.UpdateRemindDelay`), `prompted` records that
+a client asked about a security release.
+
+#### `update.dismissNotice`
+- params: `{ "id", "locale" (opt) }`
+- result: `UpdateStatus`
+- errors: invalidArgument (no notice with that `id` in the manifest)
+
+### 4.21 rules
+
+Mail rules (filters; the design is `docs/plans/rules.md`). A rule is
+conditions over a message and actions on it. The daemon evaluates the
+enabled rules **locally**, in their order, on every message it stores in
+the **inbox** of a mail account (`imap`, `graph`; never issue-tracker,
+CalDAV or CRM accounts), before `notify.newMessage`, so a message a rule
+moves, trashes or marks read is not announced as new mail of the inbox.
+Each Message-ID of an account goes through the automatic run once (a
+message moved back into the inbox, also by another client, is left
+alone), and mail whose arrival is older than the day before the rule was
+enabled, or than the account's addition, is never touched, so neither
+the first sync of an account nor a backfill runs rules. The automatic
+run sees a message when its body is stored; one whose body is too big
+to download or cannot be parsed is not run through the rules. The server's own rules (Graph `messageRules`,
+Sieve) are neither read nor changed.
+
+```jsonc
+Rule          { "id": "r_…", "name": "…", "enabled": bool, "accountId": "acc_1" (opt; absent = every mail account),
+                "match": "all|any", "conditions": [RuleCondition], "actions": [RuleAction], "stop": bool,
+                "outgoing": bool, "problem": "folderGone|sendFailed" (opt),
+                "createdAt": Time, "updatedAt": Time,
+                "applied": 12, "lastAppliedAt": Time (opt), "skipped": 0 }
+RuleInput     { "name", "enabled", "accountId" (opt), "match", "conditions", "actions", "stop" }
+RuleCondition { "field": "from|to|cc|toOrCc|subject|body|listId|bulk|hasAttachments",
+                "op": "contains|notContains|is|isNot|startsWith|endsWith|domainIs", "value": "…" }
+RuleAction    { "kind": "move|markRead|flag|trash|junk|forward|autoReply",
+                "folderId" (move), "to" (forward), "subject" (autoReply, opt), "text" (autoReply) }
+```
+
+- **Conditions.** Text comparisons ignore case after NFC normalisation.
+  An address field (`from`, `to`, `cc`, `toOrCc`) compares each address
+  as `Name <address>` for `contains`/`notContains` and the bare address
+  for `is`, `isNot`, `startsWith`, `endsWith`; it holds when any address
+  does, `notContains` and `isNot` when none does; `domainIs` holds when
+  an address's domain is the value or a subdomain of it (address fields
+  only). `body` is the plain text of the message (the text part, else
+  the text of the HTML part), its first `MaxRuleBodyBytes`; a message
+  whose body is not stored yet does not match a `body` condition.
+  `listId` is `BulkInfo.listId`. `bulk` takes `is`/`isNot` with `any` or
+  a `BulkKind`; a message not classified yet is not bulk.
+  `hasAttachments` takes `is` with `true` or `false`. A rule has 1 to
+  `MaxRuleConditions` conditions and `match` combines them.
+- **Actions.** 1 to `MaxRuleActions`, each kind at most once, run in
+  this order whatever their order in the rule: `markRead`, `flag`,
+  `forward`, `autoReply`, then one of `move`, `junk`, `trash` (a rule
+  has at most one of these). `move` needs `accountId` and a selectable
+  folder of that account other than its outbox and drafts. `trash` and
+  `junk` need the account's folder of that role (else the action is
+  skipped). Over several rules the first move, junk or trash wins; later
+  rules still mark and flag. `stop`: no later rule runs on a message
+  this rule matched.
+- **Outgoing actions** (`forward`, `autoReply`; `outgoing` is true) are
+  queued to the account's outbox like any message and carry
+  `Auto-Submitted: auto-forwarded` or `auto-replied`. The daemon never
+  sends one for a message that is bulk, has `Auto-Submitted` other than
+  `no`, comes from one of the user's own addresses, from
+  `mailer-daemon`, `postmaster` or a `noreply`/`no-reply` address, or
+  lies in junk; a rule sends at most `RuleOutgoingPerHour` messages an
+  hour, and `autoReply` answers a sender at most once in
+  `RuleReplyInterval` (RFC 3834). Each refusal counts in `skipped`.
+  `forward` attaches the whole message as it came from the server to one
+  address (`to`), named after its subject with `.eml` and sent with the
+  media type `application/octet-stream` as `draft.create`'s forward of
+  several messages does (§4.5), under the subject `Fwd: ` and the
+  message's subject, with no text of its own; a message that is not
+  stored whole is downloaded first (`message.download`), one that cannot
+  be or is larger than `MaxOutgoingMessageBytes` counts in `skipped`; `autoReply` answers the message's `Reply-To`, else
+  `From`, with `text` (plain text, at most `MaxRuleReplyBytes`) and
+  `subject` (else `Re: ` and the message's subject), with `In-Reply-To`
+  and `References` of the message. Both carry `X-Loop` with the
+  account's address, and a message with an `X-Loop` field is never
+  answered or forwarded. The limits are kept per rule. Outgoing actions
+  run only automatically, never in `rules.apply`.
+- `problem`: the daemon disabled the rule (`enabled` false): the folder
+  of its `move` is gone (`folderGone`), or an outgoing action could not
+  be queued (`sendFailed`). Saving the rule again clears it.
+- Removing an account deletes its rules. Limits: `MaxRules` rules,
+  `name` 1 to `MaxRuleNameBytes` bytes, each `value`, `to` and `subject`
+  at most `MaxRuleValueBytes`; every string without control, bidi or
+  invisible characters. A refused rule is invalidArgument with
+  `error.data` `RuleInvalidData { "field": "name|accountId|conditions|actions|confirmOutgoing", "index": 0 (opt) }`.
+
+#### `rules.list`
+- params: `{}`
+- result: `{ "rules": [Rule] }` (in their order)
+
+#### `rules.create`
+- params: `{ "rule": RuleInput, "confirmOutgoing": bool (opt) }`
+- result: `{ "rule": Rule }` (added at the end)
+- errors: invalidArgument (see above; more than `MaxRules`),
+  accountNotFound, folderNotFound (`move`)
+
+`confirmOutgoing` must be true when the rule is enabled with an outgoing
+action: the client asked the user first (field `confirmOutgoing` in
+`error.data` otherwise).
+
+#### `rules.update`
+- params: `{ "id", "rule": RuleInput, "confirmOutgoing": bool (opt) }`
+- result: `{ "rule": Rule }`
+- errors: ruleNotFound, invalidArgument, accountNotFound, folderNotFound
+
+`confirmOutgoing` must be true when the updated rule is enabled with an
+outgoing action and either was not enabled with one before or the `to`,
+`subject` or `text` of an outgoing action changed. Enabling a rule
+counts from now on: mail stored before is not run through it.
+
+#### `rules.delete`
+- params: `{ "id" }`
+- result: `{}`
+- errors: ruleNotFound
+
+#### `rules.reorder`
+- params: `{ "ids": ["r_…"] }` (every rule's id exactly once)
+- result: `{ "rules": [Rule] }`
+- errors: invalidArgument (an id missing, repeated or unknown)
+
+#### `rules.test`
+- params: `{ "rule": RuleInput, "accountId", "folderId" }`
+- result: `{ "count": 3, "messages": [MessageSummary] }` (the newest
+  `MaxRuleTestMessages`, newest first)
+- errors: invalidArgument, accountNotFound, folderNotFound
+
+Which stored messages of the folder the rule, as edited, matches; the
+rule need not be saved or enabled, its actions are ignored and nothing
+changes.
+
+#### `rules.apply`
+- params: `{ "accountId", "folderId" (opt), "messageIds": ["m_1"] (opt), "ruleIds": ["r_…"] (opt) }`
+  (exactly one of `folderId` and `messageIds`, at most
+  `MaxMessageIDsPerCall` ids)
+- result: `{ "examined": 120, "matched": 14, "changed": 12, "skippedOutgoing": 2 }`
+- errors: invalidArgument, accountNotFound, folderNotFound,
+  messageNotFound, ruleNotFound
+
+Runs rules by hand on stored mail of one account: the folder's stored
+messages of the `offlineDays` window or the given messages, the rules of
+`ruleIds` or else every enabled rule of the account (the account's own
+and those for every account), in order, with `stop`. Only the local
+actions run; outgoing ones count in `skippedOutgoing`. Neither the
+once-per-Message-ID record nor the age limit of the automatic run
+applies. The changes go to the server as the user's own (§4.4) and
+`notify.messagesChanged` follows.
+
+### 4.22 signature
+
+Signatures of incoming mail, phase 1 of `docs/plans/signatures.md`: the
+daemon verifies S/MIME (CMS SignedData, `multipart/signed` and opaque
+`signed-data`) and OpenPGP/MIME (RFC 3156) signatures; it signs, decrypts
+and encrypts nothing and holds no secret key. A verdict is computed after
+the message is stored (outside the write transaction; a verifier failure
+is the verdict `error`, never a lost message), kept, and recomputed only
+when trust changes (a key imported, confirmed or removed, a revocation
+check, another set of system roots). A verdict is never an error.
+
+Only a signature that covers the whole message is its verdict: the
+topmost `multipart/signed`, or opaque `signed-data` as the root, or one of
+them under a single `multipart/mixed` whose only other part is a
+`text/plain` after it (a mailing list's footer: note `partialFooter`). A
+signature deeper down (a forwarded message, an attachment) is no verdict,
+and its part stays an ordinary attachment.
+
+```jsonc
+MessageSignature { "kind": "smime|pgp",
+                   "status": "invalid|revoked|mismatch|untrusted|unknownKey|weak|unsupported|error|valid|validSeen" }
+SignatureSigner  { "name": "Jan Novák" (opt), "email": "jan@example.org" (opt),
+                   "fingerprint": "64 or 40 lowercase hex digits" (opt) }
+SignatureSummary = MessageSignature + { "signer": SignatureSigner (opt),
+                   "notes": ["expiredSince|revocationUnchecked|revocationGood|revokedAfter|partialFooter|protectedHeadersDiffer|inlinePGP|keyChanged|opaque"] (opt),
+                   "partId": "2" (opt) }
+SignatureDetails = SignatureSummary + {
+                   "messageId": "m_1",
+                   "reason": SignatureReason (opt),
+                   "signedAt": Time (opt),          // declared by the signer
+                   "arrivedAt": Time,               // validity is judged at this time
+                   "algorithm": "RSA 2048 / SHA-256" (opt),
+                   "expiredAt": Time (opt), "revokedAt": Time (opt),
+                   "protectedHeaders": [ { "name": "subject|from|to|cc|replyTo|date", "value": "…" } ] (opt),
+                   "smime": SMIMEDetails (opt), "pgp": PGPDetails (opt) }
+SignatureReason  "digestMismatch|badSignature|malformed|md5|keyUsage"      // invalid
+               | "unknownIssuer|selfSigned|notYetValid|expired"            // untrusted
+               | "sha1|shortKey"                                           // weak
+               | "algorithm|multipleSigners|rebuilt|format"                // unsupported
+               | "limit|internal"                                          // error
+SMIMEDetails     { "chain": [SignatureCertificate], "revocation": SMIMERevocation }
+SignatureCertificate { "sha256": "64 lowercase hex", "subject": "…" (opt), "issuer": "…" (opt),
+                   "emails": ["jan@example.org"] (opt), "notBefore": Time, "notAfter": Time,
+                   "systemRoot": true (opt), "selfSigned": true (opt) }
+SMIMERevocation  { "state": "unchecked|good|revoked|unknown", "checkedAt": Time (opt),
+                   "revokedAt": Time (opt), "source": "ocsp|crl" (opt), "checkable": bool }
+PGPDetails       { "keyTrust": "unknown|seen|verified", "keyId": "16 lowercase hex" (opt),
+                   "primaryFingerprint": "…" (opt), "userIds": ["Jan Novák <jan@example.org>"] (opt),
+                   "keySource": "autocrypt|attached|import" (opt), "firstSeen": Time (opt),
+                   "previousFingerprint": "…" (opt), "importable": PGPKeyOffer (opt) }
+PGPKeyOffer      { "fingerprint": "…", "partId": "3" (opt), "autocrypt": true (opt) }
+PGPKey           { "fingerprint": "…", "userIds": ["…"], "emails": ["…"],
+                   "trust": "seen|verified", "source": "autocrypt|attached|import",
+                   "firstSeen": Time, "createdAt": Time, "expiresAt": Time (opt),
+                   "revokedAt": Time (opt), "algorithm": "Ed25519" (opt) }
+```
+
+- `status`, the first of this order that applies: `invalid` (the
+  signature does not match the content, its structure is broken, MD5, a
+  certificate not for e-mail signing), `revoked` (S/MIME: a revocation
+  check found the certificate revoked before the message arrived;
+  OpenPGP: the key was revoked before it arrived), `mismatch` (the
+  signature matches, but the certificate's or key's address is not the
+  `From` address), `untrusted` (S/MIME: the chain leads to no root of the
+  system's trust store, or the certificate was not valid when the message
+  arrived; OpenPGP: the key had expired when it arrived), `unknownKey`
+  (OpenPGP: the key is not stored), `weak` (matches and trusted, but SHA-1
+  or an RSA key shorter than 2048 bits), `unsupported` (DSA, several
+  signers, inline OpenPGP, a message the server rebuilt), `error` (the
+  verifier failed: a limit, damaged data), `valid` (matches, trusted — a
+  system root, or an OpenPGP key the user confirmed — and the identity is
+  `From`), `validSeen` (OpenPGP: as `valid`, but the key was only found
+  automatically). A client treats an unknown `status` as `error` and
+  ignores unknown `notes`, `reason`, `state` and `keySource` values.
+- The identity is the certificate's address (`subjectAltName`
+  `rfc822Name`, else `emailAddress` of the subject) or the address of a
+  user ID of the key, compared with `From` (NFC, case-insensitively: the
+  domain and, as no mail system in use tells them apart, the local part;
+  a message with more than one `From` address never matches).
+  `signer` is always from the certificate or key, never from the headers;
+  it is present for `valid`, `validSeen`, `mismatch`, `untrusted`, `weak`
+  and `revoked`, and may be for the others. `signer.fingerprint` is the
+  SHA-256 of the signer's certificate (S/MIME) or the primary
+  fingerprint of the signing key (OpenPGP); absent for an unknown key,
+  whose `pgp.keyId` names it.
+- Validity is judged at `arrivedAt` (the message's internal date), never
+  at `signedAt`, which the signer writes. A certificate or key that
+  expired since is still a valid signature with the note `expiredSince`
+  (`expiredAt`); one revoked after arrival keeps its verdict with
+  `revokedAfter` (`revokedAt`). S/MIME trusts the system's roots only;
+  intermediate certificates come from the message, nothing is fetched.
+- `notes`: `revocationUnchecked` (S/MIME, no check made), `revocationGood`
+  (S/MIME, the last check found it not revoked, `smime.revocation.checkedAt`),
+  `partialFooter` (a footer outside the signature), `protectedHeadersDiffer`
+  (the signed part carries protected headers, RFC 9788, that differ from
+  the outer ones; `protectedHeaders` lists the signed values, the client
+  still shows the outer ones), `inlinePGP` (an inline OpenPGP signature,
+  status `unsupported`, nothing verified), `keyChanged` (OpenPGP: another
+  key was seen for the address before, `pgp.previousFingerprint`; the
+  daemon never replaces it by itself), `opaque` (S/MIME `signed-data`: the
+  daemon unwrapped the content, which listings, bodies, parts, search and
+  the board see like any message; part ids are those of the inner
+  message).
+- `partId` is the detached signature part (`application/pkcs7-signature`,
+  `application/pgp-signature`) of a `multipart/signed` message. Clients do
+  not show it among the attachments while the message has a verdict, and
+  `hasAttachments` does not count it. A message without a verdict lists
+  its signature parts like any part.
+- `pgp.keyTrust`: `verified` (the user confirmed the fingerprint),
+  `seen` (found or imported, not confirmed), `unknown` (not stored). Keys
+  come only from what the user's mail carries: an `Autocrypt` header
+  whose `addr` is `From` of mail that is neither bulk nor junk, for a key
+  whose user IDs name that address only (stored as `seen`), a key attached to a message (`importable`), or an import in
+  Preferences. There is no web of trust and no key server. `importable`
+  is a key of the message that is not stored (an attached key, or an
+  Autocrypt key for an address that already has another one); a client
+  passes it to `pgp.keyImport` as it is.
+- Every string from a certificate or key (`signer`, `subject`, `issuer`,
+  `emails`, `userIds`, `protectedHeaders[].value`) is untrusted text:
+  control, format, bidi and invisible characters removed, at most 256
+  bytes (`api.MaxSignatureTextBytes`), lists capped (`chain` 16, `emails`
+  16, `userIds` 32, `protectedHeaders` 6). `algorithm` is a
+  language-neutral technical description, public key then digest. Nothing
+  of a certificate or key is logged.
+- The bridge for AI agents returns only `kind` and `status` with a listed
+  or found message, and `kind`, `status`, the signer's e-mail and `notes`
+  with a message read (`docs/mcp.md`).
+
+#### `message.signature`
+The details for the dialog of the header's badge.
+
+- params: `{ "messageId" }`
+- result: `{ "signature": SignatureDetails | null }` — null for a message
+  without a verdict (no signature of the whole message, or not verified
+  yet)
+- errors: messageNotFound
+
+#### `message.signatureRevocation`
+Checks whether the signer's S/MIME certificate was revoked, for *Check
+Revocation* in the details: OCSP from the certificate's Authority
+Information Access, then the CRL of its distribution points; `http` and
+`https` on public addresses only (no loopback, private, link-local,
+single-label or local-network names, no redirects), at most 1 MiB per
+answer (`api.MaxRevocationResponseBytes`) and 15 s in all
+(`api.RevocationTimeout`; clients give this call a 20 s timeout). An OCSP
+response must be signed by the issuer or its delegated responder. The
+check tells the issuer that the certificate is in use, so it runs only
+when the user asks. The result is stored with the certificate and every
+message it signed is judged again (`notify.messagesChanged`,
+`notify.signaturesChanged`).
+
+- params: `{ "messageId" }`
+- result: `{ "signature": SignatureDetails }` after the check
+- errors: messageNotFound; invalidArgument (no verdict, not S/MIME, no
+  signer certificate, `revocation.checkable` false); offline;
+  revocationFailed (`data.reason`: `network` could not connect, `timeout`,
+  `server` the responder answered an error, `response` an answer that is
+  unsigned, for another certificate, too large or unreadable, `address`
+  a URL the daemon does not contact)
+
+Within a minute of the last check of the same certificate
+(`api.RevocationCheckInterval`) nothing is asked; the stored state is
+returned.
+
+#### `pgp.keyImport`
+Stores OpenPGP public keys as `seen` (a key stored already keeps its
+trust and gains new user IDs, revocations and expiry).
+
+- params: exactly one of `{ "messageId", "partId" }` (a key attached to
+  the message), `{ "messageId", "autocrypt": true }` (the message's
+  Autocrypt key), `{ "armored": "-----BEGIN PGP PUBLIC KEY BLOCK-----…" }`
+  or `{ "data": "base64 of a binary key" }`
+- result: `{ "keys": [PGPKey], "added": 1, "updated": 0 }` — the keys of
+  the data as stored after the import; `added` counts keys that were not
+  stored, `updated` stored ones that gained something
+- errors: messageNotFound, partNotFound, partNotDownloaded (an attached key
+  on the server only; `message.download` first); invalidArgument for a
+  request that names no source or several, and with `data` = `{ "reason":
+  "noKey|malformed|secretKey|tooLarge|tooMany" }` when the data was
+  refused: no public key in it, unreadable, a secret key (nothing is
+  stored, the secret is never kept), over 1 MiB
+  (`api.MaxPGPKeyBytes`) or 20 keys (`api.MaxPGPImportKeys`), or 5000
+  stored keys reached (`api.MaxPGPStoredKeys`)
+
+#### `pgp.keyVerify`
+Confirms a key after the user compared its fingerprint with the owner's,
+or takes the confirmation back.
+
+- params: `{ "fingerprint", "verified": bool }` — `true` confirms
+  (`verified`), `false` makes it `seen` again
+- result: `{ "key": PGPKey }`
+- errors: invalidArgument (no stored key with that fingerprint)
+
+#### `pgp.keyList`
+- params: `{}`
+- result: `{ "keys": [PGPKey] }` — every stored key, sorted by its first
+  e-mail address, then the fingerprint
+
+#### `pgp.keyRemove`
+Removes a stored key; messages it verified become `unknownKey` until it
+is imported again.
+
+- params: `{ "fingerprint" }`
+- result: `{}`
+- errors: invalidArgument (no stored key with that fingerprint)
+
 ## 5. Notifications
 
 | Method | params |
@@ -4610,6 +5416,10 @@ Dismissing drops it. Either way `notify.assistantProfileChanged` follows.
 | `notify.eventAlert` | `{ "alert": EventAlert }` |
 | `notify.invitationsChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
 | `notify.assistantProfileChanged` | `{}` |
+| `notify.contactsChanged` | `{ "accountId" (opt; absent for the recent book), "bookIds": ["b_1"] (opt) }` |
+| `notify.updateChanged` | `{}` |
+| `notify.rulesChanged` | `{}` |
+| `notify.signaturesChanged` | `{}` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -4724,6 +5534,27 @@ included, when the assistant profile or its pending proposals changed
 proposals. It carries no payload; clients run `assistant.profileGet`
 again. A client that does not know it ignores it.
 
+`notify.contactsChanged` is sent to every client when the books or
+contacts of an account changed (§4.19): a pass that changed something,
+an own write, a book added or removed, `addressBook.set`, contacts
+switched off, a photo downloaded by `contact.photo` or read from a
+stored card, and (without `accountId`) a delivered mail whose
+recipients went to the recent book. Without `bookIds` any book of the account changed;
+without `accountId` the recent book. Gathered within 250 ms. A client
+that does not know it ignores it.
+
+`notify.updateChanged` is sent to every client when the update status
+changed (§4.20): a check started or ended, a preference or a dismissal
+changed, or the time of a `later` (`remindAfter`) passed, so a client
+needs no clock of its own to show the banner again. It carries no payload; clients run `update.status` again. A
+client that does not know it ignores it.
+
+`notify.rulesChanged` is sent to every client when a rule was added,
+changed, reordered or deleted, the daemon disabled one (`problem`), or
+the counts of a rule moved (gathered within 1 s). It carries no
+payload; clients run `rules.list` again. A client that does not know it
+ignores it.
+
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
 progress-only changes at most every 500 ms per account (the last value is
@@ -4747,6 +5578,14 @@ keyring refused — kept in memory until the daemon stops when the keyring
 failed this time (the account works now; the next `notify.syncState` may
 follow), or not kept at all under `MALACHI_KEYRING=none` (the account
 stays in `authRequired`).
+
+`notify.signaturesChanged` is sent when trust changed (§4.22): an OpenPGP
+key was imported, confirmed or removed, a revocation check stored its
+result, or the daemon found another set of system roots. Clients call
+`message.get` again for the messages they show and `message.signature`
+for an open details dialog, and `pgp.keyList` for a shown key list; the
+rows whose verdict changed arrive as `notify.messagesChanged`. A client
+that does not know it ignores it.
 
 Notifications are best-effort: a slow client that cannot keep up may miss
 some. Clients must be able to resynchronise their view via `sync.status`,
@@ -5118,3 +5957,56 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `assistant.profilePropose`, `assistant.profileResolve` and the
   notification `notify.assistantProfileChanged`. No new error codes;
   `ProtocolVersion` stays 2.
+- **2** (2026-10-30, compatible addition: address books and contacts,
+  §4.19): new methods `addressBook.list`, `addressBook.set`,
+  `contact.list`, `contact.get`, `contact.lookup`, `contact.create`,
+  `contact.update`, `contact.delete` and the notification
+  `notify.contactsChanged` (all `notImplemented` until implemented);
+  capability `contacts`; `GraphConfig.contacts`,
+  `CalDAVConfig.addressBookHomeSetUrl` and `contacts`;
+  `account.oauthStart` `contacts`; `account.discoverCalDAV` `calendars`
+  and `addressBooks`; `account.listCalDAVCalendars`
+  `addressBookHomeSetUrl` and `addressBooks`; `contact.search` source
+  `contacts`, `Contact.contactId` and param `scope`; error codes 1110
+  `contactNotFound`, 1111 `addressBookNotFound`, 1206
+  `contactsConsentRequired`, 1308 `contactConflict`, 1509
+  `addressBookReadOnly`. `ProtocolVersion` stays 2.
+- **2** (2026-10-31, compatible addition: contact photos, read only,
+  §4.19): new method `contact.photo`; `ContactSummary.photo` and
+  `ContactCard.photo`; `contact.lookup` param `withPhotos` and result
+  `photos`; limits `MaxContactPhotoBytes`, `MaxContactPhotoPixels`,
+  `ContactPhotoTimeout`. No new error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the update check, §4.20): new
+  methods `update.status`, `update.check`, `update.setPrefs`,
+  `update.dismiss`, `update.dismissNotice` and the notification
+  `notify.updateChanged`. No new error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: mail rules, §4.21): new
+  methods `rules.list`, `rules.create`, `rules.update`, `rules.delete`,
+  `rules.reorder`, `rules.test`, `rules.apply`, the notification
+  `notify.rulesChanged` and the error code 1112 `ruleNotFound`.
+  `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the unified inbox, §4.3 and
+  §4.4): `MessageListParams.unified` and `ThreadListParams.unified`
+  (`FolderRole`, only `inbox`, `api.UnifiedRoles`). No new methods,
+  notifications or error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the user's replies in a
+  folder's search): `search.query` gained `withSent` (§4.6), which also
+  finds the matching rows of the account's sent folders that belong to
+  the folder's conversations, by the rule of `thread.get` `withSent`. An
+  older daemon ignores it and searches the folder alone. No new error
+  codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: signatures of incoming mail,
+  §4.22): `MessageSummary.signature` (`MessageSignature`) and
+  `Message.signature` (`SignatureSummary`); new methods
+  `message.signature`, `message.signatureRevocation`, `pgp.keyImport`,
+  `pgp.keyVerify`, `pgp.keyList`, `pgp.keyRemove` and the notification
+  `notify.signaturesChanged` (implemented by the daemon in the same
+  phase: verdicts after storing, the backfill of stored mail, the
+  revocation check and the key store);
+  error code 1510 `revocationFailed`; limits `MaxSignature*`,
+  `MaxProtectedHeaders`, `MaxPGP*`, `MaxRevocationResponseBytes`,
+  `RevocationTimeout`, `RevocationCheckInterval`. `ProtocolVersion`
+  stays 2.
+- **2** (2026-11-03, compatible addition): `BoardMessage.signature`
+  (`SignatureSummary`, §4.13) in `board.get`, so the board's conversation
+  cards show the signature badge. `ProtocolVersion` stays 2.

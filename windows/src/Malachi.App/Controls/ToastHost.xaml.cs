@@ -7,7 +7,10 @@
 // and out (docs/windows-port.md §11.4). WinUI has no in-app toast, and
 // system notifications are something else (a toast here is feedback on
 // what the user just did). Narrator reads each toast through a UIA
-// notification, as it reads an Adw.Toast.
+// notification, as it reads an Adw.Toast. A toast's button (Undo of a move,
+// window/undo.go showUndoToast) follows the text; its click goes to the
+// presenter (ClickButton: the toast goes, then the button runs), never to
+// the capsule's dismissal as well.
 
 using System;
 using Malachi.App.Shell;
@@ -17,12 +20,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 
 namespace Malachi.App.Controls;
 
 /// <summary>The toast overlay of one window.</summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The presenter's timer lives as long as the window; its queue holds nothing to release.")]
-public sealed partial class ToastHost : UserControl, IToasts
+public sealed partial class ToastHost : UserControl, IToasts, IActionToasts
 {
     private static readonly TimeSpan Fade = TimeSpan.FromMilliseconds(200);
 
@@ -59,6 +63,12 @@ public sealed partial class ToastHost : UserControl, IToasts
     /// <summary>Hides the current toast now; the next queued one follows.</summary>
     public void DismissCurrent() => presenter.DismissCurrent();
 
+    /// <inheritdoc/>
+    public Toast Show(Toast toast) => presenter.Show(toast);
+
+    /// <inheritdoc/>
+    public void Dismiss(Toast toast) => presenter.Dismiss(toast);
+
     private void OnCurrentChanged(object? sender, Toast? toast)
     {
         if (toast is null)
@@ -70,6 +80,16 @@ public sealed partial class ToastHost : UserControl, IToasts
         collapse.Stop();
         Label.Text = toast.Text;
         ToolTipService.SetToolTip(Capsule, toast.Text);
+        if (toast.Button is { } button)
+        {
+            ActionButton.Content = button.Label;
+            ActionButton.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ActionButton.Content = null;
+            ActionButton.Visibility = Visibility.Collapsed;
+        }
         Capsule.Visibility = Visibility.Visible;
         Capsule.Opacity = 1;
         Announce(toast.Text);
@@ -85,6 +105,25 @@ public sealed partial class ToastHost : UserControl, IToasts
     private void OnCapsuleTapped(object sender, TappedRoutedEventArgs e)
     {
         e.Handled = true;
+        if (e.OriginalSource is DependencyObject source && IsInButton(source))
+        {
+            // The button's own click (OnActionButtonClick) dismissed it.
+            return;
+        }
         presenter.DismissCurrent();
+    }
+
+    private void OnActionButtonClick(object sender, RoutedEventArgs e) => presenter.ClickButton();
+
+    private bool IsInButton(DependencyObject element)
+    {
+        for (DependencyObject? d = element; d is not null; d = VisualTreeHelper.GetParent(d))
+        {
+            if (ReferenceEquals(d, ActionButton))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }

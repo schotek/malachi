@@ -376,7 +376,7 @@ func TestCalDAVAccountTest(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := res.CalDAV
-	if r == nil || !r.OK || !slices.Equal(r.Capabilities, []string{"calendar-access", "calendar-auto-schedule", "sync-collection"}) {
+	if r == nil || !r.OK || !slices.Equal(r.Capabilities, []string{"calendar-access", "calendar-auto-schedule", "sync-collection", "addressbook"}) {
 		t.Fatalf("test: %+v", r)
 	}
 	if res.IMAP != nil || res.SMTP != nil || res.Graph != nil {
@@ -408,7 +408,7 @@ func TestCalDAVAccountTest(t *testing.T) {
 	rad := caldavtest.New(t, caldavtest.Radicale)
 	b.CalDAVHTTP = rad.HTTPClient()
 	res, err = b.Accounts().Test(ctx, api.AccountTestParams{Config: calDAVConfig(rad.ServerURL()), Credentials: api.Credentials{Password: caldavtest.Password}})
-	if err != nil || !res.CalDAV.OK || !slices.Equal(res.CalDAV.Capabilities, []string{"calendar-access"}) {
+	if err != nil || !res.CalDAV.OK || !slices.Equal(res.CalDAV.Capabilities, []string{"calendar-access", "addressbook"}) {
 		t.Fatalf("radicale: %+v %v", res.CalDAV, err)
 	}
 }

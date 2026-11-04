@@ -5,8 +5,9 @@ import Foundation
 
 /// One row of the folder sidebar (ui/internal/window/model.go
 /// `folderEntry`): an account header (`header` set, `folder` nil), the
-/// Favourites heading (`header` and `favourite` set, `account` nil too) or a
-/// folder at the given tree depth.
+/// Favourites heading (`header` and `favourite` set, `account` nil too), the
+/// All Inboxes item (`unified` and `favourite` set, no account, no folder)
+/// or a folder at the given tree depth.
 public struct FolderEntry: Sendable, Equatable {
     public var header: Bool
     /// nil only on the Favourites heading.
@@ -16,15 +17,16 @@ public struct FolderEntry: Sendable, Equatable {
     public var depth: Int
 
     /// Set on the rows of the Favourites section at the top of the sidebar:
-    /// its heading and one row per pinned folder, each at depth 0 without
-    /// children. The same folder has a second row in its account's tree, so
-    /// a folder key alone does not name a row.
+    /// its heading, the All Inboxes item and one row per pinned folder, each
+    /// at depth 0 without children. The same folder has a second row in its
+    /// account's tree, so a folder key alone does not name a row.
     public var favourite: Bool
     /// The folder is pinned: its star is filled, on the row in the section
     /// and on the one in the tree alike.
     public var starred: Bool
 
-    /// The row can be folded; `collapsed` says it currently is, and its
+    /// The row can be folded (a folder with children, an account heading,
+    /// the Favourites heading); `collapsed` says it currently is, and its
     /// descendants are left out of the list entirely.
     public var hasChildren: Bool
     public var collapsed: Bool
@@ -35,11 +37,15 @@ public struct FolderEntry: Sendable, Equatable {
     /// The number the row shows: the folder's own unread count, or that plus
     /// every hidden descendant's while it is collapsed.
     public var badge: Int
+    /// The All Inboxes item (`Unified`), the first row of the Favourites
+    /// section: no account, no folder, `badge` is the unread count of the
+    /// inboxes it covers. It cannot be pinned or folded; its section can.
+    public var unified: Bool
 
     public init(
         header: Bool = false, account: Account? = nil, folder: Folder? = nil, depth: Int = 0,
         favourite: Bool = false, starred: Bool = false, hasChildren: Bool = false, collapsed: Bool = false,
-        nested: Bool = false, badge: Int = 0
+        nested: Bool = false, badge: Int = 0, unified: Bool = false
     ) {
         self.header = header
         self.account = account
@@ -51,10 +57,13 @@ public struct FolderEntry: Sendable, Equatable {
         self.collapsed = collapsed
         self.nested = nested
         self.badge = badge
+        self.unified = unified
     }
 
-    /// The folder this row stands for; nil on a header row.
+    /// The folder this row stands for; nil on a header row. The All Inboxes
+    /// item stands for `FolderKey.unified`.
     public var key: FolderKey? {
+        if unified { return .unified }
         guard let account, let folder else { return nil }
         return FolderKey(account: account.id, folder: folder.id)
     }

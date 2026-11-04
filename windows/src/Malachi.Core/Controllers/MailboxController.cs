@@ -104,7 +104,10 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         this.toast = toast;
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
         Scope = new ControllerScope(pending ?? new PendingWork(this.logger));
-        Model = new MailModel(collapsed: CollapseState.Load(settings), favourites: FavouriteState.Load(settings));
+        Model = new MailModel(collapsed: CollapseState.Load(settings), favourites: FavouriteState.Load(settings))
+        {
+            UnifiedInbox = settings.UnifiedInbox,
+        };
         SidebarStatus = new SidebarStatus.Folders();
         Entries = [];
         ListHeading = new ListHeading(L10n.T("Messages"), "");
@@ -113,6 +116,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         settingsTokens.Add(settings.OnChange(SettingsKey.CollapsedFolders, OnCollapseChanged));
         settingsTokens.Add(settings.OnChange(SettingsKey.CollapsedAccounts, OnCollapseChanged));
         settingsTokens.Add(settings.OnChange(SettingsKey.FavouriteFolders, OnFavouritesChanged));
+        settingsTokens.Add(settings.OnChange(SettingsKey.UnifiedInbox, OnUnifiedInboxChanged));
         sync.Accounts = () => Model.Accounts;
         // The status line puts the name into a sentence ("Syncing %s… %d %%"):
         // Windows-only, the server's name is isolated there (DisplayText), so
@@ -310,14 +314,16 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     /// when none is selected. The window caption follows it.
     /// </summary>
     public string SelectedFolderTitle =>
-        Model.Selected is { } k && Model.Folder(k) is { } f ? FolderTree.FolderTitle(f) : L10n.T("Messages");
+        Model.Selected is { IsUnified: true } ? Unified.Title
+        : Model.Selected is { } k && Model.Folder(k) is { } f ? FolderTree.FolderTitle(f) : L10n.T("Messages");
 
     /// <summary>
     /// The counts under the title (window.go <c>refreshListTitle</c>,
     /// <c>folderCountsText</c>): "" while no folder is selected.
     /// </summary>
     public string SelectedFolderSubtitle =>
-        Model.Selected is { } k && Model.Folder(k) is { } f ? FolderTree.FolderCountsText(f) : "";
+        Model.Selected is { IsUnified: true } ? FolderTree.CountsText(Unified.Unread(Model.UnifiedInboxes), Unified.Total(Model.UnifiedInboxes))
+        : Model.Selected is { } k && Model.Folder(k) is { } f ? FolderTree.FolderCountsText(f) : "";
 
     /// <summary>
     /// Detaches from the settings and drops every late reply (the window
@@ -811,6 +817,31 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     }
 
     /// <summary>
+    /// Folds the Favourites section away, or brings it back (collapse.go
+    /// <c>toggleFavourites</c>); a selection among its rows stays, as under
+    /// a folded account.
+    /// </summary>
+    public void ToggleFavourites()
+    {
+        Scope.VerifyAccess();
+        Model.Collapsed.ToggleFavourites();
+        SaveCollapse();
+        RebuildFolderList();
+    }
+
+    /// <summary><see cref="ToggleFavourites"/> for a view that knows the target state; false when the model already agrees.</summary>
+    public bool SetFavouritesCollapsed(bool collapsed)
+    {
+        Scope.VerifyAccess();
+        if (Model.Collapsed.FavouritesCollapsed() == collapsed)
+        {
+            return false;
+        }
+        ToggleFavourites();
+        return true;
+    }
+
+    /// <summary>
     /// Pins a folder or unpins it, persists the change and redraws the
     /// sidebar at once (favourites.go <c>toggleFavourite</c>). The selection
     /// and the message list are left alone: pinning is a way of arranging
@@ -867,6 +898,19 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         {
             savingFavourites = false;
         }
+    }
+
+    // The unified-inbox preference changed (Preferences, another window):
+    // the All Inboxes item comes or goes; when it was selected and goes,
+    // the rebuild falls back to the initial folder.
+    private void OnUnifiedInboxChanged()
+    {
+        if (Scope.IsClosed)
+        {
+            return;
+        }
+        Model.UnifiedInbox = Settings.UnifiedInbox;
+        RebuildFolderList();
     }
 
     private void OnFavouritesChanged()
@@ -1006,17 +1050,25 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         }
         LoadFolders(n.AccountId, Model.FoldersGen);
         Scope.Raise(MessagesChanged, this, n);
+        if (Model.Selected is { IsUnified: true })
+        {
+            // The All Inboxes list: any inbox it covers (unified.CoversAny).
+            if (Unified.CoversAny(true, n.AccountId, n.FolderIds, Model.UnifiedInboxes))
+            {
+                RefreshShown?.Invoke(n.AccountId);
+                ReloadMessages?.Invoke();
+                return;
+            }
+            RefreshSentOf(n);
+            return;
+        }
         if (Model.Selected is not { } sel || sel.Account != n.AccountId)
         {
             return;
         }
         if (!(n.FolderIds.Count == 0 || System.Linq.Enumerable.Contains(n.FolderIds, sel.Folder) || IsVirtual(sel)))
         {
-            // The user's replies a conversation shows live in Sent.
-            if (System.Linq.Enumerable.Any(n.FolderIds, f => Model.FolderRole(new FolderKey(n.AccountId, f)) == FolderRole.Sent))
-            {
-                RefreshShownSent?.Invoke(n.AccountId);
-            }
+            RefreshSentOf(n);
             return;
         }
         RefreshShown?.Invoke(n.AccountId);
@@ -1036,6 +1088,16 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         ArgumentNullException.ThrowIfNull(n);
         Scope.VerifyAccess();
         RefreshDrafts?.Invoke(n);
+    }
+
+    // The user's replies a conversation shows live in Sent: a sent folder
+    // named by the notification has the conversation shown ask again.
+    private void RefreshSentOf(MessagesChangedNotification n)
+    {
+        if (System.Linq.Enumerable.Any(n.FolderIds, f => Model.FolderRole(new FolderKey(n.AccountId, f)) == FolderRole.Sent))
+        {
+            RefreshShownSent?.Invoke(n.AccountId);
+        }
     }
 
     // A fixed view of a Jira account (Assigned to Me, Watching, Open): it
@@ -1072,7 +1134,8 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         {
             s = s with { FolderId = n.FolderId };
         }
-        if (k == Model.ListFolder)
+        // The listed folder itself, or an inbox the All Inboxes list covers.
+        if (Model.ListCovers(k))
         {
             if (Model.Message(s.Id) is not null)
             {
@@ -1080,7 +1143,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
             }
             OnNewMessageForList?.Invoke(n with { Message = s });
         }
-        else if (Model.ListFolder is { } listed && n.AccountId == listed.Account)
+        else if (Model.ListFolder is { } listed && (n.AccountId == listed.Account || (listed.IsUnified && System.Linq.Enumerable.Contains(Unified.Accounts(Model.Accounts), n.AccountId))))
         {
             OnNewMessageElsewhere?.Invoke(n with { Message = s });
         }
@@ -1125,6 +1188,16 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         }
         LoadFolders(cur.AccountId, Model.FoldersGen);
         VerifyNotifications(cur.AccountId);
+        if (Model.Selected is { IsUnified: true })
+        {
+            // The All Inboxes list: the pass of an account or folder it covers.
+            IReadOnlyList<FolderId> synced = cur.FolderId is { } folder ? [folder] : [];
+            if (Unified.CoversAny(true, cur.AccountId, synced, Model.UnifiedInboxes))
+            {
+                ReloadMessages?.Invoke();
+            }
+            return;
+        }
         if (Model.Selected is { } sel && sel.Account == cur.AccountId
             && (cur.FolderId is null || cur.FolderId == sel.Folder || IsVirtual(sel)))
         {
@@ -1157,10 +1230,22 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     public void TriggerSync()
     {
         Scope.VerifyAccess();
-        var parameters = Model.Selected is { } sel
+        // Nothing selected, or the All Inboxes item (whose inboxes are in
+        // every account): every account is checked.
+        var parameters = Model.Selected is { IsUnified: false } sel
             ? new SyncTriggerParams { AccountId = sel.Account, FolderId = sel.Folder }
             : new SyncTriggerParams();
         StartSync(parameters);
+    }
+
+    /// <summary>
+    /// Runs sync.trigger for every account (the All Inboxes item's Check for
+    /// New Mail, whatever is selected).
+    /// </summary>
+    public void TriggerSyncAll()
+    {
+        Scope.VerifyAccess();
+        StartSync(new SyncTriggerParams());
     }
 
     /// <summary>

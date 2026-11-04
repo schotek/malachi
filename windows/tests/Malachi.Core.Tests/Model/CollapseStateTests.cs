@@ -225,6 +225,27 @@ public sealed class CollapseStateTests
     }
 
     [Fact]
+    public void FavouritesFoldIsStoredAmongTheAccountsAndNeverPruned()
+    {
+        using var s = Scratch();
+        var c = new CollapseState();
+        Assert.False(c.FavouritesCollapsed(), "a fresh state folds the section");
+        c.SetFavourites(true);
+        c.SetAccount("acc_1", true);
+        // Pruning against a loaded account list keeps the sentinel: it is no
+        // account that is gone.
+        c.Save(s, [TestAccount("acc_1")]);
+        Assert.Equal(["@favourites", "acc_1"], s.CollapsedAccounts);
+        var got = CollapseState.Load(s);
+        Assert.True(got.FavouritesCollapsed());
+        Assert.True(got.AccountCollapsed("acc_1"));
+        got.ToggleFavourites();
+        got.Save(s, [TestAccount("acc_1")]);
+        Assert.Equal(["acc_1"], s.CollapsedAccounts);
+        Assert.True(got.Clone().AccountCollapsed("acc_1"));
+    }
+
+    [Fact]
     public void CollapseStatePrunesRemovedAccounts()
     {
         using var s = Scratch();

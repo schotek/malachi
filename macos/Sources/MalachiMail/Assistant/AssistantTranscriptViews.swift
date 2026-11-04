@@ -30,7 +30,11 @@ enum AssistantMarkdownRenderer {
     static let listIndent: CGFloat = 14
 
     static func render(_ markdown: String) -> NSAttributedString {
-        let blocks = Assistant.markdown(markdown)
+        render(blocks: Assistant.markdown(markdown))
+    }
+
+    /// Draws blocks (the What's New dialog's notes too).
+    static func render(blocks: [Assistant.Block]) -> NSAttributedString {
         let out = NSMutableAttributedString()
         for (i, b) in blocks.enumerated() {
             if i > 0 {

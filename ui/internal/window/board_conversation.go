@@ -53,6 +53,7 @@ type boardConversationCard struct {
 	root, head       *gtk.Box
 	from, when, text *gtk.Label
 	fold             *gtk.Button
+	sig              *signatureBadge
 	host             *gtk.Overlay
 	web              *htmlview.Card
 	html             string
@@ -388,6 +389,7 @@ func (b *boardConversation) makeCard(m board.MessageCard) *boardConversationCard
 	c.head.Append(c.from)
 	c.head.Append(c.when)
 	c.root.Append(c.head)
+	c.bindSignature()
 	c.text = plainLabel("")
 	c.text.SetWrap(true)
 	c.text.SetWrapMode(pango.WrapWordChar)
@@ -459,7 +461,7 @@ func (b *boardConversation) measureAll() {
 	}
 }
 func (c *boardConversationCard) update(m board.MessageCard) {
-	if c.m == m {
+	if board.SameCard(c.m, m) {
 		return
 	}
 	c.changingHeight(func() {
@@ -471,6 +473,7 @@ func (c *boardConversationCard) update(m board.MessageCard) {
 		c.m = m
 		c.from.SetText(m.From)
 		c.when.SetText(m.When)
+		c.showSignature()
 		if m.Mine {
 			c.root.AddCSSClass("board-card-mine")
 		} else {

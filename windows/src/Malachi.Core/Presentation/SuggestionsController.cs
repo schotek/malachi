@@ -112,6 +112,23 @@ public sealed partial class SuggestionsController : IDisposable
     /// </summary>
     public event EventHandler<Address>? Picked;
 
+    /// <summary>
+    /// Which address books complete the recipients (Preferences → Contacts →
+    /// Recipient Suggestions, <c>SettingsStore.ContactsSuggestScope</c>), read
+    /// for every search and sent as contact.search's scope (compose
+    /// manager.go <c>suggestScope</c>); null leaves it out, which the daemon
+    /// reads as the account's books.
+    /// </summary>
+    public Func<ContactSearchScope>? Scope { get; set; }
+
+    /// <summary>
+    /// The account label a synchronised book's suggestion names in its
+    /// tooltip ("Contacts · Microsoft 365 (…)"; macOS
+    /// RecipientSuggestionsController: the sending account while the scope is
+    /// the account's books, else ""); null names none, as GTK.
+    /// </summary>
+    public Func<string>? BookAccount { get; set; }
+
     /// <summary>What the popup shows, in order (suggest.go <c>contacts</c>).</summary>
     public IReadOnlyList<Contact> Contacts { get; private set; } = [];
 
@@ -293,7 +310,7 @@ public sealed partial class SuggestionsController : IDisposable
     {
         gen++;
         var ticket = gen;
-        var parameters = new ContactSearchParams { AccountId = account(), Query = token, Limit = Suggest.SuggestLimit };
+        var parameters = new ContactSearchParams { AccountId = account(), Query = token, Limit = Suggest.SuggestLimit, Scope = Scope?.Invoke() };
         scope.Perform(client, API.ContactSearch, parameters, outcome =>
         {
             if (ticket != gen || closed)
@@ -328,7 +345,8 @@ public sealed partial class SuggestionsController : IDisposable
             return;
         }
         Contacts = contacts;
-        Rows = [.. contacts.Select(SuggestionRow.For)];
+        var account = BookAccount?.Invoke() ?? "";
+        Rows = [.. contacts.Select(c => SuggestionRow.For(c, c.Source == ContactSource.Contacts ? account : ""))];
         SelectedIndex = 0;
         IsVisible = true;
         Raise(Changed);

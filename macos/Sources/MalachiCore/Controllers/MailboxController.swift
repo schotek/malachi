@@ -147,12 +147,16 @@ public final class MailboxController {
         self.settings = settings
         self.sync = sync
         self.toast = toast
-        model = MailModel(collapsed: CollapseState.load(from: settings), favourites: FavouriteState.load(from: settings))
+        model = MailModel(
+            collapsed: CollapseState.load(from: settings), favourites: FavouriteState.load(from: settings),
+            unifiedSetting: settings.unifiedInbox)
         // The folded-away parts of the sidebar and the pinned folders follow
         // along when another window (or `defaults write`) changes them.
         settingsTokens.append(settings.onChange(.collapsedFolders) { [weak self] in self?.onCollapseChanged() })
         settingsTokens.append(settings.onChange(.collapsedAccounts) { [weak self] in self?.onCollapseChanged() })
         settingsTokens.append(settings.onChange(.favouriteFolders) { [weak self] in self?.onFavouritesChanged() })
+        // The All Inboxes item appears and goes with its preference.
+        settingsTokens.append(settings.onChange(.unifiedInbox) { [weak self] in self?.onUnifiedChanged() })
         sync.accounts = { [weak self] in self?.model.accounts ?? [] }
         sync.folderName = { [weak self] acc, id in
             guard let self, let f = self.model.folder(FolderKey(account: acc, folder: id)) else { return "" }
@@ -453,6 +457,9 @@ public final class MailboxController {
     /// `refreshListTitle`): the folder's display name, or "Messages" when
     /// none is selected. The window title follows it (the plan's D1).
     public var selectedFolderTitle: String {
+        if model.selected?.isUnified == true {
+            return Unified.title
+        }
         if let k = model.selected, let f = model.folder(k) {
             return folderTitle(f)
         }
@@ -462,6 +469,11 @@ public final class MailboxController {
     /// The counts under the title (window.go `refreshListTitle`,
     /// `folderCountsText`): "" while no folder is selected.
     public var selectedFolderSubtitle: String {
+        if model.selected?.isUnified == true {
+            // The inboxes' own counts, whatever the list filter shows.
+            let inboxes = model.unifiedInboxes
+            return countsText(unread: Unified.unread(inboxes), total: Unified.total(inboxes), outbox: false)
+        }
         if let k = model.selected, let f = model.folder(k) {
             return folderCountsText(f)
         }
@@ -515,6 +527,21 @@ public final class MailboxController {
         toggleAccount(id)
     }
 
+    /// Folds the Favourites section away, or brings it back (collapse.go
+    /// `toggleFavourites`); a selection among its rows stays, as under a
+    /// folded account.
+    public func toggleFavourites() {
+        model.collapsed.toggleFavourites()
+        saveCollapse()
+        rebuildFolderList()
+    }
+
+    /// `toggleFavourites` for a view that knows the target state.
+    public func setFavouritesCollapsed(_ collapsed: Bool) {
+        guard model.collapsed.favouritesCollapsed() != collapsed else { return }
+        toggleFavourites()
+    }
+
     /// Pins a folder or unpins it, persists the change and redraws the
     /// sidebar at once (favourites.go `toggleFavourite`). The selection and
     /// the message list are left alone: pinning is a way of arranging the
@@ -540,6 +567,16 @@ public final class MailboxController {
             return
         }
         model.collapsed = CollapseState.load(from: settings)
+        rebuildFolderList()
+    }
+
+    /// The `unified-inbox` preference changed (here or in another window):
+    /// the item is added to the sidebar or taken away, and a selection of
+    /// it falls back to the initial folder (`rebuildFolderList`).
+    private func onUnifiedChanged() {
+        let on = settings.unifiedInbox
+        guard on != model.unifiedSetting else { return }
+        model.unifiedSetting = on
         rebuildFolderList()
     }
 
@@ -652,6 +689,18 @@ public final class MailboxController {
         guard let account = model.account(n.accountId), account.enabled else { return }
         loadFolders(n.accountId, model.foldersGen)
         onMessagesChanged?(n)
+        if model.selected?.isUnified == true {
+            // The All Inboxes list: any of the account's covered inboxes
+            // (none named: any folder, covered when it has an inbox).
+            let sentNamed = n.folderIds.contains { model.folderRole(FolderKey(account: n.accountId, folder: $0)) == .sent }
+            if Unified.coversAny(listIsUnified: true, n.accountId, n.folderIds, model.unifiedInboxes) {
+                refreshShown?(n.accountId)
+                reloadMessages?()
+            } else if sentNamed {
+                refreshShownSent?(n.accountId)
+            }
+            return
+        }
         guard let sel = model.selected, sel.account == n.accountId else { return }
         guard n.folderIds.isEmpty || n.folderIds.contains(sel.folder) || model.folder(sel)?.virtual != nil else {
             // The user's replies a conversation shows live in Sent.
@@ -684,12 +733,14 @@ public final class MailboxController {
         if s.folderId.rawValue.isEmpty {
             s.folderId = n.folderId
         }
-        if k == model.listFolder {
+        if model.listCovers(k) {
+            // The listed folder, or an inbox the All Inboxes list covers.
             if model.message(s.id) != nil {
                 return
             }
             onNewMessageForList?(NewMessageNotification(accountId: n.accountId, folderId: n.folderId, message: s))
-        } else if n.accountId == model.listFolder?.account {
+        } else if n.accountId == model.listFolder?.account
+                    || (model.listIsUnified && Unified.accounts(model.accounts).contains(n.accountId)) {
             onNewMessageElsewhere?(NewMessageNotification(accountId: n.accountId, folderId: n.folderId, message: s))
         }
         let unread = hasFlag(s.flags, .seen) ? 0 : 1
@@ -720,6 +771,17 @@ public final class MailboxController {
         guard let prev, prev.status == .syncing, cur.status != .syncing else { return }
         loadFolders(cur.accountId, model.foldersGen)
         verifyNotifications(cur.accountId)
+        if model.selected?.isUnified == true {
+            // The All Inboxes list: the account's whole pass, or the one
+            // folder when it is a covered inbox.
+            let inboxes = model.unifiedInboxes
+            let covered = cur.folderId.map { Unified.covers(listIsUnified: true, cur.accountId, $0, inboxes) }
+                ?? Unified.coversAny(listIsUnified: true, cur.accountId, [], inboxes)
+            if covered {
+                reloadMessages?()
+            }
+            return
+        }
         if let sel = model.selected, sel.account == cur.accountId,
            cur.folderId == nil || cur.folderId == sel.folder || model.folder(sel)?.virtual != nil {
             reloadMessages?()
@@ -744,11 +806,18 @@ public final class MailboxController {
     /// nothing is selected (sync.go `triggerSync`; win.refresh).
     public func triggerSync() {
         var params = SyncTriggerParams()
-        if let sel = model.selected {
+        // The All Inboxes item has no folder of its own: every account.
+        if let sel = model.selected, !sel.isUnified {
             params.accountId = sel.account
             params.folderId = sel.folder
         }
         startSync(params)
+    }
+
+    /// Runs sync.trigger for every account (Check for New Mail in the
+    /// context menu of the All Inboxes item).
+    public func triggerSyncAllAccounts() {
+        startSync(SyncTriggerParams())
     }
 
     /// Runs sync.trigger for one whole account (sync.go

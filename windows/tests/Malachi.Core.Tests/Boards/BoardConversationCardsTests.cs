@@ -65,6 +65,56 @@ public sealed class BoardConversationCardsTests
         Assert.Equal(Cards.KeyOf(a), Cards.KeyOf(b));
     }
 
+    private static SignatureSummary Verdict(string status, params string[] notes) => new()
+    {
+        Kind = SignatureKind.Smime,
+        Status = status,
+        Signer = new SignatureSigner { Name = "Ann", Email = "ann@example.org" },
+        Notes = [.. notes.Select(n => new SignatureNote(n))],
+    };
+
+    /// <summary>A verdict that turns changes the key, so the cards learn it; the cards, folds and bodies stay and nothing is asked again.</summary>
+    [Fact]
+    public void ASignatureChangeCountsAndKeepsTheCards()
+    {
+        var plain = DetailOf("", "09:00", new MessageCard("m1", "Ann", "09:00", "Hi", false), new MessageCard("m2", "Ann", "09:00", "Ho", false));
+        var signed = DetailOf("", "09:00", new MessageCard("m1", "Ann", "09:00", "Hi", false), new MessageCard("m2", "Ann", "09:00", "Ho", false) { Signature = Verdict(SignatureStatus.Valid) });
+        Assert.NotEqual(Cards.KeyOf(plain), Cards.KeyOf(signed));
+        var cards = new Cards();
+        cards.Apply(Cards.KeyOf(plain));
+        cards.Asked(1);
+        cards.Answered(1, html: true);
+        var before = cards.Clone();
+        // The verdict arrived: every card stays, nothing is reloaded.
+        Assert.Equal(Kept(new() { [0] = 0, [1] = 1 }), cards.Apply(Cards.KeyOf(signed)));
+        Assert.Equal(Cards.Shows.Web, cards.ShowsOf(1, live: true));
+        Assert.True(cards.IsFolded(0) && !cards.IsFolded(1));
+        Assert.NotEqual(before, cards);
+        // The same verdict, built again with new notes: nothing.
+        var again = DetailOf("", "09:00", new MessageCard("m1", "Ann", "09:00", "Hi", false), new MessageCard("m2", "Ann", "09:00", "Ho", false) { Signature = Verdict(SignatureStatus.Valid) });
+        Assert.Equal(Cards.KeyOf(signed), Cards.KeyOf(again));
+        Assert.Equal(new Cards.Change.None(), cards.Apply(Cards.KeyOf(again)));
+        // Another status, or a note: counts again.
+        var revoked = DetailOf("", "09:00", new MessageCard("m1", "Ann", "09:00", "Hi", false), new MessageCard("m2", "Ann", "09:00", "Ho", false) { Signature = Verdict(SignatureStatus.Valid, SignatureNote.RevokedAfter) });
+        Assert.Equal(Kept(new() { [0] = 0, [1] = 1 }), cards.Apply(Cards.KeyOf(revoked)));
+        // The signature leaves: the same.
+        Assert.Equal(Kept(new() { [0] = 0, [1] = 1 }), cards.Apply(Cards.KeyOf(plain)));
+        Assert.Equal(Cards.Shows.Web, cards.ShowsOf(1, live: true));
+    }
+
+    /// <summary>A card and a detail with the same verdict built twice are equal; another verdict is another card.</summary>
+    [Fact]
+    public void CardsAndDetailsCompareTheirVerdictsByValue()
+    {
+        var a = new MessageCard("m1", "Ann", "09:00", "Hi", false) { Signature = Verdict(SignatureStatus.Valid, SignatureNote.Opaque) };
+        var b = new MessageCard("m1", "Ann", "09:00", "Hi", false) { Signature = Verdict(SignatureStatus.Valid, SignatureNote.Opaque) };
+        Assert.Equal(a, b);
+        Assert.NotEqual(a, a with { Signature = Verdict(SignatureStatus.Revoked) });
+        Assert.NotEqual(a, a with { Signature = null });
+        Assert.Equal(DetailOf("", "09:00", a), DetailOf("", "09:00", b));
+        Assert.NotEqual(DetailOf("", "09:00", a), DetailOf("", "09:00", b with { Signature = null }));
+    }
+
     // A detail of case "case" with the members a key does not read filled in.
     private static Detail DetailOf(string draft, string time, params MessageCard[] messages) => new()
     {

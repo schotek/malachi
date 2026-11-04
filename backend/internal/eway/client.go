@@ -335,11 +335,11 @@ func (c *Client) send(ctx context.Context, rq request) (int, http.Header, []byte
 }
 
 func (c *Client) sameOrigin(u *url.URL) bool {
-	return u.Scheme == "https" && strings.EqualFold(u.Hostname(), c.origin.Hostname()) && effectivePort(u) == effectivePort(c.origin)
+	return strings.EqualFold(u.Scheme, c.origin.Scheme) && strings.EqualFold(u.Hostname(), c.origin.Hostname()) && effectivePort(u) == effectivePort(c.origin)
 }
 
 func effectivePort(u *url.URL) string {
-	if p := u.Port(); p != "" && p != "443" {
+	if p := u.Port(); p != "" && p != defaultPort(strings.ToLower(u.Scheme)) {
 		return p
 	}
 	return ""

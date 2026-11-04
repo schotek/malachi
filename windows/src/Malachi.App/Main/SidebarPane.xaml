@@ -25,6 +25,7 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
     xmlns:main="using:Malachi.App.Main"
     xmlns:p="using:Malachi.Core.Presentation"
     xmlns:res="using:Malachi.App.Resources"
+    xmlns:toolbars="using:Malachi.App.Toolbars"
     IsTabStop="False">
     <Grid>
         <Grid.RowDefinitions>
@@ -32,25 +33,35 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- The sidebar's header bar. -->
+        <!-- The sidebar's header bar: the Folders section of the user's
+             toolbar-mail layout (Toolbars/ToolbarStrip; by default New
+             Message), then the primary menu, which is Windows' own. -->
         <Grid
             x:Name="HeaderRow"
             Height="44"
-            Padding="8,0">
-            <Button
-                x:Name="NewMessageButton"
-                Width="40"
-                Height="32"
-                Padding="0"
-                HorizontalAlignment="Left"
-                AutomationProperties.AutomationId="NewMessageButton"
-                AutomationProperties.Name="{l:T Msgid='New Message'}"
-                Style="{StaticResource AccentButtonStyle}"
-                ToolTipService.ToolTip="{l:T Msgid='New Message (Ctrl+N)'}">
-                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-message-new-symbolic')}" />
-            </Button>
+            Padding="8,0"
+            Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <toolbars:ToolbarStrip x:Name="HeaderStrip">
+                <Button
+                    x:Name="NewMessageButton"
+                    Width="40"
+                    Height="32"
+                    Padding="0"
+                    toolbars:ToolbarStrip.Item="newMessage"
+                    AutomationProperties.AutomationId="NewMessageButton"
+                    AutomationProperties.Name="{l:T Msgid='New Message'}"
+                    Style="{StaticResource AccentButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='New Message (Ctrl+N)'}">
+                    <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-message-new-symbolic')}" />
+                </Button>
+            </toolbars:ToolbarStrip>
             <Button
                 x:Name="MainMenuButton"
+                Grid.Column="1"
                 Width="40"
                 Height="32"
                 Padding="0"
@@ -61,37 +72,21 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                 ToolTipService.ToolTip="{l:T Msgid='Main Menu'}">
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
                 <Button.Flyout>
+                    <!-- window.blp primary_menu, the same as the Board's and the
+                         Calendar's "…" (BoardPage.xaml, CalendarPage.xaml): no
+                         modes (the title bar's switch) and no Add Account
+                         (Preferences), the owner's decision of 2026-11-04. -->
                     <MenuFlyout x:Name="PrimaryMenu" Placement="BottomEdgeAlignedRight">
-                        <!-- The window's modes at the top (macOS's View ▸ Mail, Board, Calendar; no key). -->
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuMail"
-                            AutomationProperties.AutomationId="MenuMail"
-                            GroupName="WindowMode"
-                            IsChecked="True"
-                            Text="{l:T Msgid='Mail'}" />
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuBoard"
-                            AutomationProperties.AutomationId="MenuBoard"
-                            GroupName="WindowMode"
-                            Text="{l:T Msgid='Board'}" />
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuCalendar"
-                            AutomationProperties.AutomationId="MenuCalendar"
-                            GroupName="WindowMode"
-                            Text="{l:T Msgid='Calendar'}" />
-                        <MenuFlyoutSeparator />
                         <!-- Windows-only strings: the key names beside the items. -->
                         <MenuFlyoutItem
                             x:Name="MenuNewMessage"
                             l:MnemonicLabel.Text="{l:T Msgid='_New Message'}"
                             KeyboardAcceleratorTextOverride="Ctrl+N" />
-                        <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
-                        <MenuFlyoutItem x:Name="MenuAddJiraAccount" l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
-                        <!-- macOS File ▸ Add CalDAV Calendar… (docs/calendar.md §5.8). -->
+                        <!-- The Contacts window (window.blp primary_menu app.contacts), without a key. -->
                         <MenuFlyoutItem
-                            x:Name="MenuAddCalDAVCalendar"
-                            AutomationProperties.AutomationId="MenuAddCalDAVCalendar"
-                            Text="{l:T Msgid='Add CalDAV Calendar…'}" />
+                            x:Name="MenuContacts"
+                            AutomationProperties.AutomationId="MenuContacts"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Contacts'}" />
                         <MenuFlyoutSeparator />
                         <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem
@@ -100,10 +95,10 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                             KeyboardAcceleratorTextOverride="Ctrl+," />
                         <MenuFlyoutItem x:Name="MenuAbout" l:MnemonicLabel.Text="{l:T Msgid='_About Malachi Mail'}" />
                         <MenuFlyoutSeparator />
-                        <!-- Windows-only strings: Quit has no GTK msgid (the tray's too). -->
+                        <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem
                             x:Name="MenuQuit"
-                            l:MnemonicLabel.Text="_Quit"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Quit'}"
                             KeyboardAcceleratorTextOverride="Ctrl+Q" />
                     </MenuFlyout>
                 </Button.Flyout>

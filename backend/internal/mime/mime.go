@@ -133,7 +133,11 @@ type Parsed struct {
 	// application/pkcs7-mime, application/x-pkcs7-mime or
 	// application/pgp-encrypted. Such a message is never reduced to a
 	// skeleton: a signature covers the parts as they are.
-	Crypto   bool
+	Crypto bool
+	// Opaque: the message is (or starts with) opaque S/MIME signed data
+	// that the parser unwrapped (opaque.go, plan S14): the text, HTML and
+	// attachments are the wrapped content's, numbered inside the wrapper.
+	Opaque   bool
 	Problems []string // technical English notes on tolerated defects (not for display)
 
 	// The shape of the walk, for VerifySkeleton: whether it ended on a
@@ -175,7 +179,7 @@ func Parse(r io.Reader, limits Limits) (*Parsed, error) {
 		p.problem("part 1: " + err.Error())
 	}
 	p.envelope(root.Header)
-	if werr := root.Walk(p.visit); werr != nil && !errors.Is(werr, errStop) {
+	if werr := walk(root, limits, func() { p.out.Opaque, p.out.Crypto = true, true }, p.visit); werr != nil && !errors.Is(werr, errStop) {
 		p.problem("walk: " + werr.Error())
 		p.out.walkFailed = true
 	}
@@ -213,19 +217,18 @@ func (p *parser) problem(s string) {
 
 // visit is the message.WalkFunc. It consumes the bodies of leaf parts and
 // leaves multipart containers untouched so Walk can descend into them.
-func (p *parser) visit(path []int, e *message.Entity, err error) error {
+func (p *parser) visit(id string, depth int, e *message.Entity, err error) error {
 	p.parts++
 	if p.parts > p.limits.MaxParts {
 		p.out.Truncated = true
 		p.problem(fmt.Sprintf("more than %d parts", p.limits.MaxParts))
 		return errStop
 	}
-	if len(path) > p.limits.MaxDepth {
+	if depth > p.limits.MaxDepth {
 		p.out.Truncated = true
 		p.problem(fmt.Sprintf("nesting deeper than %d", p.limits.MaxDepth))
 		return errStop
 	}
-	id := partID(path)
 	if err != nil {
 		p.problem("part " + id + ": " + err.Error())
 	}

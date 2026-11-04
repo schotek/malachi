@@ -188,7 +188,8 @@ status. All are `proposed`; the owner answers them (or §5) before T1.
   his CRM user has no e-mail, so the add failed with "empty address").
   `Name` defaults to the instance's path segment ("satomar") and is
   editable.
-- **ServiceURL normalisation** (`eway.NormaliseServiceURL`): https only;
+- **ServiceURL normalisation** (`eway.NormaliseServiceURL`): https only
+  (http only on a loopback host, for a development instance);
   no user info, query or fragment; a trailing `/API.svc`, `/API.svc/…` or
   `/InsecureAPI.svc` the user pasted is cut; no trailing slash. `http://`
   is refused with `invalidArgument` and a reason the wizard shows (D3).

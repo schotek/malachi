@@ -134,6 +134,13 @@ final class ComposeAssistantBar: NSView {
         disclosure.setAccessibilityValue(expanded ? L10n.T("Expanded") : L10n.T("Collapsed"))
     }
     @objc private func request(_ sender: Any?) { if write.isEnabled { onRequest?(instruction.stringValue) } }
+
+    /// DEVELOPMENT AID (MALACHI_START `compose-write`): the instruction
+    /// put into the field and Write pressed, as the user would.
+    func developmentWrite(_ text: String) {
+        instruction.stringValue = text
+        request(nil)
+    }
     @objc private func cancel(_ sender: Any?) { onCancel?(); show(text: "", running: false) }
     @objc private func replace(_ sender: Any?) { if !answer.isEmpty { onApply?(answer); show(text: "", running: false) } }
 }

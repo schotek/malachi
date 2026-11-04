@@ -38,6 +38,7 @@ over it all (ToastLayer). The page's keys: CalendarController.HandleKey.
         <Grid
             x:Name="Bar"
             Padding="12,6"
+            Background="Transparent"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
             ColumnSpacing="8">
@@ -81,46 +82,37 @@ over it all (ToastLayer). The page's keys: CalendarController.HandleKey.
                 ToolTipService.ToolTip="{l:T Msgid='Main Menu'}">
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
                 <Button.Flyout>
+                    <!-- The sidebar's primary menu (SidebarPane.xaml, window.blp
+                         primary_menu); New Event is the bar's "+" and Ctrl+Shift+N. -->
                     <MenuFlyout x:Name="PageMenu" Placement="BottomEdgeAlignedRight">
-                        <!-- Windows-only strings: the key names beside the items (Board.BoardKeys, Cal.ShowCalendarKey). -->
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuMail"
-                            AutomationProperties.AutomationId="CalendarMenuMail"
-                            GroupName="WindowMode"
-                            KeyboardAcceleratorTextOverride="Ctrl+1"
-                            Text="{l:T Msgid='Mail'}" />
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuBoard"
-                            AutomationProperties.AutomationId="CalendarMenuBoard"
-                            GroupName="WindowMode"
-                            KeyboardAcceleratorTextOverride="Ctrl+2"
-                            Text="{l:T Msgid='Board'}" />
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuCalendar"
-                            AutomationProperties.AutomationId="CalendarMenuCalendar"
-                            GroupName="WindowMode"
-                            IsChecked="True"
-                            KeyboardAcceleratorTextOverride="Ctrl+3"
-                            Text="{l:T Msgid='Calendar'}" />
-                        <MenuFlyoutSeparator />
-                        <!-- Windows-only string: the key name beside the item (Cal.CalendarKeys' New Event). -->
+                        <!-- Windows-only strings: the key names beside the items. -->
                         <MenuFlyoutItem
-                            x:Name="MenuNewEvent"
-                            AutomationProperties.AutomationId="CalendarMenuNewEvent"
-                            KeyboardAcceleratorTextOverride="Ctrl+Shift+N"
-                            Text="{l:T Msgid='New Event'}" />
+                            x:Name="MenuNewMessage"
+                            AutomationProperties.AutomationId="CalendarMenuNewMessage"
+                            l:MnemonicLabel.Text="{l:T Msgid='_New Message'}"
+                            KeyboardAcceleratorTextOverride="Ctrl+N" />
+                        <!-- The Contacts window (window.blp primary_menu app.contacts), without a key. -->
+                        <MenuFlyoutItem
+                            x:Name="MenuContacts"
+                            AutomationProperties.AutomationId="CalendarMenuContacts"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Contacts'}" />
                         <MenuFlyoutSeparator />
-                        <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
                         <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem
                             x:Name="MenuPreferences"
+                            AutomationProperties.AutomationId="CalendarMenuPreferences"
                             l:MnemonicLabel.Text="{l:T Msgid='_Preferences'}"
                             KeyboardAcceleratorTextOverride="Ctrl+," />
+                        <MenuFlyoutItem
+                            x:Name="MenuAbout"
+                            AutomationProperties.AutomationId="CalendarMenuAbout"
+                            l:MnemonicLabel.Text="{l:T Msgid='_About Malachi Mail'}" />
                         <MenuFlyoutSeparator />
-                        <!-- Windows-only strings: Quit has no GTK msgid (as the sidebar's primary menu). -->
+                        <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem
                             x:Name="MenuQuit"
-                            l:MnemonicLabel.Text="_Quit"
+                            AutomationProperties.AutomationId="CalendarMenuQuit"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Quit'}"
                             KeyboardAcceleratorTextOverride="Ctrl+Q" />
                     </MenuFlyout>
                 </Button.Flyout>

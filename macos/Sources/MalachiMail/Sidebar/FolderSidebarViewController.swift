@@ -10,13 +10,13 @@ import MalachiCore
 /// list: headings and folders fold with the disclosure chevron at the start
 /// of the row, always visible like the GTK twisty (the hover button of
 /// group rows was easy to miss); Left/Right are the outline's own. The
-/// status line GTK has at the bottom of the sidebar is the window's status
-/// bar here (`StatusBarViewController`), so the outline runs to the bottom.
+/// status line is the window's status bar (`StatusBarViewController`, GTK
+/// window.blp `status_bar`), so the outline runs to the bottom.
 ///
-/// A right click (or a Control-click) on a folder or an account heading
-/// opens its context menu (ui/internal/contextmenu `FolderItems`,
-/// `AccountItems`), which acts on the row clicked and leaves the selection
-/// alone; the Favourites heading has none.
+/// A right click (or a Control-click) on a folder, an account heading or
+/// the Favourites heading opens its context menu (ui/internal/contextmenu
+/// `FolderItems`, `AccountItems`, `FavouritesItems`), which acts on the row
+/// clicked and leaves the selection alone.
 ///
 /// The controller owns every decision; this view mirrors `model.entries`
 /// and sends clicks back. It installs the sidebar-facing callbacks of the
@@ -29,6 +29,11 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     /// (`ActionsController`), installed by the integration.
     var onMarkFolderRead: (@MainActor (FolderKey) -> Void)?
     var onEmptyFolder: (@MainActor (FolderKey) -> Void)?
+    /// Apply Rules… of a folder's context menu (`AppRules.apply` with the
+    /// folder's name), and whether an enabled rule runs on an account's
+    /// mail (`RulesController.applies`), installed by the integration.
+    var onApplyRules: (@MainActor (FolderKey, String) -> Void)?
+    var rulesApply: (@MainActor (AccountID) -> Bool)?
 
     private let outline = FolderOutlineView()
     private let scroll = NSScrollView()
@@ -146,7 +151,7 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
 
     /// Expands and collapses the items as the model says, top down so that
     /// children are reachable once their parent is open. The Favourites
-    /// section is always open.
+    /// section folds like an account.
     private func applyExpansion() {
         isApplyingExpansion = true
         defer { isApplyingExpansion = false }
@@ -158,7 +163,11 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     private func applyExpansion(_ item: NSObject) {
         switch item {
         case let f as FavouritesNode:
-            outline.expandItem(f)
+            if f.entry.collapsed {
+                outline.collapseItem(f)
+            } else {
+                outline.expandItem(f)
+            }
         case let a as AccountNode:
             if a.entry.collapsed {
                 outline.collapseItem(a)
@@ -209,8 +218,14 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
             isReselecting = false
             return
         }
-        guard let node = dataSource.node(key, fav: fav) ?? dataSource.node(key, fav: !fav) else { return }
-        let row = outline.row(forItem: node)
+        let row: Int
+        if key.isUnified {
+            guard let node = dataSource.unifiedNode else { return }
+            row = outline.row(forItem: node)
+        } else {
+            guard let node = dataSource.node(key, fav: fav) ?? dataSource.node(key, fav: !fav) else { return }
+            row = outline.row(forItem: node)
+        }
         guard row >= 0, outline.selectedRow != row else { return }
         isReselecting = true
         outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
@@ -220,36 +235,38 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     // MARK: NSOutlineViewDelegate
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
+        if item is UnifiedNode {
+            return true
+        }
         guard let node = item as? FolderNode, let folder = node.entry.folder else { return false }
         return folder.selectable
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
-        // The Favourites section does not fold; its chevron's space stays,
-        // so the headings line up (folders.go `newHeaderRow`).
-        !(item is FavouritesNode)
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, shouldCollapseItem item: Any) -> Bool {
-        !(item is FavouritesNode)
     }
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         switch item {
         case let node as FolderNode:
             return node.subtitle.isEmpty ? SidebarMetrics.rowHeight : SidebarMetrics.subtitleRowHeight
+        case let node as UnifiedNode:
+            return node.twoLines ? SidebarMetrics.subtitleRowHeight : SidebarMetrics.rowHeight
         default:
             return SidebarMetrics.headerRowHeight
         }
     }
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
-        item is FolderNode ? FolderRowView() : nil
+        item is FolderNode || item is UnifiedNode ? FolderRowView() : nil
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         switch item {
+        case let node as UnifiedNode:
+            let cell = outline.makeView(withIdentifier: FolderCellView.reuseIdentifier, owner: nil) as? FolderCellView
+                ?? FolderCellView()
+            cell.configureUnified(entry: node.entry)
+            return cell
         case is FavouritesNode:
+            // The heading folds with the chevron the outline draws for it,
+            // as an account's (folders.go `newHeaderRow`).
             let cell = headerCell()
             cell.configure(text: L10n.T("Favourites"))
             return cell
@@ -282,7 +299,12 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
         let row = outline.selectedRow
         // An emptied selection changes nothing, as the GTK row-selected
         // handler ignores a nil row.
-        guard row >= 0, let node = outline.item(atRow: row) as? FolderNode else { return }
+        guard row >= 0 else { return }
+        if outline.item(atRow: row) is UnifiedNode {
+            mailbox.selectFolder(.unified, fav: false)
+            return
+        }
+        guard let node = outline.item(atRow: row) as? FolderNode else { return }
         mailbox.selectFolder(node.key, fav: node.fav)
     }
 
@@ -295,11 +317,16 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     }
 
     /// The user folded a heading or a folder (collapse.go `toggleAccount`,
-    /// `toggleFolder`). The model changes once the outline is out of its own
-    /// notification: the rebuild that follows reloads the rows.
+    /// `toggleFavourites`, `toggleFolder`). The model changes once the
+    /// outline is out of its own notification: the rebuild that follows
+    /// reloads the rows.
     private func folded(_ notification: Notification, collapsed: Bool) {
         guard !isApplyingExpansion, let item = notification.userInfo?["NSObject"] else { return }
-        if let account = item as? AccountNode {
+        if item is FavouritesNode {
+            Task { @MainActor [weak self] in
+                self?.mailbox.setFavouritesCollapsed(collapsed)
+            }
+        } else if let account = item as? AccountNode {
             let id = account.id
             Task { @MainActor [weak self] in
                 self?.mailbox.setAccountCollapsed(id, collapsed)
@@ -316,9 +343,9 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
 // MARK: - Context menu
 
 extension FolderSidebarViewController {
-    /// The menu of the outline's `row`: a folder's or an account
-    /// heading's, its items closures over the row clicked; nil for the
-    /// Favourites heading or nothing to offer.
+    /// The menu of the outline's `row`: a folder's, an account heading's or
+    /// the Favourites heading's, its items closures over the row clicked;
+    /// nil for nothing to offer.
     fileprivate func menu(forRow row: Int) -> NSMenu? {
         let node = outline.item(atRow: row)
         var groups: [[ContextMenu.Item]] = []
@@ -336,6 +363,14 @@ extension FolderSidebarViewController {
             }
         }
         switch node {
+        case is UnifiedNode:
+            // Nothing needs a real folder; checking mail covers every account.
+            groups = ContextMenu.accountItems(foldable: false)
+            run[.checkMail] = { mailbox.triggerSyncAllAccounts() }
+        case let f as FavouritesNode:
+            groups = ContextMenu.favouritesItems()
+            labels.collapsed = !outline.isItemExpanded(f)
+            run[.fold] = fold
         case let a as AccountNode:
             let id = a.id
             groups = ContextMenu.accountItems(foldable: outline.isExpandable(a))
@@ -346,15 +381,19 @@ extension FolderSidebarViewController {
             let k = f.key
             guard let folder = mailbox.model.folder(k) ?? f.entry.folder else { return nil }
             let account = mailbox.model.account(k.account)
+            let mail = account.map(Rules.isMailAccount) ?? false
             groups = ContextMenu.folderItems(ContextMenu.FolderState(
                 selectable: folder.selectable, role: folder.role, unread: folder.unread, total: folder.total,
-                canDelete: account?.can(.delete) ?? false, foldable: !f.fav && outline.isExpandable(f)))
+                canDelete: account?.can(.delete) ?? false, foldable: !f.fav && outline.isExpandable(f),
+                offerRules: mail && onApplyRules != nil && Rules.canApplyIn(folder),
+                rules: rulesApply?(k.account) ?? false))
             labels = ContextMenu.Labels(junk: folder.role == .junk, favourite: f.entry.starred,
                                         collapsed: !outline.isItemExpanded(f))
             run[.checkMail] = { mailbox.triggerSync(folder: folder) }
             run[.markAllRead] = { [weak self] in self?.onMarkFolderRead?(k) }
             run[.emptyFolder] = { [weak self] in self?.onEmptyFolder?(k) }
             run[.favourite] = { mailbox.toggleFavourite(k) }
+            run[.applyRules] = { [weak self] in self?.onApplyRules?(k, folderTitle(folder)) }
             run[.fold] = fold
         default:
             return nil

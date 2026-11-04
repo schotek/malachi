@@ -752,7 +752,7 @@ public sealed partial class ComposePane : UserControl, IComposeForm
         CommentHeader.Margin = new Thickness(0, 0, 0, 6);
         FormatBar.Margin = new Thickness(0);
         PlainTextHint.Margin = new Thickness(0, 4, 0, 4);
-        Chips.Margin = new Thickness(0, 6, 0, 0);
+        Chips.Margin = new Thickness(0, 0, 0, 6);
         EditorRow.Height = GridLength.Auto;
         EditorSlot.MinHeight = 0;
         // The window layout's parts: the body stays whole, the board has
@@ -867,6 +867,8 @@ public sealed partial class ComposePane : UserControl, IComposeForm
                 // are no part of what is completed.
                 () => (row.Pending, Suggest.ScalarOffset(row.Pending.Length, row.Pending)),
                 logger: state.Logs.CreateLogger<SuggestionsController>());
+            // contacts-suggest-scope and the book's account in the tooltip.
+            state.Contacts.WireSuggestions(controller, () => CallAccount);
             var s = new RecipientSuggestions(row, controller);
             suggestions.Add(s);
             // The value changed (a badge, typed text: the draft is dirty), and

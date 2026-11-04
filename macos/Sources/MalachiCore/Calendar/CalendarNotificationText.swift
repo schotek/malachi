@@ -73,11 +73,17 @@ extension Cal {
 
     /// "Q4 planning · Tuesday 14 October 2026 · 10:00–11:30 · 1 h 30 min".
     static func summaryBody(_ s: InvitationSummary, _ env: Env) -> String {
+        Text.dots(cleanTitle(s.title), summaryTimeLine(s, env))
+    }
+
+    /// "Tuesday 14 October 2026 · 10:00–11:30 · 1 h 30 min" of a summary
+    /// (`summaryBody` without the title); "" without a time.
+    static func summaryTimeLine(_ s: InvitationSummary, _ env: Env) -> String {
         var o = bareOccurrence(start: s.start, end: s.end, startDate: s.startDate, allDay: s.allDay)
         if s.allDay, let d = parseDate(s.startDate, env.zone) {
             o.endDate = dateOf(addDays(d, 1, env.zone), env.zone)
         }
-        return Text.dots(cleanTitle(s.title), timeLine(o, env: env))
+        return timeLine(o, env: env)
     }
 
     public static var show: String { L10n.T("Show") }

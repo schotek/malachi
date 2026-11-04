@@ -595,6 +595,126 @@ public static class API
     public static readonly RpcMethod<AssistantProfileResolveParams, AssistantProfileResolveResult> AssistantProfileResolve =
         new("assistant.profileResolve", RpcTimeouts.Default, Wire.AssistantProfileResolveParams, Wire.AssistantProfileResolveResult);
 
+    // Address books and contacts (docs/api.md §4.19; ContactsBook.cs)
+
+    /// <summary><c>addressBook.list</c>: the books (hidden ones too); with an account, its books or contactsConsentRequired.</summary>
+    public static readonly RpcMethod<AddressBookListParams, AddressBookListResult> AddressBookList =
+        new("addressBook.list", RpcTimeouts.Default, Wire.AddressBookListParams, Wire.AddressBookListResult);
+
+    /// <summary><c>addressBook.set</c>: shows or hides a book.</summary>
+    public static readonly RpcMethod<AddressBookSetParams, AddressBookSetResult> AddressBookSet =
+        new("addressBook.set", RpcTimeouts.Default, Wire.AddressBookSetParams, Wire.AddressBookSetResult);
+
+    /// <summary><c>contact.list</c>: a page of a book's (or every visible book's) contacts.</summary>
+    public static readonly RpcMethod<ContactListParams, ContactListResult> ContactList =
+        new("contact.list", RpcTimeouts.Default, Wire.ContactListParams, Wire.ContactListResult);
+
+    /// <summary><c>contact.get</c>: a whole contact with its revision.</summary>
+    public static readonly RpcMethod<ContactGetParams, ContactGetResult> ContactGet =
+        new("contact.get", RpcTimeouts.Default, Wire.ContactGetParams, Wire.ContactGetResult);
+
+    /// <summary><c>contact.lookup</c>: which addresses a visible book has exactly.</summary>
+    public static readonly RpcMethod<ContactLookupParams, ContactLookupResult> ContactLookup =
+        new("contact.lookup", RpcTimeouts.Default, Wire.ContactLookupParams, Wire.ContactLookupResult);
+
+    /// <summary><c>contact.create</c>: written to the server first (contactsctl WriteTimeout).</summary>
+    public static readonly RpcMethod<ContactCreateParams, ContactCreateResult> ContactCreate =
+        new("contact.create", RpcTimeouts.ContactWrite, Wire.ContactCreateParams, Wire.ContactCreateResult);
+
+    /// <summary><c>contact.update</c>: the revision of the last <c>contact.get</c>, else contactConflict.</summary>
+    public static readonly RpcMethod<ContactUpdateParams, ContactUpdateResult> ContactUpdate =
+        new("contact.update", RpcTimeouts.ContactWrite, Wire.ContactUpdateParams, Wire.ContactUpdateResult);
+
+    /// <summary><c>contact.delete</c>: deleting a deleted contact answers <c>{}</c>.</summary>
+    public static readonly RpcMethod<ContactDeleteParams, EmptyResult> ContactDelete =
+        new("contact.delete", RpcTimeouts.ContactWrite, Wire.ContactDeleteParams, Wire.EmptyResult);
+
+    /// <summary><c>contact.photo</c>: a contact's photo; a Microsoft 365 one is downloaded first (contactsctl PhotoTimeout).</summary>
+    public static readonly RpcMethod<ContactPhotoParams, ContactPhotoResult> ContactPhoto =
+        new("contact.photo", RpcTimeouts.ContactPhoto, Wire.ContactPhotoParams, Wire.ContactPhotoResult);
+
+    // Update check (docs/api.md §4.20; Update.cs)
+
+    /// <summary><c>update.status</c>: the status, its texts in the locale.</summary>
+    public static readonly RpcMethod<UpdateStatusParams, UpdateStatus> UpdateStatus =
+        new("update.status", RpcTimeouts.Default, Wire.UpdateStatusParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.check</c>: checks now (Check Now); within a minute of the last one returns the status as it is.</summary>
+    public static readonly RpcMethod<UpdateCheckParams, UpdateStatus> UpdateCheck =
+        new("update.check", RpcTimeouts.UpdateCheck, Wire.UpdateCheckParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.setPrefs</c>: turns the daily check on or off.</summary>
+    public static readonly RpcMethod<UpdateSetPrefsParams, UpdateStatus> UpdateSetPrefs =
+        new("update.setPrefs", RpcTimeouts.Default, Wire.UpdateSetPrefsParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.dismiss</c>: skips, puts off or records the question of the offered version.</summary>
+    public static readonly RpcMethod<UpdateDismissParams, UpdateStatus> UpdateDismiss =
+        new("update.dismiss", RpcTimeouts.Default, Wire.UpdateDismissParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.dismissNotice</c>: hides a notice for good.</summary>
+    public static readonly RpcMethod<UpdateDismissNoticeParams, UpdateStatus> UpdateDismissNotice =
+        new("update.dismissNotice", RpcTimeouts.Default, Wire.UpdateDismissNoticeParams, Wire.UpdateStatus);
+
+    // Mail rules (docs/api.md §4.21; Rules.cs)
+
+    /// <summary><c>rules.list</c>: every rule in its order.</summary>
+    public static readonly RpcMethod<EmptyParams, RulesListResult> RulesList =
+        new("rules.list", RpcTimeouts.Default, Wire.EmptyParams, Wire.RulesListResult);
+
+    /// <summary><c>rules.create</c>: adds a rule at the end; confirmOutgoing when it is enabled with an outgoing action.</summary>
+    public static readonly RpcMethod<RulesCreateParams, RulesCreateResult> RulesCreate =
+        new("rules.create", RpcTimeouts.Default, Wire.RulesCreateParams, Wire.RulesCreateResult);
+
+    /// <summary><c>rules.update</c>: replaces a rule's input.</summary>
+    public static readonly RpcMethod<RulesUpdateParams, RulesUpdateResult> RulesUpdate =
+        new("rules.update", RpcTimeouts.Default, Wire.RulesUpdateParams, Wire.RulesUpdateResult);
+
+    /// <summary><c>rules.delete</c>: ruleNotFound for an unknown id.</summary>
+    public static readonly RpcMethod<RulesDeleteParams, EmptyResult> RulesDelete =
+        new("rules.delete", RpcTimeouts.Default, Wire.RulesDeleteParams, Wire.EmptyResult);
+
+    /// <summary><c>rules.reorder</c>: every rule's id once, in the new order.</summary>
+    public static readonly RpcMethod<RulesReorderParams, RulesReorderResult> RulesReorder =
+        new("rules.reorder", RpcTimeouts.Default, Wire.RulesReorderParams, Wire.RulesReorderResult);
+
+    /// <summary><c>rules.test</c>: which stored messages of a folder a rule, as edited, matches.</summary>
+    public static readonly RpcMethod<RulesTestParams, RulesTestResult> RulesTest =
+        new("rules.test", RpcTimeouts.RulesTest, Wire.RulesTestParams, Wire.RulesTestResult);
+
+    /// <summary><c>rules.apply</c>: runs rules by hand on stored mail, local actions only.</summary>
+    public static readonly RpcMethod<RulesApplyParams, RulesApplyResult> RulesApply =
+        new("rules.apply", RpcTimeouts.RulesApply, Wire.RulesApplyParams, Wire.RulesApplyResult);
+
+    // Signatures and OpenPGP keys (docs/api.md §4.22; Signature.cs)
+
+    /// <summary><c>message.signature</c>: the details of a message's verdict; a null signature is no verdict.</summary>
+    public static readonly RpcMethod<MessageSignatureParams, MessageSignatureResult> MessageSignature =
+        new("message.signature", RpcTimeouts.Default, Wire.MessageSignatureParams, Wire.MessageSignatureResult);
+
+    /// <summary>
+    /// <c>message.signatureRevocation</c>: checks whether the signer's S/MIME
+    /// certificate was revoked (Check Revocation); the daemon gives up after
+    /// api.RevocationTimeout (15 s), the client after 20 s.
+    /// </summary>
+    public static readonly RpcMethod<MessageSignatureRevocationParams, MessageSignatureResult> MessageSignatureRevocation =
+        new("message.signatureRevocation", RpcTimeouts.SignatureRevocation, Wire.MessageSignatureRevocationParams, Wire.MessageSignatureResult);
+
+    /// <summary><c>pgp.keyImport</c>: stores OpenPGP public keys as seen.</summary>
+    public static readonly RpcMethod<PgpKeyImportParams, PgpKeyImportResult> PgpKeyImport =
+        new("pgp.keyImport", RpcTimeouts.Default, Wire.PgpKeyImportParams, Wire.PgpKeyImportResult);
+
+    /// <summary><c>pgp.keyVerify</c>: confirms a key, or takes the confirmation back.</summary>
+    public static readonly RpcMethod<PgpKeyVerifyParams, PgpKeyVerifyResult> PgpKeyVerify =
+        new("pgp.keyVerify", RpcTimeouts.Default, Wire.PgpKeyVerifyParams, Wire.PgpKeyVerifyResult);
+
+    /// <summary><c>pgp.keyList</c>: every stored key.</summary>
+    public static readonly RpcMethod<EmptyParams, PgpKeyListResult> PgpKeyList =
+        new("pgp.keyList", RpcTimeouts.Default, Wire.EmptyParams, Wire.PgpKeyListResult);
+
+    /// <summary><c>pgp.keyRemove</c>: removes a stored key.</summary>
+    public static readonly RpcMethod<PgpKeyRemoveParams, EmptyResult> PgpKeyRemove =
+        new("pgp.keyRemove", RpcTimeouts.Default, Wire.PgpKeyRemoveParams, Wire.EmptyResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -633,6 +753,14 @@ public static class API
         AccountDetectEway,
         CrmLookup, CrmSearch, CrmSave, CrmRemove,
         AssistantProfileGet, AssistantProfileSet, AssistantProfilePropose, AssistantProfileResolve,
+        AddressBookList, AddressBookSet,
+        ContactList, ContactGet, ContactLookup,
+        ContactCreate, ContactUpdate, ContactDelete,
+        ContactPhoto,
+        UpdateStatus, UpdateCheck, UpdateSetPrefs, UpdateDismiss, UpdateDismissNotice,
+        RulesList, RulesCreate, RulesUpdate, RulesDelete, RulesReorder, RulesTest, RulesApply,
+        MessageSignature, MessageSignatureRevocation,
+        PgpKeyImport, PgpKeyVerify, PgpKeyList, PgpKeyRemove,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -676,6 +804,26 @@ public static class API
 
         /// <summary>api.NotifyAssistantProfileChanged: the profile or its proposals changed; no params.</summary>
         public const string AssistantProfileChanged = "notify.assistantProfileChanged";
+
+        /// <summary>
+        /// api.NotifyContactsChanged (<see cref="ContactsChangedNotification"/>):
+        /// the contacts of these books changed; the Contacts window,
+        /// Preferences → Contacts and the address chips' lookup read them again.
+        /// </summary>
+        public const string ContactsChanged = "notify.contactsChanged";
+
+        /// <summary>api.NotifyUpdateChanged: the update status changed; no params, clients call <c>update.status</c>.</summary>
+        public const string UpdateChanged = "notify.updateChanged";
+
+        /// <summary>api.NotifyRulesChanged: a rule was added, changed, reordered, deleted or disabled by the daemon, or its counts moved; no params, clients call <c>rules.list</c>.</summary>
+        public const string RulesChanged = "notify.rulesChanged";
+
+        /// <summary>
+        /// api.NotifySignaturesChanged: trust changed (a key imported, confirmed
+        /// or removed, a revocation check); no params, clients read the
+        /// messages they show, an open details dialog and the key list again.
+        /// </summary>
+        public const string SignaturesChanged = "notify.signaturesChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
@@ -685,6 +833,10 @@ public static class API
         Notify.BoardChanged, Notify.DraftsChanged,
         Notify.CalendarChanged, Notify.CalendarState, Notify.EventAlert, Notify.InvitationsChanged,
         Notify.AssistantProfileChanged,
+        Notify.ContactsChanged,
+        Notify.UpdateChanged,
+        Notify.RulesChanged,
+        Notify.SignaturesChanged,
     ];
 
     /// <summary>
@@ -938,5 +1090,89 @@ public static class API
 
         /// <summary>api.MaxProfileProposals: the pending proposals; the oldest goes.</summary>
         public const int MaxProfileProposals = 20;
+
+        // contacts_book.go (docs/plans/address-book.md §4.2); exceeding an
+        // input limit is invalidArgument.
+
+        /// <summary>api.DefaultContactListLimit: <see cref="ContactListParams.Limit"/> when absent.</summary>
+        public const int DefaultContactListLimit = 100;
+
+        /// <summary>api.MaxContactListLimit: the largest <see cref="ContactListParams.Limit"/>.</summary>
+        public const int MaxContactListLimit = 500;
+
+        /// <summary>api.MaxVCardBytes: one vCard as stored or sent.</summary>
+        public const int MaxVCardBytes = 1 << 20;
+
+        /// <summary>api.MaxVCardProperties: the properties of one vCard.</summary>
+        public const int MaxVCardProperties = 500;
+
+        /// <summary>api.MaxContactLookupAddresses: <see cref="ContactLookupParams.Addresses"/>.</summary>
+        public const int MaxContactLookupAddresses = 200;
+
+        /// <summary>api.MaxAddressBooksPerAccount: the books of one account.</summary>
+        public const int MaxAddressBooksPerAccount = 200;
+
+        /// <summary>api.MaxContactsPerBook: the contacts of one book.</summary>
+        public const int MaxContactsPerBook = 50000;
+
+        /// <summary>api.MaxContactNameBytes: each name part, the display name, the nickname.</summary>
+        public const int MaxContactNameBytes = 256;
+
+        /// <summary>api.MaxContactFieldBytes: a company, title, address, number or URL.</summary>
+        public const int MaxContactFieldBytes = 1024;
+
+        /// <summary>api.MaxContactLabelBytes: a server's own label.</summary>
+        public const int MaxContactLabelBytes = 64;
+
+        /// <summary>api.MaxContactNoteBytes: <see cref="ContactCard.Note"/>.</summary>
+        public const int MaxContactNoteBytes = 32 << 10;
+
+        /// <summary>api.MaxContactEmails: <see cref="ContactCard.Emails"/>.</summary>
+        public const int MaxContactEmails = 50;
+
+        /// <summary>api.MaxContactPhones: <see cref="ContactCard.Phones"/>.</summary>
+        public const int MaxContactPhones = 50;
+
+        /// <summary>api.MaxContactAddresses: <see cref="ContactCard.Addresses"/>.</summary>
+        public const int MaxContactAddresses = 20;
+
+        /// <summary>api.MaxContactURLs: <see cref="ContactCard.Urls"/>.</summary>
+        public const int MaxContactURLs = 20;
+
+        /// <summary>api.MaxContactPhotoBytes: <see cref="ContactPhotoResult.Data"/>.</summary>
+        public const int MaxContactPhotoBytes = 64 << 10;
+
+        /// <summary>api.MaxContactPhotoPixels: a side of the photo's square.</summary>
+        public const int MaxContactPhotoPixels = 256;
+
+        // signature.go (docs/api.md §4.22); exceeding an input limit is
+        // invalidArgument.
+
+        /// <summary>api.MaxSignatureTextBytes: every string from a certificate or key.</summary>
+        public const int MaxSignatureTextBytes = 256;
+
+        /// <summary>api.MaxSignatureChain: <see cref="SmimeDetails.Chain"/>.</summary>
+        public const int MaxSignatureChain = 16;
+
+        /// <summary>api.MaxSignatureEmails: <see cref="SignatureCertificate.Emails"/> and <see cref="PgpKey.Emails"/>.</summary>
+        public const int MaxSignatureEmails = 16;
+
+        /// <summary>api.MaxSignatureUserIDs: <see cref="PgpDetails.UserIds"/> and <see cref="PgpKey.UserIds"/>.</summary>
+        public const int MaxSignatureUserIDs = 32;
+
+        /// <summary>api.MaxProtectedHeaders: <see cref="SignatureDetails.ProtectedHeaders"/>.</summary>
+        public const int MaxProtectedHeaders = 6;
+
+        /// <summary>api.MaxPGPKeyBytes: the key data of <c>pgp.keyImport</c>.</summary>
+        public const int MaxPGPKeyBytes = 1 << 20;
+
+        /// <summary>api.MaxPGPImportKeys: the keys one <c>pgp.keyImport</c> may carry.</summary>
+        public const int MaxPGPImportKeys = 20;
+
+        /// <summary>api.MaxPGPStoredKeys: the stored keys; an import over it is refused.</summary>
+        public const int MaxPGPStoredKeys = 5000;
+
+        /// <summary>api.MaxRevocationResponseBytes: an OCSP response or a CRL.</summary>
+        public const int MaxRevocationResponseBytes = 1 << 20;
     }
 }

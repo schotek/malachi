@@ -4,8 +4,8 @@ SPDX-FileCopyrightText: 2026 Vladislav Janeček
 SPDX-License-Identifier: GPL-3.0-or-later
 
 The looks of the chips a message display builds in code (MessageChips): the
-address chips and "+N more", the attachment chips' texts and Save All
-(style.go: .address-chip, .address-more, .attachment-chip, .chip-action),
+address chips and "+N more", the chip names and Save All over the attachment
+tiles (style.go: .address-chip, .address-more, .chip-action),
 and the recipient badges of the compose window (RecipientBadge).
 Merged into the views that build them (MessageView, the conversation view,
 RecipientBadge),
@@ -57,13 +57,16 @@ App.xaml.
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!-- Save All at the end of the summary line over the attachment tiles
+         (AttachmentSummaryLine): quiet, in the caption's colour. -->
+    <Style
+        x:Key="SummaryActionStyle"
+        BasedOn="{StaticResource ChipActionStyle}"
+        TargetType="Button">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+    </Style>
     <Style x:Key="ChipNameStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style x:Key="ChipSizeStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
 </ResourceDictionary>

@@ -13,6 +13,7 @@ import (
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -887,6 +888,11 @@ func (p *Pane) wireToolbar() {
 		p.editor.Exec("RemoveFormat", "")
 		p.editor.Exec("Unlink", "")
 	})
+	// Black, as the editor's text: GtkColorDialogButton starts on a red of
+	// its own (0.75, 0.25, 0.25) and nothing else sets it. Before the
+	// notification below, so the editor is not told.
+	black := gdk.NewRGBA(0, 0, 0, 1)
+	p.colorButton.SetRGBA(&black)
 	p.colorButton.NotifyProperty("rgba", func() {
 		p.editor.Exec("ForeColor", p.colorButton.RGBA().String())
 	})
@@ -1032,33 +1038,50 @@ func (p *Pane) importFile(path, name string, inline bool, then func(api.DraftAtt
 	})
 }
 
+// addChip shows att as a tile (widget.AttachmentTile, the same as under the
+// headers of a message) with ✕; its click previews the attachment while
+// the manager can (PreviewAttachment). The name is backend-sanitised,
+// still plain text.
 func (p *Pane) addChip(att api.DraftAttachment) {
-	box := gtk.NewBox(gtk.OrientationHorizontal, 6)
-	box.AddCSSClass("card")
-	box.SetMarginTop(2)
-	box.SetMarginBottom(2)
-	icon := gtk.NewImageFromIconName("mail-attachment-symbolic")
-	if att.Inline {
-		icon.SetFromIconName("image-x-generic-symbolic")
-	}
-	icon.SetMarginStart(8)
-	name := gtk.NewLabel(att.Filename) // backend-sanitised, still plain text
-	name.SetEllipsize(3)               // PANGO_ELLIPSIZE_END
-	name.SetMaxWidthChars(24)
-	size := gtk.NewLabel(widget.FormatSize(att.Size))
-	size.AddCSSClass("caption")
-	size.AddCSSClass("dim-label")
 	remove := gtk.NewButtonFromIconName("window-close-symbolic")
 	remove.AddCSSClass("flat")
 	remove.SetTooltipText(i18n.T("Remove"))
 	remove.ConnectClicked(func() { p.removeAttachment(att.ID) })
-	box.Append(icon)
-	box.Append(name)
-	box.Append(size)
-	box.Append(remove)
-	p.attBox.Insert(box, -1)
-	p.chips[att.ID] = box
+	tile := widget.NewAttachmentTile(widget.FileContentType(att.Filename, att.ContentType),
+		att.Filename, widget.FormatSize(att.Size), remove)
+	if p.m != nil && p.m.PreviewAttachment != nil {
+		tile.Main.ConnectClicked(func() { p.previewAttachment(att) })
+	} else {
+		tile.SetInert()
+	}
+	p.attBox.Insert(tile.Root, -1)
+	p.chips[att.ID] = tile.Root
 	p.attBox.SetVisible(true)
+}
+
+// previewAttachment reads att back from the daemon's attachment store
+// (attachment.get, as far as its 16 MiB cap; past it the toast says the
+// attachment is too big) and hands it to the manager's preview.
+func (p *Pane) previewAttachment(att api.DraftAttachment) {
+	acc := p.account().ID
+	p.rpc(func() (any, error) {
+		var res api.AttachmentGetResult
+		err := p.m.client.Call(p.ctx(), api.MethodAttachmentGet, api.AttachmentGetParams{
+			AccountID: acc, AttachmentID: att.ID,
+		}, &res)
+		return res, err
+	}, func(v any, err error) {
+		if err != nil {
+			p.toast(widget.RPCErrorText(i18n.T("Opening the attachment"), err))
+			return
+		}
+		res := v.(api.AttachmentGetResult)
+		name := res.Filename
+		if name == "" {
+			name = att.Filename
+		}
+		p.m.PreviewAttachment(p.topLevelWindow(), name, res.ContentType, res.Data, p.toast)
+	})
 }
 
 func (p *Pane) removeAttachment(id string) {

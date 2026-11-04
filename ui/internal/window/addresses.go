@@ -16,6 +16,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/contacts"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -42,6 +43,8 @@ type addressRow struct {
 	box   *adw.WrapBox
 	chips []gtk.Widgetter
 	key   string
+	// contactFills update each chip's contacts item (contacts_chips.go).
+	contactFills []func()
 }
 
 // addressHeader is the From, To and Cc rows of one message view, with
@@ -78,6 +81,9 @@ func (h *addressHeader) show(id api.MessageID, acc api.AccountID, from, to, cc [
 	h.acc = acc
 	h.lists = [3][]api.Address{from, to, cc}
 	h.render()
+	if h.v != nil && h.v.win != nil {
+		h.v.win.chipState().watch(h)
+	}
 }
 
 // render rebuilds the rows whose content changed.
@@ -104,9 +110,11 @@ func (h *addressHeader) fill(r *addressRow, list []api.Address) {
 	for _, c := range r.chips {
 		r.box.Remove(c)
 	}
-	r.chips = nil
+	r.chips, r.contactFills = nil, nil
 	for _, a := range shown {
-		r.add(h.chip(a))
+		chip, refill := h.chip(a)
+		r.add(chip)
+		r.contactFills = append(r.contactFills, refill)
 	}
 	if more > 0 {
 		r.add(h.moreChip(r, more, len(shown)))
@@ -123,11 +131,12 @@ func (r *addressRow) add(c gtk.Widgetter) {
 }
 
 // chip is one address: a menu button with the name, whose menu names the
-// address again in full and offers to copy it or to write to it. The
-// actions live on the chip and close over its address; the menu is built
-// the first time it opens, so a message to hundreds of people costs a
-// button each.
-func (h *addressHeader) chip(a api.Address) gtk.Widgetter {
+// address again in full and offers to copy it or to write to it, and the
+// contacts item (Show Contact or Add to Contacts…, contacts_chips.go),
+// which refill updates. The actions live on the chip and close over its
+// address; the menu is built the first time it opens, so a message to
+// hundreds of people costs a button each.
+func (h *addressHeader) chip(a api.Address) (gtk.Widgetter, func()) {
 	name := widget.DisplayName(a)
 	addr := strings.TrimSpace(a.Address)
 	acc := h.acc
@@ -156,19 +165,53 @@ func (h *addressHeader) chip(a api.Address) gtk.Widgetter {
 	})
 	g.AddAction(copyAction)
 	g.AddAction(writeAction)
+
+	// The contacts item: its own section, emptied and refilled as the
+	// lookup answers; what it does is decided when it is picked.
+	contact := gio.NewMenu()
+	contactAction := gio.NewSimpleAction("contact", nil)
+	item, id := contacts.ChipNone, api.ContactID("")
+	shownText := ""
+	refill := func() {
+		if h.v == nil || h.v.win == nil || addr == "" {
+			return
+		}
+		item, id = h.v.win.chipState().item(h, addr)
+		text := contacts.ChipItemText(item, i18n.Tr)
+		if text == shownText {
+			return
+		}
+		shownText = text
+		contact.RemoveAll()
+		if text != "" {
+			// No mnemonic: the text is the translation's own.
+			contact.Append(strings.ReplaceAll(text, "_", "__"), "addr.contact")
+		}
+	}
+	contactAction.ConnectActivate(func(*glib.Variant) {
+		switch item {
+		case contacts.ChipShow:
+			h.v.win.showContact(id)
+		case contacts.ChipAdd:
+			// Once the chip's menu has closed.
+			glib.IdleAdd(func() { h.addToContacts(chip, a) })
+		}
+	})
+	g.AddAction(contactAction)
 	chip.InsertActionGroup("addr", g)
 
 	chip.SetCreatePopupFunc(func(mb *gtk.MenuButton) {
+		refill()
 		if mb.Popover() == nil {
-			mb.SetPopover(addressMenu(a))
+			mb.SetPopover(addressMenu(a, contact))
 		}
 	})
-	return chip
+	return chip, refill
 }
 
 // addressMenu is a chip's menu: the name and the address on top, as
-// text, then the actions (resolved on the chip).
-func addressMenu(a api.Address) *gtk.PopoverMenu {
+// text, then the actions (resolved on the chip) and the contacts section.
+func addressMenu(a api.Address, contact *gio.Menu) *gtk.PopoverMenu {
 	header := gio.NewMenuItem("", "")
 	header.SetAttributeValue("custom", glib.NewVariantString("address"))
 	top := gio.NewMenu()
@@ -179,6 +222,7 @@ func addressMenu(a api.Address) *gtk.PopoverMenu {
 	m := gio.NewMenu()
 	m.AppendSection("", top)
 	m.AppendSection("", actions)
+	m.AppendSection("", contact)
 
 	card := gtk.NewBox(gtk.OrientationVertical, 2)
 	card.AddCSSClass("address-card")

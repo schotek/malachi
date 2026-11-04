@@ -83,6 +83,7 @@ private actor BoardScript {
     var listFailure: RPCError?
     var writeFailure: RPCError?
     var getFailure: RPCError?
+    var getText: String?
     var calls: [String] = []
     private var holding: Set<Held> = []
     private var waiting: [Held: [CheckedContinuation<Void, Never>]] = [:]
@@ -95,6 +96,8 @@ private actor BoardScript {
     func set(lastRun: BoardRun?) { self.lastRun = lastRun }
     func set(writeFailure: RPCError?) { self.writeFailure = writeFailure }
     func set(getFailure: RPCError?) { self.getFailure = getFailure }
+    /// The text board.get's one message carries instead of "version N".
+    func set(getText: String?) { self.getText = getText }
     private(set) var deleted: [DraftDeleteParams] = []
     func delete(_ params: Data) throws -> Data {
         calls.append(API.DraftDelete.name)
@@ -185,7 +188,7 @@ private actor BoardScript {
         }
         let m = BoardMessage(
             id: "m_a", folderId: "f_inbox", from: Address(name: "Ann", address: "ann@example.invalid"), date: t0,
-            text: "version \(c.version)")
+            text: getText ?? "version \(c.version)")
         return try JSONCoding.encoder().encode(BoardGetResult(case: c, messages: [m]))
     }
 
@@ -512,8 +515,13 @@ private final class Harness {
         try await waitUntil { await h.script.listsHeld == 1 }
         await h.script.set(cases: [wireCase("1"), wireCase("2", .hot), wireCase("3", .info)])
         for _ in 0..<3 {
-            h.source.boardChanged()
-            try await waitUntil { await h.clock.pending.count == 1 }
+            // Asked again until it sleeps: the debounce fired last round
+            // clears itself on the main actor after the clock let it go,
+            // and a notification before that is no new debounce.
+            try await waitUntil {
+                h.source.boardChanged()
+                return await h.clock.pending.count == 1
+            }
             await h.clock.fire()
             try await waitUntil { await h.clock.pending.isEmpty }
         }
@@ -916,6 +924,56 @@ private final class Harness {
         await h.stop()
     }
 
+    /// notify.messagesChanged of an account: a verdict the worker computed
+    /// after board.get answered does not bump the case's version, so the
+    /// conversations of that account are marked stale and only the one on
+    /// show is asked for again.
+    @Test func messagesChangedAsksTheShownConversationOfTheAccountAgain() async throws {
+        let h = try await Harness()
+        var other = wireCase("3")
+        other.accountId = "acc_other"
+        await h.script.set(cases: [wireCase("1"), wireCase("2", .hot), other])
+        _ = try await h.started()
+        for n in ["1", "2", "3"] {
+            h.source.loadMessages(of: caseID(n))
+            try await h.idle()
+        }
+        #expect(await h.count(API.BoardGet.name) == 3)
+        // Another account: nothing is asked.
+        h.source.messagesChanged(MessagesChangedNotification(accountId: "acc_unrelated"))
+        try await h.idle()
+        #expect(await h.count(API.BoardGet.name) == 3)
+        // The case on show is of acc_other: it is asked for again; the
+        // changed answer replaces the old one in place.
+        await h.script.set(getText: "signed")
+        h.source.messagesChanged(MessagesChangedNotification(accountId: "acc_other"))
+        #expect(h.c("3")?.messages?.map(\.text) == ["version 1"])  // the old one stays until the answer
+        try await h.idle()
+        #expect(await h.count(API.BoardGet.name) == 4)
+        #expect(h.c("3")?.messages?.map(\.text) == ["signed"])
+        // The others of acc_1 are only marked stale: still shown, asked for
+        // when they are opened again.
+        #expect(h.c("1")?.messages?.map(\.text) == ["version 1"])
+        // The same answer changes nothing a view would redraw.
+        let reports = h.reports
+        h.source.messagesChanged(MessagesChangedNotification(accountId: "acc_other"))
+        try await h.idle()
+        #expect(await h.count(API.BoardGet.name) == 5 && h.reports == reports)
+        // acc_1 while case 3 is on show: nothing is asked, 1 and 2 go stale.
+        h.source.messagesChanged(MessagesChangedNotification(accountId: "acc_1"))
+        try await h.idle()
+        #expect(await h.count(API.BoardGet.name) == 5)
+        h.source.loadMessages(of: caseID("1"))
+        try await h.idle()
+        #expect(await h.count(API.BoardGet.name) == 6)
+        #expect(h.c("1")?.messages?.map(\.text) == ["signed"])
+        // An empty account (notify.signaturesChanged) is every account.
+        h.source.signaturesChanged()
+        try await h.idle()
+        #expect(await h.count(API.BoardGet.name) == 7)
+        await h.stop()
+    }
+
     /// The source keeps the conversations of the most recently opened
     /// cases only.
     @Test func conversationsAreBounded() async throws {
@@ -950,7 +1008,15 @@ private final class Harness {
         #expect(h.source.snapshot.cases.count == 1)
         await h.script.set(cases: [wireCase("1"), wireCase("2", .hot)])
         await h.script.hold(gets: false)
-        try await waitUntil { await h.script.getsHeld == 0 }
+        // The reply came back while the case was gone (Go's h.loop.ran):
+        // released by the fake is not yet received by the source, and a
+        // refresh before it would bring the case back first.
+        try await waitUntil {
+            let held = await h.script.getsHeld
+            let pending = await h.client.pendingCalls
+            return held == 0 && pending == 0
+        }
+        await Task.yield()
         h.source.refresh()
         try await h.idle()
         #expect(h.c("2")?.messages == nil)

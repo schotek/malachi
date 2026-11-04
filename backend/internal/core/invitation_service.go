@@ -238,12 +238,37 @@ func (b *Backend) readInvitation(ctx context.Context, a store.Account, m store.M
 	if err := b.store.PutInvitation(ctx, row); err != nil {
 		return out, err
 	}
+	if parsed {
+		// The card shows the calendar part: the paperclip of the list,
+		// the thread and has:attachment counts only the other files.
+		// Nor the signature part of a message with a verdict (S15).
+		skip := []string{row.PartID}
+		if m.Signature != nil && m.Signature.PartID != "" {
+			skip = append(skip, m.Signature.PartID)
+		}
+		if err := b.store.SetHasAttachments(ctx, m.ID, hasOtherAttachment(m.Attachments, skip...)); err != nil &&
+			!errors.Is(err, store.ErrNotFound) {
+			return out, err
+		}
+	}
 	out.wrote = true
 	out.unanswered = row.Method == api.InvitationMethodRequest || row.Method == api.InvitationMethodCancel ||
 		had && (old.Method == api.InvitationMethodRequest || old.Method == api.InvitationMethodCancel)
 	// No trigger joins cal_invitations to the board (docs/calendar.md
 	// §7 Q1): the threads of the message are judged again here.
 	return out, b.store.MarkBoardMessagesDirty(ctx, []string{m.ID})
+}
+
+// hasOtherAttachment reports whether atts has a non-inline attachment
+// besides part partID, the calendar part of the invitation card (the MIME
+// parser's rule of HasAttachments otherwise).
+func hasOtherAttachment(atts []api.Attachment, partIDs ...string) bool {
+	for _, a := range atts {
+		if !a.Inline && !slices.Contains(partIDs, a.PartID) {
+			return true
+		}
+	}
+	return false
 }
 
 // fillInvitationRow copies the columns of cal_invitations from a parsed

@@ -70,6 +70,27 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// weakly, and while the board's toolbar is the window's nothing else
     /// would. Its dynamic items and validation go to it in either mode.
     let mailToolbar: NSToolbar
+    /// More Actions of the mail toolbar, also while the user's arrangement
+    /// leaves it out (`MainToolbar.moreActionsItem`).
+    var moreActionsItem: NSMenuToolbarItem? { toolbarDelegate.moreActionsItem }
+    /// The arrangement of the toolbar the window shows (any mode), nil
+    /// without one.
+    var currentToolbarCustomization: ToolbarCustomization? {
+        guard let tb = window?.toolbar else { return nil }
+        if tb === mailToolbar {
+            return toolbarDelegate.customization
+        }
+        if boardToolbarsMade, let c = boardToolbars.customization(for: tb) {
+            return c
+        }
+        return calendarExtras.toolbar?.toolbar === tb ? calendarExtras.toolbar?.customization : nil
+    }
+
+    /// Move To's menu of the mail toolbar for the selection (installed by
+    /// the application, which has the list).
+    func setMoveToMenu(_ provider: @escaping @MainActor () -> NSMenu?) {
+        toolbarDelegate.moveToMenu = provider
+    }
     /// The board's source: the daemon's (`DaemonBoardSource` over the
     /// application's client), made on first use and started on the first
     /// entry into Board (`startBoard`, MainWindowController+Board): nothing
@@ -123,6 +144,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         let d = BoardToolbar(controller: board) { [weak self] in
             self?.boardPage.listSplitView
         }
+        d.settings = state.settings
+        d.onPaletteEnd = { [weak self] tb in
+            guard let self else { return }
+            BoardToolbar.rebindSidebarSeparator(in: tb)
+            if tb === self.boardToolbars.listToolbar {
+                self.boardToolbars.rebindDetailSeparator()
+            }
+            BoardToolbar.keepSidebarToggle(in: tb)
+            tb.validateVisibleItems()
+        }
         // Triage follows the application's triage (MainWindowController+Triage).
         d.triageItem = { [weak self] in
             self?.triageToolbarItem ?? .hidden
@@ -154,6 +185,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// the app installs it.
     var mailFocusFallback: (@MainActor () -> Void)?
 
+    /// DEVELOPMENT AID: the list controller, for the `row=` step of
+    /// `MALACHI_START` (MainWindowController+DevStart.swift); set by
+    /// Integration, used by nothing else.
+    var developmentList: ListController?
+    /// DEVELOPMENT AID: the mailbox controller, for the `folder=` step.
+    var developmentMailbox: MailboxController?
+
     private let toolbarDelegate: MainToolbar
     /// The toolbar's Assistant menu (ui/internal/assistant), with Summarize
     /// Unread in This Folder.
@@ -178,7 +216,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         // under the unified toolbar (its section then holds only its own
         // items, and the window title moves to the list section as in
         // Mail); the split view controller insets the other panes itself.
-        let w = NSWindow(
+        let w = MainWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false
@@ -200,13 +238,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         assistantMenu = AssistantMenu(state: state, includesUnread: true)
         toolbarDelegate = MainToolbar(
             splitView: split.splitView, assistantMenu: assistantMenu, showsAssistant: state.assistant.shown,
-            showsPanel: state.assistant.panelShown)
+            showsPanel: state.assistant.panelShown, settings: state.settings)
         mailToolbar = toolbarDelegate.makeToolbar()
         super.init(window: w)
         // The toolbar's CRM item asks this window's controller (installed
         // by the application, Integration+CRM); a hidden item has no window
         // to find it through.
         toolbarDelegate.crmController = { [weak self] in self?.crm }
+        // The palette's items (M5 of docs/plans/toolbar-customization.md).
+        toolbarDelegate.actionEnabled = { [weak self] action in
+            guard let self else { return false }
+            return self.mode == .mail && (self.allows(action, self.flags) ?? true)
+        }
+        toolbarDelegate.undoEnabled = { [weak self] in
+            (self?.window as? MainWindow)?.toolbarUndoEnabled ?? false
+        }
+        // The palette rearranged the items: AppKit's sidebar separator and
+        // toggle are made anew and bound again (M4 of
+        // docs/plans/toolbar-customization.md), the items validated.
+        toolbarDelegate.customization?.onPaletteEnd = { tb in
+            BoardToolbar.rebindSidebarSeparator(in: tb)
+            BoardToolbar.keepSidebarToggle(in: tb)
+            tb.validateVisibleItems()
+        }
         w.delegate = self
         modeKeyMonitor = installModeKeys()
         w.toolbar = mailToolbar
@@ -356,6 +410,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Puts `text` into the toolbar's search field without searching (the
+    /// caller searches): Show Mail of the Contacts window.
+    func setSearchField(_ text: String) {
+        toolbarDelegate.setSearchText(text)
+    }
+
     // MARK: Search in your own words
 
     /// "Search in Your Own Words" with the field's `words`: the field shows
@@ -387,6 +447,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         if !started {
             toolbarDelegate.endConverting(text: nil)
         }
+    }
+
+    /// DEVELOPMENT AID (MALACHI_START `search-own`): the words put into
+    /// the search field and converted, as the field's menu item does.
+    func developmentSearchInOwnWords(_ words: String) {
+        toolbarDelegate.developmentSetSearch(words)
+        searchInOwnWords(words)
+    }
+
+    /// DEVELOPMENT AID (MALACHI_START `search-clear`): the field emptied
+    /// and the search ended, as emptying the field does.
+    func developmentClearSearch() {
+        toolbarDelegate.developmentSetSearch("")
+        onSearchText?("")
     }
 
     /// Ends a search in the user's own words under way (the application
@@ -598,6 +672,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         messageActions?.openSelected()
     }
 
+    /// File ▸ Print… and the toolbars' Print (docs/plans/toolbar-customization.md
+    /// §8): Mail the selection, Calendar the selected event or the day.
+    @objc func printMail(_ sender: Any?) {
+        switch mode {
+        case .mail: messageActions?.printSelected()
+        case .calendar: messageActions?.printCalendar(calendarController)
+        case .board: break
+        }
+    }
+
     /// Move To in a message's context menu: the item's folder id.
     @objc func moveToFolder(_ sender: Any?) {
         guard let id = (sender as? NSMenuItem)?.representedObject as? String else { return }
@@ -666,6 +750,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         case Action.trustSender: return f.trustSender
         case Action.openMessage: return f.on && f.open
         case Action.moveToFolder: return f.move
+        case Action.printMail:
+            switch mode {
+            case .mail: return f.on && f.count <= Printing.maxMessages
+            case .calendar: return messageActions != nil
+            case .board: return false
+            }
         // A message not in the Outbox, and the chosen Claude app can read
         // the mail (ui/internal/assistant `Pick`, no fallback).
         case Action.askAssistant: return f.on && !f.outbox && state.assistant.pick(needsBridge: true).ok
@@ -734,8 +824,18 @@ extension MainWindowController: NSUserInterfaceValidations {
 
 extension MainWindowController: NSToolbarItemValidation {
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
-        guard let action = item.action else { return true }
         let f = flags
+        if item.itemIdentifier == MainToolbar.ID.markRead {
+            // One item (O3): Mark as Read while any selected row is unread,
+            // else Mark as Unread.
+            let read = f.markRead || !f.markUnread
+            let label = mn(read ? L10n.T("Mark as _Read") : L10n.T("Mark as _Unread"))
+            item.action = read ? Action.markAsRead : Action.markAsUnread
+            item.image = Icon.symbol(read ? "envelope.open" : "envelope.badge", size: .toolbar, description: label)
+            item.label = label
+            item.toolTip = label
+        }
+        guard let action = item.action else { return true }
         switch action {
         case Action.toggleFlag:
             (item as? StarToolbarItem)?.flagged = f.flagged

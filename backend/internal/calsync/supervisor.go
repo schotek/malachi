@@ -72,11 +72,22 @@ func HasCalendars(a store.Account) bool {
 	}
 	switch a.Config.Protocol() {
 	case api.AccountCalDAV:
-		return true
+		return CalDAVHasCalendars(a.Config)
 	case api.AccountGraph:
 		return a.Config.Calendar != nil && a.Config.Calendar.Sync
 	}
 	return false
+}
+
+// CalDAVHasCalendars reports whether a caldav configuration synchronises
+// calendars: always, unless its contacts are on and its calendar block
+// says sync false (an account of a CardDAV-only server, or one whose user
+// keeps only the address books; docs/api.md §4.19).
+func CalDAVHasCalendars(c api.AccountConfig) bool {
+	if c.Protocol() != api.AccountCalDAV {
+		return false
+	}
+	return c.CalDAV == nil || !c.CalDAV.Contacts || c.Calendar == nil || c.Calendar.Sync
 }
 
 // Supervisor owns one syncer per account with calendars and the alert

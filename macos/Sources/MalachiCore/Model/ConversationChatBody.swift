@@ -128,9 +128,11 @@ extension Conversation {
     /// `hasAttachments`, so that the bubble shows it from the first
     /// moment; else none. A failed message.get leaves the summary's word.
     @MainActor
-    public static func bubbleAttachmentBadge(summary: MessageSummary?, loaded lm: LoadedMessage?) -> BubbleAttachments {
+    public static func bubbleAttachmentBadge(
+        summary: MessageSummary?, loaded lm: LoadedMessage?, cardOn: Bool = false
+    ) -> BubbleAttachments {
         if let lm, let m = lm.msg {
-            let n = ChipPlan(m, lm.body).chips.count
+            let n = ChipPlan(m, lm.body, cardOn: cardOn).chips.count
             return n > 0 ? .count(n) : .none
         }
         return summary?.hasAttachments == true ? .some : .none

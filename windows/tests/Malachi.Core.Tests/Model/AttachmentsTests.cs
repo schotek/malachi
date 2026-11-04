@@ -71,7 +71,7 @@ public sealed class AttachmentsTests
         var notRemote = Attachment(size: 1024, remote: false);
         var fetched = Body(BodyState.Fetched);
         const string OnServer = "On the server only; it is downloaded when you open it";
-        const string OverTheCap = "Attachments over 16.0 MiB cannot be opened or saved yet.";
+        const string OverTheCap = "Attachments over 16.8 MB cannot be opened or saved yet.";
         (string Name, Attachment A, MessageBodyResult? B, PartState State, string Why)[] cases =
         [
             ("no body", small, null, PartState.Waiting, ""),

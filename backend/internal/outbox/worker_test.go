@@ -131,6 +131,7 @@ type harness struct {
 	passwordErr error
 
 	authFailed atomic.Int32 // Deps.AuthFailed calls
+	collected  atomic.Int32 // Deps.Collected calls
 }
 
 func newHarness(t *testing.T) *harness {
@@ -169,6 +170,7 @@ func (h *harness) deps() Deps {
 		Deliver:    h.deliver.deliver,
 		Trigger:    h.rec.onTrigger,
 		Changed:    h.rec.onChanged,
+		Collected:  func() { h.collected.Add(1) },
 		Now:        func() time.Time { return fixedNow },
 		Backoff:    func(attempt int) time.Duration { return time.Duration(attempt) * time.Minute },
 	}
@@ -359,6 +361,9 @@ func TestWorkerCollectsRecipients(t *testing.T) {
 	}
 	if _, ok := byAddr["me@example.invalid"]; ok {
 		t.Error("the sender was collected as a recipient")
+	}
+	if n := h.collected.Load(); n != 1 {
+		t.Errorf("Collected called %d times", n)
 	}
 
 	id2 := h.enqueue("two")

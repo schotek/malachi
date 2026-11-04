@@ -18,6 +18,26 @@ public func invitationPill(_ s: MessageSummary) -> Cal.InvitationPill {
     Cal.pillKind(s.invitation)
 }
 
+/// The preview line of a list row whose message (a conversation row: its
+/// newest member) carries an invitation with a pill: the event's time for
+/// an invitation, an update or a cancellation ("Thursday 5 November 2026 ·
+/// 09:00–10:00 · 1 h"), the answer for a reply (`Conversation
+/// .invitationReplyLine`), instead of the body's first words, which a
+/// meeting invitation fills with boilerplate; `snippet` otherwise, and
+/// when the summary has no time.
+public func invitationPreview(_ s: MessageSummary, snippet: String, env: Cal.Env? = nil) -> String {
+    guard let inv = s.invitation else { return snippet }
+    switch Cal.pillKind(inv) {
+    case .none:
+        return snippet
+    case .reply:
+        return Conversation.invitationReplyLine(inv.replyResponse)
+    default:
+        let line = Cal.summaryTimeLine(inv, env ?? Cal.Env(zone: .current, locale: .current))
+        return line.isEmpty ? snippet : line
+    }
+}
+
 /// The invitation card a message on display shows: the card of message.get
 /// when `Cal.cardModeOf` gives one (`cardOn`: the account's "Show the
 /// Invitation Card"); nil before message.get answered, for a message

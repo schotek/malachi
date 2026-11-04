@@ -489,7 +489,21 @@ a real store, since migration 0017 cannot be undone:
   its size, `MALACHI_START_INTERVAL` the seconds per step (3) and
   `MALACHI_START_TRACE` logs every resize; after each step the toolbar
   items', the dividers' and the board's and triage's state go to stderr,
-  so a layout can be checked without clicking.
+  so a layout can be checked without clicking. **Measure a binary that
+  records the same SDK as the app.** AppKit picks the design by the SDK
+  the executable records (Liquid Glass from 26 on), and SwiftPM's
+  `macos/.build/debug/MalachiMail` records the deployment target (14.0),
+  so it draws the old look; `make macos` writes the real SDK into the
+  bundle's copy with `vtool` (`set_sdk` in `macos/Makefile`, §11). A
+  layout bug of the owner's build (a divider running up through the
+  unified toolbar, floating group rows with a second line, 2026-11-01)
+  does not show in the plain debug binary at all. Before measuring
+  toolbars, dividers or lists, stamp a copy and run that:
+  `vtool -set-build-version macos 14.0 "$(xcrun --show-sdk-version)"
+  -replace -output /tmp/MalachiMail.sdk macos/.build/debug/MalachiMail`
+  (as `set_sdk` does, into another file; check it with `vtool
+  -show-build`); never stamp the debug binary in place or anything in
+  `build/`.
 - **Context menus** (2026-10-14, all three clients at once). What the
   menus of a message and of a sidebar row offer is Core's `ContextMenu`
   (`ui/internal/contextmenu`): `messageItems`, `folderItems`,

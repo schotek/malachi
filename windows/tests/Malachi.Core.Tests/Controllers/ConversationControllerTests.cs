@@ -654,6 +654,32 @@ public sealed class ConversationControllerTests
         Assert.Equal(2, h.Fixture.BodyRequests.Count); // the trimmed body was held by the cache
     }
 
+    // A member with an invitation asks for message.get without the
+    // paperclip: the daemon leaves the calendar part out of hasAttachments,
+    // and the card is message.get's (Swift invitationAsksForMessageGet).
+    [Fact]
+    public async Task InvitationAsksForMessageGet()
+    {
+        // The summary's invitation is a card here: message.get's invitation
+        // (the card) shares the key of the summary it flattens.
+        var card = Calendars.CalFixture.DemoCard(InvitationState.Unanswered);
+        var list = Messages();
+        list[0] = list[0] with { Invitation = card };
+        await using var c = await Conv.StartAsync(list);
+        var h = c.H;
+        h.Fixture.SetDetail("a1", new Message { Summary = list[0], Invitation = card });
+        await c.SelectAsync(new ListKey(Thread: "t1"));
+        await h.On(() => c.Conversation.NeedsBody("a1"));
+        await h.IdleAsync();
+        Assert.True(h.Fixture.CallCount(API.MessageGet.Name) >= 1);
+        Assert.NotNull(c.Conversation.Loaded["a1"].Msg?.Invitation);
+        var before = h.Fixture.CallCount(API.MessageGet.Name);
+        await h.On(() => c.Conversation.NeedsBody("a2"));
+        await h.IdleAsync();
+        Assert.NotNull(c.Conversation.Loaded["a2"].Body);
+        Assert.Equal(before, h.Fixture.CallCount(API.MessageGet.Name)); // a plain member needs only its body
+    }
+
     // A failed message.get is not asked again on every scroll; the summary
     // serves the card.
     [Fact]

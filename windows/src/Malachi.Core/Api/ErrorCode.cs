@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/API/ErrorCode.swift; Go:
-// backend/pkg/api/errors.go (ErrorCode, codeNames). RPCError.attachmentTooBig,
+// backend/pkg/api/errors.go (ErrorCode, codeNames; the address books'
+// 1110, 1111, 1206, 1308 and 1509 of docs/api.md §4.19; the signatures'
+// 1510 of §4.22). RPCError.attachmentTooBig,
 // which the Swift file adds as an extension, is RpcError.AttachmentTooBig.
 
 using System;
@@ -120,6 +122,15 @@ public readonly record struct ErrorCode(int Value)
     /// </summary>
     public const int CrmItemNotFound = 1109;
 
+    /// <summary>No stored contact with that id (deleted, its book gone or its account's contacts switched off).</summary>
+    public const int ContactNotFound = 1110;
+
+    /// <summary>No address book with that id.</summary>
+    public const int AddressBookNotFound = 1111;
+
+    /// <summary>No mail rule with that id (docs/api.md §4.21).</summary>
+    public const int RuleNotFound = 1112;
+
     // 1200–1299: authentication.
 
     /// <summary>Credentials missing or token expired; see notify.authRequired.</summary>
@@ -148,6 +159,12 @@ public readonly record struct ErrorCode(int Value)
     /// is a <see cref="CrmSignInUnsupportedData"/>.
     /// </summary>
     public const int CrmSignInUnsupported = 1205;
+
+    /// <summary>
+    /// The account's sign-in does not allow contacts access; <c>data</c> is a
+    /// <see cref="ContactsConsentRequiredData"/>.
+    /// </summary>
+    public const int ContactsConsentRequired = 1206;
 
     // 1300–1399: network and remote servers.
 
@@ -184,6 +201,12 @@ public readonly record struct ErrorCode(int Value)
     /// Message-ID).
     /// </summary>
     public const int CrmDuplicate = 1307;
+
+    /// <summary>
+    /// The contact changed on the server since the revision the write names;
+    /// <c>data</c> is a <see cref="ContactConflictData"/>.
+    /// </summary>
+    public const int ContactConflict = 1308;
 
     // 1400–1499: local storage.
 
@@ -239,6 +262,20 @@ public readonly record struct ErrorCode(int Value)
     /// </summary>
     public const int RecurrenceUnsupported = 1508;
 
+    /// <summary>
+    /// The address book or contact cannot be changed by the user: the recent
+    /// book, a server's read-only collection or folder.
+    /// </summary>
+    public const int AddressBookReadOnly = 1509;
+
+    /// <summary>
+    /// <c>message.signatureRevocation</c> got no answer it trusts from the
+    /// certificate's OCSP responder or CRL (docs/api.md §4.22); <c>data</c> is a
+    /// <see cref="RevocationFailedData"/> with the class, the message is not for
+    /// display.
+    /// </summary>
+    public const int RevocationFailed = 1510;
+
     private static readonly Dictionary<int, string> Names = new()
     {
         [ParseError] = "parseError",
@@ -264,12 +301,16 @@ public readonly record struct ErrorCode(int Value)
         [CalendarNotFound] = "calendarNotFound",
         [EventNotFound] = "eventNotFound",
         [CrmItemNotFound] = "crmItemNotFound",
+        [ContactNotFound] = "contactNotFound",
+        [AddressBookNotFound] = "addressBookNotFound",
+        [RuleNotFound] = "ruleNotFound",
         [AuthRequired] = "authRequired",
         [AuthFailed] = "authFailed",
         [KeyringError] = "keyringError",
         [OAuthClientMissing] = "oauthClientMissing",
         [CalendarConsentRequired] = "calendarConsentRequired",
         [CrmSignInUnsupported] = "crmSignInUnsupported",
+        [ContactsConsentRequired] = "contactsConsentRequired",
         [Offline] = "offline",
         [NetworkError] = "networkError",
         [ServerError] = "serverError",
@@ -278,6 +319,7 @@ public readonly record struct ErrorCode(int Value)
         [MessageGone] = "messageGone",
         [EventGone] = "eventGone",
         [CrmDuplicate] = "crmDuplicate",
+        [ContactConflict] = "contactConflict",
         [StorageError] = "storageError",
         [MigrationFailed] = "migrationFailed",
         [MalformedMessage] = "malformedMessage",
@@ -289,6 +331,8 @@ public readonly record struct ErrorCode(int Value)
         [QuoteNotFound] = "quoteNotFound",
         [MalformedCalendar] = "malformedCalendar",
         [RecurrenceUnsupported] = "recurrenceUnsupported",
+        [AddressBookReadOnly] = "addressBookReadOnly",
+        [RevocationFailed] = "revocationFailed",
     };
 
     /// <summary>
@@ -301,12 +345,16 @@ public readonly record struct ErrorCode(int Value)
         NotImplemented, InvalidArgument, Conflict, Cancelled, Unavailable, Unauthenticated,
         ReadOnly, InvitationsUnavailable,
         AccountNotFound, FolderNotFound, MessageNotFound, ThreadNotFound, DraftNotFound, AttachmentNotFound,
-        CaseNotFound, CalendarNotFound, EventNotFound, CrmItemNotFound,
+        CaseNotFound, CalendarNotFound, EventNotFound, CrmItemNotFound, ContactNotFound, AddressBookNotFound,
+        RuleNotFound,
         AuthRequired, AuthFailed, KeyringError, OAuthClientMissing, CalendarConsentRequired, CrmSignInUnsupported,
+        ContactsConsentRequired,
         Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone, EventGone, CrmDuplicate,
+        ContactConflict,
         StorageError, MigrationFailed,
         MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
-        UnsubscribeFailed, QuoteNotFound, MalformedCalendar, RecurrenceUnsupported,
+        UnsubscribeFailed, QuoteNotFound, MalformedCalendar, RecurrenceUnsupported, AddressBookReadOnly,
+        RevocationFailed,
     ];
 
     /// <summary>

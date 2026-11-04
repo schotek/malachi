@@ -99,6 +99,7 @@ internal sealed partial class ConversationCard : UserControl
         Id = s.Id;
         Item = item;
         InitializeComponent();
+        SignatureBadge.Attach(pane.Services, () => pane.HostWindow);
         chips = new MessageChips(pane.Services, this, () => pane.HostWindow, pane.FocusList, pane.Logger);
         addresses.RowChanged += (_, kind) => FillAddressRow(kind);
         FoldGlyph.Glyph = Icons.Glyph("pan-down");
@@ -278,6 +279,7 @@ internal sealed partial class ConversationCard : UserControl
             return;
         }
         RenderInvitation(lm?.Msg);
+        RenderSignature(lm?.Msg);
         RenderDetails(lm?.Msg);
         RenderBody(lm);
         RenderBars(lm);
@@ -422,6 +424,14 @@ internal sealed partial class ConversationCard : UserControl
         SetLive(false);
         invitation?.Close();
         invitation = null;
+    }
+
+    // The badge of a signed message in the card's header (ui/internal/signature
+    // BadgeFor; a chat bubble and an attached message have none).
+    private void RenderSignature(Message? m)
+    {
+        var from = s.From.Count > 0 ? s.From[0].Email : "";
+        SignatureBadge.Show(m?.Signature, s.Id, from);
     }
 
     // renderInvitation: the invitation card of message.get, when the account
@@ -744,11 +754,13 @@ internal sealed partial class ConversationCard : UserControl
     // renderAttachments); nothing until message.get answered.
     private void RenderChips(LoadedMessage? lm)
     {
-        if (Chips.Children.Count == 0 && (lm?.Msg is not { } m || AttachmentChips.ChipAttachments(m.Attachments, lm.Body).Count == 0))
+        var cardOn = InvitationReading.ShowsInvitationCard(pane.Services.AccountOf(s.AccountId));
+        if (Chips.Children.Count == 0 && (lm?.Msg is not { } m || AttachmentChips.ChipAttachments(m.Attachments, lm.Body, InvitationReading.Read(m, cardOn), m.Signature).Count == 0))
         {
             return;
         }
-        var (list, saveAll) = AttachmentChip.For(s, lm, nestedView: false, pane.Services.FileTypes, downloading: pane.Services.Cache.ShowsDownload(Id));
+        var (list, saveAll) = AttachmentChip.For(
+            s, lm, nestedView: false, pane.Services.FileTypes, downloading: pane.Services.Cache.ShowsDownload(Id), cardOn: cardOn);
         chips.FillAttachments(Chips, list, saveAll, AttachmentChips.AnyRemote(saveAll, lm?.Body), s);
     }
 

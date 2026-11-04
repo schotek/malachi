@@ -133,7 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (`BoardReplyEditorHost.finishAll`, bounded): one that could not be
     /// saved or sent asks before quitting, as text the user typed must not
     /// go silently, and Cancel keeps the application running with nothing
-    /// else stopped. Then the attachments written for opening go, as
+    /// else stopped. A changed contact form asks next, in the Contacts
+    /// window ("Discard Changes?"). Then the attachments written for opening go, as
     /// ui/main.go's shutdown removes them before it stops the daemon, so a
     /// quit that never completes (a force quit or a logout that gives up
     /// during the wait) leaves none behind; `applicationWillTerminate`
@@ -164,6 +165,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     sender.reply(toApplicationShouldTerminate: false)
                     return
                 }
+            }
+            // A changed contact form asks, its window in front; Cancel
+            // keeps the application and the form, as above.
+            if await !state.contacts.confirmQuit() {
+                quitting = false
+                sender.reply(toApplicationShouldTerminate: false)
+                return
             }
             shutDownSession()
             // The board's triage: no new run, and one under way ends with
@@ -288,18 +296,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state?.hooks.openPreferences?()
     }
 
+    /// Window ▸ Contacts: the one Contacts window to the front.
+    @objc func showContacts(_ sender: Any?) {
+        state?.contacts.showWindow()
+    }
+
     @objc func showAbout(_ sender: Any?) {
         // Built in code from fixed text, never from mail: the one place an
-        // attributed string is made by hand. macOS-only strings.
-        let credits = NSMutableAttributedString(string: "A native mail client.\n", attributes: [
-            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-            .foregroundColor: NSColor.labelColor,
-        ])
-        if let site = URL(string: "https://github.com/schotek/malachi") {
-            credits.append(NSAttributedString(string: site.absoluteString, attributes: [
-                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-                .link: site,
-            ]))
+        // attributed string is made by hand. macOS-only strings but Report
+        // an Issue. The standard panel takes only text, so the website and
+        // the report form (main.go SetWebsite and SetIssueURL) are links,
+        // set apart from the description and the update line by paragraph
+        // spacing.
+        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let credits = NSMutableAttributedString()
+        func paragraph(_ text: String, before: CGFloat, _ attributes: [NSAttributedString.Key: Any]) {
+            let style = NSMutableParagraphStyle()
+            style.alignment = .center
+            style.paragraphSpacingBefore = credits.length == 0 ? 0 : before
+            var a = attributes
+            a[.font] = font
+            a[.paragraphStyle] = style
+            credits.append(NSAttributedString(string: (credits.length == 0 ? "" : "\n") + text, attributes: a))
+        }
+        paragraph("A native mail client.", before: 0, [.foregroundColor: NSColor.labelColor])
+        paragraph("malachimail.app", before: 10, [.link: AppLinks.website])
+        // window.blp's Report an Issue (Adw.AboutDialog words its own).
+        paragraph(L10n.T("Report an Issue"), before: 4, [.link: AppLinks.reportIssue])
+        // The update check's status line (updates.AboutLine), plain text.
+        let line = state.map { Updates.aboutLine($0.updates.status, date: AppState.updateTime) } ?? ""
+        if !line.isEmpty {
+            paragraph(line, before: 10, [.foregroundColor: NSColor.secondaryLabelColor])
         }
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: MainMenu.appName,
@@ -361,6 +388,7 @@ extension AppDelegate: NSUserInterfaceValidations {
         case Action.addAccount:
             return (item.tag == AddAccountTag.jira ? state?.hooks.addJiraAccount : state?.hooks.addAccount) != nil
         case Action.showPreferences: return state?.hooks.openPreferences != nil
+        case Action.showContacts: return state != nil
         case Action.setUpAssistant: return state?.hooks.openAISettings != nil
         case Action.setWindowMode:
             // Checked: the main window's mode.

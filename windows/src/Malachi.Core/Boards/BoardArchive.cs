@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Board/BoardSource.swift (ArchiveOutcome)
 // and DaemonBoardSource.swift (undoArchive); GTK: ui/internal/board/source.go
-// (ArchiveOutcome, UndoCalls, UndoArchive).
+// (ArchiveOutcome, UndoCalls, UndoArchive, whose moves are
+// ui/internal/undo's Calls: Undos/Undo.cs).
 //
 // Archive moves mail on the server, so its toast offers Undo: the messages
 // go back to the folders board.archive moved them from (its result's
@@ -12,6 +13,7 @@
 using System;
 using System.Collections.Generic;
 using Malachi.Core.Api;
+using Malachi.Core.Undos;
 
 namespace Malachi.Core.Boards;
 
@@ -77,31 +79,9 @@ public static partial class Board
     /// </summary>
     public static UndoCalls UndoArchive(IReadOnlyList<BoardMoved>? moved, AccountId account, BoardCaseId id)
     {
-        var folders = new List<FolderId>();
-        var messages = new List<List<MessageId>>();
-        foreach (var m in moved ?? [])
-        {
-            if (string.IsNullOrEmpty(m.MessageId.Value) || string.IsNullOrEmpty(m.FromFolderId.Value))
-            {
-                continue;
-            }
-            var i = folders.IndexOf(m.FromFolderId);
-            if (i < 0)
-            {
-                i = folders.Count;
-                folders.Add(m.FromFolderId);
-                messages.Add([]);
-            }
-            if (!messages[i].Contains(m.MessageId))
-            {
-                messages[i].Add(m.MessageId);
-            }
-        }
-        var moves = new List<MessageMoveParams>(folders.Count);
-        for (var i = 0; i < folders.Count; i++)
-        {
-            moves.Add(new MessageMoveParams { AccountId = account, MessageIds = messages[i], TargetFolderId = folders[i] });
-        }
+        // The moves are Undo's (undo.Calls over undo.FromBoard), as Go's
+        // source.go UndoArchive takes them.
+        IReadOnlyList<MessageMoveParams> moves = Undo.FromBoard(false, account, id, moved) is { } e ? Undo.Calls(e) : [];
         return new UndoCalls(moves, new BoardSetDoneParams { CaseId = id, Done = false });
     }
 }

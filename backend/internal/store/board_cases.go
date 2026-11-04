@@ -682,6 +682,9 @@ type BoardMessage struct {
 	BodyState    BodyState
 	Text         string // the stored plain text, at most boardTextCap characters
 	TextCut      bool   // the store cut Text
+	// Signature is the member's verdict (message_signatures), nil
+	// without one, for api.BoardMessage.Signature.
+	Signature *api.SignatureSummary
 }
 
 // BoardMessages lists the members that count of a case, the newest limit
@@ -784,6 +787,16 @@ func boardMessages(ctx context.Context, q querier, accountID, threadID string, l
 	}
 	for i := range out {
 		out[i].Text, out[i].TextCut = texts[out[i].ID], cut[out[i].ID]
+	}
+	sigs := make([]*Message, len(out))
+	for i := range out {
+		sigs[i] = &Message{ID: out[i].ID}
+	}
+	if err := attachSignaturesTo(ctx, q, sigs); err != nil {
+		return nil, fmt.Errorf("board messages: %w", err)
+	}
+	for i := range out {
+		out[i].Signature = sigs[i].Signature
 	}
 	return out, nil
 }

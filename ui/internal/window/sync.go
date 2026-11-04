@@ -24,7 +24,7 @@ import (
 // Sync status line, refresh, the sign-in banner and the certificate banner.
 //
 // The daemon owns the sync state; this file only mirrors the last
-// sync.status / notify.syncState per account into the sidebar's status line
+// sync.status / notify.syncState per account into the window's status line
 // (one line for all accounts; its popover, one row per account, is in
 // status.go), the auth_banner and the cert_banner. Folder and account names
 // shown here come from the server and are set as plain text.
@@ -89,17 +89,26 @@ func (w *Window) applySyncState(s api.SyncState) {
 	}
 }
 
-// refreshSyncLabel recomputes the sidebar's status line from the cached
-// states and the connection (statusLineFor) and, while its popover is
-// open, the popover's rows. Enabled accounts without a cached state fall
-// back to the state account.list reported, so the line is right before
-// sync.status answered. Without a connection the button cannot be
-// clicked, and an open popover closes.
+// refreshSyncLabel recomputes the window's status bar from the cached
+// states and the connection (statusLineFor), with the text and the note
+// of the shown mode (statusTexts), and, while its popover is open, the
+// popover's rows. Enabled accounts without a cached state fall back to the
+// state account.list reported, so the line is right before sync.status
+// answered. Without a connection the button cannot be clicked, and an
+// open popover closes.
 func (w *Window) refreshSyncLabel() {
-	text, spinning := syncStatusText(w.syncStates, w.model.accounts, w.syncFolderName, time.Now())
-	line := statusLineFor(w.conn, text, spinning)
+	if w.syncLabel == nil {
+		// A part of the window without its status bar (the board's and
+		// the calendar's widget tests).
+		return
+	}
+	line := w.currentStatusLine()
+	text, note := w.statusTexts(line)
 	w.syncLabel.SetUseMarkup(false)
-	w.syncLabel.SetLabel(line.Text)
+	w.syncLabel.SetLabel(text)
+	w.statusNote.SetUseMarkup(false)
+	w.statusNote.SetLabel(note)
+	w.statusNote.SetVisible(note != "")
 	w.syncSpinner.SetVisible(line.Spinning)
 	if line.Icon != "" {
 		w.connIcon.SetFromIconName(line.Icon)
@@ -115,9 +124,6 @@ func (w *Window) refreshSyncLabel() {
 	if w.statusPopover.Visible() {
 		w.refreshStatusPopover()
 	}
-	// The board page's own status button shows the same line (or the
-	// triage's note over it).
-	w.refreshBoardStatusLabel()
 }
 
 // syncFolderName is the display name of a folder an account's state names,
@@ -360,7 +366,7 @@ func (w *Window) editAccount(id api.AccountID) {
 // account when nothing is selected (win.refresh).
 func (w *Window) triggerSync() {
 	params := api.SyncTriggerParams{}
-	if w.model.selected.Folder != "" {
+	if w.model.selected.Folder != "" && !w.model.selectedUnified() {
 		params.AccountID = w.model.selected.Account
 		params.FolderID = w.model.selected.Folder
 	}

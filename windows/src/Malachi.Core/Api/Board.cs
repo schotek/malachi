@@ -551,6 +551,13 @@ public sealed record BoardMessage
     /// <summary>Something was cut off <see cref="Text"/>; left out when false.</summary>
     [JsonPropertyName("trimmed")]
     public bool? Trimmed { get; init; }
+
+    /// <summary>
+    /// The member's signature verdict, as <see cref="Message.Signature"/> (signer and notes
+    /// included); left out without a verdict. The board's conversation card shows its badge.
+    /// </summary>
+    [JsonPropertyName("signature")]
+    public SignatureSummary? Signature { get; init; }
 }
 
 /// <summary>api.BoardRun: a triage run as <c>board.list</c> reports it.</summary>

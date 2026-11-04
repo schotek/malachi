@@ -46,6 +46,12 @@ BUILD_DIR   := build
 GO          ?= go
 GOFLAGS     ?=
 LDFLAGS     := -X main.version=$(VERSION)
+# The package a build is installed from (docs/services.md §2.3); only the
+# package recipes set it (macos-dmg here, the deb, rpm and Flatpak scripts
+# through the environment), and only the daemon gets it. Without it the
+# daemon never checks for updates (docs/plans/update-check.md U5).
+UPDATE_CHANNEL ?=
+LDFLAGS_DAEMON = $(LDFLAGS)$(if $(UPDATE_CHANNEL), -X main.updateChannel=$(UPDATE_CHANNEL))
 
 # Install prefix (scripts/build.sh passes /app for Flatpak). The UI needs the
 # locale directory compiled in to find its .mo files when installed.
@@ -107,7 +113,7 @@ backend: $(BUILD_DIR)/malachid$(EXE)
 # malachid; with the Go build cache that is a sub-second no-op.
 $(BUILD_DIR)/malachid$(EXE): $(shell find backend -name '*.go' -o -name '*.sql' -o -name go.mod)
 	@mkdir -p $(BUILD_DIR)
-	cd backend && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o ../$@ ./cmd/malachid
+	cd backend && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS_DAEMON)' -o ../$@ ./cmd/malachid
 
 ## mcp: compile the MCP bridge for AI agents into ./build/malachi-mcp (see docs/mcp.md)
 mcp: $(BUILD_DIR)/malachi-mcp$(EXE)
@@ -288,7 +294,7 @@ UNAME_S := $(shell uname -s)
 endif
 
 ## macos: build the macOS app bundle build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside (macOS only)
-## macos-dmg: build the universal app into build/Malachi-Mail-<version>-universal.dmg; SIGN= a Developer ID for a release (macOS only)
+## macos-dmg: build the universal app into build/Malachi-Mail-<version>-macos-universal.dmg; SIGN= a Developer ID for a release (macOS only)
 ## macos-notarize: have Apple notarise that DMG and staple the ticket to it (macOS only; docs/releasing.md §8)
 ## run-macos: build the macOS app and run it from the terminal so the daemon log stays visible (macOS only)
 ## test-macos: run the Swift tests of the macOS client (macOS only)
@@ -308,6 +314,7 @@ macos: macos-go
 	$(MAKE) -C macos app $(MACOS_VARS)
 
 macos-dmg: ARCHS ?= arm64 x86_64
+macos-dmg: UPDATE_CHANNEL = macos-dmg
 macos-dmg: macos-go
 	$(MAKE) -C macos dmg $(MACOS_VARS)
 
@@ -319,14 +326,15 @@ macos-notarize:
 # for this Mac alone.
 macos-go:
 	@set -e; \
-	if [ -z '$(strip $(ARCHS))' ]; then $(MAKE) --no-print-directory backend mcp; exit 0; fi; \
+	if [ -z '$(strip $(ARCHS))' ]; then $(MAKE) --no-print-directory backend mcp UPDATE_CHANNEL='$(UPDATE_CHANNEL)'; exit 0; fi; \
 	out='$(BUILD_DIR)/macos/go'; mkdir -p "$$out"; \
 	for bin in malachid malachi-mcp; do \
+		ldflags='$(LDFLAGS)'; [ $$bin = malachid ] && ldflags='$(LDFLAGS_DAEMON)'; \
 		slices=''; \
 		for arch in $(ARCHS); do \
 			case $$arch in x86_64) goarch=amd64 ;; *) goarch=$$arch ;; esac; \
 			echo "go build $$bin ($$arch)"; \
-			(cd backend && CGO_ENABLED=1 GOOS=darwin GOARCH=$$goarch $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o "../$$out/$$bin-$$arch" ./cmd/$$bin); \
+			(cd backend && CGO_ENABLED=1 GOOS=darwin GOARCH=$$goarch $(GO) build $(GOFLAGS) -ldflags "$$ldflags" -o "../$$out/$$bin-$$arch" ./cmd/$$bin); \
 			slices="$$slices $$out/$$bin-$$arch"; \
 		done; \
 		lipo -create $$slices -output "$$out/$$bin"; \
@@ -369,6 +377,10 @@ run-windows: backend mcp
 
 test-windows: backend mcp
 	$(WINDOWS_PS) test -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)"
+
+# The installers of a release are built by a tag's CI
+# (.github/workflows/windows.yml), never by hand; build.ps1 installer
+# builds one locally.
 else
 windows run-windows test-windows:
 	@echo "$@ needs Windows (this is $(UNAME_S)); see windows/README.md" >&2; exit 1

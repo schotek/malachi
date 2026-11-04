@@ -35,7 +35,7 @@ func TestChipAttachments(t *testing.T) {
 		{"no body yet", nil, []string{"1.2", "1.3", "2"}},
 	}
 	for _, c := range cases {
-		got := chipAttachments(atts, c.b)
+		got := chipAttachments(atts, c.b, nil)
 		ids := make([]string, len(got))
 		for i, a := range got {
 			ids[i] = a.PartID
@@ -54,7 +54,7 @@ func TestChipAttachments(t *testing.T) {
 
 	// A part without a part number is never mistaken for a shown picture.
 	odd := []api.Attachment{{ContentID: "x@x"}}
-	if got := chipAttachments(odd, &api.MessageBodyResult{BodyState: api.BodyFetched, HTML: "<p>x</p>"}); len(got) != 1 {
+	if got := chipAttachments(odd, &api.MessageBodyResult{BodyState: api.BodyFetched, HTML: "<p>x</p>"}, nil); len(got) != 1 {
 		t.Errorf("empty PartID hidden: %v", got)
 	}
 }
@@ -83,9 +83,9 @@ func TestPartState(t *testing.T) {
 		{"fetched", small, fetched, partLocal, ""},
 		{"fetched, on the server only", remote, fetched, partRemote, onServer},
 		{"at the cap", edge, fetched, partLocal, ""},
-		{"over the cap", huge, fetched, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
-		{"over the cap beats remote", hugeRemote, fetched, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
-		{"over the cap while pending", huge, pending, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
+		{"over the cap", huge, fetched, partUnavailable, "Attachments over 16.8 MB cannot be opened or saved yet."},
+		{"over the cap beats remote", hugeRemote, fetched, partUnavailable, "Attachments over 16.8 MB cannot be opened or saved yet."},
+		{"over the cap while pending", huge, pending, partUnavailable, "Attachments over 16.8 MB cannot be opened or saved yet."},
 		{"unknown body state", small, &api.MessageBodyResult{BodyState: "brandNew"}, partWaiting, ""},
 	}
 	for _, c := range cases {

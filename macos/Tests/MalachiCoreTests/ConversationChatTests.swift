@@ -247,6 +247,10 @@ struct ConversationChatTests {
             ("only whitespace", " \n\t\r\n   \n\n", ""),
             ("markup stays text", "<b>bold</b> & <script>x</script>", "<b>bold</b> & <script>x</script>"),
             ("invalid UTF-8", invalid, "ok!"),
+            ("rules", "________________\r\n\r\nMeeting\r\nJoin: x\r\n____\r\n", "Meeting\nJoin: x"),
+            ("rule kinds", "- - -\n=====\n───\n—\nText -- here\n. . .", "Text -- here"),
+            ("underscores in a line stay", "a ____ b", "a ____ b"),
+            ("only rules", "____\n----", ""),
         ]
         for (name, input, want) in cases {
             #expect(Conversation.bubbleText(input) == want, "\(name)")

@@ -121,7 +121,7 @@ Adw.BreakpointBin calendar_page_root {
       }
 
       [start]
-      Box {
+      Box calendar_step {
         styles [
           "linked",
         ]
@@ -202,55 +202,6 @@ Adw.BreakpointBin calendar_page_root {
 
       child: SearchEntry calendar_search_entry {
         width-chars: 32;
-      };
-    }
-
-    // The status strip (window/status.go moveStatusStripTo): the
-    // calendars' state on the left, the unanswered count on the right; the
-    // accounts' popover moves here while the Calendar shows.
-    [bottom]
-    MenuButton calendar_status_button {
-      direction: up;
-      margin-start: 6;
-      margin-end: 6;
-      margin-top: 6;
-      margin-bottom: 6;
-
-      accessibility {
-        labelled-by: calendar_status_label;
-      }
-
-      styles [
-        "flat",
-        "status-line",
-      ]
-
-      child: Box {
-        spacing: 8;
-
-        Label calendar_status_label {
-          use-markup: false;
-          ellipsize: end;
-          xalign: 0;
-          hexpand: true;
-
-          styles [
-            "caption",
-            "dim-label",
-          ]
-        }
-
-        Label calendar_status_note {
-          use-markup: false;
-          ellipsize: end;
-          xalign: 1;
-          visible: false;
-
-          styles [
-            "caption",
-            "dim-label",
-          ]
-        }
       };
     }
 

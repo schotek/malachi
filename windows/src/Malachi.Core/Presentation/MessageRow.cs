@@ -10,7 +10,8 @@
 // eWay pill (configure's crmPill, CRM.pillFor; docs/eway.md), threads.go (the row a listRow becomes: newMessageRow,
 // syncRows) and widget/highlight.go (the matched words in bold); macOS:
 // MessageList/MessageCellView.swift, which keeps this in AppKit and Windows
-// in Core (docs/windows-port.md §7.4, §11.2).
+// in Core (docs/windows-port.md §7.4, §11.2). The avatar's contact photo
+// (AvatarAddress) is ui/internal/contacts avatar.go AvatarOfSender.
 //
 // One row of the message list, as a view model the WinUI ListView keeps
 // across snapshots: ListController publishes its rows keyed by ListKey, and
@@ -70,6 +71,7 @@ public sealed partial class MessageRow : ObservableObject
     {
         Key = key;
         AvatarText = "";
+        AvatarAddress = "";
         Sender = "";
         SenderTooltip = "";
         Subject = "";
@@ -88,6 +90,9 @@ public sealed partial class MessageRow : ObservableObject
         DraftText = "";
         CrmPillText = "";
         CrmPillTooltip = "";
+        SignatureIcon = "";
+        SignatureStyle = "";
+        SignatureTooltip = "";
         InvitationText = "";
         EventText = "";
         EventTooltip = "";
@@ -117,6 +122,16 @@ public sealed partial class MessageRow : ObservableObject
     /// <summary>What the avatar's colour and initials come from: the first sender's (or participant's) display name.</summary>
     [ObservableProperty]
     public partial string AvatarText { get; private set; }
+
+    /// <summary>
+    /// The address whose contact's photo the avatar shows instead of the
+    /// initials (ContactBook.AvatarOfSender, docs/plans/address-book.md
+    /// F10): the first sender's (or participant's), normalised; "" for the
+    /// user's own rows (<see cref="RowAppearance.Own"/>) and a sender
+    /// without an address.
+    /// </summary>
+    [ObservableProperty]
+    public partial string AvatarAddress { get; private set; }
 
     /// <summary>The sender, or a conversation's participants.</summary>
     [ObservableProperty]
@@ -284,6 +299,24 @@ public sealed partial class MessageRow : ObservableObject
     public partial string CrmPillTooltip { get; private set; }
 
     /// <summary>
+    /// The icon of a signed message's verdict, next to the paper clip
+    /// (<see cref="Signatures.SignatureView.ListIconFor"/>: only a valid,
+    /// key-only-seen, invalid, revoked or mismatching signature; a
+    /// conversation's is its newest folder member's; docs/plans/signatures.md
+    /// §6): the GTK icon name, "" hides it.
+    /// </summary>
+    [ObservableProperty]
+    public partial string SignatureIcon { get; private set; }
+
+    /// <summary>The style class of the signature icon's colour (<c>success</c>, <c>warning</c>, <c>error</c>, <c>dim-label</c>); "" without the icon.</summary>
+    [ObservableProperty]
+    public partial string SignatureStyle { get; private set; }
+
+    /// <summary>The signature icon's tooltip, the verdict's short name; "" without the icon.</summary>
+    [ObservableProperty]
+    public partial string SignatureTooltip { get; private set; }
+
+    /// <summary>
     /// The pill of a message with a calendar part after the subject
     /// (<see cref="InvitationReading.Pill(ListRow)"/>: on a conversation row
     /// its newest member's): Invitation, Update, Cancelled or Reply; None
@@ -343,12 +376,14 @@ public sealed partial class MessageRow : ObservableObject
             var t = Model.MailModel.SummaryThread(summary, row.Expanded, row.Loading);
             var first = t.Participants.Count > 0 ? t.Participants[0] : new Address { Email = "" };
             AvatarText = Format.DisplayName(first);
+            AvatarAddress = Contacts.ContactBook.AvatarOfSender(first.Email, AvatarText, look.Own).Sender;
             Sender = Format.FormatParticipants(t.Participants);
             SenderTooltip = string.Join("\n", t.Participants.Select(Format.FormatAddress));
             Fill(t.Subject, t.Snippet, t.Date, t.Unread > 0, t.Flagged, t.HasAttachments, now);
             Highlights = [];
-            Origin = "";
-            OriginTooltip = "";
+            // Only the All Inboxes list gives its rows an origin (the account).
+            Origin = message.Origin;
+            OriginTooltip = message.OriginTooltip;
             CountText = Format.ThreadCountText(t.Count);
             // TRANSLATORS: tooltip of the member count of a conversation row.
             CountTooltip = L10n.N("%d message", "%d messages", t.Count);
@@ -366,6 +401,7 @@ public sealed partial class MessageRow : ObservableObject
             var from = message.From.Count > 0 ? message.From[0] : new Address { Email = "" };
             var name = Format.DisplayName(from);
             AvatarText = name;
+            AvatarAddress = Contacts.ContactBook.AvatarOfSender(from.Email, name, look.Own).Sender;
             Sender = name;
             SenderTooltip = Format.FormatAddress(from);
             Fill(message.Subject, message.Snippet, message.Date, message.Unread, message.Flagged, message.HasAttachments, now);
@@ -392,6 +428,11 @@ public sealed partial class MessageRow : ObservableObject
         var crm = Crm.CrmText.PillFor(row.Message);
         CrmPillText = crm?.Label ?? "";
         CrmPillTooltip = crm?.Tooltip ?? "";
+        // The verdict's icon (message_row.go, ui/internal/signature ListIconFor).
+        var signature = Signatures.SignatureView.ListIconFor(row.Message.Signature);
+        SignatureIcon = signature?.Icon ?? "";
+        SignatureStyle = signature?.Style ?? "";
+        SignatureTooltip = signature?.Tooltip ?? "";
         IsThread = thread;
         Loading = thread && loading;
         IsMember = row.Member;
@@ -440,6 +481,7 @@ public sealed partial class MessageRow : ObservableObject
         {
             parts.Add(L10n.T("Attachment"));
         }
+        parts.Add(SignatureTooltip);
         if (Origin.Length > 0)
         {
             parts.Add(Origin);

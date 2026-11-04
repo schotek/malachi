@@ -34,7 +34,9 @@ type SupervisorDeps struct {
 	FilesSentCopyFor func(a store.Account) bool
 	Trigger          func(accountID string, folder api.FolderID, full bool) bool
 	Changed          func(accountID string)
-	Log              *slog.Logger
+	// Collected: see Deps.Collected.
+	Collected func()
+	Log       *slog.Logger
 }
 
 // Supervisor owns one Worker per started account. It satisfies
@@ -144,6 +146,7 @@ func (sv *Supervisor) Start(a store.Account) {
 		FilesSentCopy: filesSentCopy,
 		Trigger:       sv.deps.Trigger,
 		Changed:       sv.deps.Changed,
+		Collected:     sv.deps.Collected,
 		Log:           sv.deps.Log,
 	})
 	ctx, cancel := context.WithCancel(sv.ctx)

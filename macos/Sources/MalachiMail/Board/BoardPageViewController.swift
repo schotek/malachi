@@ -60,8 +60,6 @@ final class BoardPageViewController: NSViewController {
     /// Whether the panel is in (or sliding in).
     private var panelShown = false
     private weak var toasts: ToastPresenter?
-    /// What Archive did, with Undo; above the window's toasts.
-    private let undoToast = BoardUndoToast()
 
     /// The case actions, shared by the styles, their menus and the detail.
     let actions: BoardActions
@@ -90,11 +88,8 @@ final class BoardPageViewController: NSViewController {
         controller.onToast = { [weak self] text in
             self?.showToast(text)
         }
-        // Archive's toast offers Undo (the messages back to their folders,
-        // the case back on the board).
-        controller.onArchived = { [weak self] outcome in
-            self?.showArchived(outcome)
-        }
+        // What Archive and Delete did goes on the window's Undo stack, with
+        // its toast (Integration+Board, ActionsController+Undo), not here.
         actions.onToast = { [weak self] text in
             self?.showToast(text)
         }
@@ -218,20 +213,7 @@ final class BoardPageViewController: NSViewController {
         ])
         if let presenter = overlayView as? ToastPresenter {
             toasts = presenter
-            // Any toast, from the page or from elsewhere (the triage, the
-            // application), takes the Undo capsule away: never both.
-            presenter.onShow = { [weak self] in
-                self?.undoToast.dismiss()
-            }
         }
-        undoToast.removeFromSuperview()
-        view.addSubview(undoToast, positioned: .above, relativeTo: nil)
-        NSLayoutConstraint.activate([
-            undoToast.topAnchor.constraint(equalTo: view.topAnchor),
-            undoToast.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            undoToast.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            undoToast.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-        ])
     }
 
     /// The List's split view, once the List was made: the List's toolbar
@@ -253,25 +235,10 @@ final class BoardPageViewController: NSViewController {
         return list
     }
 
-    /// Shows a toast over the page (the toolbar's Triage too); Archive's
-    /// Undo gives way to it.
+    /// Shows a toast over the page (the toolbar's Triage too); the Undo
+    /// of the last move gives way to it (`ToastPresenter`).
     func showToast(_ text: String) {
-        undoToast.dismiss()
         toasts?.show(text)
-    }
-
-    /// What Archive did, with Undo while the page is in a window and the
-    /// archive can be taken back (else the text alone: no `undoLabel` when
-    /// the daemon moved nothing it can move back).
-    private func showArchived(_ o: Board.ArchiveOutcome) {
-        guard let undoLabel = o.undoLabel, isViewLoaded, view.window != nil, undoToast.superview === view else {
-            showToast(o.text)
-            return
-        }
-        toasts?.dismissCurrent()
-        undoToast.show(o.text, undo: undoLabel) { [weak self] in
-            self?.controller.undoArchive(o)
-        }
     }
 
     /// Where the key R opens Remind…: in the panel while it shows.

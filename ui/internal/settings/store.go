@@ -20,6 +20,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/toolbar"
 )
 
 // SchemaID must match the gschema, desktop file and application ID.
@@ -80,6 +81,11 @@ const (
 	KeyCollapsedFolders  = "collapsed-folders"
 	KeyCollapsedAccounts = "collapsed-accounts"
 	KeyFavouriteFolders  = "favourite-folders"
+	// KeyUnifiedInbox shows the All Inboxes item, the first row of the
+	// Favourites section, while there are at least two mail accounts
+	// (ui/internal/unified Shown). Never part of the three keys above
+	// (the section's own fold is a sentinel in KeyCollapsedAccounts).
+	KeyUnifiedInbox = "unified-inbox"
 )
 
 // Keys of the main window's geometry, bound to its default-width,
@@ -139,6 +145,17 @@ var CalendarViews = []string{"day", "week", "month", "agenda"}
 
 // CalendarViewDefault is calendar-view's default in the gschema.
 const CalendarViewDefault = "week"
+
+// KeyContactsSuggestScope is which address books complete the recipients
+// of a new message (Preferences → Contacts → Recipient Suggestions): a nick
+// of the gschema's ContactsSuggestScope enum, the values of
+// api.ContactSearchScope ("account", "all"), passed as contact.search's
+// scope.
+const KeyContactsSuggestScope = "contacts-suggest-scope"
+
+// ContactsSuggestScopes are contacts-suggest-scope's values in the order of
+// the gschema's enum (contacts.Scopes' order); the first is the default.
+var ContactsSuggestScopes = []string{"account", "all"}
 
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
 type ColorScheme string
@@ -256,6 +273,7 @@ var defaults = map[string]any{
 	KeyCollapsedFolders:  []string(nil),
 	KeyCollapsedAccounts: []string(nil),
 	KeyFavouriteFolders:  []string(nil),
+	KeyUnifiedInbox:      true,
 
 	KeyWindowWidth:     1200,
 	KeyWindowHeight:    760,
@@ -282,6 +300,14 @@ var defaults = map[string]any{
 	KeyBoardTriageModel:   string(assistant.Sonnet),
 
 	KeyCalendarView: CalendarViewDefault,
+
+	KeyContactsSuggestScope: "account",
+
+	toolbar.Key(toolbar.BarMail):      []string(nil),
+	toolbar.Key(toolbar.BarBoardList): []string(nil),
+	toolbar.Key(toolbar.BarBoardFlow): []string(nil),
+	toolbar.Key(toolbar.BarCalendar):  []string(nil),
+	toolbar.DisplayModeKey:            string(toolbar.DisplayIcon),
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -399,6 +425,9 @@ func (s *Store) SetShowAvatars(v bool) { s.set(KeyShowAvatars, v) }
 
 func (s *Store) MonochromeAvatars() bool     { return s.boolean(KeyMonochromeAvatars) }
 func (s *Store) SetMonochromeAvatars(v bool) { s.set(KeyMonochromeAvatars, v) }
+
+func (s *Store) UnifiedInbox() bool     { return s.boolean(KeyUnifiedInbox) }
+func (s *Store) SetUnifiedInbox(v bool) { s.set(KeyUnifiedInbox, v) }
 
 func (s *Store) GroupByConversation() bool     { return s.boolean(KeyGroupByConversation) }
 func (s *Store) SetGroupByConversation(v bool) { s.set(KeyGroupByConversation, v) }
@@ -605,6 +634,31 @@ func (s *Store) SetCalendarView(v string) {
 	}
 }
 
+// ContactsSuggestScope is contacts-suggest-scope's nick; an unknown or
+// empty stored value is "account", the default.
+func (s *Store) ContactsSuggestScope() string {
+	v := s.str(KeyContactsSuggestScope)
+	for _, n := range ContactsSuggestScopes {
+		if v == n {
+			return v
+		}
+	}
+	return ContactsSuggestScopes[0]
+}
+
+// SetContactsSuggestScope writes a nick only when it changed; a value
+// outside the enum is ignored.
+func (s *Store) SetContactsSuggestScope(v string) {
+	for _, n := range ContactsSuggestScopes {
+		if v == n {
+			if s.str(KeyContactsSuggestScope) != v {
+				s.set(KeyContactsSuggestScope, v)
+			}
+			return
+		}
+	}
+}
+
 func (s *Store) BoardTriageConsent() bool     { return s.boolean(KeyBoardTriageConsent) }
 func (s *Store) SetBoardTriageConsent(v bool) { s.set(KeyBoardTriageConsent, v) }
 
@@ -639,6 +693,41 @@ func (s *Store) SetCollapsedAccounts(v []string) { s.set(KeyCollapsedAccounts, v
 // section, encoded like CollapsedFolders (internal/window/favourites.go).
 func (s *Store) FavouriteFolders() []string     { return s.strv(KeyFavouriteFolders) }
 func (s *Store) SetFavouriteFolders(v []string) { s.set(KeyFavouriteFolders, v) }
+
+// ToolbarLayout is the stored arrangement of bar's toolbar (the key
+// toolbar.Key names): the tokens as written, empty for the default; the
+// client reads them with toolbar.NormalizeFor.
+func (s *Store) ToolbarLayout(bar toolbar.Bar) []string { return s.strv(toolbar.Key(bar)) }
+
+// SetToolbarLayout writes bar's arrangement (toolbar.StoredFor's tokens,
+// or an empty list for the default). An unknown bar is ignored.
+func (s *Store) SetToolbarLayout(bar toolbar.Bar, tokens []string) {
+	for _, b := range toolbar.Bars {
+		if b == bar {
+			if tokens == nil {
+				tokens = []string{}
+			}
+			s.set(toolbar.Key(bar), tokens)
+			return
+		}
+	}
+}
+
+// ToolbarDisplayMode is what the toolbars' items show; an unknown nick is
+// icons only.
+func (s *Store) ToolbarDisplayMode() toolbar.DisplayMode {
+	return toolbar.ParseDisplayMode(s.str(toolbar.DisplayModeKey))
+}
+
+// SetToolbarDisplayMode ignores values outside the enum.
+func (s *Store) SetToolbarDisplayMode(m toolbar.DisplayMode) {
+	for _, x := range toolbar.DisplayModes {
+		if m == x {
+			s.set(toolbar.DisplayModeKey, string(m))
+			return
+		}
+	}
+}
 
 // OnChanged calls f whenever key changes, from any source (this process or,
 // with the GSettings backend, another one). The returned function removes

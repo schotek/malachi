@@ -2924,8 +2924,9 @@ Preferences → Calendar is the only place that lists disabled calendars
   until the calendars are listed and then Add, the mail-account combo box
   only when the server leaves scheduling to the client, Trust
   Certificate… through the account wizard's dialog. It opens from the
-  primary menu `…`, the No Accounts page, the Calendar sidebar's Add
-  Calendar… and Preferences → Calendar (`AppState.ShowAddCalDAVCalendar`).
+  No Accounts page, the Calendar sidebar's Add Calendar… and
+  Preferences → Calendar (`AppState.ShowAddCalDAVCalendar`; the primary
+  menu `…` had it until 2026-11-04).
 
 ### 5.9 Artboard 8 · Small integrations
 

@@ -117,6 +117,15 @@ public readonly record struct ActionFlags
     public bool Crm { get; init; }
 
     /// <summary>
+    /// The rows belong to more than one account, which only the All Inboxes
+    /// list allows (<see cref="Unified"/>; decision U2). Its actions run one
+    /// call per account; Forward, Move To and Save to eWay-CRM need one
+    /// account and are off (Go <c>Flags.MixedAccounts</c>,
+    /// <c>selection.CombineAccounts</c>). Never for one row.
+    /// </summary>
+    public bool MixedAccounts { get; init; }
+
+    /// <summary>
     /// selection.Flags CrmSaved: the one row is saved in eWay-CRM (the
     /// saved-state items replace Save); never for several.
     /// </summary>

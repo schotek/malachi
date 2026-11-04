@@ -12,6 +12,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
+	"github.com/schotek/malachi/ui/internal/boardtriage"
 	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -19,7 +20,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
-// The status line at the bottom of the sidebar (status_button in
+// The status line at the bottom of the window (status_button in
 // window.blp) and its popover. The line is one sentence for all accounts
 // (syncStatusText in sync.go), unless the connection to the daemon has
 // something more pressing to say (statusLineFor). The popover has one row
@@ -280,8 +281,6 @@ func (w *Window) newStatusRow(id api.AccountID) *statusRow {
 	r.arrow = gtk.NewImageFromIconName("go-next-symbolic")
 	r.failed.AddSuffix(r.arrow)
 	r.failed.ConnectActivated(func() {
-		// The popover itself: in Board it hangs on the board page's
-		// button (moveStatusStripTo), not on statusButton.
 		w.statusPopover.Popdown()
 		w.showOutbox(id)
 	})
@@ -374,46 +373,51 @@ func (w *Window) showOutbox(acc api.AccountID) {
 	w.outerSplit.SetShowContent(true)
 }
 
-// The status strip in Board and Calendar (board_status_button in
-// board_page.blp, calendar_status_button in calendar_page.blp): the
-// folders sidebar's status_button and the pages' own share the same
-// popover (status_popover), which GTK parents to one button at a time;
-// moveStatusStripTo moves it as the mode switches, the one place that
-// decides which button is live. currentStatusLine and
-// refreshBoardStatusLabel (board.go, which knows the triage's note) are
-// the board's half of refreshSyncLabel (sync.go); the Calendar's strip has
-// its own line (calendarPage.applyStatus: calendar.StatusLine and the
-// unanswered count).
+// The status bar (window.blp status_bar) spans the window under every
+// mode, as on macOS and Windows: the spinner, the connection icon and the
+// popover are always the sync line's; its text and the note at its end
+// follow the shown mode (statusTexts). refreshSyncLabel (sync.go) writes
+// it; the board (refreshBoardStatusLabel, board.go) and the Calendar
+// (calendarPage.applyStatus) call it when what they add changes, and
+// setMode when the mode does.
 
-// moveStatusStripTo parks the status popover on mode m's status button
-// and brings its line up to date: the board page's in Board, the calendar
-// page's in Calendar (each once its page is built), else the folders
-// sidebar's.
-func (w *Window) moveStatusStripTo(m board.Mode) {
-	w.statusButton.SetPopover(nil)
-	if w.boardPage != nil {
-		w.boardPage.statusButton.SetPopover(nil)
+// bindStatusBar looks up the status bar's widgets in window.blp's builder
+// b (newWindow; the smoke tests that build a part of the window).
+func (w *Window) bindStatusBar(b *gtk.Builder) {
+	w.statusButton = b.GetObject("status_button").Cast().(*gtk.MenuButton)
+	w.statusPopover = b.GetObject("status_popover").Cast().(*gtk.Popover)
+	w.statusAccounts = b.GetObject("status_accounts").Cast().(*gtk.ListBox)
+	w.statusDaemon = b.GetObject("status_daemon").Cast().(*gtk.Label)
+	w.syncSpinner = b.GetObject("sync_spinner").Cast().(*adw.Spinner)
+	w.syncLabel = b.GetObject("sync_label").Cast().(*gtk.Label)
+	w.connIcon = b.GetObject("connection_icon").Cast().(*gtk.Image)
+	w.statusNote = b.GetObject("status_note").Cast().(*gtk.Label)
+}
+
+// statusTexts is the status bar's text and note for line in the shown
+// mode: in Board a non-empty boardtriage.StripText takes the line over
+// (boardStatusText); in Calendar the line is the calendars' state
+// (calendar.StatusLine) and the note the unanswered invitations; in Mail
+// the line and no note.
+func (w *Window) statusTexts(line statusLine) (text, note string) {
+	switch w.mode {
+	case board.ModeBoard:
+		if p := w.boardPage; p != nil && !p.replyClosed {
+			if v, ok := p.cachedTriageView(); ok {
+				triageText := boardtriage.StripText(v, true, p.ctl.Source().Snapshot().Phase, i18n.Tr)
+				return boardStatusText(line.Text, triageText), ""
+			}
+		}
+	case board.ModeCalendar:
+		if p := w.cal.page; p != nil {
+			return p.ctl.StatusLine(), p.ctl.UnansweredLine()
+		}
 	}
-	if p := w.cal.page; p != nil {
-		p.statusButton.SetPopover(nil)
-	}
-	switch {
-	case m == board.ModeBoard && w.boardPage != nil:
-		w.boardPage.statusButton.SetPopover(w.statusPopover)
-		w.refreshBoardStatusLabel()
-	case m == board.ModeCalendar && w.cal.page != nil:
-		w.cal.page.statusButton.SetPopover(w.statusPopover)
-		w.cal.page.applyStatus()
-	default:
-		w.statusButton.SetPopover(w.statusPopover)
-		w.refreshSyncLabel()
-	}
+	return line.Text, ""
 }
 
 // currentStatusLine is the status line for right now (statusLineFor over
-// the cached sync states and the connection), without writing it anywhere;
-// refreshSyncLabel and refreshBoardStatusLabel (board.go) each apply it to
-// their own widgets.
+// the cached sync states and the connection), without writing it anywhere.
 func (w *Window) currentStatusLine() statusLine {
 	text, spinning := syncStatusText(w.syncStates, w.model.accounts, w.syncFolderName, time.Now())
 	return statusLineFor(w.conn, text, spinning)

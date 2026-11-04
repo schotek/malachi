@@ -81,6 +81,10 @@ type Account struct {
 	// Accounts (docs/calendar.md D15); GOA's tokens already carry the
 	// calendar scopes, so it alone says whether the calendar may be used.
 	CalendarDisabled bool
+	// ContactsDisabled is the account's Contacts switch in Online
+	// Accounts (docs/plans/address-book.md A15), read as CalendarDisabled
+	// is: without the property the contacts count as enabled.
+	ContactsDisabled bool
 	AttentionNeeded  bool
 	OAuth2           bool         // implements OAuth2Based
 	Mail             MailSettings // the Mail interface's servers; zero without it
@@ -286,6 +290,7 @@ func parseAccount(path dbus.ObjectPath, ifaces map[string]map[string]dbus.Varian
 	a.PresentationIdentity = str(acc, "PresentationIdentity")
 	a.MailDisabled = boolean(acc, "MailDisabled")
 	a.CalendarDisabled = boolean(acc, "CalendarDisabled")
+	a.ContactsDisabled = boolean(acc, "ContactsDisabled")
 	a.AttentionNeeded = boolean(acc, "AttentionNeeded")
 	if mail, ok := ifaces[ifaceMail]; ok {
 		a.Email = str(mail, "EmailAddress")

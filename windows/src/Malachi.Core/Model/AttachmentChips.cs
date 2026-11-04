@@ -25,6 +25,7 @@ using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
 using Malachi.Core.Platform;
+using Malachi.Core.Signatures;
 using Malachi.Core.Text;
 
 namespace Malachi.Core.Model;
@@ -57,14 +58,22 @@ public static class AttachmentChips
     /// attachment, minus the parts the HTML on display shows inline (the cid:
     /// references the sanitiser kept, <c>inlineParts</c>). A text-only
     /// message, withheld HTML or an unreferenced Content-ID leaves the part
-    /// listed like any other file.
+    /// listed like any other file. The calendar part of an invitation
+    /// <paramref name="card"/> the message shows
+    /// (<see cref="InvitationReading.Read"/>) gets no chip either: the card is
+    /// what it says. Nor does the detached signature part of a message with a
+    /// verdict (<paramref name="signature"/>, <see cref="SignatureView.HidesPart"/>,
+    /// docs/plans/signatures.md S15): the signature's details say it.
     /// </summary>
-    public static IReadOnlyList<Attachment> ChipAttachments(IReadOnlyList<Attachment> atts, MessageBodyResult? b)
+    public static IReadOnlyList<Attachment> ChipAttachments(
+        IReadOnlyList<Attachment> atts, MessageBodyResult? b, InvitationCard? card = null, SignatureSummary? signature = null)
     {
         ArgumentNullException.ThrowIfNull(atts);
         var html = LoadedMessageText.ShowsHtml(b);
-        return atts.Where(a =>
-            !(html && !string.IsNullOrEmpty(a.ContentId) && a.PartId.Length > 0
+        var cardPart = card?.PartId ?? "";
+        return SignatureView.TileAttachments(atts, signature).Where(a =>
+            !(cardPart.Length > 0 && string.Equals(a.PartId, cardPart, StringComparison.Ordinal))
+            && !(html && !string.IsNullOrEmpty(a.ContentId) && a.PartId.Length > 0
               && b!.InlineParts is { } inline && inline.TryGetValue(a.ContentId, out var part)
               && string.Equals(part, a.PartId, StringComparison.Ordinal))).ToList();
     }
@@ -98,7 +107,7 @@ public static class AttachmentChips
         }
         if (a.Size > API.Limits.MaxAttachmentDataBytes)
         {
-            // TRANSLATORS: %s is a size such as "16.0 MiB".
+            // TRANSLATORS: %s is a size such as "16.8 MB".
             return (PartState.Unavailable, L10n.T("Attachments over %s cannot be opened or saved yet.", Format.FormatSize(API.Limits.MaxAttachmentDataBytes)));
         }
         if (a.IsRemote || b.BodyState == BodyState.Pending)

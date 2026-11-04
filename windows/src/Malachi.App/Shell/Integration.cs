@@ -55,6 +55,9 @@ public sealed partial class Integration : IDisposable
         List = new ListController(Mailbox, state.Settings, logger: logs.CreateLogger<ListController>());
         Cache = new MessageCache(state.Client, mainToast, logs.CreateLogger<MessageCache>());
         Actions = new ActionsController(Mailbox, List, Cache, state.Settings, mainToast, logs.CreateLogger<ActionsController>());
+        // The toast of a move with its Undo button (window/undo.go), over
+        // the main window whatever window is active, as the actions' toasts.
+        Actions.ActionToasts = mainWindow.ActionToasts;
         Compose = new ComposeController(state.Client, state.Settings, logger: logs.CreateLogger<ComposeController>());
         // The Change Status menus of every view (window.go w.issues): their
         // toasts over the main window.
@@ -202,6 +205,20 @@ public sealed partial class Integration : IDisposable
         // notify.draftsChanged: the conversations it names ask thread.get
         // again for their drafts (conversation_draft.go onDraftsChanged).
         tokens.Add(hub.AddDraftsChanged(Mailbox.HandleDraftsChanged));
+        // notify.signaturesChanged (docs/api.md §4.22): trust changed (a key
+        // imported, confirmed or removed, a revocation check). What the window
+        // shows of the account's messages is read again like a
+        // notify.messagesChanged of any of its folders: the list, the pane and
+        // the cards ask for the verdicts afresh (the rows whose verdict changed
+        // come as notify.messagesChanged too). An open details flyout and the
+        // key list follow it on their own.
+        tokens.Add(hub.AddSignaturesChanged(() =>
+        {
+            foreach (var account in Mailbox.Model.EnabledAccounts)
+            {
+                Mailbox.HandleMessagesChanged(new Malachi.Core.Api.MessagesChangedNotification { AccountId = account.Id });
+            }
+        }));
         tokens.Add(hub.AddAccountsChanged(() =>
         {
             Mailbox.HandleAccountsChanged();

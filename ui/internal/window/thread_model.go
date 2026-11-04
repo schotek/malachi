@@ -13,6 +13,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/signature"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -90,6 +91,7 @@ type removal struct {
 // fetched members, so a reload (sync finished) does not blink an expanded
 // conversation through the spinner. Duplicate ids keep the first.
 func (m *mailModel) setThreads(list []api.ThreadSummary, page api.PageInfo) {
+	list = m.keyThreads(list)
 	prevSummary := make(map[api.ThreadID]api.ThreadSummary, len(m.threads))
 	for _, t := range m.threads {
 		prevSummary[t.ID] = t
@@ -157,6 +159,7 @@ func (m *mailModel) forgetMembers(tid api.ThreadID) {
 
 // appendThreads adds a further page and returns how many rows it added.
 func (m *mailModel) appendThreads(list []api.ThreadSummary, page api.PageInfo) (added int) {
+	list = m.keyThreads(list)
 	if m.tindex == nil {
 		m.tindex = make(map[api.ThreadID]int, len(list))
 		m.members = make(map[api.ThreadID]*threadMembers, len(list))
@@ -227,6 +230,7 @@ func (m *mailModel) setMembers(tid api.ThreadID, t api.ThreadSummary, list, sent
 		m.rebuildRows()
 		return
 	}
+	t.ID = tid // the model's key (unified.go threadKey)
 	m.threads[i] = t
 	m.members[tid] = &threadMembers{list: append([]api.MessageSummary(nil), list...),
 		sent: append([]api.MessageSummary(nil), sent...), drafts: append([]api.Draft(nil), drafts...), complete: true}
@@ -287,13 +291,14 @@ func (m *mailModel) applyNewMessage(s api.MessageSummary, f api.MessageFilter, s
 	if _, known := m.memberOf[s.ID]; known {
 		return true
 	}
-	i, listed := m.tindex[s.ThreadID]
+	tk := m.threadKey(s.AccountID, s.ThreadID)
+	i, listed := m.tindex[tk]
 	if !listed {
 		if !matchesFilter(s, f) {
 			return true
 		}
 		t := api.ThreadSummary{
-			ID: s.ThreadID, AccountID: s.AccountID, Subject: s.Subject,
+			ID: tk, AccountID: s.AccountID, Subject: s.Subject,
 			Participants: append([]api.Address(nil), s.From...), MessageCount: 1,
 			LatestDate: s.Date, Latest: s, Snippet: s.Snippet,
 			Flags: append([]api.Flag(nil), s.Flags...), HasAttachments: s.HasAttachments,
@@ -770,7 +775,7 @@ func summaryThread(t api.ThreadSummary, expanded, loading bool) widget.Thread {
 		Tag:            bulkmail.Tag(t.Latest.Bulk, i18n.Tr),
 		Participants:   t.Participants,
 		Subject:        t.Subject,
-		Snippet:        t.Snippet,
+		Snippet:        invitationPreview(t.Latest, t.Snippet),
 		Date:           t.LatestDate,
 		Count:          t.MessageCount,
 		Unread:         t.UnreadCount,
@@ -780,7 +785,16 @@ func summaryThread(t api.ThreadSummary, expanded, loading bool) widget.Thread {
 		Loading:        loading,
 		Draft:          threadDraftBadge(t),
 		Invitation:     calendar.InvitationPillOf(t.Latest),
+		Signature:      threadSignatureIcon(t),
 	}
+}
+
+// threadSignatureIcon is the list icon of a conversation row: its newest
+// member's verdict (the thread has no aggregate of its own; docs/api.md
+// §4.22), none when that member has none or one the list does not show.
+func threadSignatureIcon(t api.ThreadSummary) signature.ListIcon {
+	icon, _ := signature.ListIconFor(t.Latest.Signature, i18n.Tr)
+	return icon
 }
 
 // threadDraftBadge is the Draft badge of a conversation row with the

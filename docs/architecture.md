@@ -1640,6 +1640,152 @@ hourly pass in `core.Maintain` catches up (`CrmFollowedThreads`,
 `CrmUnsavedMembers`; 90 days, 50 saves). Nothing of it runs on the sync
 path, and it stops with the account's client.
 
+### 3.10 Address books (contacts of connected services)
+
+The contacts of the services the user connects (design and decisions A1–A16
+in [plans/address-book.md](plans/address-book.md), API
+[api.md §4.19](api.md), security [security.md §4.4](security.md)). Like the
+calendar (§3.8) the daemon keeps a **cache of the server**: the server is
+the authority, and switching contacts off, changing the server or user (or
+the address of a Graph account) and removing the account delete it; only
+`ab_books.visible` is the user's.
+
+**Sources.** A `graph` account with `graph.contacts.sync` (its contact
+folders: the default folder and its children, delta per folder with
+immutable ids), and a `caldav` account with `caldav.contacts` (the
+collections of its CardDAV addressbook-home-set, synchronised with
+`sync-collection` from the stored token, else the members' ETags, and
+fetched with `addressbook-multiget`). A caldav account may have
+calendars, address books or both: its capabilities are `calendar` unless
+its contacts are on and `calendar.sync` is false (a CardDAV-only server:
+the signed-in listing found no calendar home set), and `contacts` with
+`caldav.contacts` (`calsync.CalDAVHasCalendars`). The listing
+(`account.listCalDAVCalendars`, `core.listCalDAV`) reads the principal's
+home sets first and lists the calendars and the address books it names;
+iCloud and Fastmail keep the address books on another host of the same
+site, which `calDAVOrigin` trusts. The recently used addresses
+(`collected_addresses`, §4.11 of the API) are the virtual read-only book
+`recent`.
+
+**Store** (migration 0023): `ab_books` (account, remote id = the CardDAV
+collection URL or the Graph folder id, name, read-only, visible, sync
+token / ctag / delta link, the provider's data version), `ab_contacts`
+(book, remote id = href or Graph id, ETag or changeKey = the revision,
+the raw vCard or Graph JSON, and the derived display name, sort key,
+section letter, organisation and addresses), `ab_emails` (normalised
+address → contact) and the contentless FTS5 `ab_contacts_fts`
+(`store/contacts_books.go`). Never `INSERT OR REPLACE`.
+
+**Engine** `internal/contactsync`: a `Provider` interface (`AddressBooks`,
+`Sync(book, known ETags, sink)`, `Get`, `Create`, `Update`, `Delete`,
+optionally `Versioned`), one syncer per account, run beside the graph and
+caldav kinds' supervisors (`core.withContacts`): a pass at the start,
+every 15 minutes, on `addressBook.list` when the last is older than a
+minute, after `addressBook.set` makes a book visible and after an own
+write; backoff from 30 s to an hour; the account's state (`idle`,
+`offline`, `authRequired`, `consentRequired`, `error`). A pass lists the
+books, synchronises the visible ones and empties the hidden ones (a
+hidden book is not synchronised at all); it never writes to the server.
+The providers (`core/contacts_providers.go`) map both sources onto the
+vCard model of `internal/vcard`; the Graph one shares the account's
+request limiter with the mail and the calendar.
+
+**Writes** (`core/contacts_book.go`) are server-first and online only: the
+provider writes, then the cache takes the server's answer and
+`notify.contactsChanged` (coalesced 250 ms) names the book. An update is a
+patch (`vcard.Patch` of the stored vCard from what the user saw to what
+the user sent, or `graph.ContactPatch` of the changed fields), guarded by
+the revision; a stale revision or the server's 412 / changed `changeKey`
+is `contactConflict` with the server's version, which the cache stores at
+once.
+
+**Photos** (read only, [plans/address-book.md §9](plans/address-book.md),
+migration 0024): `ab_photos` keeps one picture per contact with the
+revision it was made from and a state (`ok`, `none`, `refused`), apart
+from `ab_contacts` so that listings never read a BLOB, cascading from it.
+Every picture is re-encoded by `internal/contactphoto` (limits checked
+before decoding, JPEG/PNG/GIF of the standard library, a centred square
+of at most 256 px as JPEG or PNG within 64 KiB; `golang.org/x/image/draw`
+scales). A CardDAV card's embedded `PHOTO` is read when the engine stores
+the card (and, for cards stored before 0024, by a later pass); a Graph
+contact's photo is not in its delta, so `contact.photo` downloads it on
+demand once per revision (`core/contacts_photo.go`, at most 4 at a time
+per account) and notifies the book. A photo named by a link is never
+fetched. Clients show the photo instead of the initials in the contacts
+window and on mail by the sender's exact address (`contact.lookup`
+`withPhotos`).
+
+**Recipient completion.** `contact.search` merges the synchronised books
+(visible books of the sending account, or of every account with `scope:
+all`) with the collected addresses and, on Linux, the system address
+books of Evolution Data Server, one row per address reported as the
+synchronised book's when it has it; the EDS books of an account whose
+contacts the daemon synchronises are skipped.
+
+### 3.11 Mail rules
+
+Conditions over a message and actions on it, evaluated **locally by the
+daemon** (design and decisions R1–R14 in
+[plans/rules.md](plans/rules.md), API [api.md §4.21](api.md#421-rules),
+security [security.md §7.5](security.md#75-outgoing-actions-of-the-mail-rules)).
+The server's own rules (Graph `messageRules`, Sieve) are neither read
+nor written.
+
+- `internal/rules` is pure: the matcher (NFC and case folding; address
+  fields as `Name <address>` for contains, the bare address otherwise,
+  `domainIs` with subdomains), the plan of the actions in their fixed
+  order over several rules (the first move, junk or trash wins, `stop`
+  ends the evaluation), and the validation of a rule as edited
+  (`RuleInvalidData`). It has a fuzz target and refuses the pathological
+  rules of `backend/testdata/rules`.
+- Store (migration 0025, `store/rules.go`): `rules` (order, input as
+  JSON, `enabled_at`, `problem`, counts), `rule_seen` (account +
+  Message-ID), `rule_replies` and `rule_outgoing` (the limits), pruned
+  hourly; removing an account deletes its rules. No trigger on
+  `messages`.
+- Automatic run (`core/rules_engine.go`): the last step of the mail
+  syncers' Stored hook (`afterMailStored`), only for a message of an
+  enabled `imap`/`graph` account's inbox, each Message-ID once, never
+  when it arrived more than a day before the rule was enabled or before
+  the account was added. The local
+  actions go through `FlagMessages`, `MoveMessages` and `TrashMessages` at
+  once, then `Supervisor.Trigger` and `notify.messagesChanged`;
+  `notify.newMessage` reads the message after the hook and leaves out
+  one that left its folder or is read.
+- Outgoing actions (`core/rules_outgoing.go`): the hook checks the fixed
+  protections and queues the rest; a worker per account reserves the
+  rule's slot in one transaction, builds the message (`Auto-Submitted`,
+  `X-Loop`) and queues it in the outbox like `message.unsubscribe`'s
+  mailto. A message that cannot be queued disables the rule
+  (`sendFailed`), a move to a folder that is gone too (`folderGone`).
+- By hand (`rules.apply`): a folder or a selection, in batches of
+  `MaxMessageIDsPerCall`, local actions only.
+
+### 3.12 Signatures of incoming mail (phase 1)
+
+Design: [plans/signatures.md](plans/signatures.md); API §4.22 of
+[api.md](api.md); threats [security.md](security.md) §5. Pure packages:
+`internal/smime` (own CMS SignedData parser and verifier over
+`cryptobyte`, BER normalised to DER), `internal/pgpsig` (OpenPGP/MIME over
+`github.com/ProtonMail/go-crypto`, key reading, Autocrypt),
+`internal/signature` (which signature is the message's verdict, exact
+slicing of the signed bytes, protected headers, the verdict's order,
+`VerifierVersion`), `internal/revocation` (OCSP then CRL on request,
+the network rules of `internal/oneclick`; fake `revocationtest`). The
+MIME parser unwraps opaque `signed-data` (`mime.Parsed.Opaque`, inner
+parts numbered under the wrapper's number). Migration 0026:
+`message_signatures` (one verdict per message, cascading, a cache with
+`verifier_version`, `trust_key`, `stale`), `smime_revocation`,
+`pgp_keys`. Core: the Stored hook queues, `core/signature_worker.go`
+verifies after the store (and takes Autocrypt keys), recomputes stale
+verdicts after a change of trust, rereads the system roots at start and
+daily; `core.Maintain` parses stored opaque messages again (meta
+`mime.opaqueUnwrapped`) and verifies stored signed mail (meta
+`signature.verified`); `core/signature_service.go` has the methods.
+Listings carry the verdict like the CRM flag (`store.attachSignaturesTo`
+with the invitations). Board `RulesVersion` 9: the own text of opaque
+mail is the unwrapped content's.
+
 ## 4. Security boundary: HTML
 
 HTML in mail is hostile input. It is sanitised **in the backend**
@@ -1752,7 +1898,9 @@ an error. Actions are `win.*` (`mark-read`, `mark-unread`, `toggle-flag`,
 s and Ctrl+R; flag changes and moves are applied optimistically and
 reverted with a toast when the daemon refuses.
 
-The bottom of the sidebar carries the status line, a menu button with an
+The status bar across the bottom of the window (under every mode, as on
+macOS and Windows; Report an Issue at its end) carries the status line, a
+menu button with an
 `adw.Spinner` and a caption computed from `sync.status` and
 `notify.syncState` across the enabled accounts: "Syncing *folder*…
 42 %", then sign-in required, certificate problems, sending, messages
@@ -1839,8 +1987,8 @@ inline pictures in a `multipart/related`. (`richText` in `compose/draft.go`
 is the switch back to a plain-text build.) After a send the message shows
 up in the local Outbox folder (visible only while non-empty) with a banner
 for its delivery state; a failed send offers Retry (`outbox.retry`) and the
-trash button cancels the send (`message.delete`). The status line at the
-bottom of the sidebar (on macOS a bar along the bottom of the window) shows
+trash button cancels the send (`message.delete`). The status line in the
+bar along the bottom of the window shows
 "Sending N messages…" from `SyncState.pendingOutbox` and "N messages not
 sent" from `SyncState.failedOutbox`; clicked, it opens a popover with each
 account's state, last sync and action (sign in, edit, try again, check),
@@ -2254,7 +2402,9 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   attach ram://` on macOS, a tmpfs mount on Linux: code per platform, a
   volume the user's other processes and the Finder see, and one a crash
   leaves in place).
-- Contacts and recipient completion: **decided** (2026-09-06) — the
+- Contacts and recipient completion: **decided** (2026-09-06; the
+  rejection of own Graph and CardDAV address books below is superseded by
+  the next entry, 2026-10-30) — the
   system address books through Evolution Data Server over D-Bus
   (`internal/contacts/eds`: `Sources5` for the registry,
   `AddressBook10` for the books, `GetContactList` with a
@@ -2275,6 +2425,26 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   is not cached at all, and a Flatpak hole into `~/.cache`). The D-Bus
   interface of EDS is formally private and versioned in its bus names;
   a bump means one constant here and one line in the Flatpak manifest.
+- Contacts from connected services: **decided** (2026-10-30) — the
+  daemon synchronises the address books of Microsoft 365 / Outlook.com
+  through Graph (`graph.contacts.sync`, scope `Contacts.ReadWrite` asked
+  for only by a sign-in made for the contacts) and of CardDAV servers on
+  the `caldav` account (`caldav.contacts`, an extension of
+  `internal/caldav`), as a cache of the server in the store (§3.10), with
+  writes server-first and online only, an update as a patch of the
+  server's card, and the recent addresses as a read-only book
+  ([plans/address-book.md](plans/address-book.md), owner's answers §8).
+  This supersedes the rejection of 2026-09-06: its reasons were the
+  duplication with EDS (it holds on GNOME only, and completion skips the
+  EDS books of an account whose contacts the daemon synchronises), the
+  missing token without GNOME Online Accounts (the daemon has its own
+  sign-in since 2026-09-25) and Microsoft 365 having no CardDAV (Graph
+  covers it). No system address book is read or written outside Linux's
+  existing EDS completion (no `CNContactStore`, no Windows contacts).
+  Rejected: a queue of offline edits with merging by property (the
+  calendar's server-first model is enough for edits made with the user at
+  the window), `go-vcard` (no limits, no 4 → 3), one provider interface
+  shared with the calendar (it is typed on events and windows).
 - RPC socket authentication: **decided** (2026-09-26) — every connection
   proves, in both directions and with HMAC-SHA256 over two fresh nonces,
   knowledge of a key the daemon makes at every start and writes beside
@@ -2889,3 +3059,94 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   (`BoardMember.Mine`), `board.commit` and `board.trash` keep the meaning
   "in a folder of role `sent`/`outbox`". No API shape change
   ([api.md](api.md) §4.13).
+- Undo of moves of mail (2026-10-30): **decided**, Undo is the client's.
+  Move to Trash, Archive, Junk, Move To and the board's Archive and Delete
+  push what they moved (each message and the folder it came from) on a
+  stack of the session, newest first, at most 20 entries, once the daemon
+  took the move; a toast with Undo (and its shortcut) shows for 8 s, and
+  Ctrl+Z (⌘Z on macOS) takes back the newest entry for as long as it is on
+  the stack. Taking back is `message.move` of each message to its folder,
+  one call per folder, since a moved message keeps its `id` (IMAP rows are
+  reused, Graph uses immutable ids); a board entry also puts the case back
+  (`board.setDone {done:false}`). No daemon change and no new method: the
+  daemon keeps no history of what the user meant, the stack lives in memory
+  and ends with the application, as in other mail clients. Never on the
+  stack: an expunge from Trash, a cancelled send, a move to a folder the
+  daemon does not keep (Gmail's All Mail); Empty Trash and Empty Junk drop
+  the entries into the folder. Undoing Junk only moves the messages back;
+  it does not train the server's filter the other way. The rules and texts
+  are the Go reference `ui/internal/undo`; the board's Undo uses its
+  grouping (`board.UndoArchive`). The shortcut is lifted while a text field
+  or an editor has the keyboard, which keeps its own Ctrl+Z.
+- Mail rules (2026-11-02): **decided**, evaluated locally by the daemon,
+  not on the server (Graph `messageRules` and Sieve differ in what they
+  can do, Gmail has neither, and the same rule should behave alike on
+  every account). The automatic run sits in the Stored hook so that it
+  acts before the message is announced; it runs only on the inbox and
+  once per Message-ID (`rule_seen`), so a message moved back by the user
+  or by another client is left alone, and never on mail that arrived
+  more than a day before the rule was enabled, so neither the first
+  sync nor a backfill runs rules. Local actions reuse the user's own
+  store paths and operation log (no new kind of operation); outgoing
+  actions are queued per account behind fixed protections (no bulk or
+  automatic mail, no own or no-reply sender, no junk, 20 an hour a rule,
+  a sender answered once in four days) and never run by `rules.apply`.
+  `notify.newMessage` changed with it: it is read after the hook and
+  leaves out a message no longer in its folder or already read, which
+  also stops announcing mail read on another device before it was
+  downloaded. Regex conditions and server-side rules are not in this
+  version.
+- Unified inbox (2026-11-02): **decided** with the owner (U1–U4,
+  [plans/unified-inbox.md](plans/unified-inbox.md)). An "All Inboxes" item,
+  the first row of the Favourites section at the top of the sidebar (since
+  2026-11-03; the section folds like an account heading, its fold a
+  sentinel among `collapsed-accounts`), lists the inboxes of
+  every enabled mail account (`imap`, `graph`; never `jira`, `caldav`,
+  `eway`) in one list, flat or grouped by conversation as
+  `group-by-conversation` says (U1). It is shown only with two or more
+  such accounts, and the preference `unified-inbox` (default on) hides it
+  (U3). The daemon lists it: `message.list` and `thread.list` take
+  `unified: <role>` instead of `accountId` and `folderId`, so a page is
+  merged by date across accounts with one keyset cursor of its own (a
+  client merging several folders' pages would need a cursor per folder
+  and could not count). The parameter is a folder role, not a flag, so
+  Sent or Drafts can join later without a change of the contract; today
+  only `inbox` is accepted (`api.UnifiedRoles`, U4). No new notification,
+  error code or migration: the rows are the same summaries with
+  `accountId` and `folderId`, a client recognises its notifications by
+  the folders in scope and adds the badge from `folder.list`. A
+  conversation row is one thread in one folder (thread ids are unique
+  only within an account), aggregated exactly as that folder's listing.
+  Selection crosses accounts (U2): actions are split into one call per
+  account; Move To (the folder picker) and forwarding several messages
+  need a single account and are disabled for a mixed selection. The
+  rules, texts and the sentinel sidebar key are the Go reference
+  `ui/internal/unified` (with `selection` and `contextmenu`); the item is
+  never a favourite and cannot be pinned.
+- The user's replies in a folder's search (2026-11-02): **decided**, a
+  search in one folder (`search.query` with `folderId` and `withSent`, the
+  clients' default Folder scope) also finds the user's replies to the
+  folder's conversations, by the rule of `thread.get` `withSent`: matching
+  visible rows of the account's sent folders whose thread has a visible
+  member in the folder, without the copies the folder already has and each
+  `Message-ID` once. Searching Inbox otherwise never showed what one wrote
+  back. A sent folder, the outbox, the views of a `jira` account and a
+  query with `in:` add nothing; the Account and All Accounts scopes are
+  unchanged (they search the sent folders anyway). Results are told apart
+  only by the folder name the clients already show for a row of another
+  folder; ordering, paging and `total` are those of the search. The store
+  shares one predicate (`sentMember`) between `thread.list`, `thread.get`
+  and the search, so the three cannot disagree; no migration, the indexes
+  of 0011 serve. The MCP bridge does not ask for it.
+- Signatures of incoming mail (2026-11-02): **decided** (owner, Q1–Q8 of
+  [plans/signatures.md](plans/signatures.md)), phase 1 verifies only: S/MIME
+  and OpenPGP/MIME in the daemon, verdict stored after the message, system
+  roots for S/MIME, OpenPGP keys only from the user's mail (Autocrypt,
+  attachments, import; no key servers, no WKD, no web of trust; TOFU
+  `seen` / confirmed `verified`), revocation only on request, opaque
+  S/MIME unwrapped by the parser everywhere. CMS is our own minimal parser
+  (`internal/smime`) because Go's PKCS #7 libraries are abandoned or far
+  wider than verification needs; OpenPGP is `ProtonMail/go-crypto`
+  (BSD-3-Clause, with `cloudflare/circl`, BSD-3-Clause), never GnuPG or
+  gpgme (the core's licence). Addresses are compared case-insensitively,
+  the local part too; a message with two `From` addresses never matches.

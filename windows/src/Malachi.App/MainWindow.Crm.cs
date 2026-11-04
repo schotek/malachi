@@ -17,12 +17,17 @@ using System.Linq;
 using Malachi.App.Crm;
 using Malachi.App.Reader;
 using Malachi.App.Shell;
+using Malachi.Core.Controllers;
 
 namespace Malachi.App;
 
 /// <summary>The main window's eWay-CRM.</summary>
 public sealed partial class MainWindow
 {
+    // The window's CrmController, once attached (the crm-save step of
+    // MainWindow.DevStart.cs runs its Save).
+    private CrmController? crm;
+
     /// <summary>
     /// The Integration and the reader exist: the eWay-CRM button and the
     /// context menu act on the list's selection.
@@ -38,6 +43,7 @@ public sealed partial class MainWindow
             Toasts,
             subjects: () => [.. list.SelectedRows.Select(r => r.Message)],
             conversations: () => list.SelectedRows.Where(r => r.Thread).Select(r => r.Message.Id).ToHashSet());
+        crm = c;
         ListPane.Crm = c;
         var refresh = CrmWindowSupport.Bind(MessageCommands.CrmButton, c, state, this);
         list.ActionFlagsChanged += (_, _) => refresh();

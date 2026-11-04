@@ -174,6 +174,11 @@ type calReq struct {
 	ifMatch string
 	out     any // nil = discard
 	prio    Priority
+	// prefer overrides the Prefer header ("" = calendarPrefer); contacts
+	// set it, with "contacts" as what names their responses in errors
+	// ("" = calendar, whose malformed answer is malformedCalendar).
+	prefer string
+	what   string
 }
 
 // calDo runs one calendar request with the client's policy (token, one
@@ -241,14 +246,18 @@ func (c *Client) calDo(ctx context.Context, r calReq) error {
 			}
 			return classifyTransport(err)
 		}
+		what, malformed := "calendar", api.CodeMalformedCalendar
+		if r.what != "" {
+			what, malformed = r.what, api.CodeServerError
+		}
 		if len(raw) > maxCalendarResponse {
-			return api.NewError(api.CodeServerError, "graph: calendar response over %d bytes", maxCalendarResponse)
+			return api.NewError(api.CodeServerError, "graph: %s response over %d bytes", what, maxCalendarResponse)
 		}
 		if len(bytes.TrimSpace(raw)) == 0 {
 			return nil
 		}
 		if err := json.Unmarshal(raw, r.out); err != nil {
-			return api.NewError(api.CodeMalformedCalendar, "graph: malformed calendar response: %s", transport.CleanMessage(err.Error()))
+			return api.NewError(malformed, "graph: malformed %s response: %s", what, transport.CleanMessage(err.Error()))
 		}
 		return nil
 	}
@@ -267,7 +276,11 @@ func (c *Client) calOnce(ctx context.Context, r calReq, payload []byte, token st
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Prefer", calendarPrefer)
+	if r.prefer != "" {
+		req.Header.Set("Prefer", r.prefer)
+	} else {
+		req.Header.Set("Prefer", calendarPrefer)
+	}
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

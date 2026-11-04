@@ -71,8 +71,8 @@ public sealed partial class SidebarRow : ObservableObject
     [ObservableProperty]
     public partial SidebarRowKind Kind { get; private set; }
 
-    /// <summary>A heading (the Favourites section's or an account's).</summary>
-    public bool IsHeading => Kind != SidebarRowKind.Folder;
+    /// <summary>A heading (the Favourites section's or an account's); the All Inboxes row and a folder are not.</summary>
+    public bool IsHeading => Kind is SidebarRowKind.FavouritesHeading or SidebarRowKind.AccountHeading;
 
     /// <summary>The folder the row stands for; null on a heading.</summary>
     public FolderKey? Folder { get; private set; }
@@ -87,6 +87,16 @@ public sealed partial class SidebarRow : ObservableObject
     /// <summary>Under a pinned folder's name while two or more accounts are enabled: whose it is; "" otherwise.</summary>
     [ObservableProperty]
     public partial string Subtitle { get; private set; }
+
+    /// <summary>
+    /// The row is two lines tall: a pinned folder's row with its account
+    /// under the name, and the All Inboxes row beside such rows (no
+    /// subtitle, the name centred in the same height), so the Favourites
+    /// section has one rhythm; macOS gives the item the subtitle row's
+    /// height the same way.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool TwoLines { get; private set; }
 
     /// <summary>The folder's path on the server (the row's tooltip); "" on a heading.</summary>
     [ObservableProperty]
@@ -186,12 +196,13 @@ public sealed partial class SidebarRow : ObservableObject
             Title = e.Favourite ? L10n.T("Favourites") : e.Account is { } a ? FolderTree.AccountLabel(a) : "";
             Capsule = !e.Favourite && e.Account is { } heading ? FolderTree.AccountHeaderBadge(heading) : "";
             Subtitle = "";
+            TwoLines = false;
             Tooltip = "";
             Indent = 0;
             Icon = "";
-            // The Favourites section does not fold, but keeps the arrow's
-            // place so that the headings line up (folders.go newHeaderRow).
-            SetTwisty(shown: true, active: !e.Favourite, collapsed: !e.Favourite && e.Collapsed);
+            // The Favourites section folds like an account (folders.go
+            // newHeaderRow, toggleFavourites).
+            SetTwisty(shown: true, active: true, collapsed: e.Collapsed);
             Badge = "";
             HasStar = false;
             Starred = false;
@@ -202,11 +213,40 @@ public sealed partial class SidebarRow : ObservableObject
             Dimmed = false;
             return;
         }
+        if (e.IsUnified)
+        {
+            // The All Inboxes item: the first row of the Favourites section,
+            // with the Inbox's icon and the unread badge of all the inboxes;
+            // it cannot be pinned or folded, and the arrow's column is not
+            // reserved (the section's rows have none).
+            Kind = SidebarRowKind.Unified;
+            Title = Unified.Title;
+            Capsule = "";
+            // No account to name; with several accounts the row still takes
+            // the height of a pinned folder's two-line row (TwoLines) so the
+            // section has one rhythm (folders.go rebuildFolderList).
+            Subtitle = "";
+            TwoLines = several;
+            Tooltip = "";
+            Indent = FolderInset;
+            Icon = FolderTree.RoleIcon(FolderRole.Inbox);
+            SetTwisty(shown: false, active: false, collapsed: false);
+            Badge = e.Badge > 0 ? e.Badge.ToString(CultureInfo.InvariantCulture) : "";
+            HasStar = false;
+            Starred = false;
+            StarIcon = "";
+            StarTooltip = "";
+            StarPinned = false;
+            Selectable = true;
+            Dimmed = false;
+            return;
+        }
         var f = e.Folder!;
         Kind = SidebarRowKind.Folder;
         Title = FolderTree.FolderTitle(f);
         Capsule = "";
         Subtitle = e.Favourite && several && e.Account is { } account ? FolderTree.AccountLabel(account) : "";
+        TwoLines = Subtitle.Length > 0;
         Tooltip = DisplayText.Clean(f.Path);
         Indent = FolderInset + (IndentPerLevel * e.Depth);
         Icon = FolderTree.FolderIcon(f);

@@ -4,20 +4,21 @@
 # SDK gives the app its macOS 26 design; SDK_VERSION in macos/Makefile), and
 # one that attaches the image to a tag's release:
 #
-#   app      the Swift tests, then the universal bundle in
-#            build/Malachi-Mail-<version>-universal.dmg: Swift for arm64 and
+#   app      the Swift tests (not on a tag), then the universal bundle in
+#            build/Malachi-Mail-<version>-macos-universal.dmg: Swift for arm64 and
 #            x86_64, malachid and malachi-mcp for both joined by lipo,
 #            signed with the Developer ID of the repository's secrets and
-#            notarised by Apple, kept as the run's artifact
+#            notarised by Apple; an artifact only of a tag (for the
+#            release) and, for a day, of a run by hand (to check the
+#            signing), as artifacts of a public repository are anyone's
 #   release  a notarised DMG of a v* tag onto its GitHub release
 #
 # Every step is a target of the root Makefile (make test-macos, make
 # macos-dmg, make macos-notarize), so what CI does is what a Mac does; how
 # to set the secrets up is in docs/releasing.md §8. Without the five
-# MACOS_* secrets, and always on pull requests (a fork's get no secrets,
-# and a check needs no notarised image), the bundle is signed ad hoc: the
-# DMG is then good for testing on a Mac that lets it through Gatekeeper by
-# hand, and never reaches a release.
+# MACOS_* secrets the bundle is signed ad hoc: the DMG is then good for
+# testing on a Mac that lets it through Gatekeeper by hand, and never
+# reaches a release.
 #
 # The daemon's go vet and go test run on Windows (windows.yml); on macOS
 # the same Go code only builds here, and two of its tests do not pass on a
@@ -28,20 +29,6 @@ on:
   push:
     # Only release tags (v1.2.3); pushes to main build nothing.
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
-  pull_request:
-    paths:
-      - macos/**
-      - backend/**
-      - po/**
-      - docs/malachi_icon.png
-      - Makefile
-      - LICENSE
-      - LICENSING.md
-      - THIRD-PARTY-NOTICES.md
-      - .github/workflows/macos.yml
-      # The Go reference logic the Swift ports and their tests follow; one
-      # test reads ui/internal/assistant/events_test.go itself.
-      - ui/internal/**
   workflow_dispatch:
 
 permissions:
@@ -92,7 +79,10 @@ jobs:
 
       - name: Test
         # The script tests, the string check and swift test with the
-        # generated catalogues, as make test-macos runs them on a Mac.
+        # generated catalogues, as make test-macos runs them on a Mac. Not
+        # on a tag: a release builds, signs and notarises what the Mac has
+        # tested before the tag (docs/releasing.md §3).
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         run: make test-macos
 
       - name: Decide on signing
@@ -104,10 +94,7 @@ jobs:
           NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            echo 'A pull request: the bundle is signed ad hoc and not notarised.'
-            echo 'enabled=false' >> "$GITHUB_OUTPUT"
-          elif [ -n "$CERTIFICATE" ] && [ -n "$CERTIFICATE_PASSWORD" ] && [ -n "$NOTARY_KEY" ] && [ -n "$NOTARY_KEY_ID" ] && [ -n "$NOTARY_ISSUER" ]; then
+          if [ -n "$CERTIFICATE" ] && [ -n "$CERTIFICATE_PASSWORD" ] && [ -n "$NOTARY_KEY" ] && [ -n "$NOTARY_KEY_ID" ] && [ -n "$NOTARY_ISSUER" ]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           else
             echo '::warning title=Not signed::the MACOS_* secrets are not all set (docs/releasing.md §8); the DMG is signed ad hoc, not notarised, and no release gets it'
@@ -172,10 +159,14 @@ jobs:
         run: make macos-notarize SIGN="$SIGN" NOTARY_KEY="$RUNNER_TEMP/notary.p8" NOTARY_KEY_ID="$NOTARY_KEY_ID" NOTARY_ISSUER="$NOTARY_ISSUER"
 
       - uses: actions/upload-artifact@v7
+        # Only a tag and a run by hand: any signed-in GitHub user can
+        # download the artifacts of a public repository.
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         with:
           name: malachi-macos-universal
-          path: build/Malachi-Mail-*-universal.dmg
+          path: build/Malachi-Mail-*-macos-universal.dmg
           if-no-files-found: error
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 30 || 1 }}
 
       - name: Remove the keychain and the API key
         if: always() && steps.sign.outputs.enabled == 'true'

@@ -12,6 +12,15 @@ import Foundation
 /// The `savingCollapse` guard against reacting to one's own write belongs
 /// to the controller, as it does to the GTK window.
 public struct CollapseState: Sendable, Equatable {
+    /// The entry of collapsed-accounts that stands for the Favourites
+    /// section (collapse.go `collapseFavourites`): the section folds like an
+    /// account heading (the All Inboxes item and the pinned folders go out
+    /// of sight, the heading stays), and its fold is stored among the
+    /// account folds under this sentinel. An account id is "acc_" plus hex,
+    /// so the sentinel cannot be one, and `save` never prunes it as an
+    /// account that is gone.
+    public static let favouritesEntry: AccountID = "@favourites"
+
     public var folders: Set<FolderKey>
     public var accounts: Set<AccountID>
 
@@ -29,6 +38,21 @@ public struct CollapseState: Sendable, Equatable {
     /// Whether the account hides its folders.
     public func accountCollapsed(_ id: AccountID) -> Bool {
         accounts.contains(id)
+    }
+
+    /// Whether the Favourites section hides its rows (`favouritesEntry`).
+    public func favouritesCollapsed() -> Bool {
+        accounts.contains(Self.favouritesEntry)
+    }
+
+    /// Folds the Favourites section away or unfolds it.
+    public mutating func setFavourites(_ collapsed: Bool) {
+        setAccount(Self.favouritesEntry, collapsed)
+    }
+
+    /// The state change of the window's `toggleFavourites`.
+    public mutating func toggleFavourites() {
+        setFavourites(!favouritesCollapsed())
     }
 
     /// Folds `k` away or unfolds it.
@@ -98,7 +122,7 @@ public struct CollapseState: Sendable, Equatable {
             .map(\.encoded)
             .sorted()
         let accountEntries = self.accounts
-            .filter { !prune || known.contains($0) }
+            .filter { !prune || known.contains($0) || $0 == Self.favouritesEntry }
             .map(\.rawValue)
             .sorted()
         s.collapsedFolders = folderEntries

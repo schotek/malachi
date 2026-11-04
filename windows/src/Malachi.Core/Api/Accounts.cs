@@ -162,6 +162,13 @@ public sealed record GraphConfig
     /// <summary>The GNOME Online Accounts id, with source goa.</summary>
     [JsonPropertyName("goaAccountId")]
     public string? GoaAccountId { get; init; }
+
+    /// <summary>
+    /// The contacts part of the account (docs/api.md §4.19,
+    /// <see cref="ContactsConfig"/>); null is contacts sync off.
+    /// </summary>
+    [JsonPropertyName("contacts")]
+    public ContactsConfig? Contacts { get; init; }
 }
 
 /// <summary>
@@ -524,6 +531,14 @@ public sealed record AccountOAuthStartParams
     /// </summary>
     [JsonPropertyName("calendar")]
     public bool? Calendar { get; init; }
+
+    /// <summary>
+    /// Also asks for the contacts scope (Microsoft Contacts.ReadWrite); only a
+    /// sign-in made for the contacts sets it (docs/api.md §4.19). Left out
+    /// when null.
+    /// </summary>
+    [JsonPropertyName("contacts")]
+    public bool? Contacts { get; init; }
 }
 
 /// <summary>

@@ -220,6 +220,10 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
         delegate?.loadImages(id)
     }
 
+    @objc func printMail(_ sender: Any?) {
+        delegate?.printMessage(messageView.current ?? summary, from: window)
+    }
+
     @objc func trustSender(_ sender: Any?) {
         delegate?.trustSender(id)
     }

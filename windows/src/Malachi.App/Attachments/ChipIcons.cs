@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/MessageView/AttachmentChipView.swift
-// (icon: the system's icon for the claimed or guessed type, 14 px); GTK:
+// (icon: the system's icon for the claimed or guessed type, 32 px on a
+// tile, Shared/AttachmentTileView.swift); GTK:
 // attachments.go buildChip (gio.ContentTypeGetSymbolicIcon of
 // chipIconType). On Windows the chip shows the shell's icon for the
 // extension, as Explorer does, looked up by the extension alone
@@ -12,13 +13,15 @@
 // lists want the UI thread), so one set of chips looks up a limited number
 // of extensions it has not seen and gives the rest the glyph (Core's
 // IconLookups): a message listing hundreds of parts with as many
-// extensions does not stall its first render. Call on the UI thread.
+// extensions does not stall its first render. One set (Shared) serves the
+// reader and the compose and event windows. Call on the UI thread.
 
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Malachi.App.Resources;
 using Malachi.Core.Platform;
 using Malachi.Core.Presentation;
+using Malachi.Platform.Windows.Files;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -31,8 +34,10 @@ namespace Malachi.App.Attachments;
 /// <summary>The icons of the attachment chips.</summary>
 public sealed class ChipIcons
 {
-    // Rendered at twice the chip's size, so a scaled display stays sharp.
-    private const int Pixels = 32;
+    // Rendered at twice the tile's icon size, so a scaled display stays sharp.
+    private const int Pixels = 64;
+
+    private static ChipIcons? shared;
 
     private readonly IconLookups<ImageSource> lookups;
 
@@ -41,6 +46,9 @@ public sealed class ChipIcons
     {
         lookups = new IconLookups<ImageSource>(extension => Source(types, extension));
     }
+
+    /// <summary>The icons of every tile, the shell's (made on first use, on the UI thread).</summary>
+    public static ChipIcons Shared => shared ??= new ChipIcons(new ShellFileTypes());
 
     /// <summary>The lookups of one set of chips, which <see cref="For"/> draws on.</summary>
     public IconLookups<ImageSource>.Batch StartBatch() => lookups.StartBatch();

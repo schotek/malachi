@@ -47,11 +47,6 @@ func (p *boardPage) bind(b *gtk.Builder) {
 	p.navSplit = b.GetObject("board_nav_split").Cast().(*adw.NavigationSplitView)
 	p.navList = b.GetObject("board_nav_list").Cast().(*gtk.ListBox)
 
-	p.statusButton = b.GetObject("board_status_button").Cast().(*gtk.MenuButton)
-	p.syncSpinner = b.GetObject("board_sync_spinner").Cast().(*adw.Spinner)
-	p.connIcon = b.GetObject("board_connection_icon").Cast().(*gtk.Image)
-	p.syncLabel = b.GetObject("board_sync_label").Cast().(*gtk.Label)
-
 	p.listSplit = b.GetObject("board_list_split").Cast().(*adw.NavigationSplitView)
 	p.listStack = b.GetObject("board_list_stack").Cast().(*gtk.Stack)
 	p.listEmptyPage = b.GetObject("board_list_empty_page").Cast().(*adw.StatusPage)
@@ -211,6 +206,8 @@ func (p *boardPage) renderHeader(vm board.ViewModel) {
 		p.accountFilter.SetSelected(selected)
 	}
 	p.settingAccount = false
+	// The List and Columns/Today have their own toolbars (toolbar_board.go).
+	p.syncToolbar()
 }
 
 // boardAccountFactory renders one entry of the account filter: an eliding

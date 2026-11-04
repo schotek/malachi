@@ -31,13 +31,15 @@ func TestBoardGTKSmoke(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	adw.Init()
+	wb := data.Builder("window.ui")
 	w := &Window{
-		ApplicationWindow: data.Builder("window.ui").GetObject("main_window").Cast().(*adw.ApplicationWindow),
+		ApplicationWindow: wb.GetObject("main_window").Cast().(*adw.ApplicationWindow),
 		log:               slog.Default(), mode: board.ModeBoard,
 		actions:           make(map[string]*gio.SimpleAction),
 		modeSwitchBoardOn: true,
 		toasts:            adw.NewToastOverlay(),
 	}
+	w.bindStatusBar(wb)
 	defer w.Destroy()
 	w.registerBoardActions()
 	now := time.Now()
@@ -103,6 +105,7 @@ func TestBoardGTKSmoke(t *testing.T) {
 	p.renderTriageButton()
 	p.onTriageClicked()
 	w.assist = nil
+	smokeBoardSignatureBadge(t, p, src, flush)
 	if os.Getenv("MALACHI_GTK_CARDS_SMOKE") == "1" {
 		smokeBoardConversationCards(t, p, flush)
 	}

@@ -82,6 +82,8 @@ final class Integration {
         }
 
         list = ListController(mailbox: mailbox, settings: state.settings)
+        mainWindow.developmentList = list
+        mainWindow.developmentMailbox = mailbox
         listView = MessageListViewController(
             list: list, mailbox: mailbox, connection: state.connection, settings: state.settings)
         cache = MessageCache(client: state.client, toast: mainToast)
@@ -122,6 +124,9 @@ final class Integration {
         wireConversation()
         wireBoard()
         wireCRM()
+        wireContacts()
+        wireUpdates()
+        wireSignatures()
     }
 
     /// window.go 337-360 and 411-433: the toolbar and menu act on the
@@ -143,11 +148,48 @@ final class Integration {
             return MessageContextMenu.make(
                 state: self.state, mailbox: self.mailbox, rows: self.list.selectedRows, flags: self.messageActions.flags)
         }
+        mainWindow?.setMoveToMenu { [weak self] in
+            guard let self else { return nil }
+            return MessageContextMenu.moveToMenu(mailbox: self.mailbox, rows: self.list.selectedRows)
+        }
         sidebar.onMarkFolderRead = { [weak self] k in
             self?.actions.markFolderRead(k)
         }
         sidebar.onEmptyFolder = { [weak self] k in
             self?.actions.emptyFolder(k, parent: self?.mainWindow?.window)
+        }
+        // Mail rules (AppRules): Apply Rules… of a folder, enabled when an
+        // enabled rule runs on the account's mail.
+        sidebar.onApplyRules = { [weak self] k, name in
+            guard let self else { return }
+            self.state.rules.apply(k, folderName: name, on: self.mainWindow?.window)
+        }
+        sidebar.rulesApply = { [weak self] account in
+            self?.state.rules.controller.applies(to: account) ?? false
+        }
+        state.rules.currentAccount = { [weak self] in self?.mailbox.model.selected?.account }
+        state.rules.liveFolders = { [weak self] in self?.mailbox.model.folders ?? [:] }
+        // Undo of moves (ActionsController+Undo): the toast with its button
+        // over the main window's content (Mail or Board), ⌘Z through the
+        // window's Edit ▸ Undo, never in the Calendar.
+        actions.showUndoToast = { [weak self] text, button, undo in
+            guard let toasts = self?.mainWindow?.toasts else {
+                self?.mainToast(text)
+                return
+            }
+            toasts.showUndo(text, button: button, onUndo: undo)
+        }
+        actions.dismissUndoToast = { [weak self] in
+            self?.mainWindow?.toasts.dismissUndo()
+        }
+        if let window = mainWindow?.window as? MainWindow {
+            window.mailUndoState = { [weak self] in
+                guard let self, let mode = self.mainWindow?.mode, mode != .calendar else { return nil }
+                return self.actions.canUndo
+            }
+            window.onMailUndo = { [weak self] in
+                self?.actions.undoLast()
+            }
         }
     }
 
@@ -500,6 +542,10 @@ final class Integration {
             confirmTrust: Integration.confirmTrust(state.alerts)
         )
         c.aiPane.configureProfile(state.profile)
+        c.contactsPane.configure(state.contacts)
+        c.rulesPane.configure(state.rules)
+        c.generalPane.configureUpdates(state.updates)
+        c.securityPane.configure(state: state)
         return c
     }
 
@@ -531,10 +577,19 @@ final class Integration {
                 title: Cal.Prefs.addCalDAV, target: self, action: #selector(addCalDAVCalendar(_:)))
             caldav.bezelStyle = .rounded
             caldav.controlSize = .large
-            let buttons = NSStackView(views: [button, jira, caldav])
+            // The first run's note about the update check (updates.WizardNote).
+            let note = NSTextField(wrappingLabelWithString: Updates.wizardNote)
+            note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            note.textColor = .secondaryLabelColor
+            note.alignment = .center
+            note.isSelectable = false
+            note.preferredMaxLayoutWidth = 360
+            note.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
+            let buttons = NSStackView(views: [button, jira, caldav, note])
             buttons.orientation = .vertical
             buttons.alignment = .centerX
             buttons.spacing = 12
+            buttons.setCustomSpacing(20, after: caldav)
             page.statusPage.setChild(buttons)
             mainWindow.install(message: page)
         } else {

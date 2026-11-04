@@ -15,7 +15,8 @@
 // beside the app) and the transport with the Windows key-file policy, the
 // connection, the notification hub, the shell's services (toasts,
 // alerts, windows, hooks), the Assistant (AppState.Assistant.cs), the
-// board and the calendar's sources and alerts (AppState.Calendar.cs). The
+// board and the calendar's sources and alerts (AppState.Calendar.cs), the
+// update check (AppState.Updates.cs). The
 // main window and the Integration follow in App.OnLaunched.
 
 using System;
@@ -88,6 +89,10 @@ public sealed partial class AppState : IDisposable
         InitializeBoard();
         InitializeProfile();
         InitializeCalendar();
+        InitializeContacts();
+        InitializeRules();
+        InitializeUpdates();
+        alerts.UpdateLine = () => UpdateLine;
     }
 
     /// <summary>The app's log.</summary>
@@ -175,7 +180,19 @@ public sealed partial class AppState : IDisposable
         var log = logs.CreateLogger<AppState>();
 
         // Translations first: every string built from here on is translated.
-        L10n.Catalogue = Catalogue.Default(preferredLanguages: WindowsPreferredLanguages.Instance, logger: log);
+        // The display languages, or in an isolated instance the development
+        // override MALACHI_LANGUAGES, whose first tag is the formats' culture
+        // too (EnvironmentPreferredLanguages; docs/windows-port.md §9).
+        IPreferredLanguages languages = WindowsPreferredLanguages.Instance;
+        if (EnvironmentPreferredLanguages.FromEnvironment() is { } overridden)
+        {
+            overridden.Apply();
+            languages = overridden;
+            var tags = string.Join(";", overridden.Languages);
+            var culture = overridden.Culture?.Name ?? "unchanged";
+            LogLanguagesOverridden(log, EnvironmentPreferredLanguages.Variable, tags, culture);
+        }
+        L10n.Catalogue = Catalogue.Default(preferredLanguages: languages, logger: log);
 
         // The preferences' key: the app's, or a test's own (MALACHI_SETTINGS_KEY, Paths).
         if (paths.IgnoredSettingsKey is { } ignored)
@@ -292,6 +309,9 @@ public sealed partial class AppState : IDisposable
         CloseProfile();
         CloseBoard();
         CloseCalendar();
+        CloseContacts();
+        CloseRules();
+        CloseUpdates();
         Windows.Dispose();
         Notifications.Dispose();
         Connection.Dispose();
@@ -330,6 +350,9 @@ public sealed partial class AppState : IDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "the preferences are in {Key} ({Variable})")]
     private static partial void LogSettingsKey(ILogger logger, string key, string variable);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Variable}: the languages are {Languages}, the formats' culture {Culture}")]
+    private static partial void LogLanguagesOverridden(ILogger logger, string variable, string languages, string culture);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "socket path: {Reason}")]
     private static partial void LogSocketPath(ILogger logger, string reason);

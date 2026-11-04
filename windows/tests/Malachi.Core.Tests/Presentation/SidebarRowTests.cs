@@ -61,7 +61,7 @@ public sealed class SidebarRowTests
     }
 
     [Fact]
-    public void TheFavouritesHeadingKeepsTheArrowsPlaceButDoesNotFold()
+    public void TheFavouritesHeadingFoldsLikeAnAccounts()
     {
         var favourites = new FavouriteState();
         favourites.Toggle(new FolderKey("acc1", "inbox"));
@@ -70,9 +70,14 @@ public sealed class SidebarRowTests
         Assert.Equal(SidebarRowKind.FavouritesHeading, row.Kind);
         Assert.Equal("Favourites", row.Title);
         Assert.True(row.TwistyShown);
-        Assert.False(row.TwistyActive);
-        Assert.Equal("", row.TwistyTooltip);
+        Assert.True(row.TwistyActive);
+        Assert.False(row.Collapsed);
+        Assert.Equal("Collapse", row.TwistyTooltip);
         Assert.Null(row.Account);
+        var folded = Row(entries[0] with { Collapsed = true });
+        Assert.True(folded.Collapsed);
+        Assert.Equal("Expand", folded.TwistyTooltip);
+        Assert.Equal("pan-end-symbolic", folded.TwistyIcon);
     }
 
     [Fact]
@@ -158,7 +163,9 @@ public sealed class SidebarRowTests
         favourites.Toggle(new FolderKey("acc1", "inbox"));
         var pinned = Entries(favourites).First(e => e.Favourite && !e.Header);
         Assert.Equal("one@example.invalid", Row(pinned, several: true).Subtitle);
+        Assert.True(Row(pinned, several: true).TwoLines);
         Assert.Equal("", Row(pinned, several: false).Subtitle);
+        Assert.False(Row(pinned, several: false).TwoLines);
         Assert.Equal("Inbox, one@example.invalid, 2", Row(pinned, several: true).ToString());
     }
 

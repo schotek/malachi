@@ -1,0 +1,44 @@
+From: Alice Example <alice@example.org>
+To: Bob <bob@example.net>
+Subject: OpenPGP signed
+Date: Thu, 01 Oct 2026 10:00:00 +0000
+Message-ID: <pgp-valid@example.org>
+MIME-Version: 1.0
+Autocrypt: addr=alice@example.org; prefer-encrypt=mutual; keydata=
+ xiYEaVW5ABtxYDlfb7Iw2HmpK6AP4iLSjBV3YexD415kVBWREMBdwM0hQWxpY2UgRXhhbX
+ BsZSA8YWxpY2VAZXhhbXBsZS5vcmc+wrkEExsIAG8FgmlVuQACCwcJEIDbZSsRLUJLNRQA
+ AAAAABwAEHNhbHRAbm90YXRpb25zLm9wZW5wZ3Bqcy5vcmfIlYnCtjaMD/4QGKdg24XBAh
+ UIAhYAAhkBApsDAh4BFiEEaoJ03fy8FdS5xHPogNtlKxEtQksAALyltQ0VOBMbus+KBCk4
+ i6HaoiiZm65cZUW1nJl99vYKdI+Bd2idxp+mfe9KXHAW1agtr9anQ6GGbAAyOynxIYVgCs
+ 4mBGlVuQAZGnGFB3kTM7Q82ILmjoINklL3K/Xac2QA8IbzFPNqQGHCqgQYGwgAYAWCaVW5
+ AAkQgNtlKxEtQks1FAAAAAAAHAAQc2FsdEBub3RhdGlvbnMub3BlbnBncGpzLm9yZ+UD02
+ C8kJhN6mSiV6poSGsCmwwWIQRqgnTd/LwV1LnEc+iA22UrES1CSwAAoj4OXuYgX88+sCXo
+ zUdWDCKAeNFSB2PA3yDfjXBC3/B9ElJjQSrTJByDWugALf0ve3KhgLw5miQHdUwqRihu3A
+ 0C
+Content-Type: multipart/signed; micalg=pgp-sha256; protocol="application/pgp-signature"; boundary="pgp-b1"
+
+This is an OpenPGP/MIME signed message (RFC 4880 and 3156)
+--pgp-b1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Hello Bob,
+
+signed with OpenPGP.
+
+Alice
+
+--pgp-b1
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: OpenPGP digital signature
+Content-Disposition: attachment; filename="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+wqcEARsIAF0Fgmq+LuQJEIDbZSsRLUJLNRQAAAAAABwAEHNhbHRAbm90YXRpb25z
+Lm9wZW5wZ3Bqcy5vcmeoHWG0hchTf5EWyb02ZVsrFiEEaoJ03fy8FdS5xHPogNtl
+KxEtQksAAMfiLAUbnjjquHsqZvSgc0+daKbWfGysLNVHfBcSpoWVX/zYCUFxWTqX
+MK6VCIF/cz1Fb6vvacqupZrz0KYyq9v/Bg==
+=utyN
+-----END PGP SIGNATURE-----
+--pgp-b1--

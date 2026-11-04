@@ -311,6 +311,18 @@ public sealed partial class BoardListView : UserControl, IBoardStyleContent
 
     // The width
 
+    // The toolbar's sidebar toggle (docs/plans/toolbar-customization.md
+    // W.5, toolbar-board-list toggleSidebar) folded the side pane; it stays
+    // folded while the window is wide enough for it, until toggled again.
+    private bool navHidden;
+
+    /// <summary>The toolbar's sidebar toggle: folds the side pane of states and accounts, or shows it again.</summary>
+    public void ToggleNav()
+    {
+        navHidden = !navHidden;
+        Layout(XamlRoot?.Size.Width ?? ActualWidth);
+    }
+
     // The width the window gives the board (the page spans the window): the
     // list's own grid is no measure, its columns' minimums hold it wider
     // than the window until the folds below take them away.
@@ -333,7 +345,7 @@ public sealed partial class BoardListView : UserControl, IBoardStyleContent
         {
             return;
         }
-        var navOpen = width >= HideNavBelow;
+        var navOpen = width >= HideNavBelow && !navHidden;
         NavColumn.Width = new GridLength(navOpen ? NavWidth : 0);
         Nav.Visibility = navOpen ? Visibility.Visible : Visibility.Collapsed;
         var room = width - (navOpen ? NavWidth : 0);

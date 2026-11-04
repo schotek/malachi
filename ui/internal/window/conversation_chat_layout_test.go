@@ -244,20 +244,20 @@ func TestBubbleAttachmentBadge(t *testing.T) {
 	some := bubbleAttachments{Shown: true}
 	none := bubbleAttachments{}
 	// Nothing known but the summary: the pill alone, or none.
-	if got := bubbleAttachmentBadge(summary(true), nil); got != some {
+	if got := bubbleAttachmentBadge(summary(true), nil, false); got != some {
 		t.Errorf("summary only: %+v", got)
 	}
-	if got := bubbleAttachmentBadge(summary(false), nil); got != none {
+	if got := bubbleAttachmentBadge(summary(false), nil, false); got != none {
 		t.Errorf("no attachments: %+v", got)
 	}
 	// The body alone (message.get not answered, or failed): still the
 	// summary's word.
 	bodyOnly := &loadedMessage{}
 	bodyOnly.store(chatTestBody("Hi", api.BodyFetched, false), false, false)
-	if got := bubbleAttachmentBadge(summary(true), bodyOnly); got != some {
+	if got := bubbleAttachmentBadge(summary(true), bodyOnly, false); got != some {
 		t.Errorf("body only, attachments: %+v", got)
 	}
-	if got := bubbleAttachmentBadge(summary(false), bodyOnly); got != none {
+	if got := bubbleAttachmentBadge(summary(false), bodyOnly, false); got != none {
 		t.Errorf("body only, none: %+v", got)
 	}
 
@@ -265,10 +265,10 @@ func TestBubbleAttachmentBadge(t *testing.T) {
 	two := &loadedMessage{}
 	two.store(chatTestBody("Hi", api.BodyFetched, false), false, false)
 	two.msg = &api.Message{MessageSummary: summary(true), Attachments: []api.Attachment{file("2", ""), file("3", "")}}
-	if got := bubbleAttachmentBadge(summary(true), two); got != (bubbleAttachments{Shown: true, Count: 2}) {
+	if got := bubbleAttachmentBadge(summary(true), two, false); got != (bubbleAttachments{Shown: true, Count: 2}) {
 		t.Errorf("two: %+v", got)
 	}
-	if got := bubbleAttachmentBadge(summary(true), two); got.Count != len(chipAttachments(two.msg.Attachments, two.body)) {
+	if got := bubbleAttachmentBadge(summary(true), two, false); got.Count != len(chipAttachments(two.msg.Attachments, two.body, nil)) {
 		t.Errorf("not the chips' number: %+v", got)
 	}
 
@@ -278,7 +278,7 @@ func TestBubbleAttachmentBadge(t *testing.T) {
 	inline := &loadedMessage{}
 	inline.store(chatTestBody("See the attached", api.BodyFetched, false), false, false)
 	inline.msg = &api.Message{MessageSummary: summary(false), Attachments: []api.Attachment{file("2", "scan@x")}}
-	if got := bubbleAttachmentBadge(summary(false), inline); got != (bubbleAttachments{Shown: true, Count: 1}) {
+	if got := bubbleAttachmentBadge(summary(false), inline, false); got != (bubbleAttachments{Shown: true, Count: 1}) {
 		t.Errorf("inline: %+v", got)
 	}
 
@@ -289,7 +289,7 @@ func TestBubbleAttachmentBadge(t *testing.T) {
 		InlineParts: map[string]string{"logo@x": "2"},
 	}, false, false)
 	shown.msg = &api.Message{MessageSummary: summary(false), Attachments: []api.Attachment{file("2", "logo@x")}}
-	if got := bubbleAttachmentBadge(summary(true), shown); got != none {
+	if got := bubbleAttachmentBadge(summary(true), shown, false); got != none {
 		t.Errorf("shown by the HTML: %+v", got)
 	}
 }

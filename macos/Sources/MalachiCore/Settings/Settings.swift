@@ -49,6 +49,11 @@ public final class Settings {
         case collapsedFolders = "collapsed-folders"
         case collapsedAccounts = "collapsed-accounts"
         case favouriteFolders = "favourite-folders"
+        /// The All Inboxes item, the first row of the Favourites section,
+        /// while there are two or more mail accounts (ui/internal/unified
+        /// Shown). Never part of the three keys above (the section's own
+        /// fold is a sentinel among `collapsedAccounts`).
+        case unifiedInbox = "unified-inbox"
         /// The Assistant menu (ui/internal/assistant): shown at all, and
         /// the Claude app it opens (Settings → AI → Assistant).
         case assistantMenu = "assistant-menu"
@@ -94,6 +99,21 @@ public final class Settings {
         /// agenda; default week); written whenever the view changes
         /// (`CalendarController.setView`).
         case calendarView = "calendar-view"
+        /// Which address books complete the recipients of a new message
+        /// (Settings → Contacts → Recipient Suggestions):
+        /// `ContactSearchScope`'s values, `account` (default) or `all`;
+        /// passed as contact.search's `scope`.
+        case contactsSuggestScope = "contacts-suggest-scope"
+        /// The user's arrangement of the main window's toolbars
+        /// (`Toolbar`, ui/internal/toolbar): the token list, empty for the
+        /// default toolbar (`toolbarLayout(_:)`).
+        case toolbarMail = "toolbar-mail"
+        case toolbarBoardList = "toolbar-board-list"
+        case toolbarBoardFlow = "toolbar-board-flow"
+        case toolbarCalendar = "toolbar-calendar"
+        /// What every toolbar's items show, `Toolbar.DisplayMode`'s nicks
+        /// (default icon).
+        case toolbarDisplayMode = "toolbar-display-mode"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
         /// macOS only: the size of the window text (`Typo`, Settings →
@@ -162,6 +182,7 @@ public final class Settings {
             Key.collapsedFolders.rawValue: [String](),
             Key.collapsedAccounts.rawValue: [String](),
             Key.favouriteFolders.rawValue: [String](),
+            Key.unifiedInbox.rawValue: true,
             Key.assistantMenu.rawValue: true,
             Key.assistantTarget.rawValue: Assistant.Target.desktop.rawValue,
             Key.assistantModel.rawValue: Assistant.Model.sonnet.rawValue,
@@ -181,6 +202,12 @@ public final class Settings {
             Key.boardLastMode.rawValue: Board.Mode.mail.nick,
             Key.boardAccountFilter.rawValue: "",
             Key.calendarView.rawValue: Cal.defaultView.nick,
+            Key.contactsSuggestScope.rawValue: ContactSearchScope.account.rawValue,
+            Key.toolbarMail.rawValue: [String](),
+            Key.toolbarBoardList.rawValue: [String](),
+            Key.toolbarBoardFlow.rawValue: [String](),
+            Key.toolbarCalendar.rawValue: [String](),
+            Key.toolbarDisplayMode.rawValue: Toolbar.DisplayMode.icon.rawValue,
             Key.commandR.rawValue: CommandR.reply.rawValue,
             Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
@@ -369,6 +396,11 @@ public final class Settings {
     }
 
     /// Folders pinned to the Favourites section, encoded like `collapsedFolders`.
+    public var unifiedInbox: Bool {
+        get { bool(.unifiedInbox) }
+        set { set(.unifiedInbox, newValue) }
+    }
+
     public var favouriteFolders: [String] {
         get { stringList(.favouriteFolders) }
         set { set(.favouriteFolders, newValue) }
@@ -469,10 +501,52 @@ public final class Settings {
         set { set(.boardLastMode, newValue) }
     }
 
+    /// The settings key of `bar`'s arrangement.
+    public static func key(_ bar: Toolbar.Bar) -> Key {
+        switch bar {
+        case .mail: .toolbarMail
+        case .boardList: .toolbarBoardList
+        case .boardFlow: .toolbarBoardFlow
+        case .calendar: .toolbarCalendar
+        }
+    }
+
+    /// `bar`'s arrangement, normalized (`Toolbar.normalize`: an empty or
+    /// unreadable list is the default); writing stores `Toolbar.stored`,
+    /// so the default is kept as nothing.
+    public func toolbarLayout(_ bar: Toolbar.Bar) -> Toolbar.Layout {
+        Toolbar.normalize(bar, stringList(Self.key(bar)))
+    }
+
+    public func setToolbarLayout(_ bar: Toolbar.Bar, _ layout: Toolbar.Layout) {
+        set(Self.key(bar), Toolbar.stored(bar, layout))
+    }
+
+    /// What every toolbar's items show (`Toolbar.parseDisplayMode`: an
+    /// unknown nick is icons only).
+    public var toolbarDisplayMode: Toolbar.DisplayMode {
+        get { Toolbar.parseDisplayMode(string(.toolbarDisplayMode)) }
+        set { set(.toolbarDisplayMode, newValue.rawValue) }
+    }
+
     /// The calendar's view (`Cal.parseView`: an unknown nick is Week).
     public var calendarView: Cal.View {
         get { Cal.parseView(string(.calendarView)).0 }
         set { set(.calendarView, newValue.nick) }
+    }
+
+    /// settings.Store.ContactsSuggestScope: Recipient Suggestions' scope;
+    /// an unknown or empty stored value is `.account`, the default. A value
+    /// outside `ContactBook.scopes` is not written.
+    public var contactsSuggestScope: ContactSearchScope {
+        get {
+            let v = ContactSearchScope(string(.contactsSuggestScope))
+            return ContactBook.scopes.contains(v) ? v : ContactBook.scopes[0]
+        }
+        set {
+            guard ContactBook.scopes.contains(newValue), string(.contactsSuggestScope) != newValue.rawValue else { return }
+            set(.contactsSuggestScope, newValue.rawValue)
+        }
     }
 
     /// The board's saved account filter: the daemon's account id, "" for

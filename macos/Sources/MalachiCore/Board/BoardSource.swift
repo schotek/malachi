@@ -56,25 +56,12 @@ extension Board {
     /// The calls that take back an archive of case `id` in `account`:
     /// `message.move` of the moved messages back to the folders they came
     /// from (one call per folder, in the order the folders first appear,
-    /// messages in their order, each once), then `board.setDone` with done
-    /// false. Without moved messages only the reopen.
+    /// messages in their order, each once: `Undo.calls`), then `board.setDone`
+    /// with done false. Without moved messages only the reopen.
     public static func undoArchive(_ moved: [BoardMoved], account: AccountID, id: CaseID) -> UndoCalls {
-        var moves: [MessageMoveParams] = []
-        var index: [FolderID: Int] = [:]
-        for m in moved where !m.messageId.rawValue.isEmpty && !m.fromFolderId.rawValue.isEmpty {
-            let i: Int
-            if let known = index[m.fromFolderId] {
-                i = known
-            } else {
-                i = moves.count
-                index[m.fromFolderId] = i
-                moves.append(MessageMoveParams(accountId: account, messageIds: [], targetFolderId: m.fromFolderId))
-            }
-            if !moves[i].messageIds.contains(m.messageId) {
-                moves[i].messageIds.append(m.messageId)
-            }
-        }
-        return UndoCalls(moves: moves, reopen: BoardSetDoneParams(caseId: BoardCaseID(rawValue: id.rawValue), done: false))
+        let e = Undo.fromBoard(trash: false, account: account, id: id.rawValue, moved: moved)
+        return UndoCalls(
+            moves: e.map(Undo.calls) ?? [], reopen: BoardSetDoneParams(caseId: BoardCaseID(rawValue: id.rawValue), done: false))
     }
 }
 

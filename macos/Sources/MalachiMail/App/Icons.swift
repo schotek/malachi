@@ -94,6 +94,8 @@ enum Icon {
         "sidebar-show": "sidebar.leading",
         "preferences-system": "gearshape",
         "applications-graphics": "paintpalette",
+        // Report an Issue at the end of the status bar (window.blp).
+        "malachi-report": "exclamationmark.bubble",
     ]
 
     private static let log = Logger(subsystem: "io.github.schotek.Malachi", category: "icons")

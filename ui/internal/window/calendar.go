@@ -105,10 +105,7 @@ type calendarPage struct {
 	empty       *adw.StatusPage
 	emptyButton *gtk.Button
 
-	statusButton *gtk.MenuButton
-	statusLabel  *gtk.Label
-	statusNote   *gtk.Label
-	statusTimer  glib.SourceHandle
+	statusTimer glib.SourceHandle
 
 	sidebar *calendarSidebar
 	week    *calendarWeek
@@ -131,6 +128,8 @@ type calendarPage struct {
 	// pendingDetail is the occurrence key whose detail opens once the
 	// range it is in has loaded (showInCalendar).
 	pendingDetail string
+	// toolbar is the page's customizable header bar (toolbar_calendar.go).
+	toolbar *calendarToolbar
 }
 
 // calendarEnv is how the calendar writes its texts with dates: the
@@ -182,9 +181,11 @@ func (w *Window) ensureCalendar() {
 	}
 	p := &calendarPage{w: w, colorIndex: map[api.CalendarID]int{}}
 	p.ctl = calendarctl.NewCalendarController(w.calendarSource(), w.calendarOptions())
-	p.bind(data.Builder("calendar_page.ui"))
+	cb := data.Builder("calendar_page.ui")
+	p.bind(cb)
 	w.cal.page = p
 	p.wire()
+	p.wireToolbar(cb)
 	p.sidebar = newCalendarSidebar(p)
 	p.week = newCalendarWeek(p, false)
 	p.day = newCalendarWeek(p, true)
@@ -227,9 +228,6 @@ func (p *calendarPage) bind(b *gtk.Builder) {
 	p.banner = get("calendar_banner").(*adw.Banner)
 	p.empty = get("calendar_empty").(*adw.StatusPage)
 	p.emptyButton = get("calendar_empty_button").(*gtk.Button)
-	p.statusButton = get("calendar_status_button").(*gtk.MenuButton)
-	p.statusLabel = get("calendar_status_label").(*gtk.Label)
-	p.statusNote = get("calendar_status_note").(*gtk.Label)
 }
 
 // wire gives the header bar its texts and connects its controls.
@@ -588,13 +586,11 @@ func (w *Window) signInInBrowser(id api.AccountID, fallback string) {
 	w.startBrowserSignIn(id, fallback, false)
 }
 
-// applyStatus is the Calendar's status strip: the calendars' state on the
-// left (calendar.StatusLine), the unanswered count as its note.
+// applyStatus brings the window's status bar up to date while the
+// Calendar shows: the calendars' state (calendar.StatusLine) is its line,
+// the unanswered count its note (status.go statusTexts).
 func (p *calendarPage) applyStatus() {
-	p.statusLabel.SetUseMarkup(false)
-	p.statusLabel.SetLabel(p.ctl.StatusLine())
-	note := p.ctl.UnansweredLine()
-	p.statusNote.SetUseMarkup(false)
-	p.statusNote.SetLabel(note)
-	p.statusNote.SetVisible(note != "")
+	if p.w.mode == board.ModeCalendar {
+		p.w.refreshSyncLabel()
+	}
 }

@@ -213,6 +213,8 @@ public sealed partial class WindowTracker : IDisposable
         c.AddJiraAccount.CanExecute = () => hooks.AddJiraAccount is not null;
         c.AddCalDAVCalendar.Handler = () => hooks.AddCalDAVCalendar?.Invoke(window);
         c.AddCalDAVCalendar.CanExecute = () => hooks.AddCalDAVCalendar is not null;
+        c.Contacts.Handler = () => hooks.OpenContacts?.Invoke();
+        c.Contacts.CanExecute = () => hooks.OpenContacts is not null;
         c.CheckForNewMail.Handler = () => hooks.CheckForNewMail?.Invoke();
         c.CheckForNewMail.CanExecute = () => hooks.CheckForNewMail is not null;
         c.Search.Handler = () => hooks.FocusSearch?.Invoke();

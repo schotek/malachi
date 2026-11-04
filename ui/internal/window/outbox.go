@@ -18,7 +18,7 @@ import (
 // folder, carry their delivery state in MessageSummary.Outbox and are
 // counted by SyncState.PendingOutbox (queued or sending) and FailedOutbox.
 // The UI shows the state on a banner above the message and the failed
-// ones in the sidebar's status line and its popover (status.go), offers
+// ones in the window's status line and its popover (status.go), offers
 // outbox.retry for a failed one and turns Trash into "cancel sending"
 // (message.delete drops the message for good; the backend refuses flags
 // and moves on outbox messages). The daemon owns the queue: nothing here

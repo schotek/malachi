@@ -132,6 +132,9 @@ type DaemonSource struct {
 	// first.
 	messages     map[CaseID]conversation
 	messageOrder []CaseID
+	// lastOpened is the case LoadMessages was asked for last: the
+	// detail's (ReloadConversations).
+	lastOpened CaseID
 	// loading and failed are the version of a case whose conversation is
 	// being loaded, or whose load failed.
 	loading map[CaseID]int64
@@ -573,6 +576,7 @@ func (d *DaemonSource) LoadMessages(id CaseID) {
 	if !ok {
 		return
 	}
+	d.lastOpened = id
 	if m, ok := d.messages[id]; ok && m.version == c.Version {
 		d.touch(id)
 		return
@@ -616,6 +620,39 @@ func (d *DaemonSource) LoadMessages(id CaseID) {
 			d.LoadMessages(id)
 		}
 	})
+}
+
+// staleConversation is the version of a cached conversation that must be
+// asked for again although the case's version did not change
+// (ReloadConversations): no case has it.
+const staleConversation = -1
+
+// ReloadConversations is a change the case's version does not show: the
+// signature verdicts of messages (notify.signaturesChanged: a key imported
+// or confirmed, a revocation check; notify.messagesChanged of account: a
+// verdict that came after board.get). Every cached conversation of the
+// account ("" any) is marked stale, so the next LoadMessages asks
+// board.get again, and the one asked for last (lastOpened, the detail's)
+// is asked for now. Until the answer the cached messages stay shown; an unchanged
+// answer publishes nothing.
+func (d *DaemonSource) ReloadConversations(account api.AccountID) {
+	if !d.started || d.stopped {
+		return
+	}
+	reload := false
+	for _, id := range d.messageOrder {
+		c, ok := d.baseCase(id)
+		m, cached := d.messages[id]
+		if !ok || !cached || (account != "" && c.Account != account) {
+			continue
+		}
+		m.version = staleConversation
+		d.messages[id] = m
+		reload = reload || id == d.lastOpened
+	}
+	if reload {
+		d.LoadMessages(d.lastOpened)
+	}
 }
 
 // The user's decisions.
@@ -982,8 +1019,8 @@ func convertCommitment(k api.BoardCommitment) Commitment {
 
 func convertMessage(m api.BoardMessage) CaseMessage {
 	return CaseMessage{
-		ID: m.ID, Folder: m.FolderID, From: displayName(m.From), Date: m.Date.UTC(), Text: m.Text, Mine: m.Mine,
-		Trimmed: m.Trimmed,
+		ID: m.ID, Folder: m.FolderID, From: displayName(m.From), Address: m.From.Address, Date: m.Date.UTC(), Text: m.Text, Mine: m.Mine,
+		Trimmed: m.Trimmed, Signature: m.Signature,
 	}
 }
 

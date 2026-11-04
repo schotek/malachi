@@ -1,3 +1,80 @@
+Version 0.3.0
+~~~~~~~~~~~~~
+Released: 2026-11-03
+
+Features:
+ * Mail rules: conditions on the sender, recipients, subject, body,
+   mailing list, bulk mail, attachments or account, and actions that move,
+   mark as read, star, send to Trash or Junk, forward or answer
+   automatically. Rules run on new mail in the inbox, can also be run on a
+   folder by hand, and are made in Preferences → Rules or from a message's
+   menu.
+ * All Inboxes at the top of the sidebar shows the inbox of every mail
+   account in one list, also grouped by conversation; it can be hidden in
+   Preferences.
+ * Signatures of incoming mail, S/MIME and OpenPGP, are verified: a badge
+   beside the sender, also in the message list and on the Board, says
+   whether the signature is valid and who signed it, with the details a
+   click away.
+ * Searching in a folder also finds your own replies in Sent.
+ * Attachments are shown as tiles with their type, name and size, and an
+   attachment of a message you are writing can be previewed.
+
+Bugfixes:
+ * A reply to an invitation is a short line in the conversation, the
+   invitation card is shown in the chat as well, and the .ics file no
+   longer appears as an attachment beside the card.
+
+Version 0.2.1
+~~~~~~~~~~~~~
+Released: 2026-11-02
+
+Features:
+ * Malachi Mail checks once a day whether a newer version is available
+   and shows a bar with what is new, a download link, Remind Me Later
+   and Skip This Version; a security release asks once. The check sends
+   the program's version and package to its website, nothing else, and
+   can be turned off in Preferences → General → Updates, where Check Now
+   asks at once.
+
+Version 0.2.0
+~~~~~~~~~~~~~
+Released: 2026-11-01
+
+Notes:
+ * The macOS disk image is now signed with a Developer ID and notarised
+   by Apple, so it opens like any downloaded app. The first start after
+   an earlier build asks once for each stored password: choose Always
+   Allow.
+ * The Windows installers are still unsigned, so SmartScreen warns once.
+   There is no portable zip for Windows any more.
+ * Every file of a release is named alike, with the version, the system
+   and the architecture: Malachi-Mail-0.2.0-windows-x64-setup.exe.
+
+Features:
+ * Address books: the contacts of Microsoft 365 and of CardDAV servers in
+   a Contacts window, where they can be searched, edited and added, with
+   their photos. A CalDAV server may now offer only address books.
+ * An address in a message can be shown as a contact or added to the
+   contacts, and contacts are suggested while you write.
+ * Contact photos are shown beside the sender in the message list,
+   conversations, the chat and the Board.
+ * Moving mail to the Trash, the archive, Junk or another folder, also
+   from the Board, can be undone with Ctrl+Z (⌘Z on a Mac) or from the
+   message that confirms it.
+ * AI agents can search and read contacts through the MCP bridge, and
+   create or change them only with your explicit permission.
+
+Bugfixes:
+ * A chat opens at its newest message.
+ * The conversation of a case on the Board shows its cards as soon as
+   they are loaded.
+ * The Board takes new correspondents into account after new mail.
+ * eWay-CRM accepts a web service address over http on this computer.
+ * The assistant in the app reaches your mail from its first answer.
+ * On macOS, the preview of a rewrite shows its answer from the start.
+ * On Windows, cards and status colours follow the window's theme.
+
 Version 0.1.2
 ~~~~~~~~~~~~~
 Released: 2026-10-26

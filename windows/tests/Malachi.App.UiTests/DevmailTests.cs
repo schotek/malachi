@@ -2,20 +2,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The opt-in suite (MALACHI_DEVMAIL; docs/windows-port.md §12) against
-// devmail's seeded mailbox: the Inbox listed, a message in the reader, a
-// real double click on a row opening the message's window in front of the
+// devmail's corpus and the messages the suite submits: the Inbox listed,
+// a message in the reader, a real double click on a row opening the
+// message's window in front of the
 // main window (the owner's finding of 2026-10-17: it came up behind, the
 // release of the second press taking the activation back; AfterRelease), a
 // reply prepared by the daemon (draft.create) in a composer, a message
 // sent from a composer arriving on the server, and an invitation to the
 // account itself (submitted raw over SMTP, DevmailSmtp) shown with its
 // invitation card and Accept, Tentative and Decline above the header
-// (docs/calendar.md §5.7). The seeded subjects and addresses are devmail's
-// (seed.go), never translated.
+// (docs/calendar.md §5.7), and a message of its own (submitted as well)
+// moved to Trash and taken back by Ctrl+Z and by
+// the toast's Undo (Ctrl+Z), the restored row selected, while Ctrl+Z in the
+// search box stays the box's own (docs/windows-port.md §11.14). The
+// message read and answered is the fixture's (Lunch, DevmailFixture), its
+// subject and address never translated.
 
 using System;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using System.Windows.Automation;
 using Xunit;
 
@@ -25,12 +31,18 @@ namespace Malachi.App.UiTests;
 [Collection(OneAppAtATime.Name)]
 public sealed class DevmailTests(DevmailFixture fixture) : IClassFixture<DevmailFixture>
 {
-    private const string Lunch = "Lunch tomorrow?";
-    private const string LunchSender = "bob.smith@example.org";
+    private const string Lunch = DevmailFixture.Lunch;
+    private const string LunchSender = DevmailFixture.LunchSender;
+    private const byte VkControl = 0x11;
+    private const byte VkZ = 0x5A;
 
     // How long the double click's second press is held: longer than the
     // message window takes to show.
     private static readonly TimeSpan SecondPressHeld = TimeSpan.FromSeconds(1);
+
+    // How long a toast may wait in the window's queue (ToastPresenter: each
+    // before it keeps its seconds, a move's toast 8, another's 5).
+    private static readonly TimeSpan ToastQueued = TimeSpan.FromSeconds(30);
 
     private AppSession App
     {
@@ -162,6 +174,86 @@ public sealed class DevmailTests(DevmailFixture fixture) : IClassFixture<Devmail
         Assert.NotNull(Uia.Find(card, "InvitationTentative"));
         Assert.NotNull(Uia.Find(card, "InvitationDecline"));
     }
+
+    [Fact]
+    public void CtrlZAndTheToastsButtonTakeBackAMoveToTrash()
+    {
+        var app = App;
+        var server = fixture.Server;
+        var main = app.MainWindow;
+        var list = Uia.Find(main, "MessageList");
+        // A message of its own, at the top: selecting a row further down
+        // would scroll the list away from the rows the other tests look for.
+        var subject = "Undo " + Guid.NewGuid().ToString("N")[..8];
+        var arrived = server.Total("INBOX");
+        DevmailSmtp.Submit(server, DevmailFixture.PlainMessage("Ada Example <ada@example.org>", subject, "To be taken back."));
+        Uia.WaitFor(() => server.Total("INBOX") == arrived + 1, "the message in the server's INBOX", TimeSpan.FromSeconds(60));
+        Uia.Select(Uia.Until(() => RowOf(list, subject), TimeSpan.FromSeconds(120), "the row of " + subject));
+        Uia.WaitFor(() => Uia.TryFind(main, "MessageSubject")?.Current.Name == subject, "the reader to show " + subject);
+        var inbox = server.Total("INBOX");
+
+        // Move to Trash: the row goes and the toast offers Undo (Ctrl+Z),
+        // once the toasts queued before it have had their seconds.
+        Trash(main);
+        Uia.WaitFor(() => RowOf(list, subject) is null, "the row to leave the Inbox");
+        var button = Uia.Find(main, "ToastButton", ToastQueued);
+        Assert.Contains("Ctrl+Z", button.Current.Name, StringComparison.Ordinal);
+        Uia.WaitFor(() => server.Total("INBOX") == inbox - 1, "the move on the server", TimeSpan.FromSeconds(60));
+
+        // Ctrl+Z in the search box is the box's own undo: the message stays in Trash.
+        Uia.PressKey(Edit(Uia.Find(main, "SearchBox")), app.ProcessId, VkZ, VkControl);
+        Thread.Sleep(TimeSpan.FromSeconds(2));
+        Assert.Null(RowOf(list, subject));
+
+        // Ctrl+Z on the list takes it back, selected (the keyboard on a row:
+        // the ListView itself hands the focus to its items).
+        Uia.PressKey(Uia.All(list, ControlType.ListItem).Cast<AutomationElement>().First(), app.ProcessId, VkZ, VkControl);
+        var back = Uia.Until(() => RowOf(list, subject), TimeSpan.FromSeconds(30), "the row back in the Inbox");
+        Uia.WaitFor(() => IsSelected(back), "the restored row selected");
+        Uia.WaitFor(() => server.Total("INBOX") == inbox, "the message back on the server", TimeSpan.FromSeconds(60));
+
+        // The toast's button does the same.
+        Uia.Select(back);
+        Trash(main);
+        Uia.WaitFor(() => RowOf(list, subject) is null, "the row to leave the Inbox again");
+        // Behind the toast of the first Undo.
+        Uia.Invoke(Uia.Find(main, "ToastButton", ToastQueued));
+        back = Uia.Until(() => RowOf(list, subject), TimeSpan.FromSeconds(30), "the row back after the toast's button");
+        Uia.WaitFor(() => IsSelected(back), "the restored row selected after the toast's button");
+        Uia.WaitFor(() => server.Total("INBOX") == inbox, "the message back on the server again", TimeSpan.FromSeconds(60));
+    }
+
+    // Move to Trash from the command bar, answering "Move to Trash?" when asked.
+    private static void Trash(AutomationElement main)
+    {
+        var trash = Uia.Find(main, "TrashButton");
+        Uia.WaitFor(() => trash.Current.IsEnabled, "Move to Trash to be enabled");
+        Uia.Invoke(trash);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (clock.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            if (Uia.TryFind(main, "PrimaryButton") is { } confirm)
+            {
+                Uia.Invoke(confirm);
+                return;
+            }
+            Thread.Sleep(100);
+        }
+    }
+
+    // The text field of an AutoSuggestBox, which takes the keyboard focus
+    // (the box's own element does not; CalendarSmokeTests.Edit).
+    private static AutomationElement Edit(AutomationElement box) =>
+        box.Current.ControlType == ControlType.Edit
+            ? box
+            : box.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit)) ?? box;
+
+    private static AutomationElement? RowOf(AutomationElement list, string subject) =>
+        Uia.All(list, ControlType.ListItem).Cast<AutomationElement>()
+            .FirstOrDefault(r => r.Current.Name.Contains(subject, StringComparison.Ordinal));
+
+    private static bool IsSelected(AutomationElement row) =>
+        row.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var p) && ((SelectionItemPattern)p).Current.IsSelected;
 
     // A REQUEST from an outside organiser to the seeded user, an hour long
     // at start (UTC), as a calendar client sends it: a text part and the

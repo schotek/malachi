@@ -259,7 +259,8 @@ func keyringReadErr(err error, what string) *api.Error {
 
 // refreshOnce reads the refresh token (lazily), asks the token endpoint
 // and persists a rotated refresh token (bare, in its own item). When the
-// response names a scope that changes whether the calendar is granted,
+// response names a scope that changes whether the calendar or the
+// contacts are granted,
 // KeyGrantedScope is written or removed to match. scope is the response's
 // scope ("" when it named none: the recorded one stands). lost reports
 // that the sign-in is gone (nothing stored, or the provider rejected it).
@@ -272,7 +273,7 @@ func (t *tokenSource) refreshOnce(ctx context.Context, gen uint64) (access strin
 	ep := t.endpoints(t.provider, t.client.Tenant)
 	// The scopes of the config are never sent on a refresh
 	// (golang.org/x/oauth2): a refresh keeps the grant as it is.
-	cfg := oauthConfig(t.provider, t.client, ep, "", false)
+	cfg := oauthConfig(t.provider, t.client, ep, "", false, false)
 	tok, rerr := cfg.TokenSource(withHTTP(ctx, t.http), &oauth2.Token{RefreshToken: rt}).Token()
 	if rerr != nil {
 		aerr := classifyToken(ctx, phaseRefresh, rerr, rt, t.client.Secret)
@@ -289,7 +290,8 @@ func (t *tokenSource) refreshOnce(ctx context.Context, gen uint64) (access strin
 		t.storeRotated(ctx, gen, rotated)
 	}
 	if scope != "" {
-		if stored, serr := t.loadScope(ctx, gen); serr == nil && HasCalendarScope(stored) != HasCalendarScope(scope) {
+		if stored, serr := t.loadScope(ctx, gen); serr == nil && (HasCalendarScope(stored) != HasCalendarScope(scope) ||
+			HasContactsScope(stored) != HasContactsScope(scope)) {
 			t.storeScope(ctx, gen, scope)
 		}
 	}
@@ -311,10 +313,10 @@ func (t *tokenSource) grantedScope(ctx context.Context) (string, error) {
 	return t.loadScope(ctx, gen)
 }
 
-// writeScope writes KeyGrantedScope for a grant with calendar access and
-// removes it otherwise; the caller holds storeMu.
+// writeScope writes KeyGrantedScope for a grant with calendar or contacts
+// access and removes it otherwise; the caller holds storeMu.
 func (t *tokenSource) writeScope(ctx context.Context, scope string) error {
-	if HasCalendarScope(scope) {
+	if recordsScope(scope) {
 		return t.keyring.Set(ctx, t.account, KeyGrantedScope, scope)
 	}
 	if err := t.keyring.Delete(ctx, t.account, KeyGrantedScope); err != nil && !errors.Is(err, auth.ErrNoSecret) {

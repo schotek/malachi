@@ -82,11 +82,17 @@ internal sealed partial class ConversationChatRow : Grid
     /// initials): monochrome as the list's setting says, the user's own
     /// tinted with the accent colour.
     /// </summary>
-    public void ShowAvatar(string name, bool monochrome)
+    /// <remarks>
+    /// <paramref name="photoSender"/> is the address whose contact's photo
+    /// the avatar shows ("" none, docs/plans/address-book.md F10); a bubble
+    /// on the right, the user's own, never shows one.
+    /// </remarks>
+    public void ShowAvatar(string name, bool monochrome, string photoSender = "")
     {
         avatar.Text = name;
         avatar.Monochrome = monochrome;
         avatar.Accent = Right;
+        avatar.PhotoSender = Right ? "" : photoSender;
     }
 
     /// <summary>The column is <paramref name="width"/> wide (the clamp less its side insets): the bubble's widest.</summary>

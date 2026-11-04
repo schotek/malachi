@@ -44,7 +44,7 @@ except for the Windows CI job of the backend row and what §17 lists.
 | Language, runtime | C# on .NET 10 (LTS), WinUI 3 on the Windows App SDK **2.5.x** (1.8 left servicing on 2026-09-24): the component packages `Microsoft.WindowsAppSDK.WinUI` and `.InteractiveExperiences` instead of the metapackage, which adds ~60 MB of AI libraries a mail client never uses (measured; the notification fix of §10 comes with it) | Built: `windows/Directory.Packages.props` (WinUI 2.3.9, InteractiveExperiences 2.1.9, the 2.5.1 Runtime package downloaded for one DLL), §2, §13 |
 | Windows versions | Windows 11 only (`TargetPlatformMinVersion` 10.0.22000.0) | Built: `Malachi.App.csproj` |
 | Architectures | x64 and ARM64 | Built: `build.ps1 -Arch x64\|arm64`, the solution's two platforms. x64 is built and run here; for ARM64 the app, the daemon and the bridge cross-build (2026-09-28), the NativeAOT keyring helper needs the MSVC ARM64 build tools, and nothing ARM64 has run yet (§17) |
-| Packaging | **Unpackaged, self-contained**, per user. `make windows` assembles a folder like the macOS `.app`; the app registers itself in HKCU. Installer (Velopack + winget), code signing and the licence permission for Microsoft components come before the first public binary (§17). MSIX is out: its AppData virtualisation hides `config.toml` and the store and breaks the Claude registration, the same reason macOS has no App Sandbox | Built: `build.ps1 app` and `package` (a zip of the folder), the HKCU registrations of §10; the installer, signing and the licence permission are §17 |
+| Packaging | **Unpackaged, self-contained**, per user. `make windows` assembles a folder like the macOS `.app`; the app registers itself in HKCU. Installer (Velopack + winget), code signing and the licence permission for Microsoft components come before the first public binary (§17). MSIX is out: its AppData virtualisation hides `config.toml` and the store and breaks the Claude registration, the same reason macOS has no App Sandbox | Built: `build.ps1 app` and `installer` (Inno Setup, per user; no zip since 2026-11-01), the HKCU registrations of §10; signing and updates are §17 |
 | Entry points | `make windows`, `make run-windows`, `make test-windows`, from PowerShell and Git Bash (GNU make 4.4 from winget `ezwinports.make`); `windows/build.ps1` does the work | Built: the root `Makefile`, `windows/build.ps1` (§13), verified from both shells |
 | Stopping the daemon | `CTRL_BREAK_EVENT` through `AttachConsole`/`GenerateConsoleCtrlEvent` (Go maps it to SIGINT; verified clean exit in ~18 ms), `Kill` after 15 s. No backend change; GTK/macOS semantics kept (a daemon left behind by a crashed UI is adopted, never stopped) | Built: `Malachi.Platform.Windows` `Process/` and `Console/`, §5 |
 | Secrets | `malachi-credentials.exe`, the helper keyring over **Windows Credential Manager**, values above the 2560-byte blob limit split into hash-checked chunks | Built: `Malachi.Credentials`, §10 |
@@ -186,7 +186,7 @@ windows/
     Malachi.FakeBridge/         a scripted malachi-mcp for the MCP registration tests
     Malachi.Platform.Windows.Tests/
     Malachi.Credentials.Tests/
-    Malachi.Conventions.Tests/  msgid and gschema coverage, the strings check, SPDX headers
+    Malachi.Conventions.Tests/  msgid and gschema coverage, the strings check, SPDX headers, theme brushes
     Malachi.App.Canary/         the network canary (§12) over the WebView2 layer
     Malachi.App.Canary.Host/    its WinUI host, compiling src/Malachi.App/WebViews
     Malachi.App.UiTests/        UI smoke tests over the published app (UI Automation), devmail opt-in
@@ -277,6 +277,15 @@ source. "Mirror" means what it means in [macos-port.md §3](macos-port.md#3-the-
 - **Platform code.** Only in `Malachi.Platform.Windows` and `Malachi.App`;
   P/Invoke and COM through CsWin32 (`NativeMethods.txt`), never hand-written
   where CsWin32 can generate it.
+- **Theme colours in code.** An element built in C# takes its colours from
+  a style whose setters are `{ThemeResource …}` (`Resources/Surfaces.xaml`
+  for cards, fills, icons and destructive menu items,
+  `Resources/Typography.xaml` for dim, critical and caution text, or a
+  view's own `Resources`), never a brush read from
+  `Application.Current.Resources`: that brush has Windows' theme, not the
+  colour scheme the window root's `RequestedTheme` carries, so a dark window
+  kept a light card under white text and nothing followed a change.
+  `ThemeBrushTests` in `Malachi.Conventions.Tests` rejects such a lookup.
 
 ### 3.2 Handing over a port
 
@@ -1369,6 +1378,21 @@ language (matched by base language, English always available);
 Windows-only strings stay English (`// Windows-only string`, `<!--
 Windows-only string -->`); nothing enters `po/POTFILES`.
 
+A desktop app has no per-app language on Windows, and changing the
+display languages means a sign-out, so an isolated instance (the
+screenshots of `docs/screenshots.md`, a test) may set them with the
+Windows-only development variable `MALACHI_LANGUAGES`
+(`Malachi.Core/I18n/EnvironmentPreferredLanguages.cs`, read by
+`AppState.Create` before `WindowsPreferredLanguages`, documented like
+`MALACHI_SETTINGS_KEY`): BCP 47 tags most preferred first, separated by
+`;`, `,` or white space (`en-GB`, `cs-CZ;en`), each once, a tag Windows
+does not know still counting for the catalogue. The first tag is also the
+regional format: `CultureInfo.CurrentCulture` and the default of every
+thread, which the dates, the first day of the week and the calendar read,
+as `LANG` is for the GTK client and `AppleLocale` beside `AppleLanguages`
+for the macOS one. Unset or empty, nothing changes; the log says what was
+taken.
+
 The strings check (`Malachi.Conventions.Tests/Strings`, the counterpart of
 `macos/scripts/check-strings.py`): Roslyn (`Microsoft.CodeAnalysis.CSharp`)
 over `windows/src/**/*.cs` and an XML reader over `windows/src/**/*.xaml`
@@ -1920,8 +1944,8 @@ and pane buttons in narrow layouts. Below it the three panes of
 message ≥ 300; widths in the gschema keys, written only from a wide,
 uncollapsed layout). At 900 effective pixels or less the sidebar becomes an
 overlay; at 600 or less list and message form one stack with Back (GTK). Command
-rows per pane: sidebar (New Message, the primary menu `…`: New Message, Add
-Account…, Preferences, About, Quit), list (folder title and counts, Check
+rows per pane: sidebar (New Message, the primary menu `…`: New Message,
+Contacts, Preferences, About, Quit), list (folder title and counts, Check
 for New Mail, the All/Unread/Flagged `SelectorBar`, hidden while
 searching), message (Reply, Reply All, Forward; Archive, Trash; Star, ✦,
 More). The status line runs across the bottom edge (26 px, spinner,
@@ -1977,9 +2001,10 @@ shortcuts type; `MainWindow.Panes` hands that one focus to the sidebar's
 first tab stop (GTK's first focusable widget, New Message), and a click or
 Ctrl+F that comes first stays the user's. The command rows are 44
 px under the tall title bar: the sidebar's accent New Message and the
-primary menu `…` (`_New Message`, `_Add Account…`, `_Preferences`, `_About
-Malachi Mail` and a Windows-only *Quit*, with the keys beside them; GTK's
-dead `_Keyboard Shortcuts` is left out), the list's Check for New Mail and
+primary menu `…` (`_New Message`, `_Contacts`, `_Preferences`, `_About
+Malachi Mail` and `_Quit`, with the keys beside them: GTK's `primary_menu`,
+which the Board's and the Calendar's `…` repeat; no modes and no Add
+Account since 2026-11-04), the list's Check for New Mail and
 title with its counts (`MessageListPane`, no search toggle: the box is in
 the title bar), the message page's Reply, Reply All, Forward and, packed
 from the end as in the Blueprint, Archive and Trash, a gap, then the Star
@@ -2022,7 +2047,8 @@ folders and account headings have the context menus of all three clients
 In the code (`Malachi.App/Main`, the view models in
 `Malachi.Core/Presentation` with their tests): the sidebar's rows are
 `SidebarRow`s (the rows of folders.go: headings 3 px lower with the fold
-arrow, which the Favourites heading keeps as an invisible place; folders
+arrow, the Favourites heading's folding its section like an account's;
+folders
 12 in from their heading, which GTK's rows get from `Adw.ActionRow`'s
 start padding (`SidebarRow.FolderInset`; the first port left it out and
 drew an account's folders flush with its name), and 12 more per level,
@@ -2122,7 +2148,7 @@ stay there); Add to or Remove from Favourites, Expand or Collapse. They read the
 brings the folder and the list up to date, and a failure is a toast in the
 menu's words (`ContextMenu.MarkingReadText`, `EmptyingText`,
 `MovingText`). An account heading has Check for New Mail and its folding,
-the Favourites heading no menu.
+the Favourites heading its folding alone.
 
 Several messages can be selected (2026-10-14, the same in GTK and macOS:
 `ui/internal/selection`, `ui/internal/window/selection.go`). The list's
@@ -2697,9 +2723,9 @@ the live cards, the rails, the height governor), and the controllers
 `ConversationController` and the comment mode of `ComposeController`,
 tested against the fake daemon. The app is thin over them:
 
-- **Adding and editing.** *Add Jira Account…* is in the primary menu `…`
-  and on the empty window (`AddJiraAccountButton`), and Jira's *Add…* in
-  *Preferences → Integrations* (`AddJiraIntegration`, §11.10); it opens `Wizard/JiraWizardWindow`, an owned
+- **Adding and editing.** *Add Jira Account…* is on the empty window
+  (`AddJiraAccountButton`), and Jira's *Add…* in *Preferences →
+  Integrations* (`AddJiraIntegration`, §11.10); it opens `Wizard/JiraWizardWindow`, an owned
   modal window like the account wizard (`ModalDialog`, shared by both)
   with the pages site, credentials and spaces. Every route that edits an
   account asks `AccountsPage.EditorOf` first (GTK's `accountEditor`): a
@@ -3279,7 +3305,10 @@ needs no change here).
   message page, Send enabled by typing, the text kept across another row
   and back, no bar on the page of several rows (`AddToSelection`), Ctrl+Enter
   sending (Sent and INBOX of the server), the row turned into a conversation
-  whose chat has the bar, its text kept through the timeline. The Outbox and
+  whose chat has the bar, its text kept through the timeline (since
+  2026-11-03, when the test first ran: the reply lands in the Inbox too,
+  so the message read stays selected as a member and the test selects the
+  conversation's row, the one whose expander is in the tree). The Outbox and
   Drafts are covered by the Core tests only (the fixture has no way there).
 - Written on a Mac without `dotnet`; handed to the owner's Windows agent
   (`docs/plans/chat-view.md` §12.5 has the list of what to build, run and
@@ -4081,6 +4110,552 @@ message whose pictures arrive late, and the spinner of a slow body
 (centred in the whole area). The UI smoke `DevmailTests` and
 `ConversationChatSmokeTests` (`QuotedRow`) must stay green.
 
+### 11.14 Undo of moves of mail (2026-10-30)
+
+Port of `ui/internal/undo` (`docs/architecture.md` §7) and of GTK's
+`window/undo.go`, written on a Mac without `dotnet`. Core
+`Undos/Undo.cs` (`Undo.Kind`, `Moved`, `Entry`, `History` — Go's `Stack`,
+renamed for CA1711 — `Record`, `FromBoard`, `Calls`, `Reselect`,
+`ReselectKeys`) and `UndoText.cs`; `ActionsController.Undo.cs` records Trash
+(not an expunge), Archive, Junk and Move To once the daemon took them (not
+into an unsynced folder), shows the 8 s toast with "Undo (Ctrl+Z)" through
+`IActionToasts`, runs `UndoLast` (`message.move` per source folder, then
+`IActionsMailbox.LoadFolders` and `IActionsList.ReloadSelecting`, whose
+first page selects the rows that came back), and takes the board's Archive
+and Delete through `RecordBoardUndo` / `UndoBoard` (`BoardController.UndoArchive`).
+`Board.UndoArchive` uses `Undo.Calls`. Empty Trash/Junk forgets the moves
+into the folder. `Toast` has an optional `ToastButton`; `ToastHost` shows it
+after the text (automation id `ToastButton`) and the board's `ArchiveBar`
+InfoBar is gone. Ctrl+Z is `ShortcutCommand.Undo` of the main window, in
+Mail and Board, lifted while a text input or an editor has the keyboard.
+Tests: `UndoTests`, `ActionsControllerUndoTests`, `ShortcutMapTests`
+(`CtrlZUndoesAMoveOfTheMainWindowOutsideTextInputs`), `ToastPresenterTests`.
+Guessed WinUI behaviour: a root accelerator set to `Handled = false` while
+a TextBox has the focus leaves its own undo to it; Ctrl+Z in a focused
+reading WebView2 is swallowed and runs Undo, in the board's inline editor
+not; the toast button's `Tapped` does not also dismiss the capsule. Open:
+`build.ps1 app`/`test`/`lint`, a `DevmailTests` smoke (Delete → toast →
+Ctrl+Z → the message back and selected; the board's Archive → Ctrl+Z;
+Ctrl+Z in the search box stays text undo), and by hand the toast in light,
+dark and a narrow window, keyboard focus on its button and Narrator. The
+smoke (`DevmailTests.CtrlZAndTheToastsButtonTakeBackAMoveToTrash`: Trash,
+Ctrl+Z in the search box and on a row, the toast's button) first ran, and
+passed, on 2026-11-03 against the repository's devmail (§12); the toast
+with Undo can wait behind the one before it (`ToastPresenter` queues).
+
+### 11.15 Address books (contacts, 2026-10-30)
+
+Port of the macOS client's contacts (`54b1c939`, `da76637b`) with GTK's
+`window/contacts_*.go`, `preferences_contacts.go` and `calendar_caldav.go`
+as the reference of behaviour (`docs/plans/address-book.md` W1–W6, K5). Core
+(`fcb35d82`): `Contacts/` (`ContactBook`, `ContactsText`), the controllers
+`ContactsListController`, `ContactsDetailController`,
+`ContactsLookupController`, `ContactsPreferencesController` over
+`ContactsOptions` (`RpcContactsCaller`, or `ContactsSampleCaller` with
+`MALACHI_CONTACTS_SAMPLES=1`), and since the App port
+`ContactsOptions.RequestSignInUrlAsync` (Allow…: `account.oauthStart` with
+`contacts: true`), `SuggestionsController.BookAccount` (the sending account
+in a synchronised book's tooltip) and `WindowKind.Contacts` (Ctrl+F, Ctrl+E,
+Ctrl+W; never Escape).
+
+App (`Malachi.App.Contacts`): `AppContacts` (one for the application, made
+by `AppState.Contacts.cs`: the options, the chips' lookup, the books and
+accounts as last listed, notify.contactsChanged and accountsChanged — the
+samples' `Notified` too — to the window, the lookup and Preferences; Write
+Email, Show Mail, Allow…, the suggestions' scope); `ContactsWindow` (+
+`.Detail.cs`, `.Form.cs`): one window, opened by the `Contacts` command
+(`WindowCommands.Contacts`, `AppHooks.OpenContacts`) from the `…` menus of
+Mail's sidebar (`MenuContacts`), the Board (`BoardMenuContacts`) and the
+Calendar (`CalendarMenuContacts`), from a chip's Show Contact and from Add to
+Contacts' More Details…; the sidebar of books (disabled items for the
+headings with their kind capsules), the grouped `ListView` of the list
+(`ContactRowItem`, `ContactsListGroup`; flat while searching; the next page
+near its end), consent `InfoBar`s, the `CommandBar`, the card and the form
+built in code (every text a `TextBlock.Text`; the street and the note
+`AcceptsReturn`; problems marked in the critical colour and listed in the
+detail's `InfoBar`), the row's context menu, the status line on a 30 s
+timer, folding by `ContactBook.FoldFor(width, GtkBreakpoints)`, Discard
+Changes? before an unsaved form is left (another contact or book, New
+Contact, back, Ctrl+W, the close button); `AddToContactsFlyout`;
+`MainWindow.ShowMailSearch` (Show Mail: Mail, the scope All Accounts, the
+query in the box). `MessageChips` ends an address chip's menu with Show
+Contact or Add to Contacts…; `ComposePane` and the event editor's attendees
+call `AppContacts.WireSuggestions`. `Preferences/ContactsPreferencesPage`
+after Calendar (`ContactsPage`). `CalDAVWizardWindow` is titled with
+`ContactsText.WizardTitle`, lists the address books under Address Books
+(`CalDAVAddressBooks`) and hides the calendars' list for a server without
+any. `ToastHost`'s text has the automation id `ToastText`.
+
+Tests: Core `ContactsControllerTests.SignInAsksForTheContactsScope`,
+`ShortcutMapTests.TheContactsWindowSearchesAndClosesWithCtrlWButNeverEscape`,
+`SuggestionsControllerTests.ASynchronisedBooksTooltipNamesTheBookAccountOnlyForItsRows`;
+UI smoke `ContactsSmokeTests` over the samples (`ContactsSmokeFixture`).
+Quit asks an unsaved contact form "Discard Changes?" right after the
+board's replies (`QuitSteps.ContactForm`, `AppContacts.ConfirmQuitAsync`;
+a contact is written only to its server, so nothing is kept for later):
+Cancel abandons the Quit, a session end does not ask
+(`QuitSequenceTests.AnUnsavedContactFormAsksAfterTheBoardAndItsCancelAbandonsTheQuit`).
+The detail's card of rows takes its brushes from a style with
+`ThemeResource` (`ContactsDetailCard`), so it follows the window's
+`color-scheme`. Not done: the detail's phone numbers are copied only (no
+dialling, as macOS); below about 400 DIP the `TitleBar` hides the search
+box; other display scales, touch, Narrator over the form and x64 by hand.
+
+### 11.16 The update check (2026-11-02)
+
+Written 2026-11-02 on a Mac without .NET, from the Go reference
+`ui/internal/updates` and the contract `docs/api.md` §4.20 (decisions in
+`docs/plans/update-check.md`). The Windows agent built, tested and
+linted it on Windows 11 ARM64 on 2026-11-02 without a change (two
+failures of the whole Core suite, `ClaudeCodeProcessTests.EnvironmentAndDirectory`
+and `BridgeRunnerTests.TheEnvironmentAndTheDirectoryAreTheCallers`, are
+`PROCESSOR_ARCHITECTURE` in the child's environment on ARM64, not this
+branch) and walked it by hand over isolated data against the real
+manifest, and the owner saw it on screen and approved it the same day;
+the security dialog and the notices were not seen on screen
+(the manifest has neither). Never through `windows.yml`.
+
+API: `Api/Update.cs` mirrors `backend/pkg/api/update.go` (`UpdateState`,
+`UpdateFailure`, `UpdateDismissAction`, `UpdateInfo`, `UpdateNotice`,
+`UpdateStatus` and the params of the five methods); `update.status`,
+`update.check` (`RpcTimeouts.UpdateCheck`, 75 s: the daemon answers when
+its check ends, 70 s inside), `update.setPrefs`, `update.dismiss`,
+`update.dismissNotice` end `API.Methods` (119); `notify.updateChanged`
+ends `AllNotifications`, decodes as `DaemonNotification.UpdateChanged`
+(no params) and fans out through `NotificationHub.AddUpdateChanged`.
+
+Core: `Updates/UpdateCheck.cs` is `updates.go` one to one (`BannerFor`,
+`PromptFor`, `NotesFor`, `AboutLine`, `CheckNow`, `CanCheckNow`,
+`PrefsGroup`, `PrefsTitle`, `PrefsSubtitle`, `WizardNote`, `OpenableUrl`
+over `Compose.UrlSyntax`), its types `UpdateBanner`, `BannerKind`,
+`BannerAction` (Go's `Action`), `BannerButton`, `UpdatePrompt`,
+`UpdateNotes`; every text is a GTK msgid through `L10n`, none new, none
+excluded. `Controllers/UpdateStatusController.cs` (Windows-first) keeps
+the status for the application: `Refresh` (`update.status` with
+`L10n.Catalogue.Language`), `CheckNow` (`Checking` while it runs),
+`SetEnabled`, `Dismiss`, `DismissNotice`, the security question once per
+version and process (`PendingPrompt`, `BeginPrompt`, `PromptAnswered` →
+`update.dismiss "prompted"`, sent even when the app quits right after);
+a failed call is logged and keeps the status, an older daemon leaves it
+null.
+
+App: `Shell/AppState.Updates.cs` makes the controller and reads the status
+on Connected/InfoFailed and on `notify.updateChanged`; `UpdateLine` is
+`AboutLine` with `Format.FormatDateTime`. The main window's `UpdateBar`
+(an `InfoBar` in a new row of `Root` between the title bar and
+`ModeHost`, so it shows in Mail, Board and Calendar; its buttons in a
+`WrapBox`, the first with `AccentButtonStyle`; Informational, Warning for a
+security release) and the security question in `MainWindow.Updates.cs`
+(asked while the window is shown, else when it is shown next; Download
+opens the package and, with the check box on, calls `AppState.Quit`, the
+menu's Quit with its questions). The dialogs are `AlertService.Updates.cs`
+(`IAlerts.WhatsNewAsync`: Download, More Information, Close, the notes
+as `TextBlock.Text`; `IAlerts.SecurityUpdateAsync`: Download, the default,
+and Cancel, a `CheckBox` checked by default). Preferences → General has
+the group Updates right after Startup (as macOS: `GeneralPage.Updates.cs`,
+the switch `UpdatesCheckSwitch`, the line `UpdatesStatusRow` with
+`UpdatesCheckNowButton`); About has the line under the version
+(`AlertService.UpdateLine`); the No Accounts page has `WizardNote` as a
+dim caption under its buttons (`MessageView.xaml` `UpdateNote`). URLs go
+to the browser only through `UpdateCheck.OpenableUrl` and
+`AppState.OpenUrlAsync`.
+
+Tests: `Updates/UpdateCheckTests` (updates_test.go),
+`Controllers/UpdateStatusControllerTests` (against `FakeDaemon`), and the
+updated `GoContractTests` (119 methods, the three wire enums,
+`EveryEnumAndStructOfUpdateGoIsMirrored`, update.go in
+`EveryRecordHasTheMembersOfItsGoStruct`), `ApiCodingTests` (`GoMethods`,
+the notifications, the timeout of `update.check`), `ApiRoundTripTests`
+(a sample of every update record) and `NotificationDecodeTests`.
+
+The Windows agent: `build.ps1 app`, `test` (the classes above first),
+`lint` (formatting, `StringsCheckTests.EveryTemplateMsgidIsUsedOrExcluded`
+with every msgid of updates.go used, conventions); then by hand against a
+daemon with a test manifest: the banner in all three modes (update,
+security, notice; Download, What's New, Remind Me Later, Skip This
+Version, More Information, Close), the security question once (and not
+again after a restart), Quit after Download with an unsaved draft, the
+preference and Check Now, About's line, the No Accounts note. Guessed
+without a compiler: `InfoBar.Content` with a `WrapBox`, the `Root` row
+shift (nothing reads the rows by number), `ContentDialog` content with a
+`CheckBox`.
+
+### 11.17 Mail rules (2026-11-02)
+
+Written 2026-11-02 on a Linux container without .NET, from the Go reference
+`ui/internal/rules` and `ui/internal/contextmenu` (items `createRule`,
+`applyRules`) and the contract `docs/api.md` §4.21 (decisions R1 to R14 in
+`docs/plans/rules.md`; task T4). The macOS client was written at the same
+time; nothing was ported from it. Not compiled, not run: the Windows agent
+builds and walks it (below). Never through `windows.yml`.
+
+API: `Api/Rules.cs` mirrors `backend/pkg/api/rules.go` (`RuleMatch`,
+`RuleField`, `RuleOperator`, `RuleActionKind` (with `IsOutgoing`),
+`RuleProblem`, `RuleCondition`, `RuleAction`, `RuleInput`, `Rule`,
+`RuleInvalidData` and the params and results of the seven methods; Go's
+`Rule` embeds `RuleInput`, so the record derives from it as `CalendarEvent`
+from `Occurrence`; `RulesListParams` is `EmptyParams`, `RulesDeleteResult`
+`EmptyResult`). `RuleLimits` holds the limits and `RuleValues.BulkAny`
+Go's `RuleBulkAny` (a constant of `RuleField` would be taken for a wire
+value). `rules.list`, `create`, `update`, `delete`, `reorder`, `test`,
+`apply` end `API.Methods` (126); `notify.rulesChanged` ends
+`AllNotifications`, decodes as `DaemonNotification.RulesChanged` (no
+params) and fans out through `NotificationHub.AddRulesChanged`; error 1112
+is `ErrorCode.RuleNotFound`. Timeouts: `RpcTimeouts.RulesTest` 60 s and
+`RulesApply` 5 min, as Go's `rulesctl` and macOS (the contract names none;
+the other five are 5 s).
+
+Core: `Rules/RuleBook.cs` is `rules.go` one to one (`Fields`,
+`ActionKinds`, `OperatorsFor`, `NewCondition`, `NewForm`, `FromRule`,
+`Input`, `AvailableActions`, `Validate`, `Clean`, `ValidAddress`,
+`FromMessage`, `NeedsConfirm`, `Toggled`, `Moved`, `AppliesToAccount`,
+`CanApplyIn`, `CanCreateFrom`, `MoveFolders`; lengths are UTF-8 bytes as in
+Go; the class is `RuleBook`, as `ContactBook`, so that the namespace
+`Malachi.Core.Rules` is not hidden; `MailAccounts` is Windows' own: imap
+and graph), `Rules/RuleForm.cs` (Go's `Form` as a class with `Clone`, the
+problem and value kinds) and `Rules/RulesText.cs` is `text.go`, every text
+a GTK msgid through `L10n`, none new, none excluded (the 127 msgids
+that name `ui/internal/rules` in the template are all used). The context
+menu got `ItemId.CreateRule` and `ApplyRules` (Go ids `createRule`,
+`applyRules`), `MessageState.OfferRule`, `FolderState.OfferRules` and
+`Rules`. `Controllers/RulesController.cs` (the application's: the rules as
+last listed, `Refresh` on `notify.rulesChanged` and on a new connection,
+`SetEnabledAsync` with the outgoing question, `MoveAsync` shown at once and
+put back on a refusal, `DeleteAsync`, `ApplyAsync`, `ErrorText`:
+`ruleNotFound` and the daemon's `RuleInvalidData` have their sentences,
+anything else the action's; never the daemon's message) and
+`Controllers/RuleEditorController.cs` (the editor's form edits, the
+problems of `Validate`, Save with `confirmOutgoing`, Try It) go through
+`IRulesCaller` (`RpcRulesCaller`; `RulesSampleCaller` for
+`MALACHI_RULES_SAMPLES=1`). Questions are delegates the views answer;
+nothing in Core makes a dialog.
+
+App: `Shell/AppState.Rules.cs` and `Rules/AppRules.cs` (the controller, the
+routing, the ways in to the editor and Apply Rules…; the folder `Rules/` is the
+namespace `Malachi.App.MailRules`, because a namespace `Malachi.App.Rules` would
+take the name from the alias `Rules` of `ConversationQuickReplyBar`); Preferences →
+Rules (`Preferences/RulesPage`, `RuleRowView`) is the page right after
+Integrations (icon `folder-saved-search`, the Filter glyph): description,
+Add Rule…, a `ListView` of cards like the account lists (drag by the
+handle, Ctrl+Up and Ctrl+Down, the window's `MoveUp` and `MoveDown`) with
+the switch, the sending icon, the warning `InfoBar` of a rule the daemon
+turned off, Edit and Remove, and the empty state. The editor is
+`Rules/RuleEditorWindow`, a 640 x 720 modal window like the CalDAV wizard
+(`ModalDialog`, `WindowKind.Wizard`, so Escape and Ctrl+W cancel it): the
+rows of conditions and actions are made in code and built again only when
+their structure changes, so that a caret stays; a problem is shown once the
+user changed something (or the form came with a name or from a stored rule),
+Save is disabled while there is one. Questions are `IAlerts` dialogs
+(`ConfirmDestructiveAsync` for Remove, `ConfirmAsync` with Turn On / Apply and
+Cancel for the others, in the order of a Windows dialog). The message menu's
+Create Rule from Message… (`MessageListPane.CreateRule`) is offered for one
+row of a mail account in a folder that `CanCreateFrom`; the folder menu's
+Apply Rules… (`SidebarPane.ApplyRules`, `RulesApply`) for a folder
+that `CanApplyIn` of a mail account, enabled with an enabled rule for the
+account (`AppliesTo`) and messages; it asks, shows Applying rules as a toast
+and then the result (`MainWindow.Rules.cs`). `MALACHI_START` has the steps
+`prefs-rules` and `rules-editor`.
+
+Deviations from the Go reference and from GTK (decisions of this port; also in
+`windows/README.md`): `RuleBook.MailAccounts` (imap and graph; the editor lists
+the enabled ones and the rule's own) is Windows' own; a
+change of account in the editor clears the folder of a Move To action and
+removes the action for every account; a failure that has no sentence of its
+own is `RulesController.FailureText` (the generic sentence, never the
+daemon's message); the page draws its rows again when the mailbox's folders
+change, because the names of accounts and folders come from it; Try It is enabled only for a form
+without problems; the folder choices are the account's folders in the
+sidebar's order without the indentation of the Move To submenu; the page
+shows the account and the status as two dim lines, not one.
+
+Tests: `Rules/RulesTests` (`rules_test.go`), `ContextMenus/ContextMenuRulesTests`
+(`contextmenu/rules_test.go`, with the Go ids), `Controllers/RulesControllerTests`
+and `RuleEditorControllerTests` (against `FakeRulesCaller`), and the updated
+`GoContractTests` (126 methods, the five wire enums,
+`EveryEnumAndStructOfRulesGoIsMirrored`, rules.go in
+`EveryRecordHasTheMembersOfItsGoStruct`), `ApiCodingTests` (`GoMethods`,
+`GoCodes`, the notifications), `ApiRoundTripTests` (a sample of every
+rules record), `NotificationDecodeTests` and `DevelopmentStartTests`.
+
+The Windows agent: `build.ps1 app`, `test` (the classes above first), `lint`
+(formatting, `StringsCheckTests.EveryTemplateMsgidIsUsedOrExcluded`,
+conventions); then by hand against a daemon that has the rules (or
+`MALACHI_RULES_SAMPLES=1 MALACHI_START="prefs-rules;rules-editor"`): the
+page (switch, an outgoing rule asking, drag and the keys, Edit, Remove with
+its question, a rule with a problem), the editor (every field, Add
+Condition and Add Action, the account change, Try It, Save of an outgoing
+rule, the daemon's refusals), Create Rule from Message… (the prefill from a
+sender and from a mailing list), Apply Rules… (question, toast, a folder
+without a rule). Guessed without a compiler: x:Bind in the rule row's
+`DataTemplate` (an `InfoBar` in a `ListViewItem`), `DropDownButton.Flyout`
+set from code, the `TitleBar` of the editor over `ModalDialog` at 640 x 720,
+the `ComboBox` strings with `PlaceholderText`, the pattern
+`m.Bulk is { ListId.Length: > 0 }`.
+
+As built on Windows (gate B3, 2026-11-03, Windows 11 Pro 26100 x64, .NET SDK
+10.0.400, branch `claude/sleepy-hawking-7gu54a` from `2341d89`). The guesses
+held: x:Bind and the `InfoBar` in the row's template, `DropDownButton.Flyout`
+from code, the editor's `TitleBar` at 640 x 720 over `ModalDialog`, the
+namespace `Malachi.App.MailRules`, the folder `ComboBox` and Ctrl+Up/Down
+through the list's `PreviewKeyDown` all work. Fixes: `AppRules` made its
+controller after wiring the samples' notification (CS8602) and gave the
+shown account without a nullable cast (CS8625); the row's sending label and
+the new container hook read instance data (CA1822); GTK's `funnel` icon had
+no glyph (`IconGlyphsTests`); `FakeRulesCaller` was not formatted as
+`dotnet format` writes it. One real bug: a move (Ctrl+Down, a drag, a rule
+added or removed) gives recycled containers other rows, x:Bind sets the
+switch's `IsOn` before the template's `DataContext` follows, and `Toggled`
+took the flip for a click on the container's former rule, so Ctrl+Down on
+one sample turned the disabled *Project Atlas* on (the samples' update then
+dropped its warning). `RulesPage.OnRowToggled` now judges the flip once the
+container has settled and acts only when the switch disagrees with its
+row's rule. `AccountListSection` (Preferences → Accounts and Integrations)
+had the same `Toggled` shape and the same bug: over four mail accounts, two
+of them paused, Ctrl+Down on the first turned the last one on in the daemon
+(every run). It now judges the flip the same way; `AccountsSmokeTests`
+moves a row, reorders the accounts from another client and flips a switch,
+and checks `account.list` and every switch after each step. The editor's
+field and operator are fixed columns (172 and 160) so that the condition
+rows line up. The page names each row's container
+`RuleRow:<id>` with the rule's name (as the contacts' rows) and the row's
+warning `RuleProblem` and sending icon `RuleOutgoing`.
+
+Verified: `go vet ./...` and the rules' Go tests; `build.ps1 app` without a
+warning; `build.ps1 test` with every Core class of the rules green
+(`RulesTests` 26, `ContextMenuRulesTests` 3, `RulesControllerTests` 15,
+`RuleEditorControllerTests` 13, `GoContractTests` 97, `ApiRoundTripTests`
+960, `ApiCodingTests` 58, `NotificationDecodeTests` 11) and the whole Core,
+Platform, Credentials and Conventions sets green; `build.ps1 lint` with no
+new line in `parity-exclusions.txt`. UI smoke: `RulesSmokeTests` (7, over
+the samples) and `RulesDevmailTests` (2, devmail with the samples) all
+green on an interactive desktop. By hand over an isolated copy (devmail's
+sample set, the branch's daemon): the empty state, Add Rule… with every
+field, operator and action kind, Try It, Save with the Turn On question, a
+message moved to Archive, one marked read and flagged and an auto-reply and
+a forward sent through devmail (copies in Sent, marked Automatic), no
+`notify.newMessage` for the message a rule moved out of the Inbox (watched
+on the socket), the switch, Edit, Remove's question, Create Rule from
+Message… prefilled, Apply Rules… asking and toasting "changed 1 message"
+with no outgoing action, and Apply Rules… disabled with every rule off.
+The agent could not see a drag by hand or the context menus on screen (the
+desktop session was disconnected for the second half of its walk; their
+contents were read through UI Automation); the owner walked those, the
+keys and the editor over an isolated copy with devmail and approved B3
+the same day. The canary's `NoWindowOpened` and
+`ActivatedLinksReachTheReaderAndNothingElse` fail on `9c7d693` as well.
+`DevmailTests` need the seeded mailbox of the devmail the suite was written
+for: the repository's `malachi-devmail` wants the `serve` subcommand, seeds
+only the corpus with `-corpus`, and its go-imap server drops the connection
+on the BODYSTRUCTURE of four corpus files (`missing-boundary`,
+`skeleton-empty-parts`, `skeleton-rfc822-same-boundary`,
+`skeleton-unterminated-quote`); over a wrapper that adds `serve` and leaves
+those four out, they fail on *Lunch tomorrow?* on `9c7d693` too. Fixed on
+2026-11-03: the harness passes `serve` and submits that message itself,
+and devmail serves the four files (§12).
+
+### 11.18 Signed mail (2026-11-02)
+
+Written 2026-11-02 on a Linux machine without .NET, from the Go reference
+`ui/internal/signature` and the contract `docs/api.md` §4.22 (design,
+decisions S1 to S17 and the as-built notes of every client in
+`docs/plans/signatures.md`; the macOS port was written at the same time and
+is not the source). Phase 1 only: the daemon verifies S/MIME and OpenPGP/MIME
+signatures of incoming mail, nothing is signed, decrypted or encrypted.
+**Nothing here is built or run**: the Windows agent builds, tests and walks it.
+
+API: `Api/Signature.cs` mirrors `backend/pkg/api/signature.go` (eleven wire
+enums; the records, Go's `PGP` and `SMIME` spelt `Pgp` and `Smime`;
+`SignatureDetails` derives from `SignatureSummary` as Go's embeds it);
+`MessageSummary.Signature` (`MessageSignature`) and `Message.Signature`
+(`SignatureSummary`) share the wire key `signature` as `invitation` does
+(`MessageConverter`); `message.signature`, `message.signatureRevocation`
+(`RpcTimeouts.SignatureRevocation`, 20 s: the daemon gives the check 15 s),
+`pgp.keyImport`, `pgp.keyVerify`, `pgp.keyList`, `pgp.keyRemove` end
+`API.Methods` (125); `ErrorCode.RevocationFailed` 1510 (54 codes);
+`notify.signaturesChanged` ends `AllNotifications` and decodes as
+`DaemonNotification.SignaturesChanged` (no params,
+`NotificationHub.AddSignaturesChanged`); the nine limits of signature.go
+are in `API.Limits` (102).
+
+Core: `Signatures/SignatureView.cs` (signature.go: `SeverityOf`, `IconOf`,
+`StyleOf`, `ListIconFor`, `BadgeFor`, `SignerLabel`, `HidesPart`,
+`TileAttachments`, `DetailsFor`, `ImportParams`, `ConfirmParams`,
+`RevocationFailureOf`, `ImportFailureOf`, `PastedParams`, `FileParams`,
+`KeyRows`, `FormatFingerprint`, `Clean`), `SignatureText.cs` (text.go, every
+text a GTK msgid through `L10n`, none new, none excluded) and
+`SignatureTypes.cs` (the view models: `SignatureBadge`, `SignatureRow`,
+`SignatureSection`, `SignatureButton`, `SignatureDetailsView` for Go's
+`Details`, `SignatureKeyRow`, …). `Controllers/SignatureDetailsController.cs`
+(Windows-first: the details of one message from its summary, then
+`message.signature`; Check Revocation with its busy button and the class of
+a failure; Import Key; Confirm Key; `Refresh` on `notify.signaturesChanged`)
+and `Controllers/PgpKeysController.cs` (the key list of Preferences →
+Security, import, confirm, unconfirm, remove, each a toast).
+`MessageRow` has `SignatureIcon`, `SignatureStyle`, `SignatureTooltip`
+(the latest member's on a conversation row); `AttachmentChips.ChipAttachments`
+takes the verdict and drops its signature part (S15: the panel, the cards
+and the bubble's paper clip count); `ConversationController.NeedsBody` asks
+`message.get` for a member with a verdict (the card has no signer without
+it); `IconGlyphs` has `security-high`, `-medium` and `-low`, all the one
+shield `U+EA18` (Segoe MDL2 Assets "Shield", **to be checked on Windows
+11**): the colour tells the verdicts apart and a key not confirmed is drawn
+at 60 %.
+
+App: `Controls/SignatureGlyph` (the shield in the colour of the verdict:
+visual states over `SystemFillColor…Brush`); the list's icon is a column of
+`MessageRowView` between the paper clip and the star. `Signatures/` holds
+`SignatureBadgeButton` (the flat button in a message's header: under the
+date in `MessageView`, in the header `WrapBox` of an open
+`ConversationCard`; never in a chat bubble or an attached message's window),
+`SignatureDetailsPresenter` (the `Flyout` under the badge, built in code
+from `SignatureDetailsView`: shield and short name, explanation, rows
+selectable and monospaced where the reference says, notes, certificate
+sections, the caveat, the buttons and a Close button; the Confirm Key…
+question is a `ContentDialog` with the fingerprint in monospace, and the
+session outlives the flyout while it is asked) and `ImportKeyDialog` (the
+text area with the armour's first line as placeholder, Choose File… through
+the shell's `ComposeFileDialog` with the filter OpenPGP keys, at most
+`MaxPGPKeyBytes + 1` bytes read, Import enabled while `PastedParams` is
+not null, the failure's sentence under the field). `Preferences/SecurityPage`
+is Preferences → Security (after Contacts; `security-high`): the group
+OpenPGP Keys with its description and Import Key…, one `SettingsCard` per
+key (title, fingerprint, origin, the pills, a menu with Confirm Key… or
+Remove Confirmation and Remove Key…). `Shell/Integration` turns
+`notify.signaturesChanged` into the reading of every enabled account's
+messages as `notify.messagesChanged` does (the cache lets go, the pane, the
+list and the cards ask again).
+
+Differences from the other clients: the details are a flyout (macOS a
+popover, GTK a dialog); the three icon names share one glyph; the badge of a
+folded conversation card appears when the card has been opened (its signer
+comes with `message.get`); the board's conversation cards have no
+badge (`board.get` carries no verdict, the same gap as GTK and macOS).
+
+Tests: `Signatures/SignatureViewTests` (signature_test.go),
+`Controllers/SignatureControllersTests` (against `FakeDaemon`),
+`Presentation/SignatureMessageRowTests` (the row's icon, S15 in
+`ChipAttachments`), and the updated `GoContractTests` (125 methods, the
+eleven wire enums, `EveryEnumAndStructOfSignatureGoIsMirrored`, the 102
+limits, signature.go in `EveryRecordHasTheMembersOfItsGoStruct`),
+`ApiCodingTests` (`GoMethods`, `GoCodes`, the notifications),
+`ApiRoundTripTests` (a sample of every signature record, `Message` with
+`signature`) and `NotificationDecodeTests`.
+
+The Windows agent: `build.ps1 app`, `test` (the classes above first, then
+`IconGlyphsTests` and the whole of `Malachi.Conventions.Tests`), `lint`
+(formatting; `StringsCheckTests.EveryTemplateMsgidIsUsedOrExcluded` with
+every msgid of signature/text.go used, nothing added to
+`windows/parity-exclusions.txt`). Then by hand against a daemon that has
+verdicts (or `MALACHI_DEVMAIL` mail signed with the test CA of
+`backend/testdata/signatures`):
+
+- the list: the icon next to the paper clip for a valid, valid-seen,
+  invalid, revoked and mismatching message and none for the others, a
+  conversation row with its latest member's, the tooltip, the row's name;
+- the reading pane, the message window and an open conversation card: the
+  badge under the date (in the card's header), its sentence per verdict and
+  its colour, none in a chat bubble, none in an attached message's window,
+  Tab and Enter reach it;
+- the flyout: heading, explanation, rows, notes, certificate sections, signed
+  headers, the caveat of a valid verdict; Check Revocation (the button says
+  Checking…, the 20 s limit, each failure's sentence, Check Revocation Again,
+  the caption), Import Key from an attachment and from the Autocrypt header,
+  Confirm Key… (the question shows the fingerprint, Cancel is the default;
+  the flyout closes under the dialog and the answer still arrives), Close;
+  values selectable, fingerprints monospaced, a hostile name (bidi, control
+  characters) harmless; narrow and tall windows;
+- the signature part of a signed message has no attachment tile, a message
+  with a signature hidden deeper does;
+- Preferences → Security: empty state, Import Key… by pasting (button
+  disabled while empty, the secret-key failure, the armour placeholder) and
+  by file (a binary key, an armoured one, one over 1 MiB), the toast, the
+  card of a key, Confirm Key… and Remove Confirmation, Remove Key… (the
+  destructive question), the pills (Confirmed, Not confirmed, Revoked,
+  Expired), the update after a change made in another client
+  (`notify.signaturesChanged`);
+- the dark and the high-contrast themes of the shield and the badge, and
+  other display scales.
+
+Guessed without a compiler: `Flyout` with a `ScrollViewer` and a
+`FlyoutPresenter` style set from code, `ContentDialog` subclass
+`ImportKeyDialog` keeping itself open (`args.Cancel`) until the daemon has
+the key, the glyph `U+EA18`, `VisualStateManager` groups on a `FontIcon`
+inside a `UserControl`, a `SettingsCard` whose `Description` is a panel,
+`record SignatureDetails : SignatureSummary` through the source generator.
+
+Board card badge (2026-11-03): `BoardMessage.Signature` (board.get) reaches `Board.CaseMessage` and `Board.MessageCard` (compared by value), `ConversationCards.Key` carries each member's verdict (`VerdictOf`) so a changed one updates the cards in place, `DaemonBoardSource.SignaturesChanged` asks the shown conversation again, and `BoardMessageCardView` holds the same `SignatureBadgeButton` under an open card's header (no badge in a chat bubble); written without .NET, see `docs/plans/signatures.md` "Board card badge (Windows)".
+
+### 11.19 Print (2026-11-04)
+
+Port of macOS's print (docs/plans/toolbar-customization.md §8 and §16; Go
+reference `ui/internal/printing`).
+
+**Core.** `Malachi.Core/Printing`:
+
+- `Print` is the 1:1 port of `printing.go`. Go's `Event` is `PrintedEvent`
+  (CA1716) and its `Single` layout is `One` (CA1720).
+- `PrintComposer` holds macOS `PrintController`'s Mail and Calendar parts,
+  testable over a FakeDaemon:
+  - the header comes from `message.get` through the cache;
+  - the body comes from `message.body` without `trimQuoted`, asked directly
+    and never through the cache's variant switch;
+  - Bcc is printed only for folders of role Sent, Drafts or Outbox;
+  - a conversation prints oldest first, and at most 50 messages print;
+  - the event comes from `Cal.DetailOf`, the day from `Cal.Agenda`.
+- `MessageActionRouter.PrintSelection` and `CanPrint` read the selection.
+- `ShortcutCommand.Print` is Ctrl+P, in the main window and in message
+  windows.
+
+**App.**
+
+- **Entry points.** The window command `Print` is set up by
+  `MainWindow.Print.cs`: Mail prints the selection, the Calendar prints the
+  selected event or else the day, and the Board prints nothing.
+  `MessageWindow` prints its own message.
+- **Where Print appears.** Besides the key, Print is in More Actions and at
+  the end of a message's context menu in the list. That is the owner's
+  addition to P4 until the toolbar gets its Print item. Print is never in
+  the primary menu.
+- **Printing.** `Printing/PrintJob` keeps one hidden `MessageWebView` per
+  window: transparent, out of the tree's hit test and UI Automation, with
+  the reader's policy. Once the document has loaded, the job runs these
+  steps:
+  1. `PrintToPdfStreamAsync` lays the document out as a PDF in memory: A4,
+     or Letter where `RegionInfo.IsMetric` is false. The header carries the
+     title and the date, the footer the page numbers, and the URI is blanked.
+  2. `Printing/PrintPages` draws its pages with `Windows.Data.Pdf` into
+     `BitmapImage`s: 96 dpi for the preview, 200 dpi for the printer.
+  3. The sheets are laid out in a transparent canvas, scaled to the sheet's
+     `ImageableRect`.
+  4. A XAML `PrintDocument` hands them to `PrintManagerInterop` of the
+     window. The dialog shows the preview and the job's title.
+- **Development aid.** `MALACHI_PRINT_PDF=<path>` saves the PDF instead of
+  opening the dialog.
+
+**Measured.**
+
+- WebView2's `ShowPrintUI(System)` opened a dialog called "Microsoft Edge
+  WebView2 – Print" with no preview, and its Browser dialog draws over the
+  hidden view. That is why Print uses XAML printing.
+- XAML print draws no `SoftwareBitmapSource` (a blank preview), and a sheet
+  must be in the tree.
+
+**Verified on Windows 11 x64.**
+
+- `build.ps1 app` and `lint` passed.
+- `PrintTests` and `PrintComposerTests` passed (with the shortcut and router
+  tests, 47 in all).
+- An isolated run with the Calendar samples printed a day to PDF (one A4
+  page with its header and footer) and showed the dialog with its preview.
+
+**Not verified.**
+
+- Printing on paper.
+- Mail printing on the owner's data: a message, a conversation, a selection.
+- `cid:` pictures.
+- Other display scales.
+- ARM64.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944
@@ -4258,9 +4833,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   main window with its New Message and primary menu and, once the daemon
   answered, its No Accounts page; the sidebar's New Message opens a
   composer (To, Subject, the editor) that closes without a question; the
-  primary menu's Preferences (its navigation), Add Account… (the wizard on
-  its identity page, modal, the main window enabled again after it) and
-  About (the executable's version); the No Accounts page's Add Account…;
+  primary menu's Preferences (its navigation) and About (the executable's
+  version); the No Accounts page's Add Account… (the wizard on its
+  identity page, modal, the main window enabled again after it);
   and Quit from the primary menu: the app exits with 0, the daemon it
   started exits with 0, and the socket and its key are gone; and the
   preferences' key: a `window-maximized` the session wrote into its key
@@ -4275,10 +4850,35 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   AI's triage hidden without Register with Claude). The classes
   share one collection without parallelism (the app is one instance per
   executable); one app serves the window checks, one the Board, one the
-  Quit, one the preferences; about a minute. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>` (the local
-  IMAP and SMTP server of the port's research, outside the repository)
-  adds a suite against a mail server: devmail started on free ports of
-  127.0.0.1 and seeded with `backend/testdata/mime`, the account added over
+  Quit, one the preferences; about a minute. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>`
+  adds the suites against a mail server (`DevmailTests`,
+  `RulesDevmailTests`, `ConversationChatSmokeTests`). devmail is the
+  repository's in-memory IMAP and SMTP server, `backend/cmd/malachi-devmail`
+  (its doc comment in `main.go`), built once into that folder from
+  `backend\` with
+  `go build -o <folder>\devmail.exe ./cmd/malachi-devmail`
+  (until 2026-11-03 the suites were written for a devmail of the port's
+  research outside the repository, with its own sample mailbox, which is
+  gone). Each fixture starts `devmail.exe serve` on free ports of
+  127.0.0.1 with `-corpus backend/testdata/mime`: the corpus in the INBOX
+  of test@example.test and nothing else. devmail's IMAP server is a copy
+  of go-imap's in-memory server (`internal/imapmemserver`, MIT, its
+  `LICENSE`) whose one change describes a multipart without parts as one
+  empty text/plain part (Dovecot's answer): go-imap's writer panics on it
+  and its server closes the connection, which the daemon saw as
+  "command: unexpected EOF" on the BODYSTRUCTURE of `missing-boundary`,
+  `skeleton-empty-parts`, `skeleton-rfc822-same-boundary` and
+  `skeleton-unterminated-quote`, so the Inbox never synced
+  (`TestCorpusOverIMAP` fetches the whole corpus as the daemon does). A
+  message a suite needs beyond the corpus it submits over SMTP
+  (`DevmailSmtp`), dated now: `DevmailFixture` a plain
+  *Lunch tomorrow?* from bob.smith@example.org before the account is
+  added, `ConversationChatFixture` its conversations, and the Undo test a
+  message of its own to move to Trash. Dated now, they are the Inbox's
+  first rows, which matters: the corpus files without a Date sort by the
+  file's modification time (a checkout's), and the list realizes only the
+  rows near what it shows, so a test that selects a row further down
+  scrolls the top rows out of the other tests' reach. Then the account is added over
   the app's socket as a client adds one (`account.add` through Core's
   `RpcClient`), then the Inbox listed, a message selected and shown in the
   reader (its subject and sender), Reply opening a composer the daemon
@@ -4346,6 +4946,48 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   banner's).
 - The Go side on Windows: `go vet ./...` and `go test ./...` of `backend/`
   green (§14), the helper's real round trip with `malachi-credentials.exe`.
+- **`MALACHI_START`**, the development aid of the screenshots
+  (`docs/screenshots.md` §3, §6), the port of the macOS client's variable
+  of that name (`MainWindowController+DevStart.swift`) and of GTK's
+  `MALACHI_GTK_START` (`ui/internal/window/devstart.go`): a script of
+  steps separated by `;` that the main window runs once it shows,
+  `MALACHI_START_INTERVAL` seconds apart (default 3), after
+  `MALACHI_START_SIZE` (`WxH`, the visible frame in effective pixels,
+  in the top left corner of the work area, away from the overlays
+  Windows draws above the bottom right of the screen) was applied. The
+  steps, with the macOS names
+  and meaning: `mail`, `board`, `board:list|columns|today[:select]`
+  (`:select` loads every listed case's conversation and selects the one
+  with the most text), `calendar`, `calendar:day|week|month|agenda`,
+  `group=on|off` and `chat=on|off` (the two settings), `folder=<text>`
+  (the first folder, accounts in the sidebar's order, whose server name
+  contains the text, as a click in the sidebar; then the list is waited
+  for, and a listing that failed is asked for again as Try Again does),
+  `row=<text>` (the first row whose subject contains the text,
+  case-insensitively, as a click, scrolled into view; a conversation's
+  members are waited for and asked for again after a failure),
+  `compose-open`,
+  `crm-save` (Save to eWay-CRM… over the selection, the dialog left
+  open), `shot=<path>` (the compose window when one is open, moved to
+  the same corner first, else the main window, after the reading pane's
+  web view has loaded and the eWay-CRM dialog's lookup has answered;
+  brought to the front and written as a PNG of its visible frame
+  intersected with its client area at the screen's scale: the pixels
+  from the screen, or rendered by `PrintWindow` with
+  `PW_RENDERFULLCONTENT` when the window could not be made the
+  foreground one; `Shell/WindowCapture.cs`), `size=WxH` and
+  `quit` (an open dialog closed first). The parser and the finders are
+  Core's `Presentation/DevelopmentStart.cs` with
+  `DevelopmentStartTests` (the port of `devstart_test.go`); the steps act
+  in `MainWindow.DevStart.cs` through the list and the mailbox the window
+  gets from its Integration (macOS `developmentList`,
+  `developmentMailbox`). What a step did goes to stderr
+  (`MALACHI_START step <n> <name>`, `MALACHI_START row: selected '…'`).
+  Nothing of it runs without the variable, nothing of it is translated,
+  and it is for an isolated instance only (`MALACHI_DATA_DIR`,
+  `MALACHI_SOCKET`, `MALACHI_SETTINGS_KEY`, `MALACHI_LANGUAGES`, the
+  samples), never over the real store; `scripts/screenshots/windows.ps1`
+  starts the sample world and runs the two scripts of the scenes.
 
 ## 13. Build and CI
 
@@ -4365,9 +5007,10 @@ copies the catalogues and licences, and assembles
 .NET Framework tool without long-path support: keep the clone path short.
 Version: `git describe` as in the Makefile; `Major.Minor.Patch.Commits` for
 the file version, the full string as `InformationalVersion`. `build.ps1
-package` zips the app folder as `build\windows\Malachi-Mail-<version>-<arch>.zip`
-(entries with `/` separators, so every unzip tool reads them); the zip is
-unsigned and is not a release artefact yet (§17, [releasing.md](releasing.md)).
+installer` builds the app folder and its installer,
+`build\windows\Malachi-Mail-<version>-windows-<arch>-setup.exe` (Inno Setup,
+unsigned; §17, [releasing.md §7](releasing.md#7-windows)); there is no
+portable zip any more (owner's decision of 2026-11-01).
 
 `build.ps1 lint` is `dotnet format --verify-no-changes` over the solution
 and the conventions tests. Warnings are errors in every project
@@ -4382,20 +5025,16 @@ toolset as of 2026-09-28), which is what the NativeAOT keyring helper links
 with. The label is named, not `windows-latest`, so the move to the next
 Windows Server is an edit of the workflow; the image's tools (Visual
 Studio, the WebView2 runtime) are still updated with it every week or two.
-The workflow runs on version tags (`vX.Y.Z`), by hand
-(`workflow_dispatch`) and on pull requests that touch `windows/`,
-`backend/`, `po/`, `docs/malachi_icon.png`, the Makefile or the workflow,
-or what the tests read outside `windows/`: the GTK UI's sources (the drift
-tests compare the timeouts, the editor bridge, the viewer's document and
-the icon names with them), the gschema, `docs/api.md`, the licences that
-go into the app folder, `.gitattributes`. Its jobs:
+The workflow runs on version tags (`vX.Y.Z`) and by hand
+(`workflow_dispatch`), not on pull requests (the owner's decision of
+2026-11-02, `docs/releasing.md` §3). Its jobs:
 
 | Job | Steps | Uploads (30 days) |
 |---|---|---|
 | `go` | `go vet ./...` and `go test -count=1 ./...` in `backend/` with `CGO_ENABLED=0` and `GOWORK=off`, as the daemon is built | |
-| `client` | `dotnet restore Malachi.slnx -p:Platform=x64 --locked-mode`; `build.ps1 build -Arch x64` (Debug; every warning is an error through `TreatWarningsAsErrors`); `build.ps1 go`, so that the tests against the real daemon run, as under `make test-windows`; `build.ps1 test`; a job summary of every project's counts and of every skipped test with its reason; `build.ps1 lint`; `build.ps1 package -Arch x64` | `malachi-windows-x64` (the zip), `windows-test-results` (the `.trx` files, also when a test failed) |
-| `arm64` | the locked restore and `build.ps1 build` for ARM64, then `build.ps1 package -Arch arm64`: Go cross-compiles, the app is published for `win-arm64`, the helper is NativeAOT cross-linked with the image's ARM64 tools. Nothing ARM64 runs on the x64 runner, so there are no tests. A job of its own, though one build tree takes both architectures one after the other (every project built for an architecture has output folders of its own, `Directory.Build.props`): it runs beside `client` rather than after it, has its own NuGet cache, and a failed ARM64 link leaves the x64 results apart | `malachi-windows-arm64` |
-| `release` | on a `v*` tag, once the three jobs pass, and only when the repository variable `WINDOWS_RELEASE_ZIPS` is `true`: the zips attached to the tag's release, a draft created when there is none, as the Flatpak, Debian and RPM workflows do. Unset, the job is skipped and the release gets no Windows zips (below) | |
+| `client` | `dotnet restore Malachi.slnx -p:Platform=x64 --locked-mode`; `build.ps1 build -Arch x64` (Debug; every warning is an error through `TreatWarningsAsErrors`); `build.ps1 go`, so that the tests against the real daemon run, as under `make test-windows`; `build.ps1 test`; a job summary of every project's counts and of every skipped test with its reason; `build.ps1 lint`; Inno Setup (Chocolatey when the image lacks it); `build.ps1 installer -Arch x64` | `malachi-windows-x64` (the installer, only on a tag), `windows-test-results` (the `.trx` files, also when a test failed) |
+| `arm64` | the locked restore and `build.ps1 build` for ARM64, then Inno Setup and `build.ps1 installer -Arch arm64`: Go cross-compiles, the app is published for `win-arm64`, the helper is NativeAOT cross-linked with the image's ARM64 tools. Nothing ARM64 runs on the x64 runner, so there are no tests. A job of its own, though one build tree takes both architectures one after the other (every project built for an architecture has output folders of its own, `Directory.Build.props`): it runs beside `client` rather than after it, has its own NuGet cache, and a failed ARM64 link leaves the x64 results apart | `malachi-windows-arm64` (the installer, only on a tag) |
+| `release` | on a `v*` tag, on which `go` and every test, lint and Debug build step are skipped (releasing.md §3), once `client` and `arm64` pass: both installers attached to the tag's release, a draft created when there is none, as the Flatpak, Debian, RPM and macOS workflows do; the only place a release's Windows installers are built (below) | |
 
 Every client step is a `build.ps1` target started as make starts it
 (`powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 …`), so CI
@@ -4404,7 +5043,7 @@ last program, so each step runs one. Go is the minor version of
 `backend/go.mod`'s `go` directive at its newest patch release (`go 1.25.0`
 → the newest 1.25.x, as the Linux workflows' `'1.25'`): setup-go's
 `go-version-file` would install 1.25.0 itself, without the security fixes
-the zips must carry. The .NET SDK comes from `windows/global.json` through
+the installers must carry. The .NET SDK comes from `windows/global.json` through
 `setup-dotnet`. The NuGet packages folder is cached per architecture, keyed
 by the lock files and `Directory.Packages.props`; the runner sets `CI=true`,
 which makes every restore locked (`Directory.Build.props`), and the
@@ -4499,16 +5138,12 @@ runs of `build.ps1 test` failed in the canary before these changes;
 three runs with all of them, the rebuild loop included, passed
 (2026-09-28).
 
-The zips are test builds until §17 is done (no signature, no installer,
-the licence permission for the Microsoft components not yet in
-`LICENSING.md`), so a tag keeps them as the run's artifacts and attaches
-nothing to its release: the `release` job runs only when the repository
-variable `WINDOWS_RELEASE_ZIPS` is `true`, which nothing sets by
-default. The owner sets it (*Settings → Secrets and variables → Actions →
-Variables*, or `gh variable set WINDOWS_RELEASE_ZIPS --body true`) once
-the permission is in `LICENSING.md` and the workflow signs the
-executables; [releasing.md §7](releasing.md#7-windows) has what that
-means for a release. Every step of the three jobs was run locally in
+Since 2026-11-01 (owner's decision) a tag's run builds the release's
+Windows installers and attaches them, and nothing else does: no zip, no
+upload by hand. Pull requests and runs by hand build the installers too
+but keep them nowhere, as any signed-in GitHub user can download the
+artifacts of a public repository. The installers are unsigned until §17
+settles code signing; the workflow would then sign them in these jobs. Every step of the three jobs was run locally in
 order from a fresh build tree, on Windows 11 x64 with `CI=true` and
 `GITHUB_ACTIONS=true`, before the workflow was committed; the one step
 that could not pass there is the ARM64 helper's NativeAOT link, for want
@@ -4716,37 +5351,65 @@ daemon's graceful stop), recorded in §10 and §11.
 
 ## 17. Before a public release
 
-The client is complete as a mail client; what it lacks is distribution.
-Today `make windows` gives a self-contained, unsigned folder that needs
-nothing installed but the WebView2 runtime Windows 11 comes with, and
-`build.ps1 package` zips it. Open, in the order a first public binary
-needs them:
+The client is complete as a mail client. Since 0.1.2 (2026-10-28) it is
+distributed: the release carries an installer for x64 and for ARM64
+(`Malachi-Mail-<version>-windows-<arch>-setup.exe`). Up to 0.1.2 they were built on
+a Windows machine and uploaded by hand beside a portable zip; since
+2026-11-01 (owner's decision) the tag's CI builds them, the ARM64 one
+cross-built, attaches them, and there is no zip (§13).
 
-- **Licence.** The Windows App SDK and WebView2 packages, which the app
-  folder carries, are under Microsoft's terms, not the GPL. Distributing
-  the built client needs an explicit GPLv3 §7 additional permission for
-  those Microsoft platform components in `LICENSING.md`. That is the
-  owner's decision, after a legal check, and comes before the first public
-  binary; development and the source are unaffected.
-- **Code signing.** The owner's decision (SignPath Foundation, an OV
+- **Licence.** Settled: `LICENSING.md` carries the GPLv3 §7 additional
+  permission for the Microsoft platform components (the Windows App SDK,
+  the WebView2 SDK, the Visual C++ runtime), decided by the owner on
+  2026-10-28, and the app folder carries the licence and notice files of
+  every NuGet package in it (`Microsoft-notices\`, `scripts\copy-notices.ps1`,
+  read from the restore's `project.assets.json`). The 0.1.2 tag predates
+  the permission; its installers were built from the tag with the
+  `LICENSING.md` of `main` staged in (`installer\build-installer.ps1
+  -Licensing`).
+- **Code signing.** Open, the owner's decision (SignPath Foundation, an OV
   certificate, or signing as an organisation; Azure Artifact Signing is not
-  open to individuals in the EU). Until then SmartScreen warns about the
-  unsigned executables.
-- **Installer.** Velopack (per user, updates from GitHub Releases) and a
-  winget manifest; an update stops the daemon gracefully first and must
-  cope with a `malachi-mcp.exe` that Claude Desktop or Claude Code still
-  runs (§1: it can be renamed, not replaced), and an
-  uninstall removes what the app registered in HKCU (the `mailto:`
-  registration, for which `MailtoRegistration.Unregister` exists, the Run
-  value and the notification registration).
-- **ARM64.** `build.ps1 app -Arch arm64` cross-builds the app, the
-  daemon and the bridge; the keyring helper links only where the MSVC
-  ARM64 build tools are installed, which the development machine lacks,
-  so no ARM64 app folder has been assembled and none has run. It needs a
-  build with those tools and a run on real ARM64 hardware.
+  open to individuals in the EU). The executables and the installers are
+  unsigned: SmartScreen warns when the installer is downloaded and run
+  (*More info → Run anyway*).
+- **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
+  Velopack, for now: Velopack needs its SDK called first in `Main`
+  (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs
+  into `%LOCALAPPDATA%\<id>\current`. Inno Setup needs nothing in the app,
+  builds both architectures from one script and installs for the current
+  user without administrator rights into `%LOCALAPPDATA%\Programs\Malachi
+  Mail`, with a Start menu shortcut and the uninstall entry in Settings →
+  Apps (HKCU, `AppId` `io.github.schotek.Malachi`, so both architectures
+  are one installation). It writes nothing else: the `mailto:` and Run
+  registrations stay the app's own. Before installing over a running copy
+  or uninstalling it asks the user to quit the app (it finds the app, the
+  daemon and the keyring helper by their path through WMI); Restart
+  Manager closes a `malachi-mcp.exe` that Claude Desktop or Claude Code
+  runs from the folder. The uninstaller removes, only where they point
+  into its folder, the `mailto:` registration (the keys of
+  `MailtoRegistration`), the Run value with its StartupApproved twin, the
+  notification registration of the unpackaged app (the CLSID of the
+  activator, the AppUserModelId `{guid}` entry, the entry named after the
+  executable's path and the notification platform's backup), and the
+  shell's traces (NotifyIconSettings, the Start tile's properties, the
+  MUI cache, the jump list data); the mail data, the preferences and the
+  stored passwords stay. Checked on ARM64 hardware (2026-10-28): HKCU
+  before installing and after uninstalling differ by nothing of Malachi
+  Mail, except that Windows may write the jump list value again after the
+  uninstaller, and Inno Setup leaves its own temporary copy of the
+  uninstaller (`%TEMP%\is-*-uninstall.tmp`, 4 MB). Still open: updates
+  (Velopack, or a check against GitHub Releases, with the daemon stopped
+  gracefully first and `malachi-mcp.exe` renamed rather than replaced,
+  §1) and a winget manifest.
+- **ARM64.** Done for 0.1.2: built with the MSVC ARM64 tools of Visual
+  Studio 2026 on an ARM64 machine (Windows 11 26300 under Parallels), the
+  installer installed, the app ran natively with its daemon over
+  temporary data, quit and uninstalled. The x64 installer went through
+  the same on that machine under x64 emulation; neither has run on x64
+  hardware.
 - **The UI smoke tests on CI.** `.github/workflows/windows.yml` (§13)
   runs on the hosted runner (first run 2026-09-28: the client built,
-  tested and zipped for both architectures, the ARM64 helper linked with
+  tested and packaged for both architectures, the ARM64 helper linked with
   the image's MSVC ARM64 tools); whether the UI smoke tests (§12) can
   drive the app in the runner's session is open (the test step runs
   before the app folder exists, so they skip).
@@ -4765,10 +5428,9 @@ comments.
 
 The Board, where the client trailed the daemon's API until 2026-10-06, is
 ported (§11.8); what is open is the owner's own check with a real Claude
-Code and a real Codex (triage and a suggested reply), an inline reply over
-a real linked draft, and, as for the rest of the client, ARM64 on real
-hardware (above). The Board adds nothing to the licence, signing or
-installer items.
+Code and a real Codex (triage and a suggested reply) and an inline reply
+over a real linked draft. The Board adds nothing to the licence, signing
+or installer items.
 
 The Calendar, where the client trailed the daemon's API until 2026-10-16,
 is ported (§11.9) and built, `build.ps1 app` publishes it, and its Core,
@@ -4776,5 +5438,4 @@ conventions and calendar UI smoke tests pass; the owner has tried it with
 his real accounts (Microsoft 365 through Graph, Nextcloud through CalDAV)
 and his findings are fixed. Open: a full `build.ps1 test` run, the hatch in
 the dark theme and at display scales other than 100 %, touch and pen
-double taps, declined and cancelled blocks on screen (§11.9 lists them);
-ARM64 as for the rest of the client (above).
+double taps, declined and cancelled blocks on screen (§11.9 lists them).

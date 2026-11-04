@@ -14,7 +14,9 @@ namespace Malachi.Core.Model;
 /// One row of the folder sidebar: an account header (<see cref="Header"/>
 /// set, <see cref="Folder"/> null), the Favourites heading
 /// (<see cref="Header"/> and <see cref="Favourite"/> set,
-/// <see cref="Account"/> null too) or a folder at the given tree depth.
+/// <see cref="Account"/> null too), the All Inboxes item
+/// (<see cref="IsUnified"/> and <see cref="Favourite"/> set, no account, no
+/// folder) or a folder at the given tree depth.
 /// </summary>
 public sealed record FolderEntry
 {
@@ -32,9 +34,9 @@ public sealed record FolderEntry
 
     /// <summary>
     /// Set on the rows of the Favourites section at the top of the sidebar:
-    /// its heading and one row per pinned folder, each at depth 0 without
-    /// children. The same folder has a second row in its account's tree, so
-    /// a folder key alone does not name a row.
+    /// its heading, the All Inboxes item and one row per pinned folder, each
+    /// at depth 0 without children. The same folder has a second row in its
+    /// account's tree, so a folder key alone does not name a row.
     /// </summary>
     public bool Favourite { get; init; }
 
@@ -44,7 +46,15 @@ public sealed record FolderEntry
     /// </summary>
     public bool Starred { get; init; }
 
-    /// <summary>The row can be folded.</summary>
+    /// <summary>
+    /// The All Inboxes item (<see cref="Unified"/>): the first row of the
+    /// Favourites section, under its heading, without an account or a
+    /// folder of its own; its <see cref="Badge"/> is the unread count of the
+    /// inboxes it lists. It cannot be pinned or folded; its section can.
+    /// </summary>
+    public bool IsUnified { get; init; }
+
+    /// <summary>The row can be folded (a folder with children, an account heading, the Favourites heading).</summary>
     public bool HasChildren { get; init; }
 
     /// <summary>The row is folded; its descendants are left out of the list entirely.</summary>
@@ -63,6 +73,6 @@ public sealed record FolderEntry
     /// </summary>
     public int Badge { get; init; }
 
-    /// <summary>The folder this row stands for; null on a header row.</summary>
-    public FolderKey? Key => Account is { } a && Folder is { } f ? new FolderKey(a.Id, f.Id) : null;
+    /// <summary>The folder this row stands for (the All Inboxes row: <see cref="Unified.Key"/>); null on a header row.</summary>
+    public FolderKey? Key => IsUnified ? Unified.Key : Account is { } a && Folder is { } f ? new FolderKey(a.Id, f.Id) : (FolderKey?)null;
 }

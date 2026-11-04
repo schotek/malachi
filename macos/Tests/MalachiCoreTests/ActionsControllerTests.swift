@@ -1475,3 +1475,136 @@ private final class ParentLog {
         #expect(h.log.messageWindows.count == 2)
     }
 }
+
+// Undo of moves (ActionsController+Undo; ui/internal/window/undo.go): what
+// the daemon took is pushed with its toast, ⌘Z and the toast's button move
+// the messages back and select them again.
+
+/// The toasts of moves the hook showed, with their buttons' closures.
+@MainActor
+private final class UndoToasts {
+    var shown: [(text: String, button: String, undo: @MainActor () -> Void)] = []
+    var dismissed = 0
+    var board: [Board.ArchiveOutcome] = []
+
+    func install(_ actions: ActionsController) {
+        actions.showUndoToast = { [unowned self] text, button, undo in
+            self.shown.append((text, button, undo))
+        }
+        actions.dismissUndoToast = { [unowned self] in self.dismissed += 1 }
+        actions.undoBoard = { [unowned self] o in self.board.append(o) }
+    }
+}
+
+@MainActor
+@Suite(.serialized) struct ActionsControllerUndoTests {
+    @Test func trashIsTakenBackAndSelectedAgain() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2, .seen)]], confirmDelete: false)
+        defer { Task { await h.stop() } }
+        let u = UndoToasts()
+        u.install(h.actions)
+        #expect(!h.actions.canUndo)
+
+        h.actions.trash(["m1"], subject: "s-m1")
+        try await waitUntil { u.shown.count == 1 }
+        #expect(u.shown[0].text == "Moved 1 message to Trash.")
+        #expect(u.shown[0].button == "Undo (⌘Z)")
+        #expect(h.actions.canUndo)
+        #expect(ids(h.list.rows) == ["m2"])
+
+        h.actions.undoLast()
+        #expect(!h.actions.canUndo)
+        #expect(u.dismissed == 1)
+        try await waitUntil { await h.fixture.moveRequests.count == 1 }
+        #expect(await h.fixture.moveRequests.last == MessageMoveParams(accountId: "a", messageIds: ["m1"], targetFolderId: "in"))
+        try await waitUntil { h.log.toasts.contains("Moved 1 message back.") }
+        // The inbox is listed again and the message that came back selected.
+        try await waitUntil { h.list.selectedKeys == [ListKey(message: "m1")] }
+        #expect(Set(ids(h.list.rows)) == ["m1", "m2"])
+
+        h.actions.undoLast()
+        #expect(h.log.toasts.last == "Nothing to undo.")
+    }
+
+    @Test func theToastsButtonTakesBackItsOwnMove() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2)]])
+        defer { Task { await h.stop() } }
+        let u = UndoToasts()
+        u.install(h.actions)
+
+        h.actions.archive(["m1"])
+        try await waitUntil { u.shown.count == 1 }
+        h.actions.moveTo(["m2"], folder: junk.folder)
+        try await waitUntil { u.shown.count == 2 }
+        #expect(u.shown.map(\.text) == ["Archived 1 message.", "Moved 1 message to “junk”."])
+
+        // The archive's button: the older move, not the newest.
+        u.shown[0].undo()
+        try await waitUntil { await h.fixture.moveRequests.count == 3 }
+        #expect(await h.fixture.moveRequests.last == MessageMoveParams(accountId: "a", messageIds: ["m1"], targetFolderId: "in"))
+        // Pressed twice: gone already.
+        u.shown[0].undo()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await h.fixture.moveRequests.count == 3)
+        // ⌘Z takes the junk move.
+        h.actions.undoLast()
+        try await waitUntil { await h.fixture.moveRequests.count == 4 }
+        #expect(await h.fixture.moveRequests.last == MessageMoveParams(accountId: "a", messageIds: ["m2"], targetFolderId: "in"))
+        #expect(!h.actions.canUndo)
+    }
+
+    @Test func whatCannotBeTakenBackIsNotRecorded() async throws {
+        var folders = testFolders()
+        folders.append(testFolder("all", path: "[Gmail]/All Mail", synced: false))
+        let h = try await Harness(
+            folders: folders, messages: [inbox: [msg("m1", 1), msg("m2", 2)], trash: [msg("t1", 3)]], confirmDelete: false)
+        defer { Task { await h.stop() } }
+        let u = UndoToasts()
+        u.install(h.actions)
+
+        // A folder the daemon does not keep.
+        h.actions.moveTo(["m1"], folder: "all")
+        try await waitUntil { await h.fixture.moveRequests.count == 1 }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(!h.actions.canUndo && u.shown.isEmpty)
+
+        // An expunge from Trash.
+        h.select(trash)
+        try await h.loaded(trash)
+        h.actions.trash("t1")
+        try await waitUntil { await h.fixture.deleteRequests.count == 1 }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(!h.actions.canUndo && u.shown.isEmpty)
+
+        // Empty Trash forgets the moves into it.
+        h.select(inbox)
+        try await h.loaded(inbox)
+        h.actions.trash("m2")
+        try await waitUntil { h.actions.canUndo }
+        h.actions.emptyFolder(trash)
+        try await waitUntil { await h.fixture.folderEmptyRequests.count == 1 }
+        #expect(!h.actions.canUndo)
+    }
+
+    @Test func theBoardsMovesGoThroughTheBoard() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1)]])
+        defer { Task { await h.stop() } }
+        let u = UndoToasts()
+        u.install(h.actions)
+
+        // Nothing moved: the plain toast, no entry.
+        h.actions.recordBoardUndo(Board.ArchiveOutcome(caseID: Board.CaseID(rawValue: "c_0"), account: "a", text: "Done.", undoLabel: nil))
+        #expect(h.log.toasts == ["Done."] && !h.actions.canUndo)
+
+        let o = Board.ArchiveOutcome(
+            caseID: Board.CaseID(rawValue: "c_1"), account: "a", moved: [BoardMoved(messageId: "m9", fromFolderId: "in")],
+            text: "Moved 1 message to Trash.", undoLabel: "Undo", trash: true)
+        h.actions.recordBoardUndo(o)
+        #expect(u.shown.map(\.text) == ["Moved 1 message to Trash."])
+        #expect(u.shown.map(\.button) == ["Undo (⌘Z)"])
+        h.actions.undoLast()
+        #expect(u.board.count == 1)
+        #expect(u.board.first?.caseID == o.caseID && u.board.first?.moved == o.moved && u.board.first?.trash == true)
+        #expect(await h.fixture.moveRequests.isEmpty, "the board moves the messages itself")
+    }
+}

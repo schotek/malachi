@@ -46,6 +46,7 @@ public sealed partial class EventEditorPane
             // The typed text after the last badge, and its end.
             () => (AttendeesBox.Pending, Suggest.ScalarOffset(AttendeesBox.Pending.Length, AttendeesBox.Pending)),
             logger: appState.Logs.CreateLogger<SuggestionsController>());
+        appState.Contacts.WireSuggestions(completion, () => CurrentAccount ?? new AccountId(""));
         suggestions = new RecipientSuggestions(AttendeesBox, completion);
         AttendeesBox.Changed += (_, _) => SyncAttendees();
         AttendeesBox.PendingChanged += (_, _) =>

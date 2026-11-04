@@ -98,13 +98,21 @@ func InvitationNotification(s api.InvitationSummary, env Env) Notification {
 // summaryBody is "Q4 planning · Tuesday 14 October 2026 · 10:00–11:30 · 1 h
 // 30 min".
 func summaryBody(s api.InvitationSummary, env Env) string {
+	return dots(env.Tr, cleanTitle(s.Title, env.Tr), SummaryTimeLine(s, env))
+}
+
+// SummaryTimeLine is the time of an invitation's summary, "Tuesday 14
+// October 2026 · 10:00–11:30 · 1 h 30 min" (summaryBody without the
+// title); "" without a time. The list row's preview of an invitation.
+// Swift: Cal.summaryTimeLine.
+func SummaryTimeLine(s api.InvitationSummary, env Env) string {
 	o := api.Occurrence{Start: s.Start, End: s.End, StartDate: s.StartDate, AllDay: s.AllDay}
 	if s.AllDay {
 		if d, ok := ParseDate(s.StartDate, env.loc()); ok {
 			o.EndDate = DateOf(AddDays(d, 1), env.loc())
 		}
 	}
-	return dots(env.Tr, cleanTitle(s.Title, env.Tr), TimeLine(o, env))
+	return TimeLine(o, env)
 }
 
 // Show is an invitation's action that opens the message.

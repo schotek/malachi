@@ -20,7 +20,8 @@
 // About carries the GTK fields (U8): the name, the icon, the version, the
 // developer, the licence, the website and the issue tracker. GTK's
 // comment ("A native mail client for the GNOME desktop.") names GNOME, so
-// Windows says what macOS says, a Windows-only string.
+// Windows says what macOS says, a Windows-only string. Under the version,
+// the update check's status line (updates.AboutLine; docs/plans/update-check.md).
 
 using System;
 using System.Collections.Generic;
@@ -44,10 +45,10 @@ namespace Malachi.App.Shell;
 internal sealed partial class AlertService : IAlerts
 {
     /// <summary>The project's website (main.go SetWebsite).</summary>
-    public const string Website = "https://github.com/schotek/malachi";
+    public const string Website = AppLinks.Website;
 
     /// <summary>The issue tracker (main.go SetIssueURL).</summary>
-    public const string IssueUrl = "https://github.com/schotek/malachi/issues";
+    public const string IssueUrl = AppLinks.ReportIssue;
 
     // The width of a value in the certificate's details (Alerts.swift
     // detailValueWidth): the fingerprint takes two lines.
@@ -70,6 +71,9 @@ internal sealed partial class AlertService : IAlerts
         this.openUrl = openUrl;
         this.logger = logger;
     }
+
+    /// <summary>The update check's status line for About (AppState.UpdateLine); none until set.</summary>
+    public Func<string>? UpdateLine { get; set; }
 
     /// <inheritdoc/>
     public bool IsShowing(Window window) => schedulers.TryGetValue(window, out var s) && s.IsBusy;
@@ -298,14 +302,20 @@ internal sealed partial class AlertService : IAlerts
         });
         panel.Children.Add(Centred(L10n.T("Malachi Mail contributors"), "DimLabelStyle"));
         panel.Children.Add(Centred(AppVersion.Full, "CaptionLabelStyle"));
+        // The update check's status line (updates.AboutLine); Check Now is in Preferences → General.
+        if (UpdateLine?.Invoke() is { Length: > 0 } line)
+        {
+            panel.Children.Add(Centred(line, "DimCaptionLabelStyle"));
+        }
         // Windows-only string: GTK's comment names the GNOME desktop.
         panel.Children.Add(Centred("A native mail client.", "BodyLabelStyle"));
         // Windows-only string: Adw.AboutDialog words the licence itself.
         panel.Children.Add(Centred("GNU General Public License, version 3 or later", "DimCaptionLabelStyle"));
         var links = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 8 };
-        // Windows-only strings: Adw.AboutDialog's own buttons.
+        // Windows-only string: Adw.AboutDialog's own button.
         links.Children.Add(Link("Website", Website));
-        links.Children.Add(Link("Report an Issue", IssueUrl));
+        // window.blp's Report an Issue (Adw.AboutDialog words its own).
+        links.Children.Add(Link(L10n.T("Report an Issue"), IssueUrl));
         panel.Children.Add(links);
         return new ContentDialog
         {

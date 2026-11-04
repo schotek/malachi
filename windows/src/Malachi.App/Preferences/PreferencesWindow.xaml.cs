@@ -13,16 +13,20 @@
 // at once, and the AI page asks the bridge whenever it comes up; the
 // Calendar page (after General, as on macOS) binds this window's calendar
 // source at once, as macOS attaches it, and draws it again whenever it
-// comes up. On the
+// comes up; the Contacts page (after Calendar) lists the accounts and the
+// books whenever it comes up, the Security page (after Contacts) the stored
+// OpenPGP keys. On the
 // General page Windows decides some things (the Run value and the
 // default mail app): the page reads them again whenever it comes up and
 // whenever the window is activated (after a visit to Settings). The
 // Integrations page (after Accounts, as GTK and macOS have it) lists the
 // accounts that are not mail accounts and the services that can be added;
-// a CalDAV row's Edit shows the Calendar page (ShowCalendar). Ctrl+Up and
+// a CalDAV row's Edit shows the Calendar page (ShowCalendar). The Rules
+// page (right after it, docs/plans/rules.md R14) lists the mail rules and
+// asks the daemon again whenever it comes up. Ctrl+Up and
 // Ctrl+Down are the window's MoveUp and MoveDown commands, which move the
-// selected account while the Accounts or the Integrations list has the
-// focus. Closing the window ends every binding and drops every late reply.
+// selected account or rule while the Accounts, the Integrations or the
+// Rules list has the focus. Closing the window ends every binding and drops every late reply.
 
 using System;
 using System.IO;
@@ -63,8 +67,11 @@ public sealed partial class PreferencesWindow : Window
     private readonly SettingBindings bindings;
     private readonly AccountsPage accounts;
     private readonly IntegrationsPage integrations;
+    private readonly RulesPage rules;
     private readonly GeneralPage general;
     private readonly CalendarPreferencesPage calendar;
+    private readonly ContactsPreferencesPage contactsPage;
+    private readonly SecurityPage security;
     private readonly AppearancePage appearance;
     private readonly AiPage ai;
 
@@ -89,8 +96,11 @@ public sealed partial class PreferencesWindow : Window
         // Every page at once, as GTK builds them.
         accounts = new AccountsPage(state, this, ToastsHost);
         integrations = new IntegrationsPage(state, this, ToastsHost);
-        general = new GeneralPage(state, bindings, ToastsHost);
+        rules = new RulesPage(state, this, ToastsHost);
+        general = new GeneralPage(state, bindings, ToastsHost) { HostWindow = this };
         calendar = new CalendarPreferencesPage(state, this, ToastsHost);
+        contactsPage = new ContactsPreferencesPage(state, this, ToastsHost);
+        security = new SecurityPage(state, this, ToastsHost);
         appearance = new AppearancePage(state, bindings);
         ai = new AiPage(state, bindings, ToastsHost, () => this);
 
@@ -116,8 +126,11 @@ public sealed partial class PreferencesWindow : Window
             bindings.Dispose();
             accounts.Close();
             integrations.Close();
+            rules.Close();
             general.Close();
             calendar.Close();
+            contactsPage.Close();
+            security.Close();
             ai.Close();
         };
         // The calendar page works over this window's calendar source from
@@ -144,12 +157,21 @@ public sealed partial class PreferencesWindow : Window
     /// <summary>Shows the Integrations page (Jira and CalDAV accounts, the services that can be added).</summary>
     public void ShowIntegrations() => Navigation.SelectedItem = IntegrationsItem;
 
+    /// <summary>Shows the Rules page (after Integrations; the dev start's prefs-rules).</summary>
+    public void ShowRules() => Navigation.SelectedItem = RulesItem;
+
     /// <summary>
     /// Shows the Calendar page (macOS <c>select(.calendar)</c>: the calendar
     /// page's empty state, the sidebar's Sync a Microsoft 365 Account's
     /// Calendars…, AppState.ShowCalendarPreferences).
     /// </summary>
     public void ShowCalendar() => Navigation.SelectedItem = CalendarItem;
+
+    /// <summary>Shows the Contacts page (the Contacts window's No Address Books, Open Preferences…).</summary>
+    public void ShowContacts() => Navigation.SelectedItem = ContactsItem;
+
+    /// <summary>Shows the Security page (the OpenPGP keys of signed mail).</summary>
+    public void ShowSecurity() => Navigation.SelectedItem = SecurityItem;
 
     /// <summary>
     /// Opens the Preferences, or brings the open window to the front
@@ -199,11 +221,16 @@ public sealed partial class PreferencesWindow : Window
     // moves, while its list has the focus.
     private bool CanMove() =>
         (ReferenceEquals(PageHost.Content, accounts) && accounts.CanMove)
-        || (ReferenceEquals(PageHost.Content, integrations) && integrations.CanMove);
+        || (ReferenceEquals(PageHost.Content, integrations) && integrations.CanMove)
+        || (ReferenceEquals(PageHost.Content, rules) && rules.CanMove);
 
     private void MoveSelected(int delta)
     {
-        if (ReferenceEquals(PageHost.Content, integrations))
+        if (ReferenceEquals(PageHost.Content, rules))
+        {
+            rules.MoveSelected(delta);
+        }
+        else if (ReferenceEquals(PageHost.Content, integrations))
         {
             integrations.MoveSelected(delta);
         }
@@ -239,8 +266,11 @@ public sealed partial class PreferencesWindow : Window
         UIElement page = ((args.SelectedItem as NavigationViewItem)?.Tag as string) switch
         {
             "integrations" => integrations,
+            "rules" => rules,
             "general" => general,
             "calendar" => calendar,
+            "contacts" => contactsPage,
+            "security" => security,
             "appearance" => appearance,
             "ai" => ai,
             _ => accounts,
@@ -254,9 +284,23 @@ public sealed partial class PreferencesWindow : Window
         {
             general.Refresh();
         }
+        else if (ReferenceEquals(page, rules))
+        {
+            // The rules are asked again whenever the page comes up.
+            rules.Refresh();
+        }
         else if (ReferenceEquals(page, calendar))
         {
             calendar.Refresh();
+        }
+        else if (ReferenceEquals(page, contactsPage))
+        {
+            contactsPage.Refresh();
+        }
+        else if (ReferenceEquals(page, security))
+        {
+            // The keys are read whenever the page comes up.
+            security.Refresh();
         }
         else if (ReferenceEquals(page, ai))
         {

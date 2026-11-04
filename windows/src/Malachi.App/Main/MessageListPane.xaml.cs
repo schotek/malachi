@@ -75,6 +75,7 @@ using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
+using Malachi.Core.Rules;
 using Malachi.Core.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -103,6 +104,10 @@ public sealed partial class MessageListPane : UserControl
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer calendarTimer;
     private (DateTime Day, TimeSpan Offset, DayOfWeek FirstDay) calendarStamp;
     private ListController? list;
+
+    // The toolbar-mail layout has the filter (Windows draws it as the row
+    // under the header, so only its presence counts; W.2).
+    private bool filterShown = true;
     private MailboxController? mailbox;
     private ActionsController? actions;
     private SettingsStore? settings;
@@ -186,6 +191,49 @@ public sealed partial class MessageListPane : UserControl
 
     /// <summary>The rows, in the list's order.</summary>
     public ObservableCollection<MessageRow> Rows => dateList.Rows;
+
+    /// <summary>The header's strip: the Message List section of the user's toolbar-mail layout (MainWindow.Toolbars.cs).</summary>
+    internal Toolbars.ToolbarStrip ToolbarStrip => HeaderStrip;
+
+    /// <summary>The header bar (a right click on an empty spot offers Customize Toolbar…).</summary>
+    internal FrameworkElement ToolbarBar => HeaderRow;
+
+    /// <summary>The header's Check for New Mail button (the display mode shows its label).</summary>
+    internal Button Refresh => RefreshButton;
+
+    /// <summary>Whether the layout has the filter: the row of All, Unread and Flagged shows (outside a search).</summary>
+    internal void SetFilterShown(bool shown)
+    {
+        if (filterShown == shown)
+        {
+            return;
+        }
+        filterShown = shown;
+        ShowFilter();
+    }
+
+    /// <summary>
+    /// The toolbar's Move To (and More Actions'): the folders of the
+    /// selection's account, as the list's context menu has them; nothing
+    /// without a selection that may move.
+    /// </summary>
+    internal void FillSelectionMoveTargets(IList<MenuFlyoutItemBase> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (list is not { } l || commands is not { } c || !c.Flags.Move)
+        {
+            return;
+        }
+        var rows = l.SelectedRows;
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        FillMoveTargets(items, rows[0].Message.AccountId, CommonFolder(rows));
+    }
+
+    // The title stays centred: the balance is as wide as the strip.
+    private void OnHeaderStripSizeChanged(object sender, SizeChangedEventArgs e) => HeaderBalance.Width = Math.Max(0, e.NewSize.Width);
 
     /// <summary>
     /// Installs the view-facing callbacks of the list half, the mailbox's
@@ -295,6 +343,14 @@ public sealed partial class MessageListPane : UserControl
     /// </summary>
     internal Malachi.Core.Controllers.CrmController? Crm { get; set; }
 
+    /// <summary>
+    /// The main window's Create Rule from Message… (MainWindow.Rules.cs): the
+    /// message menu's item of one message of a mail account opens the rule
+    /// editor prefilled from it (contextmenu.go CreateRule); none before the
+    /// Integration.
+    /// </summary>
+    internal Action<MessageSummary>? CreateRule { get; set; }
+
     /// <summary>A conversation row's fold arrow (threads.go toggleThread).</summary>
     internal void ToggleThread(MessageRow row)
     {
@@ -349,7 +405,11 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
-        var look = RowAppearance.From(settings, l.SearchActive, mailbox.Model.Grouped);
+        // The user's own rows (Sent, Outbox) never show a contact's photo (F10).
+        var look = RowAppearance.From(settings, l.SearchActive, mailbox.Model.Grouped) with
+        {
+            Own = l.FolderRole == FolderRole.Sent || l.FolderRole == FolderRole.Outbox,
+        };
         calendarStamp = CalendarStamp();
         reselecting = true;
         try
@@ -654,7 +714,7 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
-        FilterBar.Visibility = l.SearchActive ? Visibility.Collapsed : Visibility.Visible;
+        FilterBar.Visibility = l.SearchActive || !filterShown ? Visibility.Collapsed : Visibility.Visible;
         var item = FilterBar.Items[Math.Max(Array.IndexOf(Filters, l.ListFilter), 0)];
         if (!ReferenceEquals(FilterBar.SelectedItem, item))
         {
@@ -764,6 +824,19 @@ public sealed partial class MessageListPane : UserControl
             && MessageList.SelectedItems.Count == 1 && ReferenceEquals(MessageList.SelectedItem, row))
         {
             MessageChosen?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Scrolls the row of <paramref name="key"/> into view without touching
+    /// the selection or the keyboard (the row= step of MainWindow.DevStart.cs,
+    /// after the controller's Select).
+    /// </summary>
+    internal void ScrollTo(ListKey key)
+    {
+        if (Rows.FirstOrDefault(r => r.Key == key) is { } row)
+        {
+            MessageList.ScrollIntoView(row);
         }
     }
 
@@ -923,6 +996,10 @@ public sealed partial class MessageListPane : UserControl
             // crm.OfferFor of the selected rows (MessageState.SetCrm).
             state = state.WithCrm(crm.Offer);
         }
+        // Create Rule from Message…: one message of a mail account, not in the outbox, drafts or sent mail.
+        state = state with { OfferRule = rows.Count == 1 && CreateRule is not null && OffersRule(first.Message) };
+        // Print… right after Open (contextmenu.go OfferPrint; Windows prints).
+        state = state with { OfferPrint = true, Print = rows.Count <= Core.Printing.Print.MaxMessages };
         var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox, Count = rows.Count };
         var menu = new MenuFlyout();
         foreach (var group in ContextMenu.MessageItems(state))
@@ -994,6 +1071,14 @@ public sealed partial class MessageListPane : UserControl
                     item = crm;
                     break;
                 }
+            case ContextMenu.ItemId.CreateRule:
+                {
+                    var create = new MenuFlyoutItem { IsEnabled = it.Enabled && CreateRule is not null };
+                    var message = rows[0].Message;
+                    create.Click += (_, _) => CreateRule?.Invoke(message);
+                    item = create;
+                    break;
+                }
             default:
                 {
                     var command = CommandOf(c, it.Id);
@@ -1006,6 +1091,19 @@ public sealed partial class MessageListPane : UserControl
         MnemonicLabel.Apply(item, ContextMenu.Label(it.Id, labels));
         AutomationProperties.SetAutomationId(item, "ContextMenu." + ContextMenu.Name(it.Id));
         return item;
+    }
+
+    // rules.CanCreateFrom of the folder the message is in, for a message of a
+    // mail account (imap, graph: never an issue tracker's).
+    private bool OffersRule(MessageSummary message)
+    {
+        if (mailbox is not { } m || m.Model.Account(message.AccountId) is not { } account || RuleBook.MailAccounts([account]).Count == 0)
+        {
+            return false;
+        }
+        return m.Model.Folders.TryGetValue(message.AccountId, out var folders)
+            && folders.FirstOrDefault(f => f.Id == message.FolderId) is { } folder
+            && RuleBook.CanCreateFrom(folder.Role);
     }
 
     // context_menus.go messageMenuActions: the eWay-CRM items run the main
@@ -1036,6 +1134,7 @@ public sealed partial class MessageListPane : UserControl
     // context_menus.go messageMenuActions: the window's command of an item.
     private static AppCommand? CommandOf(WindowCommands c, ContextMenu.ItemId id) => id switch
     {
+        ContextMenu.ItemId.Print => c.Print,
         ContextMenu.ItemId.Reply => c.Reply,
         ContextMenu.ItemId.ReplyAll => c.ReplyAll,
         ContextMenu.ItemId.Forward => c.Forward,

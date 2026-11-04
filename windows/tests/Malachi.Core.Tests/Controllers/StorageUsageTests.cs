@@ -35,23 +35,23 @@ public sealed class StorageUsageTests
     {
         Assert.Equal(("0 B", ""), StorageUsage.StorageTexts(new SystemStorageResult()));
         var plain = new SystemStorageResult { TotalBytes = 44_470_272 + 909_800_000, MessageBytes = 909_800_000, MessageUncompressedBytes = 909_800_000 };
-        Assert.Equal(("910.1 MiB", ""), StorageUsage.StorageTexts(plain)); // no compression, nothing on the server
+        Assert.Equal(("954 MB", ""), StorageUsage.StorageTexts(plain)); // no compression, nothing on the server
         var both = new SystemStorageResult { TotalBytes = 734_003_200, SavedBytes = 363_100_000, RemoteAttachmentBytes = 312_000_000 };
         Assert.Equal(
-            ("700.0 MiB", "Compression saves 346.3 MiB\n297.5 MiB of attachments are on the server only"),
+            ("734 MB", "Compression saves 363 MB\n312 MB of attachments are on the server only"),
             StorageUsage.StorageTexts(both));
         var remoteOnly = new SystemStorageResult { TotalBytes = 5L << 30, RemoteAttachmentBytes = 2L << 30 };
-        Assert.Equal(("5.0 GiB", "2.0 GiB of attachments are on the server only"), StorageUsage.StorageTexts(remoteOnly));
+        Assert.Equal(("5.4 GB", "2.1 GB of attachments are on the server only"), StorageUsage.StorageTexts(remoteOnly));
         var savedOnly = new SystemStorageResult { TotalBytes = 2048, SavedBytes = 1024 };
-        Assert.Equal(("2 KiB", "Compression saves 1 KiB"), StorageUsage.StorageTexts(savedOnly));
+        Assert.Equal(("2.0 kB", "Compression saves 1.0 kB"), StorageUsage.StorageTexts(savedOnly));
         // A negative saving (a store converting back) says nothing.
         Assert.Equal("", StorageUsage.StorageTexts(new SystemStorageResult { TotalBytes = 10, SavedBytes = -5 }).Details);
         // The background conversion comes first while it runs or stopped.
         Assert.Equal(
-            ("3.0 GiB", "Converting the stored mail in the background\nCompression saves 512.0 MiB"),
+            ("3.2 GB", "Converting the stored mail in the background\nCompression saves 537 MB"),
             StorageUsage.StorageTexts(new SystemStorageResult { TotalBytes = 3L << 30, SavedBytes = 512L << 20, Conversion = StorageConversion.Running }));
         Assert.Equal(
-            ("3.0 GiB", "Converting stopped: the disk is full"),
+            ("3.2 GB", "Converting stopped: the disk is full"),
             StorageUsage.StorageTexts(new SystemStorageResult { TotalBytes = 3L << 30, Conversion = StorageConversion.NoSpace }));
         Assert.Equal("", StorageUsage.StorageTexts(new SystemStorageResult { TotalBytes = 5, Conversion = StorageConversion.Idle }).Details);
         // A state a newer daemon adds says nothing either.
@@ -68,22 +68,22 @@ public sealed class StorageUsageTests
             (
                 "uncompressed, everything local",
                 new SystemStorageResult { TotalBytes = 700L << 20, MessageBytes = 650L << 20, MessageUncompressedBytes = 650L << 20 },
-                "700.0 MiB", ""),
-            ("compressed", new SystemStorageResult { TotalBytes = 3L << 30, SavedBytes = 512L << 20 }, "3.0 GiB", "Compression saves 512.0 MiB"),
+                "734 MB", ""),
+            ("compressed", new SystemStorageResult { TotalBytes = 3L << 30, SavedBytes = 512L << 20 }, "3.2 GB", "Compression saves 537 MB"),
             (
                 "attachments on the server",
                 new SystemStorageResult { TotalBytes = 3L << 30, RemoteAttachmentBytes = 2L << 30 },
-                "3.0 GiB", "2.0 GiB of attachments are on the server only"),
+                "3.2 GB", "2.1 GB of attachments are on the server only"),
             (
                 "both",
                 new SystemStorageResult { TotalBytes = (1L << 30) + (512L << 20), SavedBytes = 300L << 10, RemoteAttachmentBytes = 40L << 20 },
-                "1.5 GiB", "Compression saves 300 KiB\n40.0 MiB of attachments are on the server only"),
+                "1.6 GB", "Compression saves 307 kB\n41.9 MB of attachments are on the server only"),
             ("no saving to speak of", new SystemStorageResult { TotalBytes = 5, SavedBytes = -3 }, "5 B", ""),
             (
                 "converting",
                 new SystemStorageResult { TotalBytes = 3L << 30, SavedBytes = 512L << 20, Conversion = StorageConversion.Running },
-                "3.0 GiB", "Converting the stored mail in the background\nCompression saves 512.0 MiB"),
-            ("disk full", new SystemStorageResult { TotalBytes = 3L << 30, Conversion = StorageConversion.NoSpace }, "3.0 GiB", "Converting stopped: the disk is full"),
+                "3.2 GB", "Converting the stored mail in the background\nCompression saves 537 MB"),
+            ("disk full", new SystemStorageResult { TotalBytes = 3L << 30, Conversion = StorageConversion.NoSpace }, "3.2 GB", "Converting stopped: the disk is full"),
             ("idle says nothing", new SystemStorageResult { TotalBytes = 5, Conversion = StorageConversion.Idle }, "5 B", ""),
         ];
         foreach (var (name, r, value, details) in cases)

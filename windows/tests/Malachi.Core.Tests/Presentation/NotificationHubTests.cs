@@ -77,6 +77,20 @@ public sealed class NotificationHubTests
         Assert.Empty(hub.Pending.TakeFaults());
     }
 
+    /// <summary>notify.contactsChanged reaches its own handlers; no params is any book (Swift's NotificationDecodeTests).</summary>
+    [Fact]
+    public void ContactsChangedReachesItsHandlers()
+    {
+        using var hub = new NotificationHub();
+        var seen = new List<string>();
+        hub.AddContactsChanged(n => seen.Add((n.AccountId?.Value ?? "-") + ":" + string.Join(",", n.BookIds.Select(b => b.Value))));
+        hub.AddBoardChanged(_ => seen.Add("board"));
+        hub.Handle(Raw("notify.contactsChanged", """{"accountId":"acc_1","bookIds":["b_1"]}"""));
+        hub.Handle(new RpcNotification("notify.contactsChanged", Encoding.UTF8.GetBytes("""{"jsonrpc":"2.0","method":"notify.contactsChanged"}""")));
+        Assert.Equal(["acc_1:b_1", "-:"], seen);
+        Assert.Empty(hub.Pending.TakeFaults());
+    }
+
     [Fact]
     public void DraftsChangedReachesItsHandlers()
     {

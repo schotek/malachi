@@ -71,6 +71,20 @@ import MalachiCore
 //   own message, for an issue's event (no bar), in the Outbox (no bar) and
 //   with nothing selected (`DevelopmentQuickReplyMessage`).
 //   `crm-dialog` and `eway-wizard`: MainWindowController+DevStartCRM.swift.
+//   `signature-popover`, `signature-popover:pgp`, `signature-popover:bad`
+//   and `prefs-security`: MainWindowController+DevStartSignature.swift.
+//   `contacts`, `contacts:edit`, `contacts:new`, `contacts:narrow`, `contacts:add` and
+//   `prefs-contacts` (with MALACHI_CONTACTS_SAMPLES=1):
+//   MainWindowController+DevStartContacts.swift.
+//   `prefs-rules` and `rules-editor` (with MALACHI_RULES_SAMPLES=1):
+//   MainWindowController+DevStartRules.swift.
+//   `toolbar=<tokens>`, `toolbar-display=<mode>`, `toolbar-palette` and
+//   `toolbar-palette-end` (macOS 15+): MainWindowController+DevStartToolbar.swift.
+//   The assistant's scenes (`assistant-unread`, `assistant=`, `assistant-say=`,
+//   `board-select=`, `triage`, `suggest-reply`, `compose-new=`,
+//   `compose-rewrite=`, `reply`, `compose-write=`, `search-own=`, `prefs-ai`)
+//   and `wait=<seconds>`, which makes the next step wait that long instead
+//   of the interval: MainWindowController+DevStartAssistant.swift.
 //   Each prints
 //   `LAYOUT:` lines and a `LAYOUT: shot <step> window <n>` line naming
 //   the window worth a screenshot (`DevelopmentCalendar`); the
@@ -120,21 +134,26 @@ extension MainWindowController {
         }
         let interval = env["MALACHI_START_INTERVAL"].flatMap(Double.init) ?? 3
         let steps = spec.split(separator: ";").map(String.init)
+        // Each step runs `interval` seconds after the one before it, or as
+        // long as a `wait=<seconds>` step before it asks (a triage run, an
+        // answer that takes longer than the interval).
+        let starts = DevelopmentStart.schedule(steps, interval: interval)
         // Started from a terminal behind other windows, the app would nap
         // and its timers run late.
         let activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "MALACHI_START")
-        DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(steps.count) + 2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (starts.last ?? 0) + interval + 2) {
             ProcessInfo.processInfo.endActivity(activity)
         }
         for (i, step) in steps.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(i) + 1) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + starts[i] + 1) { [weak self] in
                 self?.developmentStep(step)
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(i) + 2.5) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + starts[i] + 2.5) { [weak self] in
                 self?.developmentDump("step \(i) \(step)")
             }
         }
     }
+
 
     /// "1600x900": the window's size.
     private func developmentResize(_ size: String) {
@@ -149,8 +168,148 @@ extension MainWindowController {
                                                    NSStringFromSize(frame.size), NSStringFromRect(window.frame)).utf8))
     }
 
+    /// `row=<text>`: selects the first row of the message list whose
+    /// subject contains the text (case-insensitively), as a click would.
+    private func developmentSelectRow(_ text: String) {
+        guard let list = developmentList else {
+            developmentPrint("MALACHI_START row: no list")
+            return
+        }
+        let needle = text.lowercased()
+        guard let row = list.rows.first(where: { $0.message.subject.lowercased().contains(needle) }) else {
+            developmentPrint("MALACHI_START row: no row with '\(text)' among \(list.rows.count)")
+            return
+        }
+        list.select(key: row.key)
+        developmentPrint("MALACHI_START row: selected '\(row.message.subject)'")
+    }
+
+    /// `folder=<text>`: shows the first folder of any account whose name
+    /// contains the text (case-insensitively), as a click in the sidebar
+    /// would.
+    private func developmentSelectFolder(_ text: String) {
+        guard let mailbox = developmentMailbox else {
+            developmentPrint("MALACHI_START folder: no mailbox")
+            return
+        }
+        let needle = text.lowercased()
+        let all = mailbox.model.folders.values.flatMap { $0 }
+        guard let folder = all.first(where: { $0.name.lowercased().contains(needle) }) else {
+            developmentPrint("MALACHI_START folder: no folder with '\(text)' among \(all.count)")
+            return
+        }
+        mailbox.selectFolder(FolderKey(account: folder.accountId, folder: folder.id), fav: false)
+        developmentPrint("MALACHI_START folder: selected '\(folder.name)'")
+    }
+
+    /// `shot=<path>`: writes the key window (the main window when none is
+    /// key) as a PNG at the screen's scale, through the window server's
+    /// image of this process's own window, which needs no screen-recording
+    /// permission. The frame's shadow is left out.
+    private func developmentShot(_ path: String) {
+        // The window of the scene, brought to the front first: Settings
+        // while it is open, else the newest compose window, else the
+        // Contacts window, else the main window. Which window is in front is not reliable: a run from a
+        // script loses the front to whatever the person does meanwhile,
+        // and an inactive application's windows reorder as it activates;
+        // an inactive window is drawn grey.
+        NSApp.activate(ignoringOtherApps: true)
+        let windows = NSApp.windows.filter { $0.isVisible && !$0.isMiniaturized && $0.contentView != nil }
+        developmentPrint("MALACHI_START shot: windows " + windows.map { "'\($0.title)'" }.joined(separator: ", "))
+        let settings = windows.first { $0.windowController is PreferencesWindowController }
+        let compose = windows.filter { $0.windowController is ComposeWindowController }.max { $0.windowNumber < $1.windowNumber }
+        let contacts = windows.first { $0.windowController is ContactsWindowController }
+        guard var target = settings ?? compose ?? contacts ?? window else {
+            developmentPrint("MALACHI_START shot: no window")
+            return
+        }
+        if let parent = target.sheetParent {
+            target = parent
+        }
+        // A popover's window is a child of the window it points at: the
+        // parent is the picture, the popover drawn over it.
+        while let parent = target.parent {
+            target = parent
+        }
+        // A transient popover (a child window) goes when its window is
+        // made key again: such a window is only ordered front.
+        if target.childWindows?.isEmpty == false {
+            target.orderFrontRegardless()
+        } else {
+            target.makeKeyAndOrderFront(nil)
+        }
+        developmentPrint(String(format: "MALACHI_START shot: target '%@' frame %@ screen %@ scale %.1f visible %d occluded %d key %d",
+                                target.title, NSStringFromRect(target.frame), target.screen.map { NSStringFromRect($0.frame) } ?? "none",
+                                target.backingScaleFactor, target.isVisible ? 1 : 0, target.occlusionState.contains(.visible) ? 0 : 1,
+                                target.isKeyWindow ? 1 : 0))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.developmentCapture(target, to: path)
+        }
+    }
+
+    private func developmentCapture(_ target: NSWindow, to path: String) {
+        // One window at a time (the only capture that needs no
+        // screen-recording permission); a sheet on the window and its
+        // child windows (a popover) are captured on their own and drawn
+        // over the window at their places on the screen.
+        let imager: DevelopmentWindowImager = DevelopmentWindowServerImager()
+        func capture(_ w: NSWindow) -> CGImage? {
+            let image = imager.image(ofWindow: CGWindowID(w.windowNumber))
+            return (image?.width ?? 0) > 1 ? image : nil
+        }
+        guard var image = capture(target) else {
+            developmentPrint("MALACHI_START shot: the window server gave no image")
+            return
+        }
+        var overlays: [(CGImage, NSRect)] = []
+        var union = target.frame
+        let children = NSApp.windows.filter { $0.parent === target && $0 !== target.attachedSheet }
+        for w in [target.attachedSheet].compactMap({ $0 }) + children where w.isVisible && w.contentView != nil {
+            if let top = capture(w) {
+                overlays.append((top, w.frame))
+                union = union.union(w.frame)
+            }
+        }
+        if !overlays.isEmpty {
+            let scale = CGFloat(image.width) / target.frame.width
+            if let ctx = CGContext(
+                data: nil, width: Int(union.width * scale), height: Int(union.height * scale), bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+            {
+                func place(_ img: CGImage, _ frame: NSRect) {
+                    ctx.draw(img, in: CGRect(x: (frame.minX - union.minX) * scale, y: (frame.minY - union.minY) * scale,
+                                             width: CGFloat(img.width), height: CGFloat(img.height)))
+                }
+                place(image, target.frame)
+                for (top, frame) in overlays {
+                    place(top, frame)
+                }
+                if let composed = ctx.makeImage() {
+                    image = composed
+                }
+            }
+        }
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            developmentPrint("MALACHI_START shot: no PNG")
+            return
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            developmentPrint("MALACHI_START shot: \(image.width)x\(image.height) of '\(target.title)' -> \(path)")
+        } catch {
+            developmentPrint("MALACHI_START shot: \(error)")
+        }
+    }
+
     private func developmentStep(_ step: String) {
         if step == "quit" {
+            // A sheet left open (crm-save) would hold the termination.
+            for w in NSApp.windows {
+                if let sheet = w.attachedSheet {
+                    w.endSheet(sheet, returnCode: .cancel)
+                }
+            }
             DevelopmentBoardChat.restore()
             // The application quits as from the menu (the daemon it
             // started stops with it). Not from inside this main-queue
@@ -193,8 +352,51 @@ extension MainWindowController {
         if DevelopmentCRM.step(step, in: self) {
             return
         }
+        if DevelopmentContacts.step(step, in: self) {
+            return
+        }
+        if DevelopmentRules.step(step, in: self) {
+            return
+        }
+        if DevelopmentSignature.step(step, in: self) {
+            return
+        }
+        if DevelopmentAssistant.step(step, in: self) {
+            return
+        }
+        if DevelopmentToolbar.step(step, in: self) {
+            return
+        }
         if step.hasPrefix("size=") {
             developmentResize(String(step.dropFirst(5)))
+            return
+        }
+        if step.hasPrefix("row=") {
+            developmentSelectRow(String(step.dropFirst(4)))
+            return
+        }
+        if step.hasPrefix("folder=") {
+            developmentSelectFolder(String(step.dropFirst(7)))
+            return
+        }
+        if step.hasPrefix("chat=") {
+            state.settings.conversationChatLayout = step.hasSuffix("=on")
+            return
+        }
+        if step.hasPrefix("group=") {
+            state.settings.groupByConversation = step.hasSuffix("=on")
+            return
+        }
+        if step == "compose-open" {
+            state.hooks.composeNew?()
+            return
+        }
+        if step == "crm-save" {
+            crmSave(nil)
+            return
+        }
+        if step.hasPrefix("shot=") {
+            developmentShot(String(step.dropFirst(5)))
             return
         }
         let parts = step.split(separator: ":").map(String.init)
@@ -1759,5 +1961,26 @@ private enum DevelopmentReaderQuoted {
         developmentPrint(String(
             format: "LAYOUT: reader-quoted %@: reader %.0f high, button top %.0f, room below %.0f, hidden %d",
             what, reader.bounds.height, top, gapBelow, b.isHidden ? 1 : 0))
+    }
+}
+
+/// The window server's image of one of this process's windows, for the
+/// `shot=` step.
+private protocol DevelopmentWindowImager {
+    func image(ofWindow id: CGWindowID) -> CGImage?
+}
+
+/// `CGWindowListCreateImage`, which macOS 14 deprecated in favour of
+/// ScreenCaptureKit. ScreenCaptureKit needs the screen-recording
+/// permission even for the app's own windows, which a scripted run from a
+/// terminal cannot be granted, while the old call still images a window of
+/// the calling process without it. The deprecated call is kept behind the
+/// protocol: Swift reports no deprecation inside a declaration that is
+/// itself deprecated, and the step reaches it through the protocol, so the
+/// release build (-warnings-as-errors) stays clean.
+private struct DevelopmentWindowServerImager: DevelopmentWindowImager {
+    @available(*, deprecated, message: "CGWindowListCreateImage is the only capture without the screen-recording permission")
+    func image(ofWindow id: CGWindowID) -> CGImage? {
+        CGWindowListCreateImage(.null, .optionIncludingWindow, id, [.boundsIgnoreFraming, .bestResolution])
     }
 }

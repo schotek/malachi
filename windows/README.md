@@ -50,9 +50,10 @@ yet](#not-on-windows-not-yet).
 Licence: GPL-3.0-or-later (everything outside `backend/`; `malachid.exe` and
 `malachi-mcp.exe` in the app folder are AGPL-3.0-only, LICENSING.md). The
 built app folder also carries Microsoft's Windows App SDK and WebView2
-components, which are under Microsoft's terms: distributing it waits for
-the owner's decision on a GPLv3 §7 permission for them (LICENSING.md,
-docs/windows-port.md §17). Every source file starts with the SPDX header:
+components, which are under Microsoft's terms; the client is distributed
+together with them under the GPLv3 §7 additional permission in
+LICENSING.md, and their licence and notice files are in the folder's
+`Microsoft-notices\` (docs/windows-port.md §17). Every source file starts with the SPDX header:
 C# files are checked by the compiler (IDE0073 against
 `file_header_template` in `windows/.editorconfig`), every other type by
 `Malachi.Conventions.Tests`, in its own comment syntax (XML files carry it
@@ -75,6 +76,11 @@ as a comment after the XML declaration; JSON and Markdown carry none).
   root Makefile's recipes.
 - GNU make, optional: `winget install ezwinports.make` (4.4). Everything
   works without it through `windows\build.ps1`.
+- Inno Setup 6.4 or newer, only for the `installer` and `release` targets:
+  `winget install JRSoftware.InnoSetup` (`ISCC` names another `ISCC.exe`);
+  for `release` also the GitHub CLI (`winget install GitHub.cli`, then
+  `gh auth login`; `GH` names another `gh.exe`). A terminal opened before
+  winget installed them does not find them; open a new one.
 - Windows PowerShell 5.1, which every Windows has (`build.ps1` runs on
   PowerShell 7 as well).
 
@@ -126,7 +132,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 <target> [
 | `test` | every test project, `.trx` reports in `build\windows\TestResults\` (Debug); the UI smoke tests drive the app folder `app` assembled and are skipped without it (docs/windows-port.md §12) |
 | `run` | `app` for this machine, then `MalachiMail.exe` in this terminal until it quits (Ctrl+C quits it and the daemon it started) |
 | `lint` | `dotnet format --verify-no-changes` and the conventions tests |
-| `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` (unsigned; not a release yet, docs/releasing.md) |
+| `installer` | `app`, then `build\windows\Malachi-Mail-<version>-windows-<arch>-setup.exe` (`installer\build-installer.ps1`, Inno Setup 6; unsigned; see [Installer](#installer)) |
 | `clean` | removes `build\windows\` |
 
 Options: `-Configuration Debug|Release`, `-Arch x64|arm64` (default: this
@@ -160,9 +166,9 @@ locked mode.
 
 CI (`.github/workflows/windows.yml`, docs/windows-port.md §13) runs the
 daemon's Go tests on Windows and `build.ps1 build`, `test`, `lint` and
-`package` for x64, and `build` and `package` for ARM64, on the
-`windows-2025` image; the zips and the `.trx` reports are the run's
-artifacts. With `CI=true`, as there, every restore is locked and a stale
+`installer` for x64, and `build` and `installer` for ARM64, on the
+`windows-2025` image; the `.trx` reports are the run's artifacts, the
+installers only on a tag, which attaches them to its release. With `CI=true`, as there, every restore is locked and a stale
 lock file fails the build.
 
 The app folder is self-contained (the .NET runtime and the Windows App SDK
@@ -175,8 +181,67 @@ unpacked from the Runtime package's framework MSIX by the build
 (docs/windows-port.md §10: without it notifications cannot register).
 
 ARM64: `build.ps1 app -Arch arm64` cross-builds on an x64 machine; the
-keyring helper needs the MSVC ARM64 build tools for it. The ARM64 app has
-not been run on real hardware yet.
+keyring helper needs the MSVC ARM64 build tools for it. On an ARM64
+machine both architectures build natively or cross (MSVC tools for x64
+and ARM64); the 0.1.2 app folders were built and run that way.
+
+### Installer
+
+`build.ps1 installer -Arch x64|arm64` builds the app folder and then
+`installer\build-installer.ps1`, which copies it into
+`build\windows\stage-<arch>\Malachi Mail\`, checks the licences there
+(the GPLv3 §7 permission in `LICENSING.md`, `Microsoft-notices\`) and runs
+Inno Setup on `installer\MalachiMail.iss`:
+
+```
+build\windows\Malachi-Mail-<version>-windows-<arch>-setup.exe
+```
+
+There is no portable zip (owner's decision of 2026-11-01).
+
+The installer is per user and needs no administrator rights: it installs
+into `%LOCALAPPDATA%\Programs\Malachi Mail`, adds *Malachi Mail* to the
+Start menu and the uninstall entry to Settings → Apps, and offers to start
+the app at the end. It does not register `mailto:` or launch at login;
+those stay the app's own (Preferences). Installing over an older version
+replaces the folder (the app must not run; Restart Manager closes a
+`malachi-mcp.exe` that Claude runs). The x64 and the ARM64 installer are
+one installation (`AppId` `io.github.schotek.Malachi`), so one replaces
+the other. The uninstaller removes the folder, the shortcut and what the
+app registered for its folder (`mailto:`, Run, the notification
+registration and the shell's caches of the executable,
+docs/windows-port.md §17) and keeps the mail data
+(`%LOCALAPPDATA%\Malachi Mail`), the preferences
+(`HKCU\Software\io.github.schotek.Malachi`) and the passwords in
+Credential Manager. Silent: `Setup.exe /VERYSILENT` and `unins000.exe
+/VERYSILENT`.
+
+The installers of a release, both architectures, are built by the tag's
+CI (`.github/workflows/windows.yml`) and attached to its release there,
+never by hand ([releasing.md §7](../docs/releasing.md#7-windows)); the
+ARM64 one is cross-built on the x64 runner. The release notes are written
+by hand (`NEWS`); say there that the installers are unsigned. Building one
+locally (`build.ps1 installer`) needs Inno Setup 6 (`winget install
+JRSoftware.InnoSetup`, or `ISCC` pointing at `ISCC.exe`).
+
+A release of a tag older than the installer (0.1.2) runs the script
+directly with that tag's app folder (built from a worktree at the tag, so the version is exact) and
+the current `LICENSING.md`:
+
+```powershell
+git worktree add --detach C:\src\m012 v0.1.2
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\src\m012\windows\build.ps1 app -Arch arm64
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\installer\build-installer.ps1 `
+    -AppDir "C:\src\m012\build\windows\arm64\Malachi Mail" -Version 0.1.2 -Arch arm64 `
+    -AssetsFile C:\src\m012\build\windows\artifacts\obj\Malachi.App\project.assets.json,C:\src\m012\build\windows\artifacts\obj\Malachi.Credentials\project.assets.json `
+    -Licensing LICENSING.md -OutDir build\windows\release
+```
+
+Nothing is signed: there is no code-signing certificate yet, so
+SmartScreen warns about the downloaded installer (*More info → Run
+anyway*). To try an installer from an agent's shell inside Claude Desktop,
+start it outside Claude's process tree (Troubleshooting): run from there,
+Inno Setup's files land in Claude's package store.
 
 ## Layout
 
@@ -370,7 +435,11 @@ must not read or write the user's (the UI tests set
 `io.github.schotek.Malachi.UiTests.<guid>`): only that name itself or it
 followed by a dot and ASCII letters, digits, `.`, `_` or `-` is taken, and
 any other value is ignored with a line in the log, so that a mistyped one
-never writes into another program's key. `MALACHI_DAEMON`,
+never writes into another program's key. `MALACHI_LANGUAGES` stands in
+for the Windows display languages in such an instance (BCP 47 tags most
+preferred first, `en-GB` or `cs-CZ;en`; the first is also the regional
+format of the dates), since changing the real ones means a sign-out;
+unset, the app follows the display languages as always. `MALACHI_DAEMON`,
 `MALACHI_SOCKET`, `MALACHI_KEYRING`, `MALACHI_KEYRING_HELPER` and
 `MALACHI_LOCALE_DIR` work as on macOS. A
 socket path may have at most 107 bytes (AF_UNIX on Windows); the app
@@ -391,8 +460,8 @@ region*), matched by the base language; `MALACHI_LOCALE_DIR` points at
 another directory of `.po` files (the repository's `po\` works).
 
 Strings that exist only on Windows stay English, in a Czech UI too, until
-the GTK UI has msgids for them: *Quit* in the primary menu and in the
-notification-area icon's menu, with *Open Malachi Mail* there; in
+the GTK UI has msgids for them: *Open Malachi Mail* in the
+notification-area icon's menu; in
 *Preferences → General* the *Keyboard* group (its title, *Ctrl+R*, *F5
 always checks for new mail*), the *Default Mail App* group (its title,
 *Open e-mail links with Malachi Mail*, *Default apps* and what Windows
@@ -420,15 +489,14 @@ confirmation dialogs.
 | On Windows | Instead of (GTK) | Why |
 |---|---|---|
 | The search box sits in the middle of the title bar (Ctrl+F, Ctrl+E); the Folder / Account / All Accounts scope bar shows over the list while a search runs; Enter opens the first result, Escape closes the search | A search bar over the message list (Ctrl+F, the search button) with the entry and the scope toggles | Where Windows 11 apps keep search (Outlook, Explorer, Settings) |
-| The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar in Mail, and across the bottom of the Board in every style, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
 | At 900 effective pixels or less the sidebar folds into an overlay that the title bar's pane button opens; at 600 or less the list and the message are one stack, the title bar's back button returns to the list, and a click on the selected row shows it again | Collapsed split views that navigate between whole-window pages | Windows 11's own pane and back buttons in the title bar; the list stays in sight while the sidebar is open (docs/windows-port.md §11.1) |
-| The primary menu `…` has, under the window's modes (Mail, Board, Calendar; below), New Message, Add Account…, Add Jira Account…, Add CalDAV Calendar…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail (a Jira account or a CalDAV calendar is added from *Preferences → Integrations* or from the empty window) | Windows has no menu bar or application menu to add an account or quit from (macOS has Add CalDAV Calendar… in its File menu); GTK's Keyboard Shortcuts opens nothing |
 | The sidebar's New Message is an accent (filled) button | A plain header-bar button | Windows 11's style for a pane's primary action (Fluent's accent button); kept after the parity review |
 | Windows keys: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+E besides Ctrl+F for search; the setting `ctrl-r` (*Preferences → General → Keyboard*: `reply` by default, or `refresh`) gives Ctrl+R to Check for New Mail instead, as macOS's `command-r`. GTK's other keys stay: Ctrl+Q Quit, F10 the primary menu (while the sidebar shows it), Delete, A, J, U, S (also with the message view focused, never while typing), Escape; Ctrl+W also closes a secondary window | Ctrl+R Check for New Mail, no Reply/Forward keys, Escape | Ctrl+R is Reply in every Windows mail client and F5 is the Windows refresh key |
+| Print (Ctrl+P; docs/plans/toolbar-customization.md §8) opens Windows' print dialog with its preview: a hidden locked view lays the print out as a PDF in memory (WebView2 `PrintToPdfStreamAsync`, A4 or Letter by the region, the page header with the title and date and the footer with the page numbers), `Windows.Data.Pdf` draws its pages and a XAML `PrintDocument` gives them to the window's `PrintManager`; the pages print as pictures at 200 dpi. Besides the key, *Print…* is in More Actions (the reading pane and the message window) and at the end of a message's context menu in the list (the owner's addition of 2026-11-04 until the toolbar's Print item of the toolbar customization's port), never in the primary menu `…` | (GTK port pending; macOS: File ▸ Print… ⌘P and the toolbar's Print, the system's print panel as a sheet with the page header and footer) | Windows has no menu bar; WebView2's own dialogs are the WebView2 process's (its name, no preview) or draw over the view it prints, which nobody sees |
 | Mnemonics are WinUI access keys: Alt shows their key tips on the menus and buttons that carry a GTK mnemonic; a dialog's buttons have none | Underlined mnemonics | WinUI's form of mnemonics; a `ContentDialog`'s buttons take no access keys |
 | Alerts are `ContentDialog`s: the primary button on the left, Cancel on the right; the defaults and close responses stay GTK's (*Save Draft* is the default of the close question) | GTK's button order | WinUI's dialog |
 | Banners (the backend, sign-in and certificate banners over the list, the outbox and draft banners over a message) are `InfoBar`s: a warning's or an information's icon and tint, the text in the regular weight, the button at the end | `Adw.Banner`: an accent-tinted strip with a bold title | WinUI's notice bar |
-| Left and Right fold an account's heading in the sidebar, as they fold a folder | Only a folder's; a heading folds with its arrow | A row's buttons are no tab stops in a Windows list, so the heading's arrow needs the keys |
+| Left and Right fold an account's heading and the Favourites heading in the sidebar, as they fold a folder | Only a folder's; a heading folds with its arrow | A row's buttons are no tab stops in a Windows list, so the heading's arrow needs the keys |
 | The message list pages itself at its end; *Load More* appears only to retry a page that failed | The *Load More* button under the list | As macOS |
 | The window's caption names the selected folder: *Inbox – Malachi Mail* | *Malachi Mail* (the folder is the list's header) | The taskbar and Alt+Tab tell windows apart by their captions; macOS shows the folder as the window's title too |
 | The window's size and maximised state (`window-width`, `window-height`, `window-maximized`, the size the window restores to) are written when it closes or hides and at Quit; the pane widths are kept as well (`folder-pane-width`, `message-list-width`, written only from a wide layout) | The size and maximised state are bound to the window and written at every change; the pane-width keys are declared in the gschema, never written | A registry write for every step of a resize would be waste; the pane keys exist, and the window opens as it was left |
@@ -440,9 +508,8 @@ confirmation dialogs.
 | Names, subjects, attachment names and the server's folder names are shown without bidi formatting characters (U+202A–U+202E, U+2066–U+2069) and with a space for each control character, in the list, the reader, the sidebar, window captions, search results, the status line, questions and notifications; a subject or name of nothing but characters that draw nothing (a bidi mark, U+200B, U+FEFF) shows its fallback, *(No subject)* or the address; in *Name &lt;address&gt;* (the chips' tooltips, the From list), in a conversation's participants and in *Folder – Malachi Mail* each name is isolated (U+2068 … U+2069). What is sent (a reply's To and Subject fields show it), and what Copy Address copies, stays as received | Shown as received | Mail text is hostile: an override in a name turned the address after it around, one in a subject drew `gnp.exe` as `exe.png`, and a control character stopped the notification; right-to-left names still read as written (docs/security.md §4; proposed for GTK and macOS) |
 | A link the daemon did not list in `links[]` is confirmed before it opens, as on macOS | Opened | WebView2 hands out normalised URLs, so an exact match with the daemon's raw hrefs can fail (docs/windows-port.md §6.4) |
 | A link whose text names a site is confirmed when Go's URL parser cannot tell the href's host, finds none, or finds userinfo (`https:// bank.example@evil.example/`), or when the address the browser gets is on another site; that address never carries userinfo, and the question names it (`https://evil.example/`). Every listed link with the clicked href, or with its canonical form, is judged. The daemon's text of the link is read cleaned (invisible characters out, NFKC, hosts in punycode without a trailing dot), every address in it counts (two slashes after a letter too: `https//bank.example`; a start the daemon's spaces split: `w ww.`), and one whose host cannot be read (`https://moje banka.example/login`, userinfo in the text) is confirmed, as is one word with a dot another script draws (`bankꓸexample`); a text that begins with an address and goes on in words names that address (`www.shop.example for details`); a single-label host is the site of no host under it (`https://cz/`). What CSS hides or markup draws right to left in the link is not in that text and is not seen. A link the launcher refuses is not offered and shows *The link could not be opened: invalid URL* | Opened when Go cannot parse the href or it has no host, when the text reads as an address only to a person (a soft hyphen, a space or a homoglyph in its host, a trailing dot, a backslash before the path, a colon another script draws or none), or when the first listed link with the href has a plain text; the question names the href as written (`https://bank.example@evil.example/`) | The browser reads what Go refuses and goes to the host after the `@`, and a reader reads what `hostOfText` does not: the security audit's and two adversarial reviews' bypasses of the masked-link question (docs/windows-port.md §6.4) |
-| Attachment chips show Windows' icon for the file's extension | The symbolic icon of the content type | What Explorer shows for the file; macOS shows the system's icon as well |
-| An attachment chip is one split button: Tab reaches it once, Enter previews, F4 or Alt+Down opens its menu | The chip and its arrow are two buttons, each reached by Tab | WinUI's `SplitButton` |
-| A click on an attachment previews images, PDF and text in the app's own locked-down WebView2 window (no network, no script, nothing written to disk), one window titled with the file's name with *Open* and *Save As…* in its title bar, closed by Escape and Ctrl+W; it follows no link in a PDF or a text. Other types show a panel with Open and Save As…; programs are never opened | GNOME Sushi (its window with *Open With*), the default application without it | Windows has no Quick Look or Sushi, and shell preview handlers run third-party code over hostile files (docs/windows-port.md §6.6) |
+| Attachment tiles show Windows' icon for the file's extension, a generic one for an unknown extension | The colour icon of the content type, the name's guess when the type says nothing | What Explorer shows for the file; macOS shows the system's icon as well |
+| A click on an attachment previews images, PDF and text in the app's own locked-down WebView2 window (no network, no script, nothing written to disk), one window titled with the file's name with *Open* and *Save As…* in its title bar, closed by Escape and Ctrl+W; it follows no link in a PDF or a text. Other types show a panel with Open and Save As…; programs are never opened. A tile of a compose window previews the same way from `attachment.get`, without *Open* and *Save As…* (the file belongs to no message) | GNOME Sushi (its window with *Open With*), the default application without it; a compose tile's file is written to the directory for opening first | Windows has no Quick Look or Sushi, and shell preview handlers run third-party code over hostile files (docs/windows-port.md §6.6) |
 | Files opened or saved from a message get the Mark of the Web through `IAttachmentExecute` (which also runs the antivirus check and the attachment policy): the Restricted zone, or the Internet zone for a program saved with Save As (Restricted would make Attachment Services delete it). A file for opening is opened only after a check that passed and a zone that reads back, unless an administrator turned zone information off (`SaveZoneInformation=1`) or Attachment Services is missing; a saved file stays the user's | No mark | The counterpart of the macOS quarantine attribute: SmartScreen and Office's Protected View treat the files as downloads |
 | *Save All* leaves out every attachment that is never opened (programs, scripts, shortcuts, libraries, search connectors and the rest of that list, judged on the name and type the message lists, on those the daemon serves and on the name the file would get) and says so in a second toast after its summary: *2 attachments were not saved; save programs and scripts with Save As…*; when nothing else is left, it asks for no folder. *Save As…* still saves one such file, marked | Every attachment is saved | Explorer parses `.url`, `.lnk`, `.scf`, `.library-ms` and `.searchConnector-ms` files for their icon and location as soon as the folder is shown or the file selected, whatever their mark, and has leaked the user's NTLM hash to another host that way (CVE-2025-24054, exploited in 2025); one click on *Save All* for a mail with an invoice would plant such a file in Downloads (docs/windows-port.md §10) |
 | When a message's, an attachment's or the editor's web process dies, hangs (reported and not answering 5 s later) or takes the browser with it, the view shows the same document again once; when that document fails again, the reader shows the plain text, the previewer its panel, and the editor stays blank with its text kept for a save | GTK logs the terminated process and leaves the view blank; the compose window reloads the text on every report | WebView2 also reports hangs and loses the whole control with its browser, so the view must recover by itself; once per document, because a body that reliably kills the renderer (a Chromium or PDFium bug) would otherwise reload in a loop, writing a crash dump of the mail each time and giving an exploit unlimited retries (docs/windows-port.md §6.1) |
@@ -483,12 +550,11 @@ confirmation dialogs.
 | The strip's chat toggle, checked, is tinted with the accent colour (the `ToggleButton`'s own checked brushes, in the light, dark and high-contrast themes), its label and glyph the accent text | A `GtkToggleButton` in its native checked state; macOS tints the button too | WinUI's checked `ToggleButton` is a subtle grey fill, which hardly shows which layout is on (D9 of docs/plans/chat-view.md asks for the accent tint in macOS and Windows) |
 | The timeline, while the chat shows, trims its pool of card views to the two idle ones as well as letting go of its web views | The hidden timeline lets go of its web views and keeps its pool until the next trim | A card view is a WebView2, which is costly to keep; nothing needs the pool while the chat shows |
 | The reading pane's quick-reply bar (under a single message and the chat): the mode button is a `DropDownButton` whose flyout has the reply modes as radio items and *Forward…*; while a Send is on its way the field keeps the keyboard and refuses edits through a cancelled `BeforeTextChanging` (Ctrl+Z and Ctrl+Y swallowed); Escape gives the keyboard to the message list only while the list is on screen and is left alone otherwise | A `GtkMenuButton` over a menu model of `qr.mode` and `qr.forward`; the buffer refuses `insert-text` and `delete-range`, its undo off; macOS a pull-down `NSPopUpButton` and a disabled field | WinUI's own button with a menu; a disabled `TextBox` would let the keyboard go and the window's single-key commands would then act on the list (docs/windows-port.md §11.7, "The quick-reply bar") |
-| The mode switch is the three-segment control at the start of the title bar (Mail, Board, Calendar; icons, the modes' names as tooltips), and the primary menu `…`, the Board's and the Calendar's own `…` menus have Mail, Board and Calendar too; Ctrl+1, Ctrl+2 and Ctrl+3 switch everywhere in the window, through the shortcut router (`ShortcutCommand.ShowMail`/`ShowBoard`/`ShowCalendar`), so also while a WebView2, a message or a card, has the keyboard | The same switch with Mail and Board in the header bar and the sidebar's menu, `<Control>1` and `<Control>2` everywhere in the window (no calendar yet) | Windows has no menu bar to put View ▸ Mail / Board / Calendar in (as above) |
-| With *Show the Board* off the mode switch stays for Mail and Calendar, its Board segment disabled; the menus' Board is disabled too | The switch hidden with the Board | The Calendar still needs it (as macOS, docs/calendar.md §5.3); before the Calendar the Windows switch was hidden as well |
+| The mode switch is the three-segment control at the start of the title bar (Mail, Board, Calendar; icons, the modes' names as tooltips); Ctrl+1, Ctrl+2 and Ctrl+3 switch everywhere in the window, through the shortcut router (`ShortcutCommand.ShowMail`/`ShowBoard`/`ShowCalendar`), so also while a WebView2, a message or a card, has the keyboard | The same switch in the header bar, `<Control>1`, `<Control>2` and `<Control>3` everywhere in the window | Windows has one title bar above the panes, where the search box is too, instead of a header bar per pane |
+| With *Show the Board* off the mode switch stays for Mail and Calendar, its Board segment disabled | The switch hidden with the Board | The Calendar still needs it (as macOS, docs/calendar.md §5.3); before the Calendar the Windows switch was hidden as well |
 | The Board's single keys E (Archive), D (Done or Move Back to Board) and R (Remind…'s presets) act on the selected case while the keyboard is on the Board's page outside a text field, a combo box and a web view | The same keys outside text fields | A WebView2 (a card, the reply editor) with the keyboard sends no XAML key event, so a key typed there never reaches the page |
 | The Board's detail buttons (Done or Move Back to Board, Remind…, Archive, Reply or Comment) have access keys, each the first letter of its translated label not taken by a button before it (Close's comes from its msgid) | No mnemonics on these buttons | Their msgids carry no `_`; Windows users expect Alt to reach a toolbar's buttons |
-| What Archive did shows in an InfoBar where the toasts show, with *Undo* (the messages back to their folders, the case back on the Board), for 8 seconds or until closed | A toast with *Undo* | The window's toasts take no button on Windows; an InfoBar is Windows' notice with an action |
-| The Board has a bar of its own in every style: the style switch (List, Columns, Today), the account filter, *Triage* and a `…` menu (Mail, Board, Calendar, Add Account…, Preferences, Quit); the title bar's search box hides while it shows | GTK's header bar with the same items and its primary menu | The Board replaces the mail panes, so the search box (the mail's) has nothing to search |
+| The Board has a bar of its own in every style: the style switch (List, Columns, Today), the account filter, *Triage* and a `…` menu with the sidebar's primary menu (New Message, Contacts, Preferences, About Malachi Mail, Quit; as GTK, whose Board and Calendar reuse the primary menu); the title bar's search box hides while it shows | GTK's header bar with the same items and its primary menu | The Board replaces the mail panes, so the search box (the mail's) has nothing to search |
 | The List style's side pane holds the state filters and the accounts, as in GTK, and folds away below 900 effective pixels; where the list and the detail do not both fit (640) the detail is the sliding panel | `Adw.Breakpoint`s of the page | A layout pass of the page plays the breakpoints; the thresholds are GTK's |
 | The Board's detail has a `…` menu (Show in Mail, and Unstar for a case that is here because of a star) beside the state pill and the Remind Me button, and every row and card has the full case menu on a right click and Shift+F10; Escape goes in two steps (`Board.EscapeFor`): an open popup (the recipients' suggestions, a menu) closes first, the keyboard in the inline reply editor or its recipient fields goes to the state pill, and anywhere else the sliding panel closes and clears the selection | `boardDetailMenu` and the card menu; the same Escape | WinUI's `MenuFlyout`; the page handles Escape after its controls (KeyDown), and the reply editor's WebView2 hands its Escape to the page through the editor's bridge |
 | Ctrl+Enter (Send) and Ctrl+S (Save Draft) of the Board's inline reply editor run only while the editor has the keyboard (the main window's router sends them to the live pane); with the keyboard elsewhere in the pane the pane's own accelerators do, and in the rest of the window they are none | The compose window's keys | The main window must not send a message from anywhere in it (as macOS keeps ⌘↩ off the inline button) |
@@ -513,7 +579,7 @@ confirmation dialogs.
 | In the New Event and Edit Event window Ctrl+Enter is the primary button (Save, or Save and Send Invitations; in Notes too, where it types no line break), Ctrl+S Save while there are no attendees, Escape and Ctrl+W the close request | (Swift-first, no GTK yet; macOS: ⌘↩ and ⌘S as the menu bar's Send and Save Draft) | The compose window's keys on Windows: the window is tracked as one |
 | *Add Video Call ▾ → Paste Link…* asks in a dialog, prefilled from an https link on the clipboard; a link the editor refuses (not https, no host) asks again with what was typed | (Swift-first, no GTK yet; macOS: a sheet, and a beep for a refused link) | WinUI's dialog |
 | Quit asks every event editor with changes its Save / Discard / Cancel question (Cancel abandons the Quit); when the Windows session ends, their unsaved changes are lost without a question | (Swift-first, no GTK yet; macOS: each window's close question) | Saving an event sends its invitations, so it is never done unasked, as the drafts of compose windows are (the Quit row above); a session end leaves no time to ask |
-| *Add CalDAV Calendar…* opens a window of its own (560×560), modal over the window it was asked from (the primary menu `…`, the No Accounts page, the Calendar sidebar's *Add Calendar…*, *Preferences → Calendar*, *Add…* of CalDAV Calendar in *Preferences → Integrations*): an error is an `InfoBar`, Add and Cancel are at the bottom, Enter runs *Discover Calendars* until the calendars are listed, then Add; *Trust Certificate…* asks the account wizard's *Trust This Certificate?*. The *+* of *Preferences → Accounts* is a plain button that opens the mail account wizard (Jira and CalDAV are in *Preferences → Integrations*, as GTK and macOS) | (Swift-first, no GTK yet; macOS: a sheet on that window) | A window shows one `ContentDialog` at a time, as for the account wizard (above) |
+| *Add CalDAV Calendar…* opens a window of its own (560×560), modal over the window it was asked from (the No Accounts page, the Calendar sidebar's *Add Calendar…*, *Preferences → Calendar*, *Add…* of CalDAV Calendar in *Preferences → Integrations*): an error is an `InfoBar`, Add and Cancel are at the bottom, Enter runs *Discover Calendars* until the calendars are listed, then Add; *Trust Certificate…* asks the account wizard's *Trust This Certificate?*. The *+* of *Preferences → Accounts* is a plain button that opens the mail account wizard (Jira and CalDAV are in *Preferences → Integrations*, as GTK and macOS) | (Swift-first, no GTK yet; macOS: a sheet on that window) | A window shows one `ContentDialog` at a time, as for the account wizard (above) |
 | A CalDAV account's name is edited in its section of *Preferences → Calendar* (Account Name, kept on Enter and when the field loses the keyboard); *Replace Password…* is a dialog with a password box; Remove Account ends the section | (Swift-first, no GTK yet; macOS: the name is the section's heading only, Replace Password… an alert with a secure field) | A CalDAV account's row in *Preferences → Integrations* has no name field: its Edit (*Calendar Settings*) shows this page, as GTK and macOS, so the name is changed here |
 | The invitation card is the first part of a message's header area in the reading pane and the message window, so it scrolls with the headers when they scroll on their own (above); in a conversation card it is the first bar inside what folds; an attached message shows none | (Swift-first, no GTK yet; macOS: above the header, and in a conversation card under the sender row) | The headers' cap of two thirds of the pane keeps the body in reach whatever the card adds |
 | An invitation's pill in the message list (Invitation, Update, Cancelled with the subject struck through, Reply) has a column of its own right after the subject | (Swift-first, no GTK yet; macOS: in the row's subject line) | The row is a grid of columns, as for the Draft badge |
@@ -529,6 +595,29 @@ confirmation dialogs.
 | The eWay pill is a faint attention-coloured `IssuePill` after the subject's other pills, its tooltip *Saved in eWay-CRM* | `crm_pill` beside `bulk_pill` (macOS: a teal pill) | Windows' palette has no teal fill; the attention fill reads as informational |
 | *Add eWay-CRM Account* / *Edit Account* is a window of its own (520×560), modal over Preferences, with the Jira assistant's look: the title bar carries Back and the page's title, a page's banner is an `InfoBar`, the button bar at the bottom shows the call under way; it opens only from *Preferences → Integrations* (*Add…* of eWay-CRM, the row's Edit) | `accountwizard/eway.go`, an `Adw.Dialog` (macOS: a sheet, also from Integrations only) | As the Jira assistant (above) |
 | The CRM's pure logic is the static classes `CrmRules`, `CrmDialog` and `CrmText` in the namespace `Malachi.Core.Crm`, its App views in `Malachi.App.Crm` | (Go's package `crm`; Swift's `CRM`) | A class named `Crm` in a namespace `Crm` would be hidden by the namespace from every other `Malachi.Core` namespace (docs/windows-port.md §11.11) |
+| The Contacts window opens from *Contacts* of the `…` menus (Mail's sidebar, the Board, the Calendar), without a key; its search box sits in the title bar (Ctrl+E and Ctrl+F) | `app.contacts` in the primary menu, without a key; a `Gtk.SearchBar` over the list (Ctrl+F) | Where Windows 11 apps keep search (docs/plans/address-book.md W6) |
+| A contact's actions (Write Email, a menu for several addresses; Show Mail; Copy; Edit; Delete Contact…; Done and Cancel while the form is open) are a `CommandBar` above the detail | Buttons on the card (Write Email, Show Mail, Copy) and Edit, Done, Cancel in the header bar | WinUI's command row for a pane (W6) |
+| A row of the contacts list has a context menu: Write Email, Show Mail, Copy Address | None | A Windows list acts on a row from its context menu (W6) |
+| Microsoft's missing consent to the contacts is an `InfoBar` per account over the list, with *Allow…* | A banner over the list (macOS: a card) | WinUI's notice bar (W6) |
+| *Discard Changes?*, *Delete contact %s?* and *The contact changed meanwhile* are `ContentDialog`s in WinUI's button order (the action first, Cancel last; Cancel the default of a destructive one) | `Adw.AlertDialog` | WinUI's dialog (W6), as the alerts above |
+| The Contacts window folds as the main window: below 900 effective pixels the sidebar of books goes (the title bar's pane button shows it), below 600 the detail covers the list and the title bar's back button returns; Ctrl+W closes it, Escape does not (it would drop a form) | Nested `Adw.NavigationSplitView`s at 900/600 sp (macOS: 720/520 pt) | Windows 11's pane and back buttons, as the main window |
+| *Add to Contacts…* of an address chip is a `Flyout` under the chip; a chip's menu is built anew each time it opens | A popover (macOS: an `NSPopover`) | WinUI's popover; the menu follows `contact.lookup` |
+| The contacts' types are in the namespaces `Malachi.Core.Contacts` and `Malachi.App.Contacts`, their pure logic in the static classes `ContactBook` and `ContactsText` | (Go's packages `contacts` and `contactsctl`; Swift's `ContactBook`) | A class `Contacts` would be hidden by its namespace (docs/windows-port.md §11.15); never `Windows.ApplicationModel.Contacts` or the People app (docs/plans/address-book.md §8) |
+| *Preferences → Rules* is the page right after *Integrations*; a rule's row is a card in a `ListView` with the drag handle, the switch, a sending icon for a rule that sends mail, Edit and Remove, and a warning `InfoBar` for a rule the daemon turned off; a click selects it and Ctrl+Up and Ctrl+Down move the selected rule while the list has the keyboard, a row is dragged by its handle only | `rules_page` (an `Adw.PreferencesPage`, rows with a drag source; docs/plans/rules.md R14) | As the account lists above: the page's keys are the window's `MoveUp` and `MoveDown`, and the rules' account and status are two dim lines under the conditions and actions |
+| The rule editor is a window of its own (640×720), modal over the window it was opened from (Preferences, or the main window for *Create Rule from Message…*), with the CalDAV window's look: Save and Cancel at the bottom, a failed Save is an `InfoBar`, a problem is a red line under its row once the user has changed something (Save is disabled while there is one); the outgoing question of Save and of the page's switch is a `ContentDialog` with *Turn On* and Cancel; *Try It* is enabled only for a form without problems | `rules_editor.blp`, an `Adw.Dialog` (macOS: a sheet) | A window shows one `ContentDialog` at a time (as the account wizard above); the daemon refuses a rule with problems, so the call is not made |
+| Choosing another account in the rule editor clears the folder of a *Move to folder* action, and *All Mail Accounts* removes the action (it takes no move); the editor lists the enabled mail accounts, and the account of a stored rule that is off | The Go reference leaves the rows as they are and `Validate` names the problem | A folder belongs to its account; the editor never holds the folder of another one (docs/windows-port.md §11.17) |
+| *Create Rule from Message…* and *Apply Rules…* are items of the message list's and the sidebar's context menus; *Apply Rules…* shows *Applying rules* as a toast that stays until the result toast replaces it | `createRule` and `applyRules` items of `contextmenu` (progress and result as toasts) | WinUI's `MenuFlyout`; a toast is the progress line a folder menu has |
+| The rules' types are in the namespaces `Malachi.Core.Rules` and `Malachi.App.MailRules`, their pure logic in the static classes `RuleBook` and `RulesText` | (Go's package `rules`) | A class `Rules` would be hidden by its namespace; `Malachi.App.Rules` would take the name `Rules` from the alias of `ConversationQuickReplyBar` (docs/windows-port.md §11.17) |
+| The signature details (the badge's click) are a `Flyout` under the badge, built in code, with a Close button; *Confirm Key…* is a `ContentDialog` (the fingerprint in monospace under the sentence, Cancel the default) that outlives the flyout it light-dismisses | `signature_details.blp`, an `Adw.Dialog` (macOS: an `NSPopover` and a sheet) | A flyout is where Windows 11 apps show a control's details; a window shows one `ContentDialog` at a time (docs/windows-port.md §11.18) |
+| The list's signature icon, the badge's shield and the Security page's pills use one shield glyph (`U+EA18`) for `security-high`, `-medium` and `-low`: the colour tells the verdicts apart and a key not confirmed is drawn fainter | Adwaita's full, half and empty shields | Segoe Fluent Icons has one shield |
+| Preferences → Security is the page after Contacts | After AI (GTK); the last tab (macOS) | The pages follow the account-and-mail order of this client's pane |
+| The signed-mail types are in the namespaces `Malachi.Core.Signatures` and `Malachi.App.Signatures`, their pure logic in the static classes `SignatureView` and `SignatureText` | (Go's package `signature`) | A class `Signatures` would be hidden by its namespace (docs/windows-port.md §11.18) |
+| The customizable toolbars are several bars: Mail's *Folders* section is the sidebar's row (before its "…"), *Message List* the list's header (before the title), *Message* the message pane's bar; the Board's bar draws the List's *Folders* and *Cases* sections (or Columns' and Today's toolbar), its detail's row the List's *Case Detail* (inline and in the panel; in Columns and Today the panel's row stays the default); the Calendar's bar its toolbar. The Windows variant's defaults are the bars as they were (docs/plans/toolbar-customization.md §17.3) | One header bar per pane (GTK's port), one `NSToolbar` (macOS) | A WinUI window has no toolbar of its own, its bars are the panes' (W.2) |
+| The mode switch, Mail's search and the Calendar's search stay in the title bar and count only by being in the layout: without the search the box hides in that mode and Ctrl+F (Ctrl+E, the Calendar's key) shows it for the search until it is empty and loses the keyboard; Mail's *Filter* is the All / Unread / Flagged row under the list's header, shown while the layout has it | The items stand where the layout puts them | Search lives in the title bar on Windows (above); the filter is a `SelectorBar` row (W.2, Q-W7, Q-W8) |
+| The toolbar editor is a `ContentDialog` opened from *Preferences → General → Toolbar → Customize Toolbar…* or a right click on an empty spot of a bar; Restore Defaults asks in a flyout under its button; an item whose feature is missing is listed with *Hidden while unavailable* | An `Adw.Dialog` with an `Adw.AlertDialog` for Restore Defaults | A window shows one `ContentDialog` at a time, so the question cannot be a second dialog |
+| *Icons and Text* puts the label beside the icon (the bars keep their height); the Board's text buttons, Today, the views, the style switch, the account filter, Triage and the eWay-CRM button look the same in every display mode | GTK's header bars' own button content | Q-W9 is open; those controls already show text or are a composite control |
+| Only the message pane's bar gives way when too narrow (into *More Actions*); the other bars are clipped as before (no » button) | AppKit's and GTK's overflow | Q-W3 is open; the pane's minimum width keeps the message bar whole in the wide layouts |
+| Mail's sidebar toggle folds the wide layout's sidebar until toggled again (the narrow layouts' overlay as the title bar's pane button); the Board's folds the List's side pane of states and accounts | An `Adw.OverlaySplitView`'s toggle | The panes' own layout (PaneLayout, BoardListView) |
 The link under the pointer is shown at the bottom of the message view as
 in GTK, and a masked link is confirmed before it opens; those are security
 features, not deviations.
@@ -547,10 +636,11 @@ features, not deviations.
   only. The GTK UI also searches the system address books through
   Evolution Data Server; there is no equivalent here and the daemon
   degrades silently.
-- **Distribution**: the app folder is unsigned and has no installer or
-  updater; ARM64 has not run on real hardware; the Microsoft components'
-  licence permission is the owner's decision; CI builds the zips for both
-  architectures as run artefacts, not release assets ([docs/windows-port.md §17](../docs/windows-port.md#17-before-a-public-release),
+- **Distribution**: the installers and executables are unsigned
+  (SmartScreen warns), and there are no updates: a new version is
+  installed over the old one with its installer. No winget manifest yet.
+  CI builds zips as run artefacts only; release assets are built by hand
+  ([Installer](#installer), [docs/windows-port.md §17](../docs/windows-port.md#17-before-a-public-release),
   [docs/releasing.md](../docs/releasing.md)).
 
 ## Troubleshooting
@@ -764,8 +854,8 @@ the time zone). In Mail an invitation has a pill in the list and a card
 above the message (Accept, Tentative, Decline, *Add to:*, *Propose New
 Time…*, Change Response, Show in Calendar). *Preferences → Calendar* has
 the Display group and a section per account with calendars;
-*Add CalDAV Calendar…* (the primary menu `…`, the No Accounts page, the
-Calendar sidebar, *Preferences → Calendar*, *Preferences → Integrations*)
+*Add CalDAV Calendar…* (the No Accounts page, the Calendar sidebar,
+*Preferences → Calendar*, *Preferences → Integrations*)
 opens its window; *Preferences → Integrations* lists the CalDAV accounts
 beside the Jira ones, and a CalDAV row's Edit shows *Preferences → Calendar*. An event's
 alert and a new invitation are toasts, the Board's Today has *Today in
@@ -799,6 +889,30 @@ touch and pen double taps, declined and cancelled blocks on screen (the
 samples cannot show them), a full `build.ps1 test` run (the failures left
 in `Malachi.Platform.Windows.Tests` are environmental and predate the
 port) and ARM64 on real hardware.
+
+### Screenshots
+
+`MALACHI_START` (read once, at start; the macOS client's variable of
+that name, GTK's `MALACHI_GTK_START`) is a script of steps the main
+window runs once it shows, `MALACHI_START_INTERVAL` seconds apart, for
+the screenshots of [docs/screenshots.md](../docs/screenshots.md): the
+modes and their styles and views (`mail`, `board:list:select`,
+`board:columns`, `calendar:week`), the two conversation settings
+(`group=on`, `chat=off`), a folder by its server name and a row by its
+subject (`folder=inbox`, `row=DevConf`), `compose-open`, `crm-save`,
+`size=WxH` and `shot=<path>`, which writes the window (the compose window
+when one is open) as a PNG of its visible frame at the screen's scale,
+and `quit`. The steps are listed in
+[docs/windows-port.md §12](../docs/windows-port.md#12-tests).
+`scripts\screenshots\windows.ps1 start en|cs` starts the sample world
+(`malachi-devmail`, the daemon over a throwaway directory under `%TEMP%`,
+the three accounts) and `windows.ps1 shots en|cs OUTDIR` runs the
+published app through the scenes with `MALACHI_DAEMON=none`, the stack's
+socket, its own `MALACHI_DATA_DIR`, the preferences key
+`io.github.schotek.Malachi.shots` (deleted afterwards),
+`MALACHI_CALENDAR_SAMPLES=1` and `MALACHI_LANGUAGES`; the app must stay
+in front while it runs. A development aid, not a feature: nothing of it
+runs without the variable, and never over the real store.
 
 ### Inbox date sections (native verification pending)
 

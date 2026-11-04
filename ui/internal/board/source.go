@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/undo"
 )
 
 // Where the board's cases come from. The board reads a snapshot and is
@@ -68,23 +69,8 @@ type UndoCalls struct {
 // messages in their order), then board.setDone with done false. Without
 // moved messages only the reopen.
 func UndoArchive(moved []api.BoardMoved, account api.AccountID, id CaseID) UndoCalls {
-	var moves []api.MessageMoveParams
-	index := map[api.FolderID]int{}
-	for _, m := range moved {
-		if m.MessageID == "" || m.FromFolderID == "" {
-			continue
-		}
-		i, ok := index[m.FromFolderID]
-		if !ok {
-			i = len(moves)
-			index[m.FromFolderID] = i
-			moves = append(moves, api.MessageMoveParams{AccountID: account, TargetFolderID: m.FromFolderID})
-		}
-		if !slices.Contains(moves[i].MessageIDs, m.MessageID) {
-			moves[i].MessageIDs = append(moves[i].MessageIDs, m.MessageID)
-		}
-	}
-	return UndoCalls{Moves: moves, Reopen: api.BoardSetDoneParams{CaseID: id, Done: false}}
+	e, _ := undo.FromBoard(false, account, string(id), moved)
+	return UndoCalls{Moves: undo.Calls(e), Reopen: api.BoardSetDoneParams{CaseID: id, Done: false}}
 }
 
 // ArchiveUndoer is a source that can take an archive back with the

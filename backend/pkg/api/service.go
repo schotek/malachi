@@ -190,6 +190,42 @@ type AssistantService interface {
 	ProfileResolve(ctx context.Context, p AssistantProfileResolveParams) (*AssistantProfileResolveResult, error)
 }
 
+// UpdateService is the update check (docs/api.md §4.20). Every method
+// returns the status after it.
+type UpdateService interface {
+	Status(ctx context.Context, p UpdateStatusParams) (*UpdateStatus, error)
+	Check(ctx context.Context, p UpdateCheckParams) (*UpdateStatus, error)
+	SetPrefs(ctx context.Context, p UpdateSetPrefsParams) (*UpdateStatus, error)
+	Dismiss(ctx context.Context, p UpdateDismissParams) (*UpdateStatus, error)
+	DismissNotice(ctx context.Context, p UpdateDismissNoticeParams) (*UpdateStatus, error)
+}
+
+// RulesService is the mail rules (docs/api.md §4.21).
+type RulesService interface {
+	List(ctx context.Context, p RulesListParams) (*RulesListResult, error)
+	Create(ctx context.Context, p RulesCreateParams) (*RulesCreateResult, error)
+	Update(ctx context.Context, p RulesUpdateParams) (*RulesUpdateResult, error)
+	Delete(ctx context.Context, p RulesDeleteParams) (*RulesDeleteResult, error)
+	Reorder(ctx context.Context, p RulesReorderParams) (*RulesReorderResult, error)
+	Test(ctx context.Context, p RulesTestParams) (*RulesTestResult, error)
+	Apply(ctx context.Context, p RulesApplyParams) (*RulesApplyResult, error)
+}
+
+// SignatureService answers the details of a message's signature and its
+// revocation check (docs/api.md §4.22).
+type SignatureService interface {
+	Signature(ctx context.Context, p MessageSignatureParams) (*MessageSignatureResult, error)
+	Revocation(ctx context.Context, p MessageSignatureRevocationParams) (*MessageSignatureResult, error)
+}
+
+// PGPService manages the stored OpenPGP public keys (docs/api.md §4.22).
+type PGPService interface {
+	KeyImport(ctx context.Context, p PGPKeyImportParams) (*PGPKeyImportResult, error)
+	KeyVerify(ctx context.Context, p PGPKeyVerifyParams) (*PGPKeyVerifyResult, error)
+	KeyList(ctx context.Context, p PGPKeyListParams) (*PGPKeyListResult, error)
+	KeyRemove(ctx context.Context, p PGPKeyRemoveParams) (*PGPKeyRemoveResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -215,6 +251,11 @@ type Backend interface {
 	Invitations() InvitationService
 	Crm() CrmService
 	Assistant() AssistantService
+	AddressBooks() AddressBookService
+	Update() UpdateService
+	Rules() RulesService
+	Signatures() SignatureService
+	PGP() PGPService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -257,4 +298,29 @@ type CalendarNotifier interface {
 	CalendarState(n CalendarStateNotification)
 	EventAlert(n EventAlertNotification)
 	InvitationsChanged(n InvitationsChangedNotification)
+}
+
+// ContactsNotifier is the optional extension of Notifier for
+// notify.contactsChanged (docs/api.md §4.19), asserted like BoardNotifier.
+type ContactsNotifier interface {
+	ContactsChanged(n ContactsChangedNotification)
+}
+
+// UpdateNotifier is the optional extension of Notifier for
+// notify.updateChanged (docs/api.md §4.20), asserted like BoardNotifier.
+type UpdateNotifier interface {
+	UpdateChanged(n UpdateChangedNotification)
+}
+
+// RulesNotifier is the optional extension of Notifier for
+// notify.rulesChanged (docs/api.md §4.21), asserted like BoardNotifier.
+type RulesNotifier interface {
+	RulesChanged(n RulesChangedNotification)
+}
+
+// SignatureNotifier is the optional extension of Notifier for
+// notify.signaturesChanged (docs/api.md §4.22), asserted like
+// BoardNotifier.
+type SignatureNotifier interface {
+	SignaturesChanged(n SignaturesChangedNotification)
 }

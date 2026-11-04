@@ -98,7 +98,7 @@ func RetryAfter(err error) time.Duration {
 // eventGone (404, 410), conflict (412), serverTimeout (408, 429, 504) or
 // serverError (507, other 5xx, the rest); ErrInvalidSyncToken,
 // ErrTooManyResources and ErrTooLarge are serverError, ErrOtherOrigin and a server
-// without calendar-access serverError; context cancellation is cancelled, a deadline
+// without calendar-access (or addressbook) serverError; context cancellation is cancelled, a deadline
 // serverTimeout; any other error networkError. Nil for nil. The message
 // never carries a credential.
 func ToAPIError(err error) *api.Error {
@@ -132,7 +132,7 @@ func ToAPIError(err error) *api.Error {
 	case errors.Is(err, context.DeadlineExceeded):
 		return api.NewError(api.CodeServerTimeout, "caldav: request timed out")
 	case errors.Is(err, ErrInvalidSyncToken), errors.Is(err, ErrTooManyResources),
-		errors.Is(err, ErrTooLarge), errors.Is(err, ErrOtherOrigin), errors.Is(err, errNotCalDAV):
+		errors.Is(err, ErrTooLarge), errors.Is(err, ErrOtherOrigin), errors.Is(err, errNotCalDAV), errors.Is(err, errNotCardDAV):
 		return api.NewError(api.CodeServerError, "%s", transport.CleanMessage(err.Error()))
 	}
 	return api.NewError(api.CodeNetworkError, "%s", transport.CleanMessage(err.Error()))

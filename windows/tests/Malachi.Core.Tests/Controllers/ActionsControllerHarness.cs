@@ -35,6 +35,7 @@ using Malachi.Core.Tests.Fixtures;
 using Malachi.Core.Tests.Model;
 using Malachi.Core.Text;
 using Malachi.Core.Transport;
+using Malachi.Core.Undos;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -384,6 +385,16 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
             });
         }
 
+        /// <summary>folders.go loadFolders: folder.list of one account and the sidebar (<paramref name="gen"/> unchecked here).</summary>
+        public void LoadFolders(AccountId acc, ulong gen)
+        {
+            FoldersLoaded.Add(acc);
+            FetchFolders(acc, Model.RebuildEntries);
+        }
+
+        /// <summary>The accounts whose folders <see cref="LoadFolders"/> read again, in order.</summary>
+        public List<AccountId> FoldersLoaded { get; } = [];
+
         /// <summary>folders.go selectFolder: the list follows.</summary>
         public void Select(FolderKey k)
         {
@@ -422,6 +433,9 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
     internal sealed class ListHalf(MailboxHalf mailbox) : IActionsList
     {
         private readonly Dictionary<ThreadId, List<Action>> waiters = [];
+
+        // What the next first page selects after an Undo (ReloadSelecting).
+        private IReadOnlyList<Undo.Moved>? undoReselect;
 
         /// <summary>The selected rows' keys in list order (ListController.SelectedKeys).</summary>
         public IReadOnlyList<ListKey> SelectedKeys { get; private set; } = [];
@@ -483,6 +497,7 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
                     Model.Loading = false;
                     var res = outcome.Value ?? throw new InvalidOperationException("thread.list failed", outcome.Error);
                     Model.SetThreads(res.Threads, res.Page);
+                    TakeUndoReselect();
                 });
                 return;
             }
@@ -496,7 +511,35 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
                 Model.Loading = false;
                 var res = outcome.Value ?? throw new InvalidOperationException("message.list failed", outcome.Error);
                 Model.SetMessages(res.Messages, res.Page);
+                TakeUndoReselect();
             });
+        }
+
+        /// <summary>ListController.ReloadSelecting: the folder again, then the rows of <paramref name="back"/> selected.</summary>
+        public void ReloadSelecting(IReadOnlyList<Undo.Moved> back)
+        {
+            Reloads++;
+            undoReselect = back;
+            LoadMessages();
+        }
+
+        /// <summary>How many times an Undo listed the folder again.</summary>
+        public int Reloads { get; private set; }
+
+        // ListController.TakeUndoReselect.
+        private void TakeUndoReselect()
+        {
+            var back = undoReselect;
+            undoReselect = null;
+            if (back is not { Count: > 0 })
+            {
+                return;
+            }
+            var keys = Undo.ReselectKeys(back, k => Row(k) is not null);
+            if (keys.Count > 0)
+            {
+                SelectKeys(keys);
+            }
         }
 
         /// <summary>The list's share of outbox.go refreshOutboxViews.</summary>

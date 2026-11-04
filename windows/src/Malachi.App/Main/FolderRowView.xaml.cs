@@ -67,6 +67,29 @@ public sealed partial class FolderRowView : UserControl
     /// <summary>A folder's indent; a heading 3 lower (folderHeadingGap).</summary>
     public static Thickness RowMargin(double indent, bool heading) => new(indent, heading ? SidebarRow.HeadingGap : 0, 0, 0);
 
+    /// <summary>A row of 24 px plus 1 above and below (style.go row.folder-row).</summary>
+    public const double RowHeight = 26;
+
+    /// <summary>
+    /// A two-line row: the title's line (FolderTitleStyle, 18) over the
+    /// account's (CaptionTextBlockStyle, 16) with 3 px above and below, so
+    /// the two lines sit close together and the block stands clear of the
+    /// row's edges (a selection's highlight) instead of on its bottom line.
+    /// The All Inboxes row, which has no subtitle, is held to the same
+    /// height so its name stands centred beside the pinned folders' rows
+    /// (SidebarRow.TwoLines).
+    /// </summary>
+    public const double TwoLineRowHeight = 40;
+
+    /// <summary>The row's least height: <see cref="TwoLineRowHeight"/> for a two-line row, else <see cref="RowHeight"/>.</summary>
+    public static double RowMinHeight(bool twoLines) => twoLines ? TwoLineRowHeight : RowHeight;
+
+    /// <summary>
+    /// The All Inboxes row keeps the star's column (unified.go starSlot),
+    /// so its badge lines up with the folders' badges; it cannot be pinned.
+    /// </summary>
+    public static Visibility StarSlot(SidebarRowKind kind) => kind == SidebarRowKind.Unified ? Visibility.Visible : Visibility.Collapsed;
+
     /// <summary>dim-label on a container that cannot be opened.</summary>
     public static double DimOpacity(bool dimmed) => dimmed ? 0.55 : 1;
 

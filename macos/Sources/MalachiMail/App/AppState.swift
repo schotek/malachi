@@ -105,12 +105,29 @@ final class AppState {
     /// removal runs for, shared by every window's `CRMController`
     /// (Integration+CRM wires it).
     let crm = CRMState()
+    /// The address books (Integration+Contacts): the Contacts window, the
+    /// address chips' Show Contact / Add to Contacts…, the suggestions'
+    /// scope.
+    private(set) var contacts: AppContacts!
+    /// The mail rules (Integration+Rules): Settings → Rules, the rule
+    /// editor, Create Rule from Message… and the folders' Apply Rules….
+    private(set) var rules: AppRules!
     /// The user's profile for the assistant (docs/api.md §4.18): every
     /// prompt carries it, Settings → AI → About You edits it, the panel's
     /// proposal cards resolve through it. Read when the connection comes
     /// and on notify.assistantProfileChanged and notify.accountsChanged.
     let profile: ProfileStore
     private var profileTokens: [NotificationHub.Token] = []
+    /// The update check (docs/api.md §4.20, AppState+Updates): the main
+    /// window's banner, Settings → General, the About panel and the
+    /// question of a security release. Read when the connection comes and
+    /// on notify.updateChanged.
+    let updates: UpdateController
+    var updateTokens: [NotificationHub.Token] = []
+    /// Signature trust (docs/api.md §4.22): the number every
+    /// notify.signaturesChanged raises, which the details popover and
+    /// Settings → Security follow (Integration+Signatures wires it).
+    let signatures = SignatureState()
     private var boardTriageTokens: [NotificationHub.Token] = []
 
     var hooks = Hooks()
@@ -130,6 +147,7 @@ final class AppState {
         notifications.attach(to: connection)
         calendar = AppCalendar(client: client, settings: settings, hub: notifications)
         profile = ProfileStore(client: client)
+        updates = UpdateController(client: client)
         let claudeCode = ClaudeCodeLocator(settings: settings, directory: ClaudeCodeLocator.defaultDirectory)
         self.claudeCode = claudeCode
         let assistant = AssistantController(
@@ -178,7 +196,10 @@ final class AppState {
         Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
         wireBoardTriage()
         wireProfile()
+        wireUpdates()
         EventEditorManager.shared.state = self
+        contacts = AppContacts(state: self)
+        rules = AppRules(state: self)
     }
 
     var selectedProvider: (any AssistantProvider)? { settings.assistantProvider == .chatgpt ? codex : nil }
@@ -390,6 +411,10 @@ final class NotificationHub {
     private var draftsChanged = HandlerList<DraftsChangedNotification>()
     private var calendarNotification = HandlerList<CalendarNotification>()
     private var assistantProfileChanged = HandlerList<Void>()
+    private var updateChanged = HandlerList<Void>()
+    private var rulesChanged = HandlerList<Void>()
+    private var signaturesChanged = HandlerList<Void>()
+    private var contactsChanged = HandlerList<ContactsChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "notify")
@@ -444,6 +469,31 @@ final class NotificationHub {
         assistantProfileChanged.add { _ in f() }
     }
 
+    /// notify.updateChanged: the application's `UpdateController` asks
+    /// update.status again.
+    func addUpdateChanged(_ f: @escaping @MainActor () -> Void) -> Token {
+        updateChanged.add { _ in f() }
+    }
+
+    /// notify.rulesChanged: the application's `RulesController` lists the
+    /// rules again (`AppRules`).
+    func addRulesChanged(_ f: @escaping @MainActor () -> Void) -> Token {
+        rulesChanged.add { _ in f() }
+    }
+
+    /// notify.signaturesChanged: trust changed (a key imported, confirmed
+    /// or removed, a revocation check); the messages on display, an open
+    /// details popover and the key list ask again (`wireSignatures`).
+    func addSignaturesChanged(_ f: @escaping @MainActor () -> Void) -> Token {
+        signaturesChanged.add { _ in f() }
+    }
+
+    /// notify.contactsChanged: the Contacts window, the address chips'
+    /// lookup and Settings → Contacts load again (`AppContacts`).
+    func addContactsChanged(_ f: @escaping @MainActor (ContactsChangedNotification) -> Void) -> Token {
+        contactsChanged.add(f)
+    }
+
     /// The calendar's notifications (notify.calendarChanged,
     /// notify.calendarState, notify.eventAlert, notify.invitationsChanged),
     /// decoded next to `DaemonNotification` (`CalendarNotification`).
@@ -465,7 +515,23 @@ final class NotificationHub {
             assistantProfileChanged.fire(())
             return
         }
+        if raw.method == API.Notify.updateChanged {
+            updateChanged.fire(())
+            return
+        }
+        if raw.method == API.Notify.rulesChanged {
+            rulesChanged.fire(())
+            return
+        }
+        if raw.method == API.Notify.signaturesChanged {
+            signaturesChanged.fire(())
+            return
+        }
         do {
+            if let c = try ContactsChangedNotification.decode(raw) {
+                contactsChanged.fire(c)
+                return
+            }
             if let c = try CalendarNotification(raw) {
                 calendarNotification.fire(c)
                 return

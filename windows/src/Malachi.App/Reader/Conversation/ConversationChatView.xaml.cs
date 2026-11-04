@@ -193,6 +193,23 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
         Core.Model.Conversation.BubbleShortened(
             services.State.Settings.ConversationChatTruncateMine, services.State.Settings.ConversationChatTruncateOthers, mine, expandedOne);
 
+    // Whether the bubble of member id in row shows a preview: the text of an
+    // invitation's bubble (the meeting's boilerplate under the card) starts
+    // shortened, the card says what matters; else as the preferences say.
+    private bool Shortened(ConversationChatRow row, MessageId id)
+    {
+        var was = expanded.Is(id);
+        return (row.Bubble.ShowsInvitation && !was) || Shortened(row.Right, was);
+    }
+
+    // The invitation card of member s in its bubble (message.get's, when the
+    // account shows invitation cards); Join Video Call goes through the link
+    // confirmation of the pane's window.
+    private void ShowInvitation(ConversationChatRow row, MessageSummary s) =>
+        row.Bubble.ShowInvitation(
+            s, ctrl.Loaded.GetValueOrDefault(s.Id)?.Msg, CardOn(s), services.State, () => host.HostWindow,
+            url => _ = services.Links.OpenAsync(new ActivatedLink(url, url), [], host.HostWindow));
+
     /// <summary>
     /// A change of the controller, from the host. While hidden the rows are
     /// only taken out when the conversation goes; <see cref="SetShown"/>
@@ -454,6 +471,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
                             if (view is not null)
                             {
                                 view.Bubble.SetLive(false);
+                                view.Bubble.CloseInvitation();
                                 Detach(view);
                             }
                             view = MakeRow(id, null, right);
@@ -461,7 +479,8 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
                             view.Bubble.Expand = () => ExpandMember(id);
                             bubbles[id] = view;
                         }
-                        view.Bubble.SetShortened(Shortened(view.Right, expanded.Is(id)));
+                        ShowInvitation(view, s);
+                        view.Bubble.SetShortened(Shortened(view, id));
                         view.Bubble.CompactDate = compactDates;
                         view.Bubble.ShowMessage(item, Attachments(id));
                         if (!view.Bubble.ShowsText)
@@ -469,7 +488,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
                             var lm = ctrl.Loaded.GetValueOrDefault(id);
                             view.Bubble.ShowBody(Core.Model.Conversation.BubbleBodyFor(lm, s.Snippet, HtmlSetting), Monospace(lm), PicturesArrived(id, lm));
                         }
-                        view.ShowAvatar(item.Sender, monochrome);
+                        view.ShowAvatar(item.Sender, monochrome, ConversationRow.PhotoSenderOf(item));
                         view.SetColumnWidth(column);
                         desired.Add(view);
                         break;
@@ -520,6 +539,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
         foreach (var id in bubbles.Keys.Where(id => !bubbleIds.Contains(id)).ToList())
         {
             bubbles[id].Bubble.SetLive(false);
+            bubbles[id].Bubble.CloseInvitation();
             Detach(bubbles[id]);
             bubbles.Remove(id);
             sources.Remove(id);
@@ -598,6 +618,11 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
             return;
         }
         var item = m.Items[i];
+        if (item.Message is { } s)
+        {
+            ShowInvitation(row, s);
+        }
+        row.Bubble.SetShortened(Shortened(row, id));
         row.Bubble.ShowMessage(item, Attachments(id));
         row.Bubble.ShowBody(Core.Model.Conversation.BubbleBodyFor(lm, item.Message?.Snippet ?? "", HtmlSetting), Monospace(lm), PicturesArrived(id, lm));
     }
@@ -620,7 +645,12 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
     // the paperclip from the summary at once, the number of the timeline's
     // chips once message.get told it.
     private BubbleAttachments Attachments(MessageId id) =>
-        Core.Model.Conversation.BubbleAttachmentBadge(ctrl.Member(id), ctrl.Loaded.GetValueOrDefault(id));
+        Core.Model.Conversation.BubbleAttachmentBadge(ctrl.Member(id), ctrl.Loaded.GetValueOrDefault(id), CardOn(ctrl.Member(id)));
+
+    // Whether the account of member s shows invitation cards (so that the
+    // calendar part of the card shown is no chip).
+    private bool CardOn(MessageSummary? s) =>
+        s is not null && InvitationReading.ShowsInvitationCard(services.AccountOf(s.AccountId));
 
     // Whether a bubble whose entry is lm shows its text monospaced
     // (Conversation.BubbleMonospace: the setting, a plain-text body).
@@ -643,6 +673,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
         foreach (var row in bubbles.Values)
         {
             row.Bubble.SetLive(false);
+            row.Bubble.CloseInvitation();
         }
         foreach (var v in rowViews)
         {
@@ -1029,7 +1060,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
         {
             foreach (var (id, row) in bubbles)
             {
-                row.Bubble.SetShortened(Shortened(row.Right, expanded.Is(id)));
+                row.Bubble.SetShortened(Shortened(row, id));
             }
         });
     }
@@ -1047,7 +1078,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
             var i = m.Index(id);
             if (i >= 0)
             {
-                row.ShowAvatar(m.Items[i].Sender, monochrome);
+                row.ShowAvatar(m.Items[i].Sender, monochrome, ConversationRow.PhotoSenderOf(m.Items[i]));
             }
         }
         foreach (var card in ctrl.Drafts)

@@ -134,16 +134,20 @@ public sealed record AttachmentChip(
     /// (<see cref="AttachmentChips.AnyRemote"/> says whether it downloads
     /// first). <paramref name="downloading"/>: the message is being
     /// downloaded, the chips of its parts on the server show the spinner.
+    /// <paramref name="cardOn"/>: the account shows invitation cards, so the
+    /// calendar part of the card shown gets no chip (never in an attached
+    /// message's view).
     /// </summary>
     public static (IReadOnlyList<AttachmentChip> Chips, IReadOnlyList<Attachment> SaveAll) For(
-        MessageSummary s, LoadedMessage? lm, bool nestedView, IFileTypePolicy? policy, bool downloading = false)
+        MessageSummary s, LoadedMessage? lm, bool nestedView, IFileTypePolicy? policy, bool downloading = false, bool cardOn = false)
     {
         ArgumentNullException.ThrowIfNull(s);
         if (lm?.Msg is not { } m)
         {
             return ([], []);
         }
-        var atts = AttachmentChips.ChipAttachments(m.Attachments, lm.Body);
+        var atts = AttachmentChips.ChipAttachments(
+            m.Attachments, lm.Body, nestedView ? null : InvitationReading.Read(m, cardOn), nestedView ? null : m.Signature);
         if (atts.Count == 0)
         {
             return ([], []);

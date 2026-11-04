@@ -17,6 +17,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/settings"
+	undoKind "github.com/schotek/malachi/ui/internal/undo"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -58,13 +59,16 @@ func flagChange(f api.Flag, on bool) (set, clear []api.Flag) {
 // setStar shows the flagged state on a star toggle button.
 func setStar(b *gtk.ToggleButton, on bool) {
 	b.SetActive(on)
+	icon, tip := "non-starred-symbolic", i18n.T("Star")
 	if on {
-		b.SetIconName("starred-symbolic")
-		b.SetTooltipText(i18n.T("Unstar"))
-	} else {
-		b.SetIconName("non-starred-symbolic")
-		b.SetTooltipText(i18n.T("Star"))
+		icon, tip = "starred-symbolic", i18n.T("Unstar")
 	}
+	// The main window's star is a toolbar item that may show a label
+	// (toolbar_host.go setFace).
+	if !setFace(b, icon, tip) {
+		b.SetIconName(icon)
+	}
+	b.SetTooltipText(tip)
 }
 
 // refreshRow pushes the model's summary of id to its list row, if listed.
@@ -159,6 +163,9 @@ func (w *Window) markUnread(id api.MessageID) { w.setSeenIDs([]api.MessageID{id}
 // messages are of one account (a selection is), possibly of several of its
 // folders (a search).
 func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
+	if w.splitByAccount(ids, func(g []api.MessageID) { w.setSeenIDs(g, seen) }) {
+		return // the All Inboxes list: one call per account
+	}
 	var todo []api.MessageID
 	var k folderKey
 	folderOf := make(map[api.MessageID]folderKey)
@@ -235,6 +242,9 @@ func (w *Window) toggleFlagged(id api.MessageID) {
 // setFlaggedIDs stars or unstars the messages that are not so yet, like
 // setSeenIDs.
 func (w *Window) setFlaggedIDs(ids []api.MessageID, on bool) {
+	if w.splitByAccount(ids, func(g []api.MessageID) { w.setFlaggedIDs(g, on) }) {
+		return
+	}
 	var todo []api.MessageID
 	var acc api.AccountID
 	for _, id := range ids {
@@ -314,7 +324,10 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 	} else if len(queued) > 0 {
 		return // a selection is one folder's; outbox rows never mix in
 	}
-	confirmTrash(parent, w.settings, len(list), subject, func() {
+	// One question for the whole selection, then one move per account (the
+	// All Inboxes list may hold rows of several).
+	var group int // shared by the per-account moves of this action
+	trashAccount := func(list []api.MessageSummary) {
 		restore := w.removeRows(idsOf(list))
 		for _, s := range list {
 			w.closeMessageWindow(s.ID)
@@ -351,7 +364,19 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 		}, func() {
 			restore()
 			undo()
-		}, func() { w.withdrawNotifications(idsOf(list)) })
+		}, func() {
+			w.withdrawNotifications(idsOf(list))
+			if hasTrash {
+				w.recordUndo(undoKind.Trash, trash.ID, moving, group)
+			}
+		})
+	}
+	confirmTrash(parent, w.settings, len(list), subject, func() {
+		groups := accountGroups(list)
+		group = w.nextUndoGroup(len(groups))
+		for _, g := range groups {
+			trashAccount(g.Items)
+		}
 	})
 }
 
@@ -402,7 +427,7 @@ func (w *Window) archive(id api.MessageID) { w.archiveIDs([]api.MessageID{id}) }
 
 // archiveIDs moves messages to the account's Archive folder.
 func (w *Window) archiveIDs(ids []api.MessageID) {
-	w.moveIDsToRole(ids, api.RoleArchive, func(n int) string {
+	w.moveIDsToRole(ids, api.RoleArchive, undoKind.Archive, func(n int) string {
 		if n == 1 {
 			return i18n.T("Archiving the message")
 		}
@@ -426,13 +451,20 @@ func (w *Window) junkFrom(parent gtk.Widgetter, id api.MessageID) {
 
 // junkIDs moves messages to the account's Junk folder after a confirmation
 // shown over parent. Unlike Trash the question is always asked: the move
-// feeds the server's spam filter and is not undone by moving back.
+// feeds the server's spam filter, which Undo (moving back) does not take
+// back.
 func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject string) {
 	list := w.summaries(ids)
 	if len(list) == 0 {
 		return
 	}
-	if _, ok := w.model.folderByRole(list[0].AccountID, api.RoleJunk); !ok {
+	// The All Inboxes list: messages of accounts without a Junk folder are
+	// skipped (as macOS and Windows); the toast only when none has one.
+	list = slices.DeleteFunc(list, func(s api.MessageSummary) bool {
+		_, ok := w.model.folderByRole(s.AccountID, api.RoleJunk)
+		return !ok
+	})
+	if len(list) == 0 {
 		w.Toast(i18n.T("This account has no junk folder"))
 		return
 	}
@@ -442,7 +474,7 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 		heading = fmt.Sprintf(i18n.N("Mark %d message as junk?", "Mark %d messages as junk?", n), n)
 	}
 	widget.ConfirmDestructive(parent, heading, subject, i18n.T("Mark as _Junk"), func() {
-		w.moveIDsToRole(idsOf(list), api.RoleJunk, func(n int) string {
+		w.moveIDsToRole(idsOf(list), api.RoleJunk, undoKind.Junk, func(n int) string {
 			if n == 1 {
 				return i18n.T("Marking the message as junk")
 			}
@@ -457,23 +489,38 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 // no such folder. The rows go at once and come back on failure; the
 // folder counts follow the messages to the target (trackMoves). Success
 // withdraws their desktop notifications.
-func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, what func(n int) string, missing string) {
+func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, kind undoKind.Kind, what func(n int) string, missing string) {
 	list := w.movable(ids)
 	if len(list) == 0 {
 		return
 	}
-	target, ok := w.model.folderByRole(list[0].AccountID, role)
-	if !ok {
+	// The All Inboxes list: one move (and one Undo entry) per account; an
+	// account without the folder is skipped, the toast says so only when
+	// none of them has it (as macOS and Windows).
+	type move struct {
+		items  []api.MessageSummary
+		target api.FolderID
+	}
+	var moves []move
+	for _, g := range accountGroups(list) {
+		if target, ok := w.model.folderByRole(g.Account, role); ok {
+			moves = append(moves, move{g.Items, target.ID})
+		}
+	}
+	if len(moves) == 0 {
 		w.Toast(missing)
 		return
 	}
-	w.moveListTo(list, target.ID, what)
+	group := w.nextUndoGroup(len(moves))
+	for _, m := range moves {
+		w.moveListTo(m.items, m.target, kind, what, group)
+	}
 }
 
 // moveIDsTo moves messages to another folder of their account (Move To
 // in a message's context menu), as moveIDsToRole does.
 func (w *Window) moveIDsTo(ids []api.MessageID, target api.FolderID) {
-	w.moveListTo(w.movable(ids), target, func(n int) string { return contextmenu.MovingText(i18n.Tr, n) })
+	w.moveListTo(w.movable(ids), target, undoKind.Move, func(n int) string { return contextmenu.MovingText(i18n.Tr, n) }, 0)
 }
 
 // movable are the summaries of ids a move takes: not the outbox's
@@ -489,12 +536,15 @@ func (w *Window) movable(ids []api.MessageID) []api.MessageSummary {
 }
 
 // moveListTo is the move itself: the rows go at once and come back on
-// failure, the counts follow, the windows of the messages close.
-func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, what func(n int) string) {
+// failure, the counts follow, the windows of the messages close. Once the
+// daemon took it, Undo can take it back as kind (undo.go), unless the
+// target is a folder the daemon does not keep (Gmail's All Mail drops the
+// rows).
+func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, kind undoKind.Kind, what func(n int) string, group int) {
 	// The messages already in the target stay where they are.
 	list = slices.DeleteFunc(slices.Clone(list), func(s api.MessageSummary) bool { return s.FolderID == target })
-	if len(list) == 0 {
-		return
+	if len(list) == 0 || len(accountGroups(list)) > 1 {
+		return // Move To is off for rows of several accounts (one folder is one account's)
 	}
 	acc := list[0].AccountID
 	restore := w.removeRows(idsOf(list))
@@ -507,7 +557,12 @@ func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, what
 	}, func() {
 		restore()
 		undo()
-	}, func() { w.withdrawNotifications(idsOf(list)) })
+	}, func() {
+		w.withdrawNotifications(idsOf(list))
+		if !w.folderUnsynced(folderKey{Account: acc, Folder: target}) {
+			w.recordUndo(kind, target, list, group)
+		}
+	})
 }
 
 // scheduleMarkRead arms the mark-as-read timer for the newly selected
@@ -586,6 +641,12 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 			a.SetEnabled(e)
 		}
 	}
+	w.updateMailToolbarItems(st)
+	w.printRows = 0
+	if st.on {
+		w.printRows = st.count
+	}
+	w.refreshPrint()
 	// eWay-CRM follows the selection explicitly (crm.go refreshCRM).
 	w.refreshCRM()
 }
@@ -597,8 +658,11 @@ func (w *Window) presentReply(b *gtk.Button, comment bool) {
 	if comment {
 		icon = commentIcon
 	}
-	b.SetIconName(icon)
-	b.SetTooltipText(jira.ReplyLabel(comment, i18n.Tr))
+	label := jira.ReplyLabel(comment, i18n.Tr)
+	if !setFace(b, icon, label) {
+		b.SetIconName(icon)
+	}
+	b.SetTooltipText(label)
 }
 
 // commentIcon is the icon of Reply when it writes a comment on an issue.

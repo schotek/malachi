@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Not found – Malachi Mail</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0b3260">
+<link rel="stylesheet" href="/assets/style.css?v=5">
+<script src="/assets/report.js?v=4" defer></script>
+<link rel="icon" href="/assets/icon-32.png" sizes="32x32">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/index.html"><img src="/assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+  </div>
+</header>
+
+<main>
+<div class="band page-head">
+  <div class="wrap">
+    <div class="eyebrow">404</div>
+    <h1>There is no page here.</h1>
+    <p class="lead">The address may have changed, or the link that brought you here was wrong. Tato stránka neexistuje; adresa se mohla změnit.</p>
+  </div>
+</div>
+<section>
+  <div class="wrap">
+    <div class="buttons">
+      <a class="btn primary" href="/index.html">Malachi Mail in English</a>
+      <a class="btn" href="/cs/index.html" lang="cs">Malachi Mail česky</a>
+    </div>
+    <p class="hint"><a href="#report" data-report>Report a problem with the app</a></p>
+  </div>
+</section>
+</main>
+
+<dialog class="report" data-form="report" aria-labelledby="report-title">
+  <form>
+    <h2 id="report-title">Report a problem with the app</h2>
+    <label>Name <span>(optional)</span><input name="name" maxlength="100" autocomplete="name"></label>
+    <label>E-mail <span>(optional, for an answer)</span><input name="contact" type="email" maxlength="254" autocomplete="email"></label>
+    <label>What happened? <span>(required)</span><textarea name="text" rows="6" required placeholder="What you did, what you expected and what happened instead; the version of Malachi Mail and your system help too."></textarea></label>
+    <label>Screenshot <span>(optional)</span><input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp"></label>
+    <img class="rp-preview" alt="The chosen screenshot" hidden>
+    <div class="rp-trap" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <div class="rp-turnstile"></div>
+    <p class="rp-small">What is sent: the fields above, the screenshot made smaller and without its metadata, the language and the address of this page. The report is kept for 12 months. Cloudflare Turnstile protects the form against spam.</p>
+    <p class="rp-status" role="status" aria-live="polite"></p>
+    <div class="buttons">
+      <button type="submit" class="btn primary">Send</button>
+      <button type="button" class="btn rp-close">Close</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

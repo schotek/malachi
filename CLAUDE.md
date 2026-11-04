@@ -179,6 +179,12 @@ kontejneru, kde poslouchá démon. Broadway
 po popoverech. Po každé práci `container system stop` (`gtk.sh stop`; oba
 cíle ho volají samy). Zmínky o Toolbxu níže jsou historické;
 `flatpak-builder` a balíčky zůstávají na linuxovém hostiteli.
+Na pull requestech neběží žádné CI kromě kontroly CLA (rozhodnutí
+vlastníka 2026-11-02): vlastník každý PR před sloučením stáhne a otestuje
+na nativních platformách automaticky i ručně, takže by CI jen opakovalo
+hotové testy. Workflow v `.github/workflows/` staví a nahrávají aplikace
+a instalátory jen u tagu vydání a na ruční spuštění; do CI nepřidávej
+kontroly navíc.
 
 Ověřené verze (2026-09-02): Go 1.25, GTK 4.18, libadwaita 1.7, GLib 2.84,
 WebKitGTK 2.52 (API 6.0), Blueprint 0.16, SQLite 3.47, gsound 1.0.3
@@ -296,7 +302,18 @@ Vyhledávání: `search.query` jen nad lokálním úložištěm (okno
 `core.Maintain` pod `search.indexed`), `internal/search` = čistý parser
 syntaxe, FTS5 výraz s každou hodnotou v uvozovkách a výřez se zvýrazněním;
 rozsahy složka / účet / všechny povolené účty, koš a nevyžádaná jen jako
-vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000.
+vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000;
+rozsah složky posílá ve všech třech klientech `withSent` (2026-11-02,
+větev `claude/search-sent-mail-lrccj5`, rozhodnutí vlastníka): démon
+přidá vlastní odeslané zprávy z Odeslaných, které patří do vláken složky
+(pravidlo `store.sentMember` jako `sentCount`; ne v Odeslaných, Outboxu,
+virtuálních složkách ani s `in:`), řádek je odliší jen jménem složky
+(`searchOutside`); na Macu zelené Go testy démona, GTK v kontejneru
+(`make build`, celé `test-ui`, `make lint`, `po/` beze změny) i celé
+`swift test` a vlastník hledání ručně ověřil v macOS i GTK nad kopií dat;
+Windows agent na ARM64 `build.ps1 app` a `lint` zelené, `test` po opravě
+vzorku round-trip (`a2a0df2`) bez selhání větve (zbylá jsou prostředí
+a padají i na `main`) a vlastník ho ručně ověřil na Windows.
 GTK: lišta hledání nad seznamem (Ctrl+F, `window/search.go`,
 `search_model.go`, GSettings `search-scope`), hledá při psaní od 2 znaků,
 výsledky ploše se složkou/účtem a tučnými shodami, jednopísmenné zkratky
@@ -353,8 +370,7 @@ app spouští `malachid` z bundlu s `--config`/`--store` v
 démona, `malachi-mcp` je v bundlu. Gmail a Microsoft 365 jdou přes
 vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
 doplňování příjemců jen ze sebraných adres. Odchylky od GTK jen z tabulky
-v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
-stavový pruh přes spodek okna místo patičky sidebaru, bez tlačítka
+v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět, bez tlačítka
 hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, hledací pole v toolbaru s pruhem rozsahu, bez hledání sbalené na lupu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
@@ -367,8 +383,23 @@ a `Resources/MalachiMail.entitlements` (Apple events kvůli restartu
 Claude Desktop); CI `.github/workflows/macos.yml` na `macos-26` (Xcode 26
 kvůli SDK pro Liquid Glass) testuje, staví DMG, s pěti secrets
 `MACOS_*` podepisuje a notarizuje, k release tagu připojí jen
-notarizovaný DMG (`docs/releasing.md` §8; členství v Apple Developer
-Program a secrets zatím chybí, do té doby ad hoc).
+notarizovaný DMG (`docs/releasing.md` §8). Vydání macOS podepisuje
+a notarizuje jen CI (rozhodnutí vlastníka 2026-11-01), nikdy ručně z Macu;
+nastavené 2026-11-01 (individuální členství, Developer ID Application
+Vlada Janecek, tým `PG9F7XU6X8`, klíč App Store Connect API s rolí
+Developer, pět secrets `MACOS_*` v repozitáři; první podepsaný
+a notarizovaný běh 41324040230 ověřený `spctl` a `stapler`). Artefakty
+CI (DMG, instalátory, balíčky) se nahrávají jen u tagů pro vydání, ruční
+běh macOS drží DMG jeden den, PR žádné (artefakty veřejného repozitáře si
+stáhne kdokoli přihlášený). Windows instalátory (Inno Setup, x64 a ARM64,
+nepodepsané) staví od 2026-11-01 jen CI u tagu (`windows.yml`, ARM64
+křížově) a připojí je k vydání; zip ani ruční nahrávání už neexistují
+(`build.ps1` nemá `package` ani `release`, Makefile `windows-installer`;
+rozhodnutí vlastníka, `docs/releasing.md` §7). Soubory vydání se jmenují
+`Malachi-Mail-<verze>-<os>-<arch>…` (`macos-universal.dmg`,
+`windows-x64-setup.exe`, `linux-x64.flatpak`, `linux-x64.deb`,
+`linux-x64-fedora42.rpm`; architektury všude `x64`/`arm64`, rozhodnutí
+vlastníka 2026-11-01, `docs/releasing.md` §1).
 Kontributorský popis `docs/macos-port.md`. `make macos` / `macos-dmg` /
 `macos-notarize` / `run-macos` / `test-macos` jsou jen na Darwinu.
 
@@ -408,7 +439,7 @@ požadavek; UI smoke testy (`Malachi.App.UiTests`, UI Automation nad
 publikovanou aplikací s dočasnými daty a falešným keyringem, volitelně
 proti lokálnímu IMAP/SMTP serveru `MALACHI_DEVMAIL`) a ruční průchod celým
 UI. CI `.github/workflows/windows.yml` (Go testy démona na Windows, build,
-testy, lint a zipy x64 a ARM64). Build: `make windows` / `run-windows` / `test-windows` (jen na
+testy, lint a instalátory x64 a ARM64, u tagu do vydání). Build: `make windows` / `run-windows` / `test-windows` (jen na
 Windows, z PowerShellu i Git Bashe) delegují na `windows/build.ps1` (`app`,
 `test`, `lint`, `package`, …); výstup `build\windows\<arch>\Malachi Mail\`
 s `malachid.exe`, `malachi-mcp.exe` a `malachi-credentials.exe`. App spouští
@@ -421,9 +452,8 @@ kontroluje u souboru s klíčem navíc vlastníka a DACL. Démon dostal jen
 platformně neutrální opravy (`exec.LookPath` pro helper, zavírání surových
 souborů před smazáním, `malachi-mcp --claude-desktop-config/--command`,
 `.gitattributes` a přenositelné Go testy). Odchylky od GTK jen z tabulky
-ve `windows/README.md` (hledání v titulkové liště, stavový pruh přes spodek
-okna, skládání panelů při 900/600 px s tlačítky v titulkové liště, menu `…`
-s Přidat účet a Konec, klávesy Windows s volbou `ctrl-r`, přístupové
+ve `windows/README.md` (hledání v titulkové liště, skládání panelů při 900/600 px s tlačítky v titulkové liště,
+klávesy Windows s volbou `ctrl-r`, přístupové
 klávesy místo mnemonik, pořadí tlačítek ContentDialog, bannery InfoBar,
 kontextová menu, vlastní náhled příloh, Mark of the Web, Uložit vše bez
 programů a zástupců, potvrzení nevypsaných odkazů, obnova WebView2 jednou na dokument, uložení konceptů
@@ -491,6 +521,257 @@ Pořadí prací:
     reference, macOS, GTK i Windows ověřené vlastníkem na obrazovce týž
     den; viz odstavec Profil pro asistenta níže a
     `docs/plans/assistant-profile.md`
+15. Adresáře (kontakty z připojených služeb, úpravy, fotky) — sloučeno
+    z `claude/keen-bohr-rrjhm3` do `main` 2026-11-01; démon, Go reference,
+    macOS, GTK i Windows ověřené vlastníkem a agenty na skutečných
+    strojích; viz odstavec Adresáře níže a `docs/plans/address-book.md`
+16. Kontrola nových verzí (fáze 1) — napsaná 2026-11-02, necommitnutá;
+    viz odstavec Kontrola nových verzí níže a `docs/plans/update-check.md`
+17. Přílohy jako dlaždice (podle Outlooku) — větev `feat/attachment-tiles`
+    2026-11-02, všechny tři klienty ověřené vlastníkem na obrazovce; viz
+    odstavec Přílohy jako dlaždice níže
+18. Společná doručená pošta (Všechny doručené) — větev
+    `claude/exciting-ritchie-dy3qqt` 2026-11-02, démon, GTK, macOS i Windows
+    sestavené, otestované a ověřené vlastníkem na obrazovce; viz odstavec níže
+    a `docs/plans/unified-inbox.md`
+19. Pravidla pošty (filtry) — větev `claude/sleepy-hawking-7gu54a`
+    2026-11-02, démon i všechny tři klienty napsané, macOS (B1), GTK (B2)
+    a Windows (B3) schválené vlastníkem 2026-11-03;
+    viz odstavec Pravidla pošty níže a `docs/plans/rules.md`
+20. Ověřování podpisů (S/MIME, OpenPGP, fáze 1) — větev
+    `claude/keen-planck-bgzc8z` 2026-11-02; démon (migrace 0026, při sloučení
+    `main` přečíslovaná z 0025, kterou mají pravidla; API `docs/api.md`
+    §4.22; opaque S/MIME rozbalený v parseru, `RulesVersion` "9") s Go testy a fuzz,
+    Go reference `ui/internal/signature`, GTK, macOS a Windows, odznak
+    i na kartách Nástěnky (`BoardMessage.signature`); 2026-11-03 sestavené
+    a otestované na Macu (`swift test`, kontejner `gtk.sh make build`,
+    `test-ui`, smoke, `make po`, `make lint`) a na Windows 11 x64
+    (`build.ps1 app`/`test`/`lint`), vlastník schválil macOS, GTK
+    i Windows na obrazovce nad devmailem se 39 podepsanými fixturami;
+    neověřené: skutečné podepsané zprávy (Outlook, Graph `$value`, Apple
+    Mail, Thunderbird, Proton); plán, rozhodnutí a „As built“
+    v `docs/plans/signatures.md`
+
+Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
+U1–U4 v `docs/plans/unified-inbox.md`). Položka je od 2026-11-03 první
+řádek sekce Oblíbené v postranním panelu (změna U3, varianta B vizuální
+revize: jedna mřížka šipka · ikona · text; sekce existuje i bez připnuté
+složky a její hlavička se skládá jako hlavička účtu, stav jako záznam
+`@favourites` v `collapsed-accounts`, kontextové menu jen Rozbalit/Sbalit;
+GTK `sidebarEntries`, macOS `FavouritesNode` s `UnifiedNode` jako dítětem,
+Windows `FolderTree.UnifiedEntry`; řádek položky je v sekci dvouřádkový
+jako připnuté složky; macOS sestavené, otestované a schválené vlastníkem,
+GTK v kontejneru sestavené, otestované a prošlé v XQuartz, Windows jen
+napsané — čeká `build.ps1`), jen při ≥ 2 povolených
+poštovních účtech (`imap`, `graph`)
+a se zapnutým klíčem `unified-inbox` (Předvolby → Seznam zpráv). Démon:
+`message.list`/`thread.list` s `unified: "inbox"` bez `accountId`/`folderId`
+(`api.UnifiedRoles`, `core/unified.go`, `store.ListMessagesIn`/`ListThreadsIn`,
+vlastní prefixy kurzoru, bez migrace a nové notifikace). Reference
+`ui/internal/unified` (zástupný klíč `@unified:inbox`, `Covers`, `GroupByAccount`),
+`selection.CombineAccounts`/`RestrictIn` (výběr přes účty, akce po účtech,
+Přeposlat více/Přesunout do/eWay u smíšeného výběru vypnuté), `undo.Entry.Group`
+(jedno Zpět pro akci přes účty); vlákna ve sjednoceném seznamu klíčovaná
+(účet, vlákno), protože Graph `conversationId` se mezi schránkami opakuje.
+Ověřeno 2026-11-02: GTK v kontejneru (build, celé `test-ui`, smoke, `make po`,
+`make lint`), macOS (`swift build`, celé `swift test` 2052, `check-strings`),
+Windows ARM64 (`build.ps1 app`/`lint`, `test` 9100 se čtyřmi selháními
+prostředí jako na `main`), vlastník prošel všechny tři nad dvěma účty
+z `malachi-devmail`; podrobnosti v „As built“ plánu.
+
+Stavový pruh přes spodek okna a Nahlásit problém (2026-11-04, všechny
+tři klienty, necommitnuté; rozhodnutí vlastníka). GTK přesunulo stavový
+řádek z patičky postranního panelu do pruhu přes celou šířku okna pod
+všemi režimy (`window.blp` `status_bar` pod `mode_stack`), jako macOS
+a Windows, takže to už není jejich odchylka; pruhy Nástěnky a Kalendáře
+zmizely, text a poznámku podle režimu počítá `status.go` `statusTexts`
+(Nástěnka: poznámka triage přebije řádek, Kalendář: stav kalendářů
+a nezodpovězené pozvánky v `status_note`). Na konci pruhu ve všech
+třech klientech „Nahlásit problém“ (msgid „Report an Issue“, ikona
+`malachi-report-symbolic` / `exclamationmark.bubble` / Feedback ED15),
+který otevře https://malachimail.app/#report jako O aplikaci (GTK
+`app.report-issue`, macOS a Windows `AppLinks`).
+
+Hlavní nabídka (2026-11-04, GTK a Windows, větev `fix/main-menu-parity`;
+rozhodnutí vlastníka přes AskUserQuestion, Windows prošel na obrazovce). `primary_menu` v GTK a nabídky „…“ ve
+Windows (postranní panel Pošty, Nástěnka, Kalendář) mají ve všech
+režimech stejný obsah: Nová zpráva, Kontakty | Předvolby, O aplikaci
+Malachi Mail | Konec (Ctrl+Q). Režimy (dělají totéž co přepínač),
+Přidat účet…, Přidat účet Jira…, Přidat kalendář CalDAV… (jsou
+v Předvolbách a na prázdném okně), Nová událost (je to + v liště
+Kalendáře) a mrtvé Klávesové zkratky z ní zmizely. Nový msgid `_Quit`
+(česky „Kone_c“) používá i nabídka ikony v oznamovací oblasti Windows.
+macOS zůstal beze změny, protože všechno má v menu baru. `po/` je
+upravené ručně: odkazy `window.ui` za nabídkou se posunuly o +2 a
+„_Keyboard Shortcuts“ přešlo do `#~`. Na Windows prošly `build.ps1
+app` a `lint`, `TrayMenuTests` a UI smoke testy `BoardSmokeTests`
+(nový `EveryModeHasTheSameMainMenu`), `SmokeTests` a
+`ContactsSmokeTests`. Čeká: v kontejneru na Macu `gtk.sh make build`,
+`make po` (má vyjít beze změny), `make lint` a pohled na nabídku
+v XQuartz.
+
+Pravidla pošty (2026-11-02, všechny tři klienty, v PR do `main`;
+plán, rozhodnutí R1–R14 a stav ověření v `docs/plans/rules.md`, API
+`docs/api.md` §4.21, bezpečnost `docs/security.md` §7.5). Démon vyhodnocuje
+pravidla lokálně v hooku `afterMailStored` jen pro Doručenou poštovních
+účtů, každé Message-ID nejvýš jednou (`rule_seen`), nikdy na poštu starší
+než den před zapnutím pravidla (`internal/rules` čistý matcher, migrace
+0025, `core/rules_engine.go`); lokální akce synchronně před
+`notify.newMessage`, přeposlání a automatická odpověď přes frontu na účet
+(`core/rules_outgoing.go`) s ochranami (hromadná a automatická pošta,
+vlastní adresy, noreply, `X-Loop`, 20 za hodinu, odpověď odesílateli
+jednou za 4 dny, hlavičky `Auto-Submitted`), zapnutí odchozího pravidla
+jen s `confirmOutgoing`; `rules.apply` jen lokální akce. MCP `list_rules`,
+za `--allow-modify` `create_rule`/`update_rule`, odchozí akce navíc jen
+s `--allow-send`. Reference `ui/internal/rules` (model, validace, texty)
+a `ui/internal/rulesctl` (GTK kontrolery), porty `MalachiCore/Rules`
+a `Malachi.Core/Rules`; Předvolby → Pravidla za Integracemi, editor,
+*Vytvořit pravidlo ze zprávy…* a *Použít pravidla…* v kontextových
+menu, vzorová data `MALACHI_RULES_SAMPLES=1`. Brány: B1 macOS (2026-11-03,
+`swift build`/`swift test` zelené, vlastník schválil nad kopií dat), B2
+GTK (`gtk.sh make build`, `test-ui`, `TestRulesGTKSmoke`, `make po`,
+`make lint`, vlastník schválil v XQuartz) a B3 Windows (`build.ps1
+app`/`test`/`lint`, UI smoke `RulesSmokeTests` a `RulesDevmailTests`,
+vlastník schválil na obrazovce; oprava přepínače, který přesun řádku
+přepínal u jiného pravidla) prošly; čeká rozhodnutí vlastníka, zda
+nechat potlačení `notify.newMessage` pro každou zprávu přečtenou už při
+stažení, nebo ho zúžit na zprávy změněné pravidlem.
+
+Přílohy jako dlaždice (2026-11-02, všechny tři klienty, rozhodnutí
+vlastníka podle srovnání s Outlookem). Příloha je dlaždice pevné šířky
+(macOS 216 pt, GTK a Windows 280 px kvůli většímu písmu): rámeček, ikona
+typu 32, název zkrácený uprostřed nad velikostí (za ní ikona serveru či
+kolečko), vpravo šipka s nabídkou (i pravý klik) nebo ✕; táž dlaždice
+v panelu, okně zprávy, kartách konverzace a okně Nová zpráva (macOS
+`Shared/AttachmentTileView.swift`, GTK `ui/internal/widget/attachment_tile.go`
+s vlastním `hexpand` vypnutým, jinak ji `Adw.WrapBox` roztáhne, Windows
+`Malachi.App/Attachments/AttachmentTile`). Uložit vše je nenápadné tlačítko
+v souhrnném řádku nad dlaždicemi („2 přílohy · 255 kB“, `widget.AttachmentSummary`;
+macOS `FlowFullLine`, GTK sourozenec před `WrapBox`). V okně Nová zpráva
+jsou přílohy v šedém pásu mezi hlavičkou a lištou formátování (nikdy
+zmáčknuté editorem) a klik ukáže náhled z `attachment.get` (strop 16 MiB,
+nad ním existující „příliš velká“): macOS Quick Look a GTK Sushi přes
+soukromý adresář pro otevírání (GTK háček `compose.Manager.PreviewAttachment`
+= `window.PreviewDraftAttachment`), Windows náhled ve WebView2 jen v paměti
+bez Otevřít a Uložit jako; editor události má dlaždice bez náhledu.
+Velikosti jsou desítkové s přeloženým oddělovačem (`%s kB`/`MB`/`GB`,
+`msgctxt "decimal separator"`, jedno desetinné místo pod 100: „41,1 kB“),
+staré KiB/MiB msgidy jsou pryč. Démon a API beze změny.
+
+Kontrola nových verzí (2026-11-02, všechny tři klienty, necommitnutá;
+plán `docs/plans/update-check.md` s odpověďmi vlastníka Q1–Q6, kontrakt
+služby `docs/services.md` §2, API `docs/api.md` §4.20, bezpečnost
+`docs/security.md` §7.4). Démon (`internal/update`: přísná čtečka JSON,
+Ed25519 nad přesnými bajty payloadu, klíče natvrdo v `keys.go` podle
+`keyId`, pravidla manifestu, výběr vydání pro kanál, HTTP klient API →
+záloha GitHub; `core/update_service.go`: plán 5–15 min po startu, ne dřív
+než den ± 2 h po poslední kontrole, `Retry-After`, `meta` `update.state`
+a `update.prefs`) testovaný tabulkou nad fixturami správce
+(`backend/testdata/update`, testovací klíč `test-1` nikdy v `keys.go`)
+a živým manifestem 0.2.0. Kanál dává sestavení (`-X main.updateChannel`:
+`make macos-dmg`, `build.ps1 installer`, `build-deb.sh`, `build-rpm.sh`,
+Flatpak), `MALACHI_UPDATE_CHANNEL` přebíjí; `make macos` a vývojové
+buildy nekontrolují. Klienti: reference `ui/internal/updates`, GTK
+`ui/internal/updatesctl` + `window/updates.go`, macOS `MalachiCore/Updates`
++ `UpdateController`, Windows `Malachi.Core/Updates` (`UpdateCheck`)
++ `UpdateStatusController`: pruh ve všech režimech hlavního okna
+(v GTK jeden `update_bar` přes celou šířku nad všemi hlavičkovými
+lištami, svislý s tlačítky v `Adw.WrapBox`; rozhodnutí vlastníka
+2026-11-02),
+bezpečnostní vydání jednou modálně (Stáhnout + předvybrané ukončení),
+Předvolby → Obecné → Aktualizace se Zkontrolovat nyní, řádek v O aplikaci,
+věta na stránce bez účtů. Ověřeno: Go testy démona a reference, GTK
+`gtk.sh make build` + cílené a smoke testy, macOS `swift build` + filtrované
+`swift test`, `make po`; vlastník prošel macOS nad skutečnými daty (pruh,
+Co je nového, Později → Zkontrolovat nyní, bezpečnostní dialog
+s ukončením, Přeskočit, věta bez účtů) a GTK nad kopií dat na Fedoře 44
+(Linux agent), Windows agent na ARM64 sestavil, otestoval (1086 cílených,
+Core sada 8105/8125, dvě selhání jsou prostředí ARM64:
+`PROCESSOR_ARCHITECTURE` v prostředí dětského procesu, s větví nesouvisí),
+zlintoval a prošel ručně nad izolovanými daty, vlastník to na obrazovce
+schválil, vše beze změny kódu;
+všechno proti skutečnému API. Neviděné na obrazovce: bezpečnostní dialog
+a oznámení (manifest je nemá; jen testy Core).
+
+Odpovědi na pozvánky v konverzaci (2026-11-02, větev
+`fix/invitation-replies`; macOS první z pokynu vlastníka a jím ověřený nad
+kopií dat, GTK a Windows následují). Démon: `InvitationSummary.replyResponse`
+(odpověď účastníka i v souhrnu), `messages.has_attachments` bez kalendářové
+části, kterou ukazuje karta (`SetHasAttachments` v hooku pozvánky,
+`calendar.ParserVersion` 4 přečte uložené znovu), náhled bez řádků
+oddělovačů (`mime.isRule`). Reference Go `ui/internal/conversation/
+invitation.go`: odpověď (iTIP REPLY) je `ItemEvent` s jednou větou
+(4 msgid, česky), v časové ose i chatu kompaktní řádek, nepřečtená odpověď
+účastníka se označí jako karta; `BubbleText` vynechá řádky oddělovačů.
+macOS: port (`ConversationInvitation.swift`), čip `.ics` skrytý, když se
+ukazuje karta (`chipAttachments(…, card:)`, `ChipPlan(cardOn:)`; Swift-first),
+náhled řádku seznamu u pozvánky termín, u odpovědi věta
+(`invitationPreview`, Swift-first), karta pozvánky v bublině chatu s textem
+zkráceným (`ConversationBubbleView.showInvitation`), Navrhnout jiný čas… po
+odpovědi v řádku stavu (`InvitationCardView.placePropose`), řádek stavu karty vždy stav nad
+tlačítky a Připojit se k videohovoru na jednom řádku s minimální šířkou
+podle titulku (okno zprávy se měří dřív, než má šířku). Konverzace
+volá `message.get` i pro člena s pozvánkou (`needsBody`, ve všech třech
+klientech: karta jinak závisela na 📎 přílohy `.ics`). Ověřeno: Go testy démona
+(`core`, `store`, `mime`, `api`, `calendar`), `ui/internal/conversation`,
+`make po` v kontejneru, `swift build` a celé `swift test`,
+`check-strings.py`; vlastník na obrazovce (vlákno, chat, okno zprávy).
+GTK (2026-11-02, vlastník schválil v XQuartz): `chipAttachments(…, card)`
+a `Window.shownInvitation`, `invitationPreview` v `model.go` nad
+`calendar.SummaryTimeLine`, karta v bublině (`chatBubble.showInvitation`,
+`updateFill`), řádek stavu karty svislý s `invitation_strip_buttons`
+a `placePropose`; ověřeno `gtk.sh make build`, `test-ui`, smoke testy
+(pád WebKitu v `TestBodyFitGTKSmoke` je starší, i na čistém commitu),
+`make po`, `make lint`. Windows (2026-11-02, vlastník schválil na obrazovce):
+Core `Model/Conversation.Invitation.cs`, `InvitationSummary.ReplyResponse`,
+`AttachmentChips.ChipAttachments(…, card)`, `AttachmentChip.For(…, cardOn)`,
+`ReaderController.InvitationCardOn`, `BubbleAttachmentBadge(…, cardOn)`,
+`InvitationReading.Preview` nad `Cal.SummaryTimeLine`, `BubbleText` bez
+oddělovačů; App karta v bublině (`ConversationBubbleView.ShowInvitation`,
+kliky na kartu bublinu nerozbalí ani neotevřou), `InvitationCardView` se
+svislým `StripRow` a `PlacePropose` (přesun podle `Children.Contains`:
+`FrameworkElement.Parent` je null, dokud karta časové osy není v okně,
+a přepnutí chat → vlákna jinak padalo na 0x800F1000); 4 exclusions pryč.
+Ověřeno `build.ps1 app`, `lint`, `test` (zbylá selhání: kanárek WebView2
+i na čistém `HEAD`, dva testy `PROCESSOR_ARCHITECTURE` na ARM64, časový
+`IsLinear` samostatně zelený).
+
+Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
+rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7
+v `docs/plans/address-book.md`). Démon synchronizuje kontakty jako cache
+serveru (`internal/contactsync` jako `calsync`): Microsoft 365 přes Graph
+jako volba poštovního účtu (`GraphConfig.contacts.sync`, scope
+`Contacts.ReadWrite` na vyžádání, 1206 `contactsConsentRequired`, GOA
+`ContactsDisabled`) a CardDAV na účtu `kind: caldav` s capability
+`contacts` (vlastní klient v `internal/caldav`, i server jen s adresáři;
+průvodce „Kalendář a kontakty (CalDAV/CardDAV)“); Nedávno použité
+(`recent`) jako virtuální adresář jen pro čtení. Vlastní parser vCard
+`internal/vcard` (záplata mění jen upravené vlastnosti, zbytek bajt po
+bajtu), migrace 0023 (`ab_books`, `ab_contacts`, `ab_emails`, FTS5)
+a 0024 (`ab_photos`). API `docs/api.md` §4.19 (`addressBook.*`,
+`contact.*`, `notify.contactsChanged`, chyby 1110, 1111, 1206, 1308,
+1509; odmítnuté pole v `error.data` `{field}`), `contact.search` se
+zdrojem `contacts` a rozsahem (`contacts-suggest-scope`). Zápis jen
+online a rovnou na server (konflikt 1308 nese verzi serveru, klient ji
+načte a nechá pole uživatele), mazání jen výslovné. Fotky jen pro čtení
+(`internal/contactphoto`: kontrola rozměrů před dekódováním, zmenšení přes
+`golang.org/x/image/draw` v0.45.0 na ≤ 256 px a nové kódování; Graph
+líně, `PHOTO` jako URL nikdy) v okně Kontakty a u odesílatele v poště,
+kde avatar už je (seznam se `show-avatars`, karty konverzace, chat Pošty
+i Nástěnky; vlastní zprávy nikdy), párované jen přesnou adresou;
+`contact.photo` nic nenotifikuje. MCP `search_contacts`, `get_contact`,
+za `--allow-modify` `create_contact`/`update_contact`, nikdy fotky ani
+mazání. Klienti: samostatné okno Kontakty (jedna instance; GTK hlavní
+nabídka, Windows nabídka `…`, macOS Okno ▸ Kontakty a tlačítko
+v toolbaru všech tří režimů, bez zkratky), Zobrazit kontakt / Přidat do
+kontaktů… na čipu adresy, Předvolby → Kontakty za Kalendářem, otázka při
+Konci s rozepsaným kontaktem; reference `ui/internal/contacts`
+a `ui/internal/contactsctl` (vzorová data `MALACHI_CONTACTS_SAMPLES=1`
+s fotkami i na adresy devmailu), porty `MalachiCore/Contacts`
+(`enum ContactBook`, Contacts framework nikdy) a `Malachi.Core/Contacts`.
+Bez přesahu do systému (žádné `CNContactStore`, `Windows.ApplicationModel.Contacts`;
+EDS dál jen pro doplňování na Linuxu). eWay-CRM jako adresář (jen
+hledání) je 2. etapa, Google 3. etapa.
 
 Profil pro asistenta (2026-10-21, všechny tři klienty, sloučeno do `main`;
 plán, rozhodnutí P1–P16, Q1–Q10 a „As built“ v
@@ -992,8 +1273,8 @@ Windows (2026-09-30, větev `feat/jira-windows`, `docs/windows-port.md`
 `Wizard/JiraWizardWindow` (stránky site, přihlášení, spaces; vlastní modální
 okno přes `ModalDialog` jako poštovní průvodce), nastavení
 `Preferences/JiraAccountWindow` (+ `JiraListEditor`, `JiraStatusPicker`;
-Uložit a Zrušit dole), *Přidat účet Jira…* v nabídce `…`, v „+“ Předvoleb
-→ Účty a na prázdném okně, karta issue `Reader/IssueCardView` (pilulka
+Uložit a Zrušit dole), *Přidat účet Jira…* na prázdném okně a v Předvolbách
+→ Integrace, karta issue `Reader/IssueCardView` (pilulka
 jako `DropDownButton` s přechody), okno komentáře
 `Compose/ComposeWindow.Comment.cs` (viditelnost jako `SelectorBar`),
 zobrazení konverzace `Reader/Conversation/` (`ConversationView`,
@@ -1137,6 +1418,39 @@ app`/`test`/`lint` (`ComposeBodyLayoutTests`, `AssistantWriteTests`,
 `AssistantRequestTests` Writer*, `EditorBridgeTests`), UI smoke
 (`DevmailTests` odpověď bez otázky, `BoardSmokeTests`, mřížka
 `ComposePane.xaml` má o řádky víc) a ruční průchod.
+
+Zpět u přesunů pošty (2026-10-30, všechny tři klienty, sloučeno do `main`;
+rozhodnutí vlastníka přes AskUserQuestion, `docs/architecture.md` §7).
+Koš, Archivovat, Nevyžádaná, Přesunout do a Archivovat/Smazat na nástěnce
+zapíšou po úspěchu u démona přesun (zpráva + složka, odkud přišla) do
+zásobníku relace (nejvýš 20, jen v paměti) a ukážou na 8 s toast
+s tlačítkem „Zpět (Ctrl+Z)“ (macOS „⌘Z“); Ctrl+Z / ⌘Z vrátí nejnovější
+přesun i po zmizení toastu, v Poště i na Nástěnce, ne v Kalendáři, nikdy
+s klávesnicí v textovém poli či editoru (ty si nechají vlastní Zpět). Vrácení
+= `message.move` zpět po zdrojových složkách (přesunutá zpráva si nechává
+`id`), nástěnka navíc `board.setDone {done:false}`; pak počty složek
+a v zobrazené zdrojové složce nové načtení s výběrem vrácených řádků.
+Nezapíše se vymazání z Koše, zrušené odeslání ani přesun do
+nesynchronizované složky; Vysypat koš/nevyžádanou zahodí přesuny do ní.
+Démon ani API beze změny. Reference `ui/internal/undo` (`Stack`, `Record`,
+`FromBoard`, `Calls`, `Reselect`, texty; `board.UndoArchive` ho používá),
+GTK `window/undo.go` (`win.undo` `<Control>z` v `MessageAccels`, brána
+`undoAccelAllowed` + `focusTakesTypingHere` s inline odpovědí nástěnky),
+macOS `MalachiCore/Undo`, `ActionsController+Undo.swift`, sdílený
+`Shared/UndoToast.swift` v `ToastPresenter`, okno `MainWindow` (NSWindow
+odpovídá na `undo:` dřív než controller), Windows `Malachi.Core/Undos`
+(`Undo.History`), `ActionsController.Undo.cs`, toast s tlačítkem
+(`ToastButton`), `ShortcutCommand.Undo`; InfoBar `ArchiveBar` nástěnky
+zrušený. 7 nových msgid i česky. Ověřeno: Go testy `undo` a `board`;
+GTK v kontejneru `gtk.sh make build`, celé `test-ui`, `make po`, `make lint`;
+macOS `swift build` a celé `swift test` (1935), `check-strings.py`; Windows
+agent na ARM64 `build.ps1 app`/`lint` a testy Undo zelené, průchod přes
+UI Automation nad devmailem (smoke
+`DevmailTests.CtrlZAndTheToastsButtonTakeBackAMoveToTrash` napsaný,
+nespuštěný); vlastník ověřil všechny tři
+klienty 2026-10-30. Toast zůstává i nad řádkem rychlé odpovědi (rozhodnutí
+vlastníka); se vzorovými daty nástěnky (`MALACHI_BOARD_SAMPLES`) Zpět není.
+Nespuštěný zůstal test démonu Koš a hned zpět (IMAP, Graph).
 
 Kontextová menu u zpráv a složek (2026-10-14, všechny tři klienty,
 commit `bcaf8b0`; rozhodnutí vlastníka přes AskUserQuestion). Pravý klik
@@ -2347,7 +2661,7 @@ ChatGPT v panelu; (CP3) v Toolbxu `make build`, `go test
 Archivovat, Ctrl+1/2 na české klávesnici, R v úzkém Seznamu; na Windows
 `build.ps1 app`/`test`/`lint` a smoke; skutečný běh triage a návrhu
 odpovědi s Claude Code i Codexem. GTK nemá okno zkratek
-(`win.show-help-overlay` ukazuje nikam), takže Ctrl+1/2 a E/D/R nejsou
+(položka Klávesové zkratky z hlavní nabídky zmizela 2026-11-04), takže Ctrl+1/2 a E/D/R nejsou
 nikde vypsané (rozhodnutí vlastníka).
 
 Kalendář (stav 2026-10-17, větev `feat/calendar`; návrh a poznámky „As
@@ -2584,9 +2898,8 @@ Platform: `Notifications/CalendarAlertActivation`, `CalendarAlertResponse`,
 `NotificationArguments.ForAlert`/`ForInvitation`. App (jmenný prostor
 `Malachi.App.Calendars`): třísegmentový přepínač režimu
 (`ModeCalendarButton`; s vypnutou nástěnkou zůstává se zašedlým segmentem
-Nástěnka jako na macOS, dřív se na Windows schoval), Pošta/Nástěnka/Kalendář
-v nabídkách `…` postranního panelu, nástěnky i kalendáře
-(`MainWindow.Mode.cs`, `MainWindow.Calendar.cs`, `MainWindow.CalendarPage.cs`,
+Nástěnka jako na macOS, dřív se na Windows schoval;
+`MainWindow.Mode.cs`, `MainWindow.Calendar.cs`, `MainWindow.CalendarPage.cs`,
 `Shell/AppState.Calendar.cs` se zdrojem na okno a `MALACHI_CALENDAR_SAMPLES`,
 `Integration.Calendar.cs`); stránka `Calendars/CalendarPage` s lištou
 `CalendarBar` (přepínač postranního panelu, Dnes, ‹ ›, Den/Týden/Měsíc/Agenda
@@ -2671,7 +2984,7 @@ rozcházejí) a okno `Wizard/CalDAVWizardWindow` (modální 560×560 přes
 `ModalDialog`, chyby v InfoBaru, Přidat a pak Zrušit, Enter spustí Zjistit
 kalendáře a pak Přidat, výběr poštovního účtu jen když server nechá
 plánování klientovi, dialog důvěry certifikátu poštovního průvodce; vstupy:
-nabídka `…`, stránka Žádné účty, postranní panel kalendáře, Předvolby →
+stránka Žádné účty, postranní panel kalendáře, Předvolby →
 Kalendář; nabídka „+“ v Předvolbách → Účty ho nemá, jako
 macOS M9). Testy: `tests/Malachi.Core.Tests/Calendars/*` (Go testy 1:1
 a případy Swiftu, asi 614), `Controllers/Calendar*Tests`,

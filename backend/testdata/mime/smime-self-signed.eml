@@ -1,0 +1,51 @@
+From: Alice Example <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Signed report
+Date: Thu, 01 Oct 2026 10:00:00 +0000
+Message-ID: <smime-self-signed@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/signed; protocol="application/pkcs7-signature"; micalg=sha-256; boundary="sig-b1"
+
+This is an S/MIME signed message.
+
+--sig-b1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Hello Bob,
+
+the report is attached to this signed message.
+
+Alice
+
+--sig-b1
+Content-Type: application/pkcs7-signature; name="smime.p7s"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="smime.p7s"
+
+MIIFKgYJKoZIhvcNAQcCoIIFGzCCBRcCAQExDzANBglghkgBZQMEAgEFADALBgkqhkiG9w0BBwGg
+ggMjMIIDHzCCAgegAwIBAgICA/EwDQYJKoZIhvcNAQELBQAwLzEVMBMGA1UEChMMTWFsYWNoaSBU
+ZXN0MRYwFAYDVQQDEw1BbGljZSBFeGFtcGxlMB4XDTI2MDEwMTAwMDAwMFoXDTQ2MDEwMTAwMDAw
+MFowLzEVMBMGA1UEChMMTWFsYWNoaSBUZXN0MRYwFAYDVQQDEw1BbGljZSBFeGFtcGxlMIIBIjAN
+BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyN913hhEC1XLZwSQfKPR5p6qYGHbx83ZLusks19O
+Yg/vboNQuqEL1nu05cLnmbR7XOOkN557ciUOFjquuYdO3v5ZnYgNYwHEGfD8zRu5W2kBU2zY+LB5
+u1HWB/JP6eHD2Oogs6sGqosq/GOBQGzg9MXpCN/5Z8zLbNq9G74JtJbnhQ1EdALxZrAXQmIbyxvg
+BrWSZntzBorFfX+cwXVL66/LpKxnD4RNdMqqZWPt6k9kbov6HK4dhyxc+2VW55vi2kj5pox3Su3e
+o4KIb+yUEzfnZJfHLJ/zwpdHzIlrts9wBfQ/8Cf7eeKRZ9BJ9WZ9beVHoFuusxwPo9YbHzDTpQID
+AQABo0UwQzAOBgNVHQ8BAf8EBAMCBaAwEwYDVR0lBAwwCgYIKwYBBQUHAwQwHAYDVR0RBBUwE4ER
+YWxpY2VAZXhhbXBsZS5vcmcwDQYJKoZIhvcNAQELBQADggEBAJYk9Y/hFM+1PHRn0VflJ4VasGiC
+baRSx7Rv4cSoOb9naHyeQUjrMLbAzFHKZqVPtW47DyvK6C+bMNTG+jt4Q+Ta5FnGA3Q/tzCzjwT5
+a5+wL1Zl6k3xtRRKujRA82boS+5W4uFyhzy3Qcaj+FzPtXysce25GD/8MB5HmUxuuM5e0CK7ajif
+yE68Gi3YJXi46bpIE5rmaSLSVOSTn0mNpJebfE0O5go8kvMgkltOORahHfmevUb2BqFhSQMbvuej
+ax/UIJ6SbjV4n0A3A8o42+bFbUybekFPydBxesZ8xCnHNc4wvBWB4sU8oJ5eLtnz8E3GDgwn8z7q
+Cd37PBbFMoAxggHLMIIBxwIBATA1MC8xFTATBgNVBAoTDE1hbGFjaGkgVGVzdDEWMBQGA1UEAxMN
+QWxpY2UgRXhhbXBsZQICA/EwDQYJYIZIAWUDBAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcN
+AQcBMBwGCSqGSIb3DQEJBTEPFw0yNjEwMDEwOTU5MDBaMC8GCSqGSIb3DQEJBDEiBCBXBu2Yg7n9
+VTxxMqjEY+0XQBYmCYFiit7mOjVg8YkX6zANBgkqhkiG9w0BAQEFAASCAQAKsP3qRRWWNWQSIIYp
+We7PQIyV/ls6VC58xqcCtPeOtyUSDIozh5Qs0qFjVFESEley9S9UF/i5SS/YpTBgBfQp7UJlU7yb
+wC0ytU0fKwkf55y02UF+Ox4XlULOfyydSHj4PGOMwRaEHX5PBdGkM/Zrj7fuEFDiXy0pqncvKMkI
+Gw+iOU/4NgBMIL9DvHpXAIHB7jixIFPZoOtf0J+ahGUi12/aKzWbfXs4IuCdhhMSSSIPVnes0CDO
+m/HTivAUcfoMSz6aRmVO79NhYZlp0KCa6XzIuwpKHdL0bvoEGqfpo7RWZzFK12w0Zk/jLC5vI7le
+IdO6kJaLnOJlGAhNSSDu
+
+--sig-b1--

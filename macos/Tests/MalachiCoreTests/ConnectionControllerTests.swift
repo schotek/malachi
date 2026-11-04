@@ -314,7 +314,10 @@ private func isUnavailable(_ s: ConnectionController.ConnectionState) -> Bool {
         let start = ContinuousClock.now
         try await waitUntil { log.states.count >= 5 && isConnected(cc.state) }
         #expect(ContinuousClock.now - start < .seconds(5))
-        #expect(await fake.accepted == 2)
+        // Handshakes, not accepted sockets: every dial probes the socket
+        // first (UnixSocketProbe), and whether the fake's listener reports
+        // that probe before it closes is up to the machine's timing.
+        #expect(await fake.hellos == 2)
         #expect(log.states.map(\.kind) == ["connecting", "connected", "unavailable", "connecting", "connected"])
         await cc.stop()
     }
@@ -377,7 +380,7 @@ private func isUnavailable(_ s: ConnectionController.ConnectionState) -> Bool {
         cc.start()
         try await Task.sleep(for: .milliseconds(100))
         #expect(log.states == [.connecting, .connected(fakeInfo)])
-        #expect(await fake.accepted == 1)
+        #expect(await fake.hellos == 1)
         await cc.stop()
     }
 }

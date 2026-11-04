@@ -24,8 +24,21 @@ import (
 // the window) and keeps the gate in step with it; called once from New.
 func (w *Window) wireTypingGate() {
 	w.NotifyProperty("focus-widget", func() {
-		w.setTypingAccels(!focusTakesTyping(w.Focus()))
+		w.setTypingAccels(!w.focusTakesTypingHere(w.Focus()))
 	})
+}
+
+// focusTakesTypingHere is focusTakesTyping and the board's inline reply,
+// a web editor GTK does not report as editable text (board_keys.go
+// keyboardInText): its Ctrl+Z takes back typing, never a move of mail.
+func (w *Window) focusTakesTypingHere(f gtk.Widgetter) bool {
+	if f == nil {
+		return false
+	}
+	if p := w.boardPage; p != nil && p.replySlot != nil && gtk.BaseWidget(f).IsAncestor(p.replySlot) {
+		return true
+	}
+	return focusTakesTyping(f)
 }
 
 // focusTakesTyping reports whether a letter typed with the keyboard on f

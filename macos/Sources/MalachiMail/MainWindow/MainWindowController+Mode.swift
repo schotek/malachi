@@ -414,7 +414,42 @@ enum ModeSwitch {
         group.controlRepresentation = .expanded
         group.selectedIndex = selected.rawValue
         tagSegments(group, titles: labels, action: Action.setWindowMode)
+        // No label under the segments: each icon is narrower than its
+        // mode's name, which ran into the next item's label with the
+        // toolbar's labels shown and in the palette's default set
+        // (docs/plans/toolbar-customization.md, B1). The names stay the
+        // segments' tooltips and accessibility descriptions. No palette
+        // label either: AppKit shows it in the default set when the label
+        // is empty, cut to the switch's width ("P", B1).
+        for sub in group.subitems {
+            sub.label = ""
+        }
+        group.label = ""
+        group.paletteLabel = ""
         return group
+    }
+
+    /// The switch as the customization palette shows it (its default
+    /// set): a plain item whose view is a segmented control of the three
+    /// icons, sized to them. AppKit measured the item group narrower than
+    /// its segments there, with or without labels, and the next item ran
+    /// over it (B1 of docs/plans/toolbar-customization.md).
+    /// `navigational` as the toolbar's own switch (the Board's Columns and
+    /// Today, which have no sidebar section): ahead of the title.
+    static func paletteItem(_ id: NSToolbarItem.Identifier, selected: Board.Mode, navigational: Bool = false) -> NSToolbarItem {
+        let t = Board.texts()
+        let images = Board.Mode.allCases.map { m in
+            Icon.symbol(symbol(m), size: .toolbar, description: t.name(m))
+        }
+        let control = NSSegmentedControl(images: images, trackingMode: .selectOne, target: nil, action: nil)
+        control.selectedSegment = selected.rawValue
+        control.sizeToFit()
+        let it = NSToolbarItem(itemIdentifier: id)
+        it.view = control
+        it.label = ""
+        it.paletteLabel = ""
+        it.isNavigational = navigational
+        return it
     }
 
     /// The SF Symbol of `mode`'s segment.

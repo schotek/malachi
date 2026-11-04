@@ -9,10 +9,33 @@ import MalachiCore
 // key across rebuilds so the outline keeps their identity: `reloadData()`
 // then preserves the selection and the expansion of what did not change.
 
-/// The Favourites heading (`FolderEntry.header && favourite`).
+/// The All Inboxes item (`FolderEntry.unified`), the first row of the
+/// Favourites section: no children, no star, no fold of its own.
+@MainActor
+final class UnifiedNode: NSObject {
+    var entry: FolderEntry
+    /// The row takes the height of a pinned folder's row with its account
+    /// under the name (`several`), so every row of the section is as tall
+    /// and the section has one rhythm (folders.go `rebuildFolderList`, the
+    /// blank subtitle of the item).
+    var twoLines = false
+
+    init(entry: FolderEntry) {
+        self.entry = entry
+    }
+}
+
+/// The Favourites heading (`FolderEntry.header && favourite`): it folds
+/// like an account heading (`entry.collapsed`), over the All Inboxes item
+/// and the pinned folders.
 @MainActor
 final class FavouritesNode: NSObject {
-    var children: [FolderNode] = []
+    var entry: FolderEntry
+    var children: [NSObject] = []
+
+    init(entry: FolderEntry) {
+        self.entry = entry
+    }
 }
 
 /// An account heading (`FolderEntry.header`), present from two enabled
@@ -61,6 +84,9 @@ final class FolderOutlineDataSource: NSObject, NSOutlineViewDataSource {
     /// The top-level items in order.
     private(set) var roots: [NSObject] = []
     private var favouritesNode: FavouritesNode?
+    /// The All Inboxes row, when the entries have one (under the Favourites
+    /// heading; nil while the section is folded).
+    private(set) var unifiedNode: UnifiedNode?
     private var accountNodes: [AccountID: AccountNode] = [:]
     private var folderNodes: [RowKey: FolderNode] = [:]
 
@@ -72,17 +98,22 @@ final class FolderOutlineDataSource: NSObject, NSOutlineViewDataSource {
         var folders: [RowKey: FolderNode] = [:]
         var accounts: [AccountID: AccountNode] = [:]
         var favourites: FavouritesNode?
+        var unified: UnifiedNode?
         // The section the rows go under (nil without headings) and the
         // ancestors of the current row by depth.
         var section: NSObject?
         var stack: [FolderNode] = []
 
-        func append(_ node: FolderNode, to parent: NSObject?) {
+        func append(_ node: NSObject, to parent: NSObject?) {
             switch parent {
             case let f as FolderNode:
-                f.children.append(node)
+                if let node = node as? FolderNode {
+                    f.children.append(node)
+                }
             case let a as AccountNode:
-                a.children.append(node)
+                if let node = node as? FolderNode {
+                    a.children.append(node)
+                }
             case let s as FavouritesNode:
                 s.children.append(node)
             default:
@@ -91,8 +122,19 @@ final class FolderOutlineDataSource: NSObject, NSOutlineViewDataSource {
         }
 
         for e in entries {
+            if e.unified {
+                // The item is the first row of the Favourites section (its
+                // heading precedes it in the entries).
+                let node = unifiedNode ?? UnifiedNode(entry: e)
+                node.entry = e
+                node.twoLines = several
+                unified = node
+                append(node, to: section)
+                continue
+            }
             if e.header, e.favourite {
-                let node = favouritesNode ?? FavouritesNode()
+                let node = favouritesNode ?? FavouritesNode(entry: e)
+                node.entry = e
                 node.children = []
                 favourites = node
                 roots.append(node)
@@ -130,6 +172,7 @@ final class FolderOutlineDataSource: NSObject, NSOutlineViewDataSource {
 
         self.roots = roots
         favouritesNode = favourites
+        unifiedNode = unified
         accountNodes = accounts
         folderNodes = folders
     }

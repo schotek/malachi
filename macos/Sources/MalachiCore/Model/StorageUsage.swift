@@ -19,11 +19,11 @@ public func storageTexts(_ r: SystemStorageResult) -> (value: String, details: S
         lines.append(L10n.T("Converting stopped: the disk is full"))
     }
     if r.savedBytes > 0 {
-        // TRANSLATORS: %s is a size such as "1.2 GiB".
+        // TRANSLATORS: %s is a size such as "1.2 GB".
         lines.append(L10n.T("Compression saves %s", formatSize(r.savedBytes)))
     }
     if r.remoteAttachmentBytes > 0 {
-        // TRANSLATORS: %s is a size such as "1.2 GiB".
+        // TRANSLATORS: %s is a size such as "1.2 GB".
         lines.append(L10n.T("%s of attachments are on the server only", formatSize(r.remoteAttachmentBytes)))
     }
     return (formatSize(r.totalBytes), lines.joined(separator: "\n"))

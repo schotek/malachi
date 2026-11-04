@@ -1,0 +1,192 @@
+{
+  "lang": "cs",
+  "company": "Kovář Engineering",
+  "attribution": "Dne %s %s napsal(a):",
+  "dateFormat": "2. 1. 2006 15:04",
+  "me": {"name": "Jana Dvořáková", "email": "jana.dvorakova@example.test", "company": "Kovář Engineering"},
+  "people": {
+    "tomas": {"name": "Tomáš Holub", "email": "tomas.holub@example.test", "company": "Kovář Engineering"},
+    "lucie": {"name": "Lucie Marková", "email": "lucie.markova@example.test", "company": "Kovář Engineering"},
+    "martin": {"name": "Martin Beneš", "email": "martin.benes@example.test", "company": "Kovář Engineering"},
+    "petr": {"name": "Petr Svoboda", "email": "petr.svoboda@acme.test", "company": "Acme Logistics"},
+    "eva": {"name": "Eva Králová", "email": "eva.kralova@bluebird.test", "company": "Bluebird Studio"},
+    "ondrej": {"name": "Ondřej Vlk", "email": "ondrej@copywrite.test", "company": "Copywrite"},
+    "karel": {"name": "Karel Novotný", "email": "karel.novotny@golang-cz.test"},
+    "design": {"name": "Design Weekly", "email": "news@designweekly.test"},
+    "shop": {"name": "Northwind Shop", "email": "orders@northwind-shop.test"},
+    "conf": {"name": "DevConf Prague", "email": "programme@devconf-prague.test"},
+    "lottery": {"name": "Výherní kancelář", "email": "win@prizes-today.test"},
+    "list": {"name": "golang-cz", "email": "golang-cz@lists.golang-cz.test"}
+  },
+  "messages": [
+    {"id": "q1", "from": "petr", "to": ["me"], "when": "-6d 09:12", "subject": "Nabídka na rozšíření skladu", "html": true, "sign": true, "flags": ["seen"],
+     "text": "Dobrý den, paní Dvořáková,\n\nrozšiřujeme halu B asi o 600 m² a potřebovali bychom nabídku na regály a dopravník mezi oběma halami. Mohla byste ji poslat do čtvrtka? V pátek zasedá představenstvo.\n\nDispozice je zhruba ta, o které jsme mluvili v září; aktuální výkres pošlu, jakmile ho vrátí náš architekt.\n\nS pozdravem\nPetr Svoboda"},
+    {"id": "q2", "folder": "Sent", "from": "me", "to": ["petr"], "when": "-6d 11:40", "subject": "Re: Nabídka na rozšíření skladu", "inReplyTo": "q1", "quote": true, "sign": true, "flags": ["seen"],
+     "text": "Dobrý den, pane Svobodo,\n\nčtvrtek dopoledne je v pořádku. Prodlouženou záruku dám na samostatný řádek, abyste se o ní mohli rozhodnout nezávisle na zbytku.\n\nJeden dotaz: chcete dopravník jen s válečkovou částí, nebo i s pásem pro malé zásilky? Pás přidá k ceně asi 12 %.\n\nS pozdravem\nJana Dvořáková"},
+    {"id": "q3", "from": "petr", "to": ["me"], "when": "-3d 16:05", "subject": "Re: Nabídka na rozšíření skladu", "inReplyTo": "q2", "html": true, "quote": true, "sign": true, "flags": ["seen"],
+     "attachments": [{"name": "Hala-B-dispozice.pdf", "kind": "pdf", "kb": 180, "text": "Rozsireni haly B - dispozice\nMeritko 1:200\nRegalove rady R1-R6, dopravnik C1\nAcme Logistics, vykres 2026-10-21"}],
+     "text": "Dobrý den,\n\nvýkres posílám v příloze. Pásovou část ano, prosím, malé zásilky tvoří většinu toho, co tudy prochází.\n\nMohla byste do nabídky zahrnout i osvětlení nad regály? Náš elektrikář říká, že musí být ve stejném projektu.\n\nDěkuji,\nPetr Svoboda"},
+    {"id": "q4", "folder": "Sent", "from": "me", "to": ["petr"], "when": "-2d 08:50", "subject": "Re: Nabídka na rozšíření skladu", "inReplyTo": "q3", "quote": true, "sign": true, "flags": ["seen"],
+     "text": "Dobrý den,\n\nano, osvětlení přidám jako třetí část; náš partner pro elektro ho nacení z výkresu. Kompletní nabídku budete mít v pátek do poledne.\n\nS pozdravem\nJana Dvořáková"},
+    {"id": "inv1", "from": "tomas", "to": ["me"], "cc": ["lucie", "martin"], "when": "-1d 15:20", "subject": "Porada k plánu na Q4", "html": true,
+     "invite": {"summary": "Porada k plánu na Q4", "location": "Zasedačka 2", "when": "+3d 10:00", "hours": 1.5, "organizer": "tomas", "attendees": ["me", "lucie", "martin"]},
+     "text": "Ahoj,\n\nve čtvrtek projdeme plán na Q4: projekt Acme, nábor do montážního týmu a rozpočet na nové licence CAD. Jano, vezmi prosím stav nabídek.\n\nTomáš"},
+    {"id": "news1", "from": "design", "to": ["me"], "when": "-5h", "subject": "Design Weekly #212: typografie na desktopu", "html": true, "remoteImage": true,
+     "list": {"id": "Design Weekly <weekly.designweekly.test>", "unsubscribe": "https://designweekly.test/unsubscribe/7f3a9c, mailto:unsubscribe@designweekly.test?subject=unsubscribe", "oneClick": true},
+     "text": "Tento týden v Design Weekly:\n\n- Proč zase vyhrávají systémová písma: pohled na typografii GNOME, macOS a Windows 11.\n- Tmavý režim pořádně: kontrast, vrstvy a barva stínů.\n- Rozhovor: jak navrhnout poštovního klienta, který nepřekáží.\n\nČtěte na webu, nebo číslo přepošlete kamarádovi."},
+    {"id": "eva1", "from": "eva", "to": ["me"], "when": "-2h", "subject": "Poptávka: vestavba do nového studia", "html": true, "sign": true,
+     "text": "Vážená paní Dvořáková,\n\nnašli jsme vás přes Acme Logistics, kteří vás vřele doporučili. Stěhujeme studio do bývalé dílny v Karlíně (asi 220 m²) a potřebujeme ocelovou mezipatro, zábradlí a schodiště.\n\nMohla byste se přijít podívat na místo příští týden? Hodí se nám úterý a středa odpoledne.\n\nS pozdravem\nEva Králová"},
+    {"id": "fin1", "from": "lucie", "to": ["me"], "when": "-1d 09:30", "subject": "Zářijové faktury ke schválení", "html": true, "sign": true, "flags": ["seen"],
+     "attachments": [{"name": "Faktury-2026-09.pdf", "kind": "pdf", "kb": 320, "text": "Kovar Engineering - dodavatelske faktury, zari 2026\n12 faktur, celkem 486 210 Kc\nSchvalovaci list"}, {"name": "faktury-zari.csv", "kind": "text", "text": "faktura,dodavatel,castka,splatnost\n2026-0912,Steelworks Ostrava,184200,2026-10-15\n2026-0913,Elektro Novak,42800,2026-10-20\n2026-0917,Hilti,19650,2026-10-10"}],
+     "text": "Ahoj Jano,\n\nv příloze posílám zářijové dodavatelské faktury ke schválení: dvanáct kusů, celkem 486 210 Kč. Dvě z nich (Steelworks Ostrava) jsou na projekt Acme, zbytek je dílna.\n\nMohla bys je schválit do středy, abychom je zaplatili před splatností?\n\nDíky,\nLucie"},
+    {"id": "fin1d", "folder": "Drafts", "from": "me", "to": ["lucie"], "when": "-1d 10:05", "subject": "Re: Zářijové faktury ke schválení", "inReplyTo": "fin1", "flags": ["draft", "seen"],
+     "text": "Ahoj Lucie,\n\nschváleno, kromě těch dvou od Steelworks: na druhé je starý ceník, řeknu si jim o opravenou"},
+    {"id": "it1", "from": "martin", "to": ["tomas"], "cc": ["me", "lucie"], "when": "-8h", "subject": "Odstávka serverů v sobotu", "flags": ["seen"],
+     "text": "Ahoj,\n\nsouborový a poštovní server budou v sobotu od 8:00 asi do 11:00 mimo provoz kvůli výměně disků. Co potřebujete, uložte si v pátek; VPN nepojede také.\n\nMartin"},
+    {"id": "boss1", "from": "tomas", "to": ["me"], "when": "-3h", "subject": "Prezentace pro představenstvo: slajdy do středy", "flags": ["flagged"],
+     "text": "Jano,\n\npředstavenstvo chce v pátek případ Acme jako první bod. Mohla bys mít slajdy hotové do středy večer? Deset minut, čísla a rizika, nic víc.\n\nT."},
+    {"id": "shop1", "from": "shop", "to": ["me"], "when": "-26h", "subject": "Vaše objednávka č. 48213 byla odeslána", "html": true, "remoteImage": true, "automated": true, "flags": ["seen"],
+     "table": [["Položka", "Ks", "Cena"], ["Laserový dálkoměr Leica D2", "1", "3 290 Kč"], ["Značkovací sprej, bílý", "6", "594 Kč"], ["Doprava", "", "129 Kč"]],
+     "text": "Dobrý den,\n\nvaše objednávka č. 48213 opustila náš sklad a měla by dorazit ve čtvrtek. Číslo zásilky je DPD 0152 3390 7781.\n\nDěkujeme za nákup v Northwindu."},
+    {"id": "lunch1", "from": "martin", "to": ["me", "tomas", "lucie"], "when": "-2d 11:02", "subject": "Týmový oběd v pátek?", "flags": ["seen"],
+     "text": "Ahoj,\n\nco takhle v pátek týmový oběd? Myslel jsem na tu italskou restauraci na náměstí, kolem půl jedné.\n\nMartin"},
+    {"id": "lunch2", "from": "lucie", "to": ["martin"], "cc": ["me", "tomas"], "when": "-2d 11:30", "subject": "Re: Týmový oběd v pátek?", "inReplyTo": "lunch1", "quote": true, "flags": ["seen"],
+     "text": "Pátek mi vyhovuje. Italská je fajn, ale v pátek bývají plní, někdo by měl zamluvit stůl.\n\nLucie"},
+    {"id": "lunch3", "folder": "Sent", "from": "me", "to": ["martin"], "cc": ["tomas", "lucie"], "when": "-2d 11:45", "subject": "Re: Týmový oběd v pátek?", "inReplyTo": "lunch2", "quote": true, "flags": ["seen"],
+     "text": "12:30 u Da Pietra, zamluvím stůl pro čtyři. Kdyby někdo bral hosta, dejte vědět do čtvrtka.\n\nJana"},
+    {"id": "copy1", "from": "ondrej", "to": ["me"], "when": "-4d 14:10", "subject": "Texty webu, druhý návrh", "html": true, "sign": true, "flags": ["seen"],
+     "attachments": [{"name": "Texty-webu-v2.pdf", "kind": "pdf", "kb": 96, "text": "Kovar Engineering - texty webu, navrh 2\nUvod, Sluzby, Reference, Kontakt\nCopywrite, rijen 2026"}],
+     "text": "Ahoj Jano,\n\nv příloze je druhý návrh textů webu. Úvodní stránku jsem zkrátil, jak jsi chtěla, a reference jsem přesunul pod služby, takže každá služba má svoje dvě tři.\n\nNa kontaktní stránce ještě chybí otevírací doba dílny.\n\nOndřej"},
+    {"id": "copy2", "folder": "Sent", "from": "me", "to": ["ondrej"], "when": "-4d 17:20", "subject": "Re: Texty webu, druhý návrh", "inReplyTo": "copy1", "quote": true, "sign": true, "flags": ["seen"],
+     "text": "Ahoj Ondřeji,\n\nčte se to o hodně líp, díky. Dvě poznámky:\n\n- Na úvodní stránce má být „rodinná firma od roku 1996“, ne 1994, tehdy se otevřela dílna.\n- Pod službami si mezipatra zaslouží vlastní odstavec; dnes jsou třetinou naší práce.\n\nDílna má otevřeno 7:00 až 15:30, pondělí až pátek.\n\nJana"},
+    {"id": "junk1", "folder": "Junk", "from": "lottery", "to": ["me"], "when": "-3d 04:12", "subject": "Byli jste vybráni k výhře!", "html": true,
+     "text": "Gratulujeme! Vaše adresa byla vylosována v našem týdenním slosování. Klikněte na odkaz níže do 24 hodin a vyzvedněte si odměnu."},
+    {"id": "trash1", "folder": "Trash", "from": "martin", "to": ["me"], "when": "-12d 10:00", "subject": "Reset hesla k VPN", "flags": ["seen"],
+     "text": "Ahoj Jano,\n\nresetoval jsem ti heslo k VPN, jak jsi chtěla; nové je na obvyklém místě. Po prvním přihlášení si ho změň.\n\nMartin"},
+    {"id": "arch1", "folder": "Archive", "from": "petr", "to": ["me"], "when": "-20d 13:15", "subject": "Podepsaná smlouva", "html": true, "sign": true, "flags": ["seen"],
+     "text": "Dobrý den,\n\nsmlouva na regály do haly A je z naší strany podepsaná; sken je ve sdílené složce. Děkuji za trpělivost s naším právním oddělením.\n\nPetr Svoboda"},
+    {"id": "ask1", "folder": "Sent", "from": "me", "to": ["petr"], "when": "-1d 13:00", "subject": "Mohli byste potvrdit termín instalace?", "sign": true, "flags": ["seen"],
+     "text": "Dobrý den,\n\nmohli byste potvrdit, že instalace v hale A může začít 10. listopadu? Naše parta potřebuje do konce týdne vědět, jestli má objednat plošinu.\n\nS pozdravem\nJana Dvořáková"},
+    {"id": "conf1", "from": "conf", "to": ["me"], "when": "-7h", "subject": "DevConf Prague 2026: váš program na čtvrtek", "html": true, "flags": ["seen"],
+     "table": [["Čas", "Přednáška", "Sál"], ["9:30", "Nativní desktopové aplikace v roce 2026: kdo je ještě píše", "A1"], ["11:00", "Jedno jádro, tři okna: sdílená logika nad GTK, AppKitem a WinUI", "A1"], ["13:30", "E-mail jako nepřátelský vstup", "B2"], ["15:00", "Local-first: hledání, synchronizace a úložiště bez vlastního serveru", "A1"]],
+     "text": "Dobrý den,\n\nděkujeme za registraci na DevConf Prague. Posíláme program, který jste si označila na čtvrtek; sály jsou ve druhém patře, registrace začíná v 8:30.\n\nOběd se podává ve foyer mezi 12:00 a 13:30. Slajdy zveřejníme na webu konference týden po akci.\n\nNa shledanou ve čtvrtek,\ntým DevConf"},
+    {"id": "list1", "from": "karel", "to": ["list"], "when": "-9h", "subject": "[golang-cz] Listopadový meetup: hledáme přednášky", "flags": ["seen"],
+     "list": {"id": "golang-cz.lists.golang-cz.test", "unsubscribe": "mailto:golang-cz-leave@lists.golang-cz.test", "post": "golang-cz@lists.golang-cz.test"},
+     "text": "Ahoj,\n\nlistopadový meetup je 19. na obvyklém místě. Zatím máme jednu přednášku (generika v praxi); dvě další by byly skvělé, lightning talky vítány.\n\nOdpovězte sem nebo mně přímo.\n\nKarel"},
+    {"id": "thanks1", "from": "tomas", "to": ["me"], "when": "-9d 18:40", "subject": "Díky za včerejšek", "flags": ["seen"],
+     "text": "Jano, prezentace v Acme dopadla opravdu dobře, hlavně technická část. Díky, že jsi to dala dohromady v tak krátkém čase.\n\nT."},
+    {"id": "exp1", "from": "lucie", "to": ["me"], "when": "-10d 08:15", "subject": "Cestovní výkazy za září", "flags": ["seen"],
+     "text": "Ahoj Jano,\n\npřipomínám, že cestovní výkazy za září mají být do pátku. V tom tvém ještě chybí účtenky za palivo z cesty do Ostravy.\n\nLucie"},
+    {"id": "it2", "from": "martin", "to": ["me"], "when": "-30m", "subject": "Nový notebook je připravený",
+     "text": "Ahoj Jano,\n\nnový notebook je nastavený a čeká u mě na stole: pošta, VPN i CAD jsou nainstalované, soubory zkopírované. Stav se, kdykoli budeš mít deset minut, a přeneseme zbytek.\n\nMartin"}
+  ],
+  "eway": {
+    "companies": {
+      "acme": {
+        "fileAs": "Acme Logistics",
+        "email": "info@acme.test",
+        "domain": "acme.test"
+      },
+      "bluebird": {
+        "fileAs": "Bluebird Studio",
+        "email": "hello@bluebird.test",
+        "domain": "bluebird.test"
+      },
+      "copywrite": {
+        "fileAs": "Copywrite",
+        "email": "studio@copywrite.test",
+        "domain": "copywrite.test"
+      }
+    },
+    "contacts": {
+      "petr": {
+        "fileAs": "Svoboda, Petr",
+        "person": "petr",
+        "company": "acme"
+      },
+      "eva": {
+        "fileAs": "Králová, Eva",
+        "person": "eva",
+        "company": "bluebird"
+      },
+      "ondrej": {
+        "fileAs": "Vlk, Ondřej",
+        "person": "ondrej",
+        "company": "copywrite"
+      }
+    },
+    "deals": {
+      "warehouse": {
+        "fileAs": "Acme: rozšíření skladu, hala B",
+        "company": "acme"
+      },
+      "studio": {
+        "fileAs": "Bluebird: vestavba studia v Karlíně",
+        "company": "bluebird"
+      }
+    },
+    "projects": {
+      "hallA": {
+        "fileAs": "Acme: regály hala A",
+        "company": "acme",
+        "completed": true
+      },
+      "web": {
+        "fileAs": "Web 2026",
+        "company": "copywrite"
+      }
+    },
+    "saved": [
+      {
+        "message": "q4",
+        "link": [
+          "contact:petr",
+          "company:acme"
+        ],
+        "superior": "deal:warehouse"
+      }
+    ]
+  },
+  "jira": {
+    "users": {
+      "tomas": {"id": "712020:aa11-tomas", "name": "Tomáš Holub", "email": "tomas.holub@example.test"},
+      "martin": {"id": "712020:bb22-martin", "name": "Martin Beneš", "email": "martin.benes@example.test"}
+    },
+    "issues": [
+      {"id": "web-redesign", "space": "WEB", "summary": "Redesign firemního webu", "status": "In Progress", "assignee": "me", "reporter": "tomas", "created": "-21d 09:00", "watching": true,
+       "description": "<p>Současný web je z roku 2019 a na telefonech nefunguje dobře. Nový má představit tři služby (regály, mezipatra, dopravníky) s referencemi pod každou z nich a kontaktní stránka má nést otevírací dobu dílny.</p><p>Texty dodá Copywrite (Ondřej Vlk), fotky z instalace v hale A.</p>",
+       "comments": [
+         {"author": "petr", "when": "-15d 10:20", "html": "<p>Šlo by přidat krátkou případovou studii projektu v hale A? Náš marketing ji rád zkontroluje.</p>"},
+         {"author": "me", "when": "-14d 16:45", "html": "<p>Ano, počítáme s ní pod Referencemi; návrh pošlu, jakmile budou texty.</p>"},
+         {"author": "tomas", "when": "-2d 12:10", "html": "<p>Dorazil druhý návrh textů; Jano, zkontroluj prosím čísla na úvodní stránce, než to půjde grafikovi.</p>"}
+       ],
+       "history": [{"when": "-18d 11:00", "by": "me", "status": "In Progress"}]},
+      {"id": "web-hours", "space": "WEB", "summary": "Kontaktní stránka: otevírací doba dílny", "status": "To Do", "assignee": "me", "reporter": "me", "created": "-4d 17:30",
+       "description": "<p>Pondělí až pátek 7:00 až 15:30; o svátcích zavřeno. Ukázat vedle mapy.</p>"},
+      {"id": "mob-offline", "space": "MOB", "summary": "Terénní aplikace: bez signálu se ztrácejí měření", "status": "In Progress", "assignee": "martin", "reporter": "me", "created": "-9d 08:40", "watching": true,
+       "description": "<p>Když parta měří halu bez mobilního signálu, aplikace při další synchronizaci měření ztratí místo toho, aby je zachovala. Stalo se dvakrát v hale B u Acme.</p><p>Očekávané chování: měření se uloží lokálně a nahrají se, až se signál vrátí.</p>",
+       "comments": [
+         {"author": "martin", "when": "-6d 09:05", "html": "<p>Reprodukováno: synchronizace přepíše lokální databázi kopií ze serveru, jakmile je server zase dostupný. Oprava v práci.</p>"},
+         {"author": "me", "when": "-5d 13:30", "html": "<p>Díky. Stihne se to do příštího vydání? Parta je u Acme zase 10.</p>"},
+         {"author": "martin", "when": "-1d 17:50", "html": "<p>Ano, oprava je v testování; vydání plánuju na pondělí.</p>"}
+       ],
+       "history": [{"when": "-6d 09:00", "by": "martin", "status": "In Progress"}]},
+      {"id": "itsd-vpn", "space": "ITSD", "summary": "VPN se odpojuje každých 20 minut", "status": "Waiting for customer", "assignee": "martin", "reporter": "me", "created": "-13d 14:00", "watching": true,
+       "description": "<p>Od aktualizace routeru VPN vypadává zhruba každých dvacet minut, obvykle uprostřed práce v CADu. Home office, připojení Vodafone.</p>",
+       "comments": [
+         {"author": "martin", "when": "-12d 09:15", "html": "<p>Zkus prosím nový profil, který jsem ti poslal, a dej vědět, jestli pořád vypadává.</p>"}
+       ],
+       "history": [{"when": "-12d 09:16", "by": "martin", "status": "Waiting for customer"}]},
+      {"id": "itsd-laptop", "space": "ITSD", "summary": "Nový notebook pro Janu Dvořákovou", "status": "Done", "assignee": "martin", "reporter": "tomas", "created": "-16d 10:30",
+       "description": "<p>Vyměnit notebook z roku 2021; CAD potřebuje víc paměti. Stejný model jako má konstrukce.</p>",
+       "comments": [{"author": "martin", "when": "-30m", "html": "<p>Dodáno a nastaveno; čeká u mě na stole.</p>"}],
+       "history": [{"when": "-10d 15:00", "by": "martin", "status": "In Progress"}, {"when": "-30m", "by": "martin", "status": "Done"}]},
+      {"id": "mob-photos", "space": "MOB", "summary": "Přiložit fotky k měření", "status": "To Do", "assignee": "", "reporter": "me", "created": "-3d 11:20",
+       "description": "<p>Parta chce ke každému změřenému rozponu přiložit fotku, aby kancelář viděla, co to číslo znamená.</p>"},
+      {"id": "web-photos", "space": "WEB", "summary": "Fotky instalace v hale A pro reference", "status": "Done", "assignee": "petr", "reporter": "me", "created": "-11d 09:50",
+       "description": "<p>Deset až patnáct fotek hotových regálů v hale A, se souhlasem Acme ke zveřejnění.</p>",
+       "comments": [{"author": "petr", "when": "-7d 15:40", "html": "<p>Čtrnáct fotek je ve sdílené složce, zveřejnění náš marketing schválil.</p>"}],
+       "history": [{"when": "-7d 15:41", "by": "petr", "status": "Done"}]}
+    ]
+  }
+}

@@ -87,6 +87,8 @@ type conversationChat struct {
 	scroll       convChatScroll
 	last         *convAnchor
 	settingValue bool
+	// relayoutQueued: setTop's idle layout of the viewport is pending.
+	relayoutQueued bool
 	// columnWidth is the column's inner width the rows were last sized
 	// for (followSize; 0 before the first allocation), compact whether the
 	// bubbles show the short date (convChatCompactDates).
@@ -171,6 +173,10 @@ func newConversationChat(h *conversationHost, b *gtk.Builder) *conversationChat 
 		return false
 	})
 	cv.scroller.AddController(sc)
+	// The senders' photos (contact_photos.go) while the chat shows.
+	h.w.photoHub().addPhotoView("chat", cv.photoAvatars)
+	cv.scroller.ConnectMap(h.w.photosChanged)
+	cv.scroller.ConnectUnmap(h.w.photosChanged)
 	return cv
 }
 
@@ -308,10 +314,11 @@ func (cv *conversationChat) apply(m *conversation.Model) {
 				cv.bubbles[id] = row
 			}
 			row.row = r
+			cv.showInvitation(row)
 			cv.shorten(row)
 			row.setMax(bubbleMax)
 			row.setGap(cv.bubbleGap())
-			row.showMessage(r.Item, bubbleAttachmentBadge(r.Item.Message, cv.ctrl.loaded[id]), cv.compact)
+			row.showMessage(r.Item, bubbleAttachmentBadge(r.Item.Message, cv.ctrl.loaded[id], cv.cardOn(r.Item.Message.AccountID)), cv.compact)
 			if !row.bubble.showsText {
 				lm := cv.ctrl.loaded[id]
 				text, placeholder := bubbleBody(lm, r.Item.Message.Snippet)
@@ -384,6 +391,7 @@ func (cv *conversationChat) apply(m *conversation.Model) {
 	}
 	cv.order = desired
 	cv.members = members
+	cv.w.photosChanged()
 }
 
 // render shows what the entry lm of the member of row holds (nil: nothing
@@ -399,7 +407,9 @@ func (cv *conversationChat) render(row *chatRow, lm *loadedMessage) {
 		return
 	}
 	item := cv.ctrl.model.Items[i]
-	row.showMessage(item, bubbleAttachmentBadge(item.Message, lm), cv.compact)
+	cv.showInvitation(row)
+	cv.shorten(row)
+	row.showMessage(item, bubbleAttachmentBadge(item.Message, lm, cv.cardOn(item.Message.AccountID)), cv.compact)
 	text, placeholder := bubbleBody(lm, item.Message.Snippet)
 	row.bubble.showBody(text, placeholder, bubbleMonospace(lm, true))
 	cv.renderHTML(row, lm)
@@ -444,7 +454,23 @@ func (cv *conversationChat) shorten(row *chatRow) {
 		chatExpandRow(&cv.expanded, row.row)
 		row.bubble.setShortened(false)
 	}
-	row.bubble.setShortened(chatRowShortened(cv.mineOn, cv.othersOn, &cv.expanded, row.row))
+	// The text of an invitation's bubble (the meeting's boilerplate under
+	// the card) starts shortened: the card says what matters.
+	card := row.bubble.showsInvitation() && !cv.expanded.Is(row.row.Item.Message.ID)
+	row.bubble.setShortened(card || chatRowShortened(cv.mineOn, cv.othersOn, &cv.expanded, row.row))
+}
+
+// showInvitation gives the bubble of row its invitation card
+// (message.get's, when the account shows invitation cards).
+func (cv *conversationChat) showInvitation(row *chatRow) {
+	if row.row.Kind != conversation.ChatBubble {
+		return
+	}
+	var m *api.Message
+	if lm := cv.ctrl.loaded[row.row.Item.Message.ID]; lm != nil {
+		m = lm.msg
+	}
+	row.bubble.showInvitation(cv.w, row.row.Item.Message, m)
 }
 
 // truncChanged follows the preferences conversation-chat-truncate-mine
@@ -541,6 +567,7 @@ func (cv *conversationChat) removeAll() {
 	cv.last = nil
 	cv.layoutTries = 0
 	cv.issue.clear()
+	cv.w.photosChanged()
 }
 
 // Width.
@@ -645,9 +672,28 @@ func (cv *conversationChat) scrollToEnd() {
 	if math.Abs(top-adj.Value()) < 0.5 {
 		return
 	}
+	cv.setTop(top)
+}
+
+// setTop moves the viewport's top to top without counting it as the
+// user's scroll. Its callers run inside the viewport's allocation (the
+// adjustment's "changed"), where the allocation the new value queues is
+// dropped and the rows stay drawn at the old one until something else
+// lays them out; the viewport is laid out again once that is over.
+func (cv *conversationChat) setTop(top float64) {
 	cv.settingValue = true
-	adj.SetValue(top)
+	cv.scroller.VAdjustment().SetValue(top)
 	cv.settingValue = false
+	if cv.relayoutQueued {
+		return
+	}
+	cv.relayoutQueued = true
+	glib.IdleAdd(func() {
+		cv.relayoutQueued = false
+		if c := cv.scroller.Child(); c != nil {
+			gtk.BaseWidget(c).QueueAllocate()
+		}
+	})
 }
 
 // spanOf is w's stretch of the document; false while w is not in the
@@ -696,9 +742,7 @@ func (cv *conversationChat) restore(a *convAnchor) {
 	if math.Abs(top-adj.Value()) < 0.5 {
 		return
 	}
-	cv.settingValue = true
-	adj.SetValue(top)
-	cv.settingValue = false
+	cv.setTop(top)
 }
 
 // pageBy scrolls one page down (or up) for Space (Shift+Space) in the list
@@ -784,4 +828,9 @@ func (cv *conversationChat) afterLayout() {
 		cv.scheduleNear()
 		return false
 	})
+}
+
+// cardOn is the "Show the Invitation Card" switch of account acc.
+func (cv *conversationChat) cardOn(acc api.AccountID) bool {
+	return cv.w.invitationCardOn(acc)
 }

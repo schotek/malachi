@@ -18,6 +18,8 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/schotek/malachi/backend/internal/caldav"
+	"github.com/schotek/malachi/backend/internal/calendar"
+	"github.com/schotek/malachi/backend/internal/calsync"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -91,16 +93,16 @@ func validateCalDAVConnection(cd *api.CalDAVConfig) error {
 		}
 		cd.CertificateSHA256 = pin
 	}
-	for _, f := range []*string{&cd.PrincipalURL, &cd.HomeSetURL} {
+	for _, f := range []*string{&cd.PrincipalURL, &cd.HomeSetURL, &cd.AddressBookHomeSetURL} {
 		*f = strings.TrimSpace(*f)
 		if *f == "" {
 			continue
 		}
 		if len(*f) > maxCalDAVURLBytes {
-			return bad("principalUrl and homeSetUrl are limited to %d bytes", maxCalDAVURLBytes)
+			return bad("principalUrl, homeSetUrl and addressBookHomeSetUrl are limited to %d bytes", maxCalDAVURLBytes)
 		}
 		if _, ok := calDAVOrigin(server, *f); !ok {
-			return bad("principalUrl and homeSetUrl must be URLs of the server's site")
+			return bad("principalUrl, homeSetUrl and addressBookHomeSetUrl must be URLs of the server's site")
 		}
 	}
 	switch cd.Scheduling {
@@ -117,7 +119,8 @@ func validateCalDAVConnection(cd *api.CalDAVConfig) error {
 
 // validateCalendarConfig checks the calendar block of a graph or caldav
 // account (any other kind has none) and fills a caldav account's: its
-// calendars always synchronise.
+// calendars always synchronise, unless its contacts are on and the block
+// says sync false (calsync.CalDAVHasCalendars).
 func validateCalendarConfig(c *api.AccountConfig) error {
 	bad := func(format string, args ...any) error {
 		return api.NewError(api.CodeInvalidArgument, "calendar: "+format, args...)
@@ -130,10 +133,11 @@ func validateCalendarConfig(c *api.AccountConfig) error {
 		return nil
 	}
 	if kind == api.AccountCalDAV {
+		contactsOnly := c.CalDAV != nil && c.CalDAV.Contacts && c.Calendar != nil && !c.Calendar.Sync
 		if c.Calendar == nil {
 			c.Calendar = &api.CalendarConfig{}
 		}
-		c.Calendar.Sync = true
+		c.Calendar.Sync = !contactsOnly
 	}
 	cal := c.Calendar
 	if cal == nil {
@@ -197,9 +201,9 @@ func calDAVSecretMoves(old, next api.AccountConfig) bool {
 	return false
 }
 
-// isCalendarOnlyAccount says whether the account has calendars and nothing
-// else (kind caldav): no mail, no folders, no messages, so no board case
-// and nothing for triage to read.
+// isCalendarOnlyAccount says whether the account has calendars or address
+// books and nothing else (kind caldav): no mail, no folders, no messages,
+// so no board case and nothing for triage to read.
 func isCalendarOnlyAccount(a store.Account) bool {
 	return a.Config.Protocol() == api.AccountCalDAV
 }
@@ -231,9 +235,17 @@ func (b *Backend) prepareCalDAV(ctx context.Context, c *api.AccountConfig, exist
 		if cd.HomeSetURL == "" {
 			cd.HomeSetURL = existing.Config.CalDAV.HomeSetURL
 		}
+		if cd.AddressBookHomeSetURL == "" {
+			cd.AddressBookHomeSetURL = existing.Config.CalDAV.AddressBookHomeSetURL
+		}
+		if c.Calendar == nil && cd.Contacts && !calsync.CalDAVHasCalendars(existing.Config) {
+			// An account without calendars keeps having none.
+			c.Calendar = &api.CalendarConfig{Sync: false}
+		}
 	}
 	c.Email = strings.TrimSpace(c.Email)
-	if (cd.HomeSetURL != "" && c.Email != "") || password == "" {
+	known := cd.HomeSetURL != "" || (cd.Contacts && cd.AddressBookHomeSetURL != "")
+	if (known && c.Email != "") || password == "" {
 		if c.Email == "" && validateAddress(api.Address{Address: cd.Username}) == nil {
 			c.Email = cd.Username
 		}
@@ -246,11 +258,21 @@ func (b *Backend) prepareCalDAV(ctx context.Context, c *api.AccountConfig, exist
 	if cd.PrincipalURL == "" {
 		cd.PrincipalURL = info.PrincipalURL
 	}
-	if cd.HomeSetURL == "" {
-		cd.HomeSetURL = info.HomeSetURL
+	if cd.HomeSetURL == "" && info.Cal != nil {
+		cd.HomeSetURL = info.Cal.HomeSetURL
 	}
-	if c.Email == "" {
-		for _, a := range info.Addresses {
+	if cd.AddressBookHomeSetURL == "" {
+		cd.AddressBookHomeSetURL = info.BookHome
+	}
+	if info.Cal == nil && cd.Contacts {
+		// A CardDAV-only server: the account has no calendars.
+		if c.Calendar == nil {
+			c.Calendar = &api.CalendarConfig{}
+		}
+		c.Calendar.Sync = false
+	}
+	if c.Email == "" && info.Cal != nil {
+		for _, a := range info.Cal.Addresses {
 			if validateAddress(api.Address{Address: a}) == nil {
 				c.Email = a
 				break
@@ -316,7 +338,7 @@ func (s *accountService) ListCalDAVCalendars(ctx context.Context, p api.AccountL
 		return nil, err
 	}
 	res := info.Result()
-	s.b.log.Info("caldav calendars listed", "calendars", len(res.Calendars), "scheduling", res.Scheduling)
+	s.b.log.Info("caldav calendars listed", "calendars", len(res.Calendars), "addressBooks", len(res.AddressBooks), "scheduling", res.Scheduling)
 	return &res, nil
 }
 
@@ -372,50 +394,148 @@ func (s *accountService) testCalDAV(ctx context.Context, p api.AccountTestParams
 // calDAVTestCapabilities are EndpointTestResult.capabilities of a caldav
 // endpoint: calendar-access, calendar-auto-schedule and sync-collection
 // (when a calendar of the home set offers it).
-func calDAVTestCapabilities(info *caldav.AccountInfo) []string {
+func calDAVTestCapabilities(l *davListing) []string {
 	var caps []string
-	if info.Capabilities.CalendarAccess {
-		caps = append(caps, "calendar-access")
+	if info := l.Cal; info != nil {
+		if info.Capabilities.CalendarAccess {
+			caps = append(caps, "calendar-access")
+		}
+		if info.Capabilities.AutoSchedule {
+			caps = append(caps, "calendar-auto-schedule")
+		}
+		if slices.ContainsFunc(info.Calendars, func(c caldav.Calendar) bool { return c.SupportsSync }) {
+			caps = append(caps, "sync-collection")
+		}
 	}
-	if info.Capabilities.AutoSchedule {
-		caps = append(caps, "calendar-auto-schedule")
-	}
-	if slices.ContainsFunc(info.Calendars, func(c caldav.Calendar) bool { return c.SupportsSync }) {
-		caps = append(caps, "sync-collection")
+	if l.BookHome != "" {
+		caps = append(caps, "addressbook")
 	}
 	return caps
 }
 
-// listCalDAV signs in with password and lists the account. A principal or
-// home set on another origin of the server's site (iCloud's partition
-// hosts pNN-caldav.icloud.com) is trusted once the server names it; one
-// on another site is serverError and gets no request with the password.
+// davListing is what a signed-in listing of a caldav account found: its
+// calendars (nil for a CardDAV-only server) and its address books.
+type davListing struct {
+	PrincipalURL string
+	DisplayName  string
+	Cal          *caldav.AccountInfo
+	BookHome     string // absolute, "" when the principal names none
+	Books        []caldav.AddressBook
+}
+
+// Result is the answer of account.listCalDAVCalendars.
+func (l *davListing) Result() api.AccountListCalDAVCalendarsResult {
+	var r api.AccountListCalDAVCalendarsResult
+	if l.Cal != nil {
+		r = l.Cal.Result()
+	} else {
+		r = api.AccountListCalDAVCalendarsResult{PrincipalURL: l.PrincipalURL, DisplayName: l.DisplayName,
+			Addresses: []string{}, Calendars: []api.CalDAVCalendar{}, Scheduling: api.CalDAVSchedulingClient}
+	}
+	r.AddressBookHomeSetURL = l.BookHome
+	r.AddressBooks = make([]api.CardDAVAddressBook, 0, len(l.Books))
+	for _, bk := range l.Books {
+		if len(r.AddressBooks) >= api.MaxAddressBooksPerAccount {
+			break
+		}
+		r.AddressBooks = append(r.AddressBooks, api.CardDAVAddressBook{Href: bk.Href, Name: calendar.CleanLine(bk.Name, 256), ReadOnly: bk.ReadOnly})
+	}
+	return r
+}
+
+// listCalDAV signs in with password and lists the account: the principal
+// and its home sets, the calendars of the calendar home set (when there is
+// one) and the address books of the address book home set (when there is
+// one). A server without either is serverError. A principal or home set
+// on another origin of the server's site (iCloud's partition hosts
+// pNN-caldav.icloud.com, its contacts host) is trusted once the server
+// names it; a principal or calendar home set on another site is
+// serverError, an address book home set there is left out, either without
+// a request with the password.
 // Errors are *api.Error.
-func (b *Backend) listCalDAV(ctx context.Context, cd api.CalDAVConfig, password string) (*caldav.AccountInfo, error) {
+func (b *Backend) listCalDAV(ctx context.Context, cd api.CalDAVConfig, password string) (*davListing, error) {
 	origins := calDAVConfiguredOrigins(cd)
 	pw := func(context.Context) (string, error) { return password, nil }
+	trust := func(raw string) bool {
+		o, ok := calDAVOrigin(cd.ServerURL, raw)
+		if !ok || slices.Contains(origins, o) {
+			return false
+		}
+		origins = append(origins, o)
+		return true
+	}
 	for round := 0; ; round++ {
 		c, err := b.newCalDAVClient(cd, origins, pw)
 		if err != nil {
 			return nil, err
 		}
-		info, err := c.ListCalendars(ctx)
-		if err == nil {
-			return info, nil
+		retry := func(err error) bool {
+			if !errors.Is(err, caldav.ErrOtherOrigin) || round >= calDAVOriginRounds {
+				return false
+			}
+			added := false
+			for _, o := range calDAVNamedOrigins(ctx, c, cd.ServerURL) {
+				if !slices.Contains(origins, o) {
+					origins = append(origins, o)
+					added = true
+				}
+			}
+			return added
 		}
-		if !errors.Is(err, caldav.ErrOtherOrigin) || round >= calDAVOriginRounds {
+		hs, err := c.HomeSets(ctx)
+		if err != nil {
+			if retry(err) {
+				continue
+			}
 			return nil, caldav.ToAPIError(err)
 		}
-		added := false
-		for _, o := range calDAVNamedOrigins(ctx, c, cd.ServerURL) {
-			if !slices.Contains(origins, o) {
-				origins = append(origins, o)
-				added = true
+		again := false
+		for _, home := range []*string{&hs.CalendarHomeSet, &hs.AddressBookHomeSet} {
+			if *home == "" || c.Trusts(*home) {
+				continue
+			}
+			if round < calDAVOriginRounds && trust(*home) {
+				again = true
+				continue
+			}
+			if home == &hs.CalendarHomeSet {
+				return nil, caldav.ToAPIError(caldav.ErrOtherOrigin)
+			}
+			*home = "" // address books on another site: left out, never asked with the password
+		}
+		if again {
+			continue
+		}
+		out := &davListing{PrincipalURL: hs.PrincipalURL, DisplayName: hs.DisplayName}
+		if hs.CalendarHomeSet != "" {
+			info, err := c.ListCalendars(ctx)
+			switch {
+			case err == nil:
+				out.Cal = info
+			case retry(err):
+				continue
+			case caldav.IsNotCalDAV(err) && hs.AddressBookHomeSet != "":
+				// A CardDAV server that names a calendar home anyway.
+			default:
+				return nil, caldav.ToAPIError(err)
 			}
 		}
-		if !added {
-			return nil, caldav.ToAPIError(err)
+		if hs.AddressBookHomeSet != "" {
+			books, err := c.ListAddressBooks(ctx, hs.AddressBookHomeSet)
+			switch {
+			case err == nil:
+				out.BookHome, out.Books = hs.AddressBookHomeSet, books
+			case out.Cal != nil && !caldav.IsUnauthorized(err) && !errors.Is(err, context.Canceled):
+				// The calendars stand alone; the address books are left out.
+				b.log.Info("caldav address books not listed", "code", caldav.ToAPIError(err).Code)
+			default:
+				return nil, caldav.ToAPIError(err)
+			}
 		}
+		if out.Cal == nil && out.BookHome == "" {
+			return nil, api.NewError(api.CodeServerError, "caldav: the server has neither calendars nor address books")
+		}
+		return out, nil
 	}
 }
 
@@ -455,7 +575,7 @@ func calDAVNamedOrigins(ctx context.Context, c *caldav.Client, server string) []
 // home set a configuration names.
 func calDAVConfiguredOrigins(cd api.CalDAVConfig) []string {
 	var out []string
-	for _, u := range []string{cd.PrincipalURL, cd.HomeSetURL} {
+	for _, u := range []string{cd.PrincipalURL, cd.HomeSetURL, cd.AddressBookHomeSetURL} {
 		if o, ok := calDAVOrigin(cd.ServerURL, u); ok && u != "" && !slices.Contains(out, o) {
 			out = append(out, o)
 		}

@@ -36,6 +36,12 @@ public sealed class ApiRoundTripTests
     private const string Config =
         """{"name":"Work","email":"me@example.org","displayName":"Me","kind":"imap","imap":@server@,"smtp":@server@,"oauth2":@oauth2@,"graph":{"source":"goa","goaAccountId":"account_1"},"jira":@jira@,"caldav":@calcaldavconfig@,"eway":@ewayconfig@,"calendar":@calconfig@,"syncIntervalSeconds":300}""";
 
+    private const string RuleInputJson =
+        """{"name":"Acme","enabled":true,"accountId":"acc_1","match":"any","conditions":[{"field":"from","op":"domainIs","value":"acme.cz"},{"field":"hasAttachments","op":"is","value":"true"}],"actions":[{"kind":"move","folderId":"f_news"},{"kind":"forward","to":"boss@acme.cz"},{"kind":"autoReply","subject":"Re","text":"Hi"}],"stop":true}""";
+
+    private const string RuleJson =
+        """{"id":"r_1","name":"Acme","enabled":true,"accountId":"acc_1","match":"any","conditions":[{"field":"from","op":"domainIs","value":"acme.cz"},{"field":"hasAttachments","op":"is","value":"true"}],"actions":[{"kind":"move","folderId":"f_news"},{"kind":"forward","to":"boss@acme.cz"},{"kind":"autoReply","subject":"Re","text":"Hi"}],"stop":true,"outgoing":true,"problem":"folderGone","createdAt":"2026-11-01T08:00:00Z","updatedAt":"2026-11-02T08:00:00Z","applied":12,"lastAppliedAt":"2026-11-02T08:30:00Z","skipped":2}""";
+
     private const string Error = """{"code":1302,"message":"550 no","data":{"limit":1,"size":2}}""";
 
     private const string State =
@@ -46,7 +52,10 @@ public sealed class ApiRoundTripTests
     private const string Outbox = """{"state":"failed","attempts":3,"nextAttemptAt":"2026-09-02T12:00:00.5Z","error":@error@}""";
 
     private const string Summary =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"bulk":@bulk@,"invitation":@calinvitationsummary@,"crmSaved":true}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"bulk":@bulk@,"invitation":@calinvitationsummary@,"crmSaved":true,"signature":{"kind":"smime","status":"valid"}}""";
+
+    private const string UpdateInfoJson =
+        """{"version":"0.1.3","publishedAt":"2026-11-01T19:00:00Z","security":false,"notes":"Fixes.\nMore fixes.","infoUrl":"https://malachimail.app/download.html","url":"https://github.com/schotek/malachi/releases/download/v0.1.3/Malachi-Mail-0.1.3-windows-x64-setup.exe","size":81234567,"skipped":false,"remindAfter":"2026-11-04T19:00:00Z","prompt":false}""";
 
     private const string Bulk = """{"kind":"list","listId":"golang-nuts.googlegroups.com","domain":"googlegroups.com"}""";
 
@@ -56,7 +65,7 @@ public sealed class ApiRoundTripTests
         """{"partId":"2.1","filename":"image001.png","contentType":"image/png","size":100,"inline":true,"contentId":"image001@example.org","remote":true}""";
 
     private const string Message =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"},"bulk":@bulk@,"unsubscribe":@unsubscribe@,"invitation":@calinvitationcard@,"crm":[@crmrecord@],"crmSaved":true}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"},"bulk":@bulk@,"unsubscribe":@unsubscribe@,"invitation":@calinvitationcard@,"crm":[@crmrecord@],"crmSaved":true,"signature":@sigsummary@}""";
 
     private const string Blocked =
         """{"remoteImages":3,"remoteStyles":1,"remoteFonts":0,"scripts":1,"forms":0,"eventHandlers":2,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":1}""";
@@ -106,7 +115,7 @@ public sealed class ApiRoundTripTests
         """{"id":"k_1","caseId":"@caseid@","accountId":"acc_1","messageId":"m_3","text":"Send the report","quote":"I will send the report on Monday.","due":"2026-10-05T09:00:00Z","state":"closed","closedReason":"replied","at":"2026-09-30T08:31:00Z"}""";
 
     private const string BoardMessage =
-        """{"id":"m_1","folderId":"f_inbox","from":@address@,"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign the contract?","trimmed":true}""";
+        """{"id":"m_1","folderId":"f_inbox","from":@address@,"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign the contract?","trimmed":true,"signature":@sigsummary@}""";
 
     private const string BoardRun =
         """{"at":"2026-09-30T08:00:00Z","endedAt":"2026-09-30T08:02:00Z","trigger":"auto","source":"claude-opus","annotated":3,"error":"timeout"}""";
@@ -135,7 +144,10 @@ public sealed class ApiRoundTripTests
     // The calendar (Calendar.cs): every member named, optional ones present.
 
     private const string CalCalDavConfig =
-        """{"serverUrl":"https://cloud.example.org/remote.php/dav","principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","username":"jana","certificateSha256":"@pin@","mailAccountId":"acc_2","scheduling":"client"}""";
+        """{"serverUrl":"https://cloud.example.org/remote.php/dav","principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","username":"jana","certificateSha256":"@pin@","mailAccountId":"acc_2","scheduling":"client","addressBookHomeSetUrl":"https://cloud.example.org/remote.php/dav/addressbooks/users/jana/","contacts":true}""";
+
+    private const string ContactCardJson =
+        """{"id":"p_1","bookId":"b_1","readOnly":false,"revision":"\"e1\"","name":{"given":"Jana","family":"Nováková"},"displayName":"Jana Nováková","nickname":"Janka","org":"Acme","title":"CTO","emails":[{"label":"work","address":"jana@example.org"}],"phones":[{"label":"mobile","number":"+420 600 000 000"}],"addresses":[{"label":"home","city":"Praha","country":"CZ"}],"urls":[{"url":"https://example.org"}],"birthday":{"month":2,"day":29},"note":"plain text","photo":"remote"}""";
 
     private const string CalConfig =
         """{"sync":true,"disabledCalendars":["/remote.php/dav/calendars/jana/old/"],"defaultCalendar":"/remote.php/dav/calendars/jana/personal/","keepDays":365,"showUnanswered":false,"invitationCard":true,"afterAnswer":"archive"}""";
@@ -218,7 +230,7 @@ public sealed class ApiRoundTripTests
 
     private const string CalInvitationSummaryMembers =
         """
-        "method":"request","kind":"update","state":"unanswered","title":"Workshop","start":"2026-10-14T08:00:00Z","end":"2026-10-14T08:30:00Z","startDate":"2026-10-14","allDay":true,"organizer":@address@,"replyFrom":@address@,"ownEvent":true
+        "method":"request","kind":"update","state":"unanswered","title":"Workshop","start":"2026-10-14T08:00:00Z","end":"2026-10-14T08:30:00Z","startDate":"2026-10-14","allDay":true,"organizer":@address@,"replyFrom":@address@,"replyResponse":"accepted","ownEvent":true
         """;
 
     private const string CalInvitationSummary =
@@ -258,6 +270,36 @@ public sealed class ApiRoundTripTests
     private const string CrmRecord =
         """{"accountId":"acc_e","itemGuid":"00000000-0000-4000-8000-000000000100","savedAt":"2026-10-17T10:00:00Z","checkedAt":"2026-10-17T11:00:00Z","private":true,"auto":true,"items":[@crmitem@],"url":"https://open.eway-crm.com/?l=e"}""";
 
+    // The signatures (Signature.cs): every member named, optional ones present; a
+    // Message's "signature" is the summary with the signer, the notes and the part.
+    private const string SigFp40 = "0123456789abcdef0123456789abcdef01234567";
+
+    private const string SigSigner = """{"name":"Jan Novák","email":"jan@example.org","fingerprint":"@pin@"}""";
+
+    private const string SigSummary =
+        """{"kind":"smime","status":"valid","signer":@sigsigner@,"notes":["opaque","partialFooter"],"partId":"2"}""";
+
+    private const string SigHeader = """{"name":"subject","value":"Real subject"}""";
+
+    private const string SigCertificate =
+        """{"sha256":"@pin@","subject":"CN=Jan","issuer":"CN=CA","emails":["jan@example.org"],"notBefore":"2025-01-02T03:04:05Z","notAfter":"2027-01-02T03:04:05Z","systemRoot":true,"selfSigned":false}""";
+
+    private const string SigRevocation =
+        """{"state":"good","checkedAt":"2026-11-02T09:00:00Z","revokedAt":"2026-11-01T09:00:00Z","source":"ocsp","checkable":true}""";
+
+    private const string SigSmime = """{"chain":[@sigcertificate@],"revocation":@sigrevocation@}""";
+
+    private const string SigOffer = """{"fingerprint":"0123456789abcdef0123456789abcdef01234567","partId":"3","autocrypt":false}""";
+
+    private const string SigPgp =
+        """{"keyTrust":"seen","keyId":"89abcdef01234567","primaryFingerprint":"0123456789abcdef0123456789abcdef01234567","userIds":["Jan <jan@example.org>"],"keySource":"autocrypt","firstSeen":"2026-10-30T08:00:00Z","previousFingerprint":"ef01234567890123456789abcdef0123456789ab","importable":@sigoffer@}""";
+
+    private const string SigDetails =
+        """{"kind":"smime","status":"untrusted","signer":@sigsigner@,"notes":["expiredSince"],"partId":"2","messageId":"m_1","reason":"unknownIssuer","signedAt":"2026-11-02T07:00:00Z","arrivedAt":"2026-11-02T08:00:00Z","algorithm":"RSA 2048 / SHA-256","expiredAt":"2026-12-01T00:00:00Z","revokedAt":"2026-12-02T00:00:00Z","protectedHeaders":[@sigheader@],"smime":@sigsmime@,"pgp":@sigpgp@}""";
+
+    private const string SigKey =
+        """{"fingerprint":"0123456789abcdef0123456789abcdef01234567","userIds":["Jan <jan@example.org>"],"emails":["jan@example.org"],"trust":"verified","source":"import","firstSeen":"2026-10-30T08:00:00Z","createdAt":"2025-01-02T03:04:05Z","expiresAt":"2030-01-02T03:04:05Z","revokedAt":"2031-01-02T03:04:05Z","algorithm":"Ed25519"}""";
+
     // Every record: a JSON document and, when the encoding adds members, what it encodes to.
     private static readonly Dictionary<string, Sample> Samples = new(StringComparer.Ordinal)
     {
@@ -273,7 +315,7 @@ public sealed class ApiRoundTripTests
         [nameof(SystemInfoResult)] = Case<SystemInfoResult>("""{"version":"0.1.0","protocolVersion":2,"pid":4242,"storePath":"/home/u/.local/share/malachi/store.db"}"""),
         [nameof(ServerConfig)] = Case<ServerConfig>(Server),
         [nameof(OAuth2Config)] = Case<OAuth2Config>(OAuth2),
-        [nameof(GraphConfig)] = Case<GraphConfig>("""{"source":"goa","goaAccountId":"account_1788512854_0"}"""),
+        [nameof(GraphConfig)] = Case<GraphConfig>("""{"source":"goa","goaAccountId":"account_1788512854_0","contacts":{"sync":true}}"""),
         [nameof(AccountConfig)] = Case<AccountConfig>(Config),
         [nameof(Credentials)] = Case<Credentials>("""{"password":"secret","oauthSession":"s_1"}"""),
         [nameof(Account)] = Case<Account>("""{"id":"acc_1","config":@config@,"enabled":true,"state":@state@,"capabilities":["comment","forward","teleport"]}"""),
@@ -292,7 +334,7 @@ public sealed class ApiRoundTripTests
             """{"accounts":[{"provider":"google","email":"me@gmail.com","goaAccountId":"account_2","configured":true,"attentionNeeded":false}]}"""),
         [nameof(OAuthBrowserPage)] = Case<OAuthBrowserPage>(
             """{"successTitle":"Signed in","successText":"You can close this tab.","failureTitle":"Sign-in failed","failureText":"Return to Malachi Mail."}"""),
-        [nameof(AccountOAuthStartParams)] = Case<AccountOAuthStartParams>("""{"accountId":"acc_1","config":@config@,"browserPage":{"successTitle":"Signed in"},"calendar":true}"""),
+        [nameof(AccountOAuthStartParams)] = Case<AccountOAuthStartParams>("""{"accountId":"acc_1","config":@config@,"browserPage":{"successTitle":"Signed in"},"calendar":true,"contacts":true}"""),
         [nameof(AccountOAuthStartResult)] = Case<AccountOAuthStartResult>(
             """{"sessionId":"s_1","authUrl":"https://accounts.google.com/o/oauth2/v2/auth?x=1&y=2","expiresAt":"2026-09-25T10:10:00Z"}"""),
         [nameof(AccountOAuthWaitParams)] = Case<AccountOAuthWaitParams>("""{"sessionId":"s_1"}"""),
@@ -371,9 +413,43 @@ public sealed class ApiRoundTripTests
         [nameof(ConfigSetParams)] = Case<ConfigSetParams>("""{"preferences":{"syncIntervalSeconds":60,"remoteContent":"allow","offlineDays":3650}}"""),
         [nameof(ConfigSetResult)] = Case<ConfigSetResult>("""{"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30}}"""),
         // Contacts.cs
-        [nameof(Contact)] = Case<Contact>("""{"name":"Alice Example","address":"alice@example.org","source":"addressBook","book":"Contacts"}"""),
-        [nameof(ContactSearchParams)] = Case<ContactSearchParams>("""{"accountId":"acc_1","query":"ali","limit":10}"""),
+        [nameof(Contact)] = Case<Contact>("""{"name":"Alice Example","address":"alice@example.org","source":"contacts","book":"Contacts","contactId":"p_1"}"""),
+        [nameof(ContactSearchParams)] = Case<ContactSearchParams>("""{"accountId":"acc_1","query":"ali","limit":10,"scope":"all"}"""),
         [nameof(ContactSearchResult)] = Case<ContactSearchResult>("""{"contacts":[{"address":"bob@example.org","source":"sent"}]}"""),
+        // ContactsBook.cs (docs/api.md §4.19)
+        [nameof(ContactsConfig)] = Case<ContactsConfig>("""{"sync":true}"""),
+        [nameof(CardDAVAddressBook)] = Case<CardDAVAddressBook>("""{"href":"/ab/family/","name":"Family","readOnly":true}"""),
+        [nameof(ContactsConsentRequiredData)] = Case<ContactsConsentRequiredData>("""{"accountId":"acc_1","signIn":true}"""),
+        [nameof(ContactConflictData)] = Case<ContactConflictData>("""{"server":@contactcard@}"""),
+        [nameof(ContactFieldData)] = Case<ContactFieldData>("""{"field":"emails[2].address"}"""),
+        [nameof(AddressBook)] = Case<AddressBook>("""{"id":"b_1","accountId":"acc_1","name":"Contacts","kind":"graph","readOnly":false,"searchOnly":true,"visible":true,"count":318,"lastSyncAt":"2026-10-30T10:00:00Z"}"""),
+        [nameof(ContactSummary)] = Case<ContactSummary>("""{"id":"p_1","bookId":"b_1","displayName":"Jana Nováková","sortKey":"nováková jana","section":"N","org":"Acme","email":"jana@example.org","photo":"ready"}"""),
+        [nameof(ContactName)] = Case<ContactName>("""{"given":"Jana","family":"Nováková","middle":"M","prefix":"Ing.","suffix":"Ph.D."}"""),
+        [nameof(ContactEmail)] = Case<ContactEmail>("""{"label":"work","address":"jana@example.org"}"""),
+        [nameof(ContactPhone)] = Case<ContactPhone>("""{"label":"Kancelář","number":"+420 600 000 000"}"""),
+        [nameof(ContactAddress)] = Case<ContactAddress>("""{"label":"home","street":"Dlouhá 12\nvchod B","city":"Praha","region":"Praha","postcode":"110 00","country":"CZ"}"""),
+        [nameof(ContactUrl)] = Case<ContactUrl>("""{"label":"work","url":"https://example.org"}"""),
+        [nameof(ContactBirthday)] = Case<ContactBirthday>("""{"year":1980,"month":2,"day":29}"""),
+        [nameof(ContactCard)] = Case<ContactCard>(ContactCardJson),
+        [nameof(AddressBookListParams)] = Case<AddressBookListParams>("""{"accountId":"acc_1"}"""),
+        [nameof(AddressBookListResult)] = Case<AddressBookListResult>("""{"books":[{"id":"recent","name":"Recent","kind":"recent","readOnly":true,"visible":true,"count":3}]}"""),
+        [nameof(AddressBookSetParams)] = Case<AddressBookSetParams>("""{"bookId":"b_1","visible":false}"""),
+        [nameof(AddressBookSetResult)] = Case<AddressBookSetResult>("""{"book":{"id":"b_1","name":"Contacts","kind":"carddav","readOnly":false,"visible":false,"count":2}}"""),
+        [nameof(ContactListParams)] = Case<ContactListParams>("""{"bookId":"all","query":"ja","offset":100,"limit":50}"""),
+        [nameof(ContactListResult)] = Case<ContactListResult>("""{"contacts":[{"id":"p_1","bookId":"b_1","displayName":"Jana","sortKey":"jana","section":"J"}],"total":412}"""),
+        [nameof(ContactGetParams)] = Case<ContactGetParams>("""{"contactId":"p_1"}"""),
+        [nameof(ContactGetResult)] = Case<ContactGetResult>("""{"contact":@contactcard@}"""),
+        [nameof(ContactLookupParams)] = Case<ContactLookupParams>("""{"addresses":["jana@example.org","x@example.net"],"withPhotos":true}"""),
+        [nameof(ContactLookupResult)] = Case<ContactLookupResult>("""{"known":{"jana@example.org":"p_1"},"photos":{"jana@example.org":{"contactId":"p_2","state":"remote"}}}"""),
+        [nameof(ContactPhotoRef)] = Case<ContactPhotoRef>("""{"contactId":"p_1","state":"ready"}"""),
+        [nameof(ContactPhotoParams)] = Case<ContactPhotoParams>("""{"contactId":"p_1"}"""),
+        [nameof(ContactPhotoResult)] = Case<ContactPhotoResult>("""{"state":"ready","mime":"image/png","data":"iVBORw0KGgo=","revision":"\"e1\""}"""),
+        [nameof(ContactCreateParams)] = Case<ContactCreateParams>("""{"bookId":"b_1","card":@contactcard@}"""),
+        [nameof(ContactCreateResult)] = Case<ContactCreateResult>("""{"contactId":"p_2","revision":"\"e1\""}"""),
+        [nameof(ContactUpdateParams)] = Case<ContactUpdateParams>("""{"contactId":"p_1","revision":"\"e1\"","card":@contactcard@}"""),
+        [nameof(ContactUpdateResult)] = Case<ContactUpdateResult>("""{"revision":"\"e2\""}"""),
+        [nameof(ContactDeleteParams)] = Case<ContactDeleteParams>("""{"contactId":"p_1","revision":"\"e1\""}"""),
+        [nameof(ContactsChangedNotification)] = Case<ContactsChangedNotification>("""{"accountId":"acc_1","bookIds":["b_1"]}"""),
         // Drafts.cs
         [nameof(Malachi.Core.Api.DraftAttachment)] = Case<DraftAttachment>(DraftAttachment),
         [nameof(Malachi.Core.Api.Draft)] = Case<Draft>(Draft),
@@ -469,7 +545,7 @@ public sealed class ApiRoundTripTests
         [nameof(Malachi.Core.Api.Attachment)] = Case<Attachment>(Attachment),
         [nameof(Malachi.Core.Api.Message)] = Case<Message>(Message),
         [nameof(MessageListParams)] = Case<MessageListParams>(
-            """{"accountId":"acc_1","folderId":"f_inbox","page":@page@,"sort":"dateAsc","filter":"unread","unreadOnly":true}"""),
+            """{"accountId":"acc_1","folderId":"f_inbox","unified":"inbox","page":@page@,"sort":"dateAsc","filter":"unread","unreadOnly":true}"""),
         [nameof(MessageListResult)] = Case<MessageListResult>("""{"messages":[@summary@],"page":@pageinfo@}"""),
         [nameof(MessageGetParams)] = Case<MessageGetParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
         [nameof(MessageGetResult)] = Case<MessageGetResult>("""{"message":@message@}"""),
@@ -501,7 +577,7 @@ public sealed class ApiRoundTripTests
         // RpcError.cs
         [nameof(RpcError)] = Case<RpcError>(Error),
         // Search.cs
-        [nameof(SearchQueryParams)] = Case<SearchQueryParams>("""{"accountId":"acc_1","folderId":"f_inbox","query":"from:alice přílohy","page":@page@}"""),
+        [nameof(SearchQueryParams)] = Case<SearchQueryParams>("""{"accountId":"acc_1","folderId":"f_inbox","query":"from:alice přílohy","page":@page@,"withSent":true}"""),
         [nameof(MatchRange)] = Case<MatchRange>("""{"start":13,"end":22}"""),
         [nameof(SearchResult)] = Case<SearchResult>("""{"message":@summary@,"snippet":"…posílám přílohy k faktuře…","ranges":[{"start":13,"end":22}],"score":0}"""),
         [nameof(SearchQueryResult)] = Case<SearchQueryResult>("""{"results":[{"message":@summary@,"snippet":"x","score":0.5}],"page":@pageinfo@}"""),
@@ -520,7 +596,7 @@ public sealed class ApiRoundTripTests
         [nameof(SyncTriggerParams)] = Case<SyncTriggerParams>("""{"accountId":"acc_1","folderId":"f_inbox","full":true}"""),
         // Threads.cs
         [nameof(ThreadSummary)] = Case<ThreadSummary>(Thread),
-        [nameof(ThreadListParams)] = Case<ThreadListParams>("""{"accountId":"acc_1","folderId":"f_inbox","page":@page@,"sort":"dateDesc","filter":"flagged"}"""),
+        [nameof(ThreadListParams)] = Case<ThreadListParams>("""{"accountId":"acc_1","folderId":"f_inbox","unified":"inbox","page":@page@,"sort":"dateDesc","filter":"flagged"}"""),
         [nameof(ThreadListResult)] = Case<ThreadListResult>("""{"threads":[@thread@],"page":@pageinfo@}"""),
         [nameof(ThreadGetParams)] = Case<ThreadGetParams>("""{"accountId":"acc_1","threadId":"t_9","folderId":"f_inbox","withSent":true,"withDrafts":true}"""),
         [nameof(ThreadGetResult)] = Case<ThreadGetResult>("""{"thread":@thread@,"messages":[@summary@,@summary@],"sent":[@summary@],"drafts":[@draft@]}"""),
@@ -532,9 +608,9 @@ public sealed class ApiRoundTripTests
         [nameof(CalendarConfig)] = Case<CalendarConfig>("""@calconfig@"""),
         [nameof(CalDAVCalendar)] = Case<CalDAVCalendar>("""@caldavcalendar@"""),
         [nameof(AccountDiscoverCalDAVParams)] = Case<AccountDiscoverCalDAVParams>("""{"url":"cloud.example.org","certificateSha256":"@pin@"}"""),
-        [nameof(AccountDiscoverCalDAVResult)] = Case<AccountDiscoverCalDAVResult>("""{"serverUrl":"https://cloud.example.org/remote.php/dav","foundVia":"wellKnown","needsCredentials":true,"certificate":@certificate@}"""),
+        [nameof(AccountDiscoverCalDAVResult)] = Case<AccountDiscoverCalDAVResult>("""{"serverUrl":"https://cloud.example.org/remote.php/dav","foundVia":"wellKnown","needsCredentials":true,"certificate":@certificate@,"calendars":true,"addressBooks":true}"""),
         [nameof(AccountListCalDAVCalendarsParams)] = Case<AccountListCalDAVCalendarsParams>("""{"accountId":"acc_1","config":@config@,"credentials":{"password":"p"}}"""),
-        [nameof(AccountListCalDAVCalendarsResult)] = Case<AccountListCalDAVCalendarsResult>("""{"principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","displayName":"Jana","addresses":["jana@example.org"],"scheduling":"server","calendars":[@caldavcalendar@]}"""),
+        [nameof(AccountListCalDAVCalendarsResult)] = Case<AccountListCalDAVCalendarsResult>("""{"principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","displayName":"Jana","addresses":["jana@example.org"],"scheduling":"server","calendars":[@caldavcalendar@],"addressBookHomeSetUrl":"https://cloud.example.org/remote.php/dav/addressbooks/users/jana/","addressBooks":[{"href":"/remote.php/dav/addressbooks/users/jana/contacts/","name":"Contacts","readOnly":true}]}"""),
         [nameof(Calendar)] = Case<Calendar>("""@calcalendar@"""),
         [nameof(CalendarFeatures)] = Case<CalendarFeatures>("""@calfeatures@"""),
         [nameof(CalendarSyncState)] = Case<CalendarSyncState>("""@calsyncstate@"""),
@@ -607,11 +683,80 @@ public sealed class ApiRoundTripTests
         [nameof(CalendarStateNotification)] = Case<CalendarStateNotification>("""{"state":@calsyncstate@}"""),
         [nameof(EventAlertNotification)] = Case<EventAlertNotification>("""{"alert":@calalert@}"""),
         [nameof(InvitationsChangedNotification)] = Case<InvitationsChangedNotification>("""{"accountIds":["acc_1"]}"""),
+        // Update.cs
+        [nameof(UpdateInfo)] = Case<UpdateInfo>(UpdateInfoJson),
+        [nameof(UpdateNotice)] = Case<UpdateNotice>("""{"id":"n-2026-11-02","text":"Hello.","url":"https://malachimail.app/news.html"}"""),
+        [nameof(UpdateStatus)] = Case<UpdateStatus>(
+            """{"enabled":true,"channel":"windows-setup-x64","current":"0.1.2","state":"available","checkedAt":"2026-11-02T08:00:00Z","failure":"network","available":"""
+                + UpdateInfoJson + ""","notice":{"id":"n-1","text":"Hello."}}"""),
+        [nameof(UpdateStatusParams)] = Case<UpdateStatusParams>("""{"locale":"cs"}"""),
+        [nameof(UpdateCheckParams)] = Case<UpdateCheckParams>("""{"locale":"cs-CZ"}"""),
+        [nameof(UpdateSetPrefsParams)] = Case<UpdateSetPrefsParams>("""{"enabled":false,"locale":"cs"}"""),
+        [nameof(UpdateDismissParams)] = Case<UpdateDismissParams>("""{"version":"0.1.3","action":"later","locale":"cs"}"""),
+        [nameof(UpdateDismissNoticeParams)] = Case<UpdateDismissNoticeParams>("""{"id":"n-1","locale":"cs"}"""),
+        // Rules.cs
+        [nameof(RuleCondition)] = Case<RuleCondition>("""{"field":"from","op":"domainIs","value":"acme.cz"}"""),
+        [nameof(RuleAction)] = Case<RuleAction>("""{"kind":"autoReply","folderId":"f_news","to":"boss@acme.cz","subject":"Re","text":"Hi"}"""),
+        [nameof(RuleInput)] = Case<RuleInput>(RuleInputJson),
+        [nameof(Rule)] = Case<Rule>(RuleJson),
+        [nameof(RuleInvalidData)] = Case<RuleInvalidData>("""{"field":"conditions","index":2}"""),
+        [nameof(RulesListResult)] = Case<RulesListResult>("{\"rules\":[" + RuleJson + "]}"),
+        [nameof(RulesCreateParams)] = Case<RulesCreateParams>("{\"rule\":" + RuleInputJson + ",\"confirmOutgoing\":true}"),
+        [nameof(RulesCreateResult)] = Case<RulesCreateResult>("{\"rule\":" + RuleJson + "}"),
+        [nameof(RulesUpdateParams)] = Case<RulesUpdateParams>("{\"id\":\"r_1\",\"rule\":" + RuleInputJson + ",\"confirmOutgoing\":true}"),
+        [nameof(RulesUpdateResult)] = Case<RulesUpdateResult>("{\"rule\":" + RuleJson + "}"),
+        [nameof(RulesDeleteParams)] = Case<RulesDeleteParams>("""{"id":"r_1"}"""),
+        [nameof(RulesReorderParams)] = Case<RulesReorderParams>("""{"ids":["r_2","r_1"]}"""),
+        [nameof(RulesReorderResult)] = Case<RulesReorderResult>("{\"rules\":[" + RuleJson + "]}"),
+        [nameof(RulesTestParams)] = Case<RulesTestParams>("{\"rule\":" + RuleInputJson + ",\"accountId\":\"acc_1\",\"folderId\":\"f_inbox\"}"),
+        [nameof(RulesTestResult)] = Case<RulesTestResult>("""{"count":3,"messages":[@summary@]}"""),
+        [nameof(RulesApplyParams)] = Case<RulesApplyParams>("""{"accountId":"acc_1","folderId":"f_inbox","messageIds":["m_1"],"ruleIds":["r_1"]}"""),
+        [nameof(RulesApplyResult)] = Case<RulesApplyResult>("""{"examined":120,"matched":14,"changed":12,"skippedOutgoing":2}"""),
+        // Signature.cs
+        [nameof(MessageSignature)] = Case<MessageSignature>("""{"kind":"pgp","status":"validSeen"}"""),
+        [nameof(SignatureSigner)] = Case<SignatureSigner>(SigSigner),
+        [nameof(SignatureSummary)] = Case<SignatureSummary>(SigSummary),
+        [nameof(ProtectedHeader)] = Case<ProtectedHeader>(SigHeader),
+        [nameof(SignatureDetails)] = Case<SignatureDetails>(SigDetails),
+        [nameof(SignatureCertificate)] = Case<SignatureCertificate>(SigCertificate),
+        [nameof(SmimeRevocation)] = Case<SmimeRevocation>(SigRevocation),
+        [nameof(SmimeDetails)] = Case<SmimeDetails>(SigSmime),
+        [nameof(PgpKeyOffer)] = Case<PgpKeyOffer>(SigOffer),
+        [nameof(PgpDetails)] = Case<PgpDetails>(SigPgp),
+        [nameof(PgpKey)] = Case<PgpKey>(SigKey),
+        [nameof(MessageSignatureParams)] = Case<MessageSignatureParams>("""{"messageId":"m_1"}"""),
+        [nameof(MessageSignatureResult)] = Case<MessageSignatureResult>("""{"signature":@sigdetails@}"""),
+        [nameof(MessageSignatureRevocationParams)] = Case<MessageSignatureRevocationParams>("""{"messageId":"m_1"}"""),
+        [nameof(RevocationFailedData)] = Case<RevocationFailedData>("""{"reason":"timeout"}"""),
+        [nameof(PgpKeyImportParams)] = Case<PgpKeyImportParams>(
+            """{"messageId":"m_1","partId":"3","autocrypt":true,"armored":"-----BEGIN PGP PUBLIC KEY BLOCK-----","data":"mQE="}"""),
+        [nameof(PgpKeyImportResult)] = Case<PgpKeyImportResult>("""{"keys":[@sigkey@],"added":1,"updated":0}"""),
+        [nameof(PgpImportErrorData)] = Case<PgpImportErrorData>("""{"reason":"secretKey"}"""),
+        [nameof(PgpKeyVerifyParams)] = Case<PgpKeyVerifyParams>("""{"fingerprint":"0123456789abcdef0123456789abcdef01234567","verified":true}"""),
+        [nameof(PgpKeyVerifyResult)] = Case<PgpKeyVerifyResult>("""{"key":@sigkey@}"""),
+        [nameof(PgpKeyListResult)] = Case<PgpKeyListResult>("""{"keys":[@sigkey@]}"""),
+        [nameof(PgpKeyRemoveParams)] = Case<PgpKeyRemoveParams>("""{"fingerprint":"0123456789abcdef0123456789abcdef01234567"}"""),
     };
 
     // Minimal documents: what the encoding adds to them.
     private static readonly Dictionary<string, Sample> Minimal = new(StringComparer.Ordinal)
     {
+        // Rules: a nil list of Go is null or absent, an empty string of an omitempty member goes out as absent, a false confirmation is left out.
+        ["Rule without conditions and actions"] = Case<Rule>(
+            """{"id":"r_2","name":"x","enabled":false,"match":"all","conditions":null,"actions":null,"stop":false,"outgoing":false,"createdAt":"2026-11-01T08:00:00Z","updatedAt":"2026-11-01T08:00:00Z","applied":0,"skipped":0}""",
+            """{"id":"r_2","name":"x","enabled":false,"match":"all","conditions":[],"actions":[],"stop":false,"outgoing":false,"createdAt":"2026-11-01T08:00:00Z","updatedAt":"2026-11-01T08:00:00Z","applied":0,"skipped":0}"""),
+        ["RuleAction with empty strings"] = Case<RuleAction>(
+            """{"kind":"flag","folderId":"","to":"","subject":"","text":""}""",
+            """{"kind":"flag"}"""),
+        ["RuleInput for every account"] = Case<RuleInput>(
+            """{"name":"n","enabled":true,"accountId":"","match":"all","conditions":[],"actions":[],"stop":false}""",
+            """{"name":"n","enabled":true,"match":"all","conditions":[],"actions":[],"stop":false}"""),
+        ["RulesCreateParams without a confirmation"] = Case<RulesCreateParams>(
+            """{"rule":{"name":"n","enabled":false,"match":"all","conditions":[],"actions":[],"stop":false},"confirmOutgoing":false}""",
+            """{"rule":{"name":"n","enabled":false,"match":"all","conditions":[],"actions":[],"stop":false}}"""),
+        ["RulesApplyParams to a folder"] = Case<RulesApplyParams>(
+            """{"accountId":"acc_1","folderId":"f_inbox","messageIds":null,"ruleIds":null}""",
+            """{"accountId":"acc_1","folderId":"f_inbox","messageIds":[],"ruleIds":[]}"""),
         // The calendar: members left out stay out, the lists Go never sends as null are written as arrays.
         ["Calendar without its optional members"] = Case<Calendar>(
             """{"id":"cal_1","accountId":"acc_1","remoteId":"AAMk-1","name":"Calendar","color":"#1f6feb","visible":true,"access":"read","kind":"somethingNewer"}""",
@@ -664,6 +809,15 @@ public sealed class ApiRoundTripTests
         ["MessageSummary not saved in a CRM"] = Case<MessageSummary>(
             """{"id":"m","accountId":"a","folderId":"f","from":[],"subject":"","date":"2026-09-02T10:00:00Z","snippet":"","flags":[],"hasAttachments":false,"size":0,"crmSaved":false}""",
             """{"id":"m","accountId":"a","folderId":"f","from":[],"subject":"","date":"2026-09-02T10:00:00Z","snippet":"","flags":[],"hasAttachments":false,"size":0}"""),
+        // The signatures: a daemon without a verdict sends no signature; a null
+        // details is a message without one; a summary without a signer, notes or part.
+        ["MessageSignatureResult without a verdict"] = Case<MessageSignatureResult>("""{"signature":null}""", "{}"),
+        ["SignatureSummary of an unknown key"] = Case<SignatureSummary>(
+            """{"kind":"pgp","status":"unknownKey"}""",
+            """{"kind":"pgp","status":"unknownKey","notes":[]}"""),
+        ["PgpKeyImportParams of a pasted key"] = Case<PgpKeyImportParams>(
+            """{"armored":"-----BEGIN PGP PUBLIC KEY BLOCK-----","autocrypt":false}""",
+            """{"armored":"-----BEGIN PGP PUBLIC KEY BLOCK-----"}"""),
         ["SyncState without failedOutbox"] = Case<SyncState>(
             """{"accountId":"a","status":"idle","progress":-1,"pendingOutbox":0}""",
             """{"accountId":"a","status":"idle","progress":-1,"pendingOutbox":0,"failedOutbox":0}"""),
@@ -695,6 +849,9 @@ public sealed class ApiRoundTripTests
         ["ThreadGetResult without sent"] = Case<ThreadGetResult>(
             """{"thread":@thread@,"messages":[],"drafts":null}""",
             """{"thread":@thread@,"messages":[],"sent":[],"drafts":[]}"""),
+        ["SearchQueryParams without withSent"] = Case<SearchQueryParams>(
+            """{"query":"x","page":{"cursor":"c","limit":50},"withSent":null}""",
+            """{"query":"x","page":{"cursor":"c","limit":50}}"""),
         ["ThreadGetParams without withSent"] = Case<ThreadGetParams>(
             """{"accountId":"a","threadId":"t","withSent":null,"withDrafts":null}""",
             """{"accountId":"a","threadId":"t"}"""),
@@ -727,6 +884,21 @@ public sealed class ApiRoundTripTests
             """{"caseId":"@caseid@"}"""),
         ["BoardRunEndParams of a success"] = Case<BoardRunEndParams>("""{"runId":"r_1"}""", """{"runId":"r_1"}"""),
         ["BoardChangedNotification for any account"] = Case<BoardChangedNotification>("{}", """{"accountIds":[]}"""),
+        // The address books: a card with nothing writes its lists as arrays
+        // and its name as {}, as Swift's encoding; no label, a year 0 and
+        // false booleans Go leaves out stay out.
+        ["ContactCard empty"] = Case<ContactCard>(
+            "{}",
+            """{"id":"","bookId":"","readOnly":false,"revision":"","name":{},"displayName":"","emails":[],"phones":[],"addresses":[],"urls":[]}"""),
+        ["ContactEmail without a label"] = Case<ContactEmail>("""{"label":"","address":"a@b.cz"}""", """{"address":"a@b.cz"}"""),
+        ["ContactBirthday without a year"] = Case<ContactBirthday>("""{"year":0,"month":3,"day":14}""", """{"month":3,"day":14}"""),
+        ["AddressBook of the recent book"] = Case<AddressBook>(
+            """{"id":"recent","accountId":"","name":"Recent","kind":"recent","readOnly":true,"searchOnly":false,"visible":true,"count":3}""",
+            """{"id":"recent","name":"Recent","kind":"recent","readOnly":true,"visible":true,"count":3}"""),
+        ["ContactsChangedNotification for any book"] = Case<ContactsChangedNotification>("{}", """{"bookIds":[]}"""),
+        ["CalDAVConfig without contacts"] = Case<CalDAVConfig>(
+            """{"serverUrl":"https://x.example","username":"j","addressBookHomeSetUrl":"","contacts":false}""",
+            """{"serverUrl":"https://x.example","username":"j"}"""),
         ["MessageBodyResult without links"] = Case<MessageBodyResult>(
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"remoteContent":"block","sanitizerVersion":"1"}""",
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"links":[],"remoteContent":"block","sanitizerVersion":"1"}"""),
@@ -967,12 +1139,16 @@ public sealed class ApiRoundTripTests
             ("@pageinfo@", PageInfo), ("@page@", Page), ("@pin@", Pin),
             ("@jira@", Jira), ("@itemissue@", ItemIssue), ("@issue@", Issue),
             ("@bulk@", Bulk), ("@unsubscribe@", Unsubscribe),
-            ("@ewayconfig@", EwayConfig), ("@crmrecord@", CrmRecord), ("@crmitemref@", CrmItemRef), ("@crmitem@", CrmItem),
+            ("@ewayconfig@", EwayConfig), ("@sigsigner@", SigSigner), ("@sigsummary@", SigSummary), ("@sigheader@", SigHeader), ("@sigcertificate@", SigCertificate),
+            ("@sigrevocation@", SigRevocation), ("@sigsmime@", SigSmime), ("@sigoffer@", SigOffer), ("@sigpgp@", SigPgp),
+            ("@sigdetails@", SigDetails), ("@sigkey@", SigKey),
+            ("@crmrecord@", CrmRecord), ("@crmitemref@", CrmItemRef), ("@crmitem@", CrmItem),
             ("@caseid@", CaseId), ("@boardissue@", BoardIssue), ("@boarddue@", BoardDue), ("@boardannotation@", BoardAnnotation),
             ("@boardcase@", BoardCase), ("@boardcommitment@", BoardCommitment), ("@boardmessage@", BoardMessage),
             ("@boardrun@", BoardRun), ("@boardtriage@", BoardTriage), ("@boardwindows@", BoardWindows),
             ("@boardmoved@", BoardMoved), ("@boardusage@", BoardUsage), ("@boardusagetotal@", BoardUsageTotal),
             ("@boardpreferences@", BoardPreferences), ("@boardqueuemessage@", BoardQueueMessage), ("@boardqueueitem@", BoardQueueItem),
+            ("@contactcard@", ContactCardJson),
             ("@calcaldavconfig@", CalCalDavConfig),
             ("@calconfig@", CalConfig),
             ("@caldavcalendar@", CalDavCalendar),

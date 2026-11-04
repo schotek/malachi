@@ -258,10 +258,13 @@ final class ConversationRow: NSView {
     /// avatar stands for (hostile text, only ever drawn as initials);
     /// `monochrome` is the list's setting for avatars, which the accent
     /// tint of the user's own message overrides.
-    func show(_ rail: ConversationLayout.Rail, name: String, monochrome: Bool) {
+    /// `photo` is whose contact photo replaces the initials (F10; nil for
+    /// the user's own message and a draft).
+    func show(_ rail: ConversationLayout.Rail, name: String, monochrome: Bool, photo: ContactBook.Avatar? = nil) {
         above.isHidden = !rail.above
         below.isHidden = !rail.below
         guard let avatar else { return }
+        avatar.photoSource = photo
         avatar.text = name
         avatar.monochrome = monochrome
         avatar.accent = rail.accent

@@ -38,7 +38,18 @@ final class PreferenceRowView: NSView, PrefsGroupMember {
         set {
             subtitleLabel.stringValue = newValue
             subtitleLabel.isHidden = newValue.isEmpty
-            heightConstraint?.constant = newValue.isEmpty ? PreferenceRowView.minHeight : PreferenceRowView.minHeightWithSubtitle
+            heightConstraint?.constant = newValue.isEmpty ? PreferenceRowView.minHeight : subtitledMinHeight
+        }
+    }
+
+    /// The least height of the row while it has a subtitle: an action
+    /// row's 58, or less for a denser list (the status flyout's 52, as the
+    /// Windows client's rows). Set before the subtitle.
+    var subtitledMinHeight = PreferenceRowView.minHeightWithSubtitle {
+        didSet {
+            if !subtitleLabel.isHidden {
+                heightConstraint?.constant = subtitledMinHeight
+            }
         }
     }
 

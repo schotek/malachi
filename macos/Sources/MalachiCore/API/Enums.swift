@@ -272,6 +272,9 @@ public struct ContactSource: WireEnum {
     public static let sent: ContactSource = "sent"
     /// A system address book, read only.
     public static let addressBook: ContactSource = "addressBook"
+    /// An address book the daemon synchronises (docs/api.md §4.19);
+    /// `Contact.book` names it, `Contact.contactId` is the contact.
+    public static let contacts: ContactSource = "contacts"
 }
 
 /// api.AccountCapability: what the user can do with an account and its
@@ -296,11 +299,15 @@ public struct Capability: WireEnum {
     /// issue.transition): the Change Status menu.
     public static let transition: Capability = "transition"
     /// The account can have calendars (graph, caldav); it does not change
-    /// with consent or sync state. A caldav account has exactly this one.
+    /// with consent or sync state. A caldav account has this one, and
+    /// `contacts` when it has address books.
     public static let calendar: Capability = "calendar"
     /// Messages of mail accounts can be saved to this account (crm.*,
     /// docs/api.md §4.17). An eway account has exactly this one.
     public static let crm: Capability = "crm"
+    /// The account can have address books (graph, caldav; docs/api.md
+    /// §4.19); it does not change with consent or sync state.
+    public static let contacts: Capability = "contacts"
 }
 
 /// api.JiraDeployment: where a Jira site runs.

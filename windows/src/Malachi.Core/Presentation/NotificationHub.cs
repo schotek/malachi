@@ -20,7 +20,9 @@
 // to one handler kind as they were decoded (Swift addCalendar, which
 // decodes them as CalendarNotification next to DaemonNotification; here
 // they are DaemonNotification cases), for the calendar's sources and the
-// application's alerts.
+// application's alerts. notify.contactsChanged has its own handler kind
+// (Swift's AppState decodes it with ContactsChangedNotification.decode), and
+// so has notify.updateChanged (no params).
 
 using System;
 using System.Collections.Generic;
@@ -55,6 +57,10 @@ public sealed partial class NotificationHub : IDisposable
     private readonly HandlerList<DraftsChangedNotification> draftsChanged;
     private readonly HandlerList<DaemonNotification> calendar;
     private readonly HandlerList<DaemonNotification> assistantProfile;
+    private readonly HandlerList<ContactsChangedNotification> contactsChanged;
+    private readonly HandlerList<DaemonNotification> updateChanged;
+    private readonly HandlerList<DaemonNotification> rulesChanged;
+    private readonly HandlerList<DaemonNotification> signaturesChanged;
     private readonly HandlerList<ConnectionState> connection;
     private ConnectionController? attached;
 
@@ -74,6 +80,10 @@ public sealed partial class NotificationHub : IDisposable
         draftsChanged = new HandlerList<DraftsChangedNotification>(Pending);
         calendar = new HandlerList<DaemonNotification>(Pending);
         assistantProfile = new HandlerList<DaemonNotification>(Pending);
+        contactsChanged = new HandlerList<ContactsChangedNotification>(Pending);
+        updateChanged = new HandlerList<DaemonNotification>(Pending);
+        rulesChanged = new HandlerList<DaemonNotification>(Pending);
+        signaturesChanged = new HandlerList<DaemonNotification>(Pending);
         connection = new HandlerList<ConnectionState>(Pending);
     }
 
@@ -152,6 +162,50 @@ public sealed partial class NotificationHub : IDisposable
     }
 
     /// <summary>
+    /// Fires on every <c>notify.contactsChanged</c> (Swift's hub decodes it
+    /// with <c>ContactsChangedNotification.decode</c>): the Contacts window
+    /// (<see cref="ContactsListController.Handle"/>,
+    /// <see cref="ContactsDetailController.ContactsChanged"/>), Preferences →
+    /// Contacts and the address chips' lookup
+    /// (<see cref="ContactsLookupController.Invalidate"/>) read them again.
+    /// </summary>
+    public IDisposable AddContactsChanged(Action<ContactsChangedNotification> handler) => contactsChanged.Add(handler);
+
+    /// <summary>
+    /// Fires on every <c>notify.updateChanged</c> (docs/api.md §4.20): the
+    /// application's <see cref="UpdateStatusController"/> asks
+    /// <c>update.status</c> again.
+    /// </summary>
+    public IDisposable AddUpdateChanged(Action handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        return updateChanged.Add(_ => handler());
+    }
+
+    /// <summary>
+    /// Fires on every <c>notify.rulesChanged</c> (docs/api.md §4.21): the
+    /// application's <see cref="RulesController"/> asks <c>rules.list</c>
+    /// again.
+    /// </summary>
+    public IDisposable AddRulesChanged(Action handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        return rulesChanged.Add(_ => handler());
+    }
+
+    /// <summary>
+    /// Fires on every <c>notify.signaturesChanged</c> (docs/api.md §4.22): trust
+    /// changed, so the windows read the messages they show
+    /// (<c>message.get</c>), an open details dialog (<c>message.signature</c>)
+    /// and the key list (<c>pgp.keyList</c>) again.
+    /// </summary>
+    public IDisposable AddSignaturesChanged(Action handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        return signaturesChanged.Add(_ => handler());
+    }
+
+    /// <summary>
     /// Fires on every connection state change, after
     /// <see cref="ConnectionState"/> was updated. A handler added later does
     /// not get the current state; read <see cref="ConnectionState"/> for that.
@@ -205,6 +259,18 @@ public sealed partial class NotificationHub : IDisposable
                 break;
             case DaemonNotification.AssistantProfileChanged:
                 assistantProfile.Fire(n);
+                break;
+            case DaemonNotification.ContactsChanged k:
+                contactsChanged.Fire(k.Payload);
+                break;
+            case DaemonNotification.UpdateChanged:
+                updateChanged.Fire(n);
+                break;
+            case DaemonNotification.RulesChanged:
+                rulesChanged.Fire(n);
+                break;
+            case DaemonNotification.SignaturesChanged:
+                signaturesChanged.Fire(n);
                 break;
             case DaemonNotification.Unknown u:
                 LogUnknown(logger, u.Method);

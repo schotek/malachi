@@ -29,6 +29,7 @@ selected case outside text fields (Board.KeyFor), and Escape in two steps
     xmlns:l="using:Malachi.App.Localization"
     xmlns:main="using:Malachi.App.Main"
     xmlns:res="using:Malachi.App.Resources"
+    xmlns:toolbars="using:Malachi.App.Toolbars"
     IsTabStop="False">
     <Grid x:Name="PageRoot" KeyDown="OnPageKeyDown">
         <Grid.RowDefinitions>
@@ -37,118 +38,118 @@ selected case outside text fields (Board.KeyFor), and Escape in two steps
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- The board's bar (board_header). -->
+        <!-- The board's bar (board_header): the user's toolbar-board-list
+             layout (its Folders and Cases sections) in the List style,
+             toolbar-board-flow in Columns and Today (Toolbars/ToolbarStrip,
+             BoardPage.Toolbar.cs). The title and "…" are Windows' own: the
+             title after the style switch, taking the free room, "…" at the
+             end. -->
         <Grid
             x:Name="Bar"
             Padding="12,6"
+            Background="Transparent"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-            BorderThickness="0,0,0,1"
-            ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel
-                x:Name="StyleSwitch"
-                VerticalAlignment="Center"
-                Orientation="Horizontal"
-                Spacing="2">
-                <ToggleButton
-                    x:Name="StyleListButton"
-                    AutomationProperties.AutomationId="BoardStyleList"
-                    Click="OnStyleClick" />
-                <ToggleButton
-                    x:Name="StyleColumnsButton"
-                    AutomationProperties.AutomationId="BoardStyleColumns"
-                    Click="OnStyleClick" />
-                <ToggleButton
-                    x:Name="StyleTodayButton"
-                    AutomationProperties.AutomationId="BoardStyleToday"
-                    Click="OnStyleClick" />
-            </StackPanel>
-            <StackPanel
-                Grid.Column="1"
-                Margin="8,0,0,0"
-                VerticalAlignment="Center">
-                <TextBlock
-                    x:Name="TitleText"
-                    MaxLines="1"
-                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                    TextTrimming="CharacterEllipsis" />
-                <TextBlock
-                    x:Name="SubtitleText"
-                    AutomationProperties.AutomationId="BoardSubtitle"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    MaxLines="1"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    TextTrimming="CharacterEllipsis" />
-            </StackPanel>
-            <ComboBox
-                x:Name="AccountFilter"
-                Grid.Column="2"
-                MinWidth="160"
-                MaxWidth="260"
-                VerticalAlignment="Center"
-                AutomationProperties.AutomationId="BoardAccountFilter"
-                SelectionChanged="OnAccountFilterChanged" />
-            <Button
-                x:Name="TriageButton"
-                Grid.Column="3"
-                VerticalAlignment="Center"
-                AutomationProperties.AutomationId="BoardTriage"
-                IsEnabled="False" />
-            <Button
-                x:Name="MoreButton"
-                Grid.Column="4"
-                Width="40"
-                Height="32"
-                Padding="0"
-                VerticalAlignment="Center"
-                AutomationProperties.AutomationId="BoardPageMenu"
-                AutomationProperties.Name="{l:T Msgid='Main Menu'}"
-                Style="{StaticResource SubtleButtonStyle}"
-                ToolTipService.ToolTip="{l:T Msgid='Main Menu'}">
-                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
-                <Button.Flyout>
-                    <MenuFlyout x:Name="PageMenu" Placement="BottomEdgeAlignedRight">
-                        <!-- Windows-only strings: the key names beside the items (Board.BoardKeys). -->
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuMail"
-                            AutomationProperties.AutomationId="BoardMenuMail"
-                            GroupName="WindowMode"
-                            KeyboardAcceleratorTextOverride="Ctrl+1"
-                            Text="{l:T Msgid='Mail'}" />
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuBoard"
-                            AutomationProperties.AutomationId="BoardMenuBoard"
-                            GroupName="WindowMode"
-                            KeyboardAcceleratorTextOverride="Ctrl+2"
-                            Text="{l:T Msgid='Board'}" />
-                        <RadioMenuFlyoutItem
-                            x:Name="MenuCalendar"
-                            AutomationProperties.AutomationId="BoardMenuCalendar"
-                            GroupName="WindowMode"
-                            KeyboardAcceleratorTextOverride="Ctrl+3"
-                            Text="{l:T Msgid='Calendar'}" />
-                        <MenuFlyoutSeparator />
-                        <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
-                        <!-- Windows-only string: the key name beside the item. -->
-                        <MenuFlyoutItem
-                            x:Name="MenuPreferences"
-                            l:MnemonicLabel.Text="{l:T Msgid='_Preferences'}"
-                            KeyboardAcceleratorTextOverride="Ctrl+," />
-                        <MenuFlyoutSeparator />
-                        <!-- Windows-only strings: Quit has no GTK msgid (as the sidebar's primary menu). -->
-                        <MenuFlyoutItem
-                            x:Name="MenuQuit"
-                            l:MnemonicLabel.Text="_Quit"
-                            KeyboardAcceleratorTextOverride="Ctrl+Q" />
-                    </MenuFlyout>
-                </Button.Flyout>
-            </Button>
+            BorderThickness="0,0,0,1">
+            <toolbars:ToolbarStrip x:Name="BarStrip" Spacing="8">
+                <StackPanel
+                    x:Name="StyleSwitch"
+                    toolbars:ToolbarStrip.Item="boardStyle"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="2">
+                    <ToggleButton
+                        x:Name="StyleListButton"
+                        AutomationProperties.AutomationId="BoardStyleList"
+                        Click="OnStyleClick" />
+                    <ToggleButton
+                        x:Name="StyleColumnsButton"
+                        AutomationProperties.AutomationId="BoardStyleColumns"
+                        Click="OnStyleClick" />
+                    <ToggleButton
+                        x:Name="StyleTodayButton"
+                        AutomationProperties.AutomationId="BoardStyleToday"
+                        Click="OnStyleClick" />
+                </StackPanel>
+                <StackPanel
+                    Margin="8,0,0,0"
+                    toolbars:ToolbarStrip.Pin="after:boardStyle"
+                    toolbars:ToolbarStrip.Stretch="True"
+                    VerticalAlignment="Center">
+                    <TextBlock
+                        x:Name="TitleText"
+                        MaxLines="1"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        x:Name="SubtitleText"
+                        AutomationProperties.AutomationId="BoardSubtitle"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        MaxLines="1"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <ComboBox
+                    x:Name="AccountFilter"
+                    MinWidth="160"
+                    MaxWidth="260"
+                    toolbars:ToolbarStrip.Item="boardAccount"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="BoardAccountFilter"
+                    SelectionChanged="OnAccountFilterChanged" />
+                <Button
+                    x:Name="TriageButton"
+                    toolbars:ToolbarStrip.Item="boardTriage"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="BoardTriage"
+                    IsEnabled="False" />
+                <Button
+                    x:Name="MoreButton"
+                    Width="40"
+                    toolbars:ToolbarStrip.Pin="end"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="BoardPageMenu"
+                    AutomationProperties.Name="{l:T Msgid='Main Menu'}"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='Main Menu'}">
+                    <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
+                    <Button.Flyout>
+                        <!-- The sidebar's primary menu (SidebarPane.xaml, window.blp primary_menu). -->
+                        <MenuFlyout x:Name="PageMenu" Placement="BottomEdgeAlignedRight">
+                            <!-- Windows-only strings: the key names beside the items. -->
+                            <MenuFlyoutItem
+                                x:Name="MenuNewMessage"
+                                AutomationProperties.AutomationId="BoardMenuNewMessage"
+                                l:MnemonicLabel.Text="{l:T Msgid='_New Message'}"
+                                KeyboardAcceleratorTextOverride="Ctrl+N" />
+                            <!-- The Contacts window (window.blp primary_menu app.contacts), without a key. -->
+                            <MenuFlyoutItem
+                                x:Name="MenuContacts"
+                                AutomationProperties.AutomationId="BoardMenuContacts"
+                                l:MnemonicLabel.Text="{l:T Msgid='_Contacts'}" />
+                            <MenuFlyoutSeparator />
+                            <!-- Windows-only string: the key name beside the item. -->
+                            <MenuFlyoutItem
+                                x:Name="MenuPreferences"
+                                AutomationProperties.AutomationId="BoardMenuPreferences"
+                                l:MnemonicLabel.Text="{l:T Msgid='_Preferences'}"
+                                KeyboardAcceleratorTextOverride="Ctrl+," />
+                            <MenuFlyoutItem
+                                x:Name="MenuAbout"
+                                AutomationProperties.AutomationId="BoardMenuAbout"
+                                l:MnemonicLabel.Text="{l:T Msgid='_About Malachi Mail'}" />
+                            <MenuFlyoutSeparator />
+                            <!-- Windows-only string: the key name beside the item. -->
+                            <MenuFlyoutItem
+                                x:Name="MenuQuit"
+                                AutomationProperties.AutomationId="BoardMenuQuit"
+                                l:MnemonicLabel.Text="{l:T Msgid='_Quit'}"
+                                KeyboardAcceleratorTextOverride="Ctrl+Q" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </toolbars:ToolbarStrip>
         </Grid>
 
         <!-- The notice above the cases, and the triage's strip (stage 5). -->
@@ -181,29 +182,6 @@ selected case outside text fields (Board.KeyFor), and Escape in two steps
                 AutomationProperties.AutomationId="BoardEmpty"
                 Visibility="Collapsed" />
             <boards:BoardDetailPanel x:Name="Panel" />
-            <!--
-                What Archive did, with Undo (Board.ArchiveOutcome; GTK's toast
-                with a button): an InfoBar where the window's toasts show, as
-                the toast has no button on Windows.
-            -->
-            <InfoBar
-                x:Name="ArchiveBar"
-                MaxWidth="560"
-                Margin="12,0,12,24"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="BoardArchived"
-                Closed="OnArchiveBarClosed"
-                IsClosable="True"
-                IsOpen="False"
-                Severity="Informational">
-                <InfoBar.ActionButton>
-                    <Button
-                        x:Name="ArchiveUndoButton"
-                        AutomationProperties.AutomationId="BoardArchiveUndo"
-                        Click="OnArchiveUndoClick" />
-                </InfoBar.ActionButton>
-            </InfoBar>
         </Grid>
 
         <!-- The window's toasts while the board shows (MainWindow.Mode.cs moves them here). -->

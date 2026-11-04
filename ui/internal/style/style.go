@@ -78,12 +78,22 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// across at one digit (8px of text box and 4px either side) and a
 	// capsule with more; bold, so the small caption still reads at a glance.
 	b.WriteString("label.unread-badge { min-width: 8px; min-height: 16px; padding: 0 4px; border-radius: 99px; font-weight: bold; background-color: @accent_bg_color; color: @accent_fg_color; }\n")
-	// The status line at the bottom of the sidebar (window.blp) is a menu
+	// The status line at the bottom of the window (window.blp) is a menu
 	// button that opens the accounts' states, but it reads as a line of
 	// text: the button loses the height and padding a stand-alone one
 	// claims and the bold weight Adwaita gives buttons, and its label keeps
 	// to the left over the full width (hexpand and xalign in window.blp).
 	b.WriteString("menubutton.status-line > button { min-height: 0; padding: 4px 6px; font-weight: normal; }\n")
+	// Report an Issue at the end of the status bar (window.blp) reads as
+	// the same line of text.
+	b.WriteString("button.status-line { min-height: 0; padding: 4px 6px; font-weight: normal; }\n")
+	// The accounts in the status popover (window.blp status_accounts), as
+	// the Windows client draws them: a flat card with a hairline border and
+	// a radius of 8 instead of Adwaita's raised boxed list (radius 12 and a
+	// shadow); the rows' corners follow the card's.
+	b.WriteString("list.boxed-list.status-accounts { border-radius: 8px; box-shadow: 0 0 0 1px alpha(@window_fg_color, 0.12); }\n")
+	b.WriteString("list.boxed-list.status-accounts > row:first-child { border-top-left-radius: 8px; border-top-right-radius: 8px; }\n")
+	b.WriteString("list.boxed-list.status-accounts > row:last-child { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }\n")
 	// The fold arrow and the pin star of a sidebar row. A default button
 	// would push the row past the height above, so both are squeezed to the
 	// size of their icon.
@@ -102,6 +112,10 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// The strip above a bulk message (window/bulk.go): the remote-bar tint,
 	// a warm one in the junk folder.
 	b.WriteString("box.bulk-bar.bulk-warning { background-color: alpha(@orange_3, 0.25); }\n")
+	// The update check's banner (window/updates.go): the information look
+	// of Adw.Banner, a warm one for a security release.
+	b.WriteString("box.update-bar { background-color: alpha(@accent_bg_color, 0.12); padding: 6px 12px; }\n")
+	b.WriteString("box.update-bar.update-security { background-color: alpha(@orange_3, 0.25); }\n")
 	// Compose header fields (compose.blp): one line each, so the entries
 	// and the account drop-down lose the height a stand-alone input would
 	// claim and the card supplies the padding the rows no longer have.
@@ -133,15 +147,26 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("popover.recipient-suggestions list { background: none; }\n")
 	b.WriteString("popover.recipient-suggestions row { padding: 4px 10px; }\n")
 	b.WriteString("popover.recipient-suggestions image { -gtk-icon-size: 16px; }\n")
-	// Attachment chips under the message headers: two have to fit side by
-	// side in a narrow pane, so the buttons drop libadwaita's roomy
-	// padding, the labels go down a size and the menu arrow is barely
-	// wider than its icon. The name itself is capped in Go (chipNameChars).
-	b.WriteString("box.attachment-chip button, button.chip-action { min-height: 0; padding: 3px 8px; }\n")
-	b.WriteString("box.attachment-chip image, button.chip-action image { -gtk-icon-size: 14px; }\n")
-	b.WriteString("box.attachment-chip label.chip-name, button.chip-action label { font-size: 90%; }\n")
-	b.WriteString("box.attachment-chip label.chip-size { font-size: 80%; }\n")
-	b.WriteString("box.attachment-chip menubutton.chip-arrow > button { min-width: 16px; padding-left: 2px; padding-right: 2px; }\n")
+	// Attachment tiles (widget.AttachmentTile) under the message headers
+	// and in a compose window: a card with a hairline border, the main
+	// button flat over its whole left part (rounded with the card), the
+	// trailing arrow or ✕ barely wider than its icon. An inert tile (an
+	// event's attachment) has no hover. The summary line over the tiles and
+	// the small buttons beside chips (Save All, the assistant's chips) drop
+	// libadwaita's roomy padding.
+	b.WriteString("box.attachment-tile { background-color: @card_bg_color; border: 1px solid alpha(@window_fg_color, 0.15); border-radius: 6px; }\n")
+	b.WriteString("box.attachment-tile > button.tile-main { min-height: 0; padding: 6px 4px 6px 8px; border-radius: 5px 0 0 5px; }\n")
+	b.WriteString("box.attachment-tile.inert > button.tile-main { background: none; }\n")
+	b.WriteString("box.attachment-tile label.tile-size { font-size: 85%; }\n")
+	b.WriteString("box.attachment-tile > .tile-accessory, box.attachment-tile > menubutton.tile-accessory > button { min-height: 0; min-width: 20px; padding: 2px; margin-right: 4px; }\n")
+	b.WriteString("button.chip-action { min-height: 0; padding: 3px 8px; }\n")
+	b.WriteString("button.chip-action image { -gtk-icon-size: 14px; }\n")
+	b.WriteString("button.chip-action label { font-size: 90%; }\n")
+	b.WriteString("box.attachment-summary button.chip-action { color: alpha(currentColor, 0.7); }\n")
+	b.WriteString("box.attachment-summary button.chip-action label { font-size: 85%; }\n")
+	// The band of a compose window's attachments, between the header
+	// fields and the formatting bar.
+	b.WriteString("flowbox.attachments-band { background-color: alpha(@window_fg_color, 0.05); border-radius: 8px; padding: 8px; }\n")
 	// The assistant panel (window/assistant_panel.go): the context chip is a
 	// pill with its remove button inside it; the user's questions a tinted
 	// bubble, the cards (the draft, the bar "Another message is selected")
@@ -223,6 +248,13 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// list row and the draft card of the conversation view), red as in
 	// mail clients that show drafts in their threads.
 	b.WriteString("label.issue-pill.draft-pill { color: @error_color; background-color: alpha(@error_bg_color, 0.12); }\n")
+	// Preferences → Security (window/preferences_security.go): a key the
+	// user confirmed green, a revoked or expired key red; the signature
+	// badge in a message's header (window/signature.go) without a flat
+	// button's height, its icon and text coloured by the verdict's class.
+	b.WriteString("label.issue-pill.key-verified { color: @success_color; background-color: alpha(@success_bg_color, 0.15); }\n")
+	b.WriteString("label.issue-pill.key-state { color: @error_color; background-color: alpha(@error_bg_color, 0.12); }\n")
+	b.WriteString("button.signature-badge { min-height: 0; padding: 2px 6px; margin-left: -6px; font-weight: normal; }\n")
 	// The issue card over a Jira message (window/issue_card.go): the
 	// card's own padding, the key as a link without a button's bulk, and
 	// the status pill as a menu button in the pill's shape and colours.

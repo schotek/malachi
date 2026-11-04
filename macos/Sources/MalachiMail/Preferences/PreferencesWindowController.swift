@@ -5,15 +5,15 @@ import AppKit
 import MalachiCore
 
 /// The settings window (preferences.blp `preferences_dialog`): a
-/// toolbar-style tab view with the Accounts, Integrations, General,
-/// Calendar (docs/calendar.md §5.8), Appearance and AI pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
+/// toolbar-style tab view with the Accounts, Integrations, Rules, General,
+/// Calendar (docs/calendar.md §5.8), Contacts, Appearance, AI and Security pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
 /// at a time; `show` brings it to the front. There is no search (deviation
 /// D9).
 @MainActor
 final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     /// The pages, in the order of the tabs.
     enum Page: Int {
-        case accounts, integrations, general, calendar, appearance, ai
+        case accounts, integrations, rules, general, calendar, contacts, appearance, ai, security
     }
 
     private static var shared: PreferencesWindowController?
@@ -24,10 +24,19 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
 
     let accountsPane: AccountsPaneViewController
     let integrationsPane: IntegrationsPaneViewController
+    /// Settings → Rules (docs/plans/rules.md R14), bound to the
+    /// application's rules by `Integration.showPreferences`.
+    let rulesPane: RulesPaneViewController
     let generalPane = GeneralPaneViewController()
     let calendarPane: CalendarPaneViewController
+    /// Settings → Contacts (docs/plans/address-book.md W3), bound to the
+    /// application's address books by `Integration.showPreferences`.
+    let contactsPane = ContactsPaneViewController()
     let appearancePane = AppearancePaneViewController()
     let aiPane = AIPaneViewController()
+    /// Settings → Security (docs/plans/signatures.md §6): the OpenPGP keys,
+    /// bound to the application by `Integration.showPreferences`.
+    let securityPane = SecurityPaneViewController()
     let settings: Settings
     private let tabs = PrefsTabViewController()
     private let toasts = WizardToastPresenter()
@@ -84,6 +93,9 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         calendarPane = CalendarPaneViewController(client: client, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust) { text in
             toasts.show(text)
         }
+        rulesPane = RulesPaneViewController { text in
+            toasts.show(text)
+        }
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: PreferencesPaneViewController.paneWidth, height: PreferencesPaneViewController.paneHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -115,16 +127,20 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
             confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage, client: client
         ) { text in toasts.show(text) }
         _ = generalPane.view
+        securityPane.toast = { text in toasts.show(text) }
 
         tabs.tabStyle = .toolbar
         tabs.transitionOptions = []
         let pages: [(NSViewController, String, String)] = [
             (accountsPane, L10n.T("Accounts"), "person.2"),
             (integrationsPane, Integrations.texts().title, "puzzlepiece.extension"),
+            (rulesPane, Rules.pageTitle, "line.3.horizontal.decrease.circle"),
             (generalPane, L10n.T("General"), "gearshape"),
             (calendarPane, Cal.Prefs.tabTitle, "calendar"),
+            (contactsPane, ContactBook.windowTitle, "person.text.rectangle"),
             (appearancePane, L10n.T("Appearance"), "paintpalette"),
             (aiPane, L10n.T("AI"), "sparkles"),
+            (securityPane, SignatureView.securityPageTexts().title, SignatureView.symbolName(SignatureView.iconPage)),
         ]
         for (controller, label, symbol) in pages {
             let item = NSTabViewItem(viewController: controller)
@@ -190,10 +206,13 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     func windowWillClose(_ notification: Foundation.Notification) {
         accountsPane.closed = true
         integrationsPane.closed = true
+        rulesPane.closed = true
         generalPane.closed = true
         calendarPane.closed = true
+        contactsPane.closed = true
         appearancePane.closed = true
         aiPane.closed = true
+        securityPane.closed = true
         if PreferencesWindowController.shared === self {
             PreferencesWindowController.shared = nil
         }

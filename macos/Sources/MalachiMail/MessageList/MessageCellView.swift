@@ -79,6 +79,10 @@ final class MessageCellView: NSTableCellView {
     private let from = NSTextField(labelWithString: "")
     private let badge = CountBadgeView(padding: RowMetrics.badgePadding)
     private let attachment = NSImageView()
+    /// The verdict of a signed message beside the paperclip
+    /// (`SignatureView.listIcon`): a shield or a warning for a valid,
+    /// invalid, revoked or mismatching signature; nothing for the rest.
+    private let signatureIcon = NSImageView()
     private let star = NSImageView()
     private let origin = NSTextField(labelWithString: "")
     private let date = NSTextField(labelWithString: "")
@@ -121,6 +125,8 @@ final class MessageCellView: NSTableCellView {
     private var reserve = false
     private var member = false
     private var showAvatar = true
+    /// The row is the user's own (F10: its avatar never shows a photo).
+    private var mine = false
     private var avatarSize = RowMetrics.avatarComfortable
     /// The preview's text and its matched words (UTF-16 ranges), redrawn
     /// in the colour the selection asks for (`renderPreview`).
@@ -134,6 +140,7 @@ final class MessageCellView: NSTableCellView {
     private var bulkTag = ""
     /// The invitation pill of the row's message (`invitationPill`).
     private var invitation = Cal.InvitationPill.none
+    private var signature: SignatureView.ListIcon?
     private var event = false
     private var statusStyle = Jira.StatusStyle.plain
     private var emphasized = false
@@ -222,11 +229,13 @@ final class MessageCellView: NSTableCellView {
         attachment.contentTintColor = Tint.secondary
         attachment.imageScaling = .scaleNone
         attachment.isHidden = true
+        signatureIcon.imageScaling = .scaleNone
+        signatureIcon.isHidden = true
         star.image = Icon.image("starred", size: .small)
         star.contentTintColor = Tint.accent
         star.imageScaling = .scaleNone
         star.isHidden = true
-        for icon in [attachment, star] {
+        for icon in [attachment, signatureIcon, star] {
             icon.setContentHuggingPriority(.required, for: .horizontal)
             icon.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -252,7 +261,7 @@ final class MessageCellView: NSTableCellView {
         date.setContentCompressionResistancePriority(.required, for: .horizontal)
         unreadDot.isHidden = true
 
-        let line = NSStackView(views: [from, eventLabel, badge, attachment, star, origin, date, unreadDot])
+        let line = NSStackView(views: [from, eventLabel, badge, attachment, signatureIcon, star, origin, date, unreadDot])
         line.orientation = .horizontal
         line.distribution = .fill
         line.setHuggingPriority(.defaultLow, for: .horizontal)
@@ -300,9 +309,11 @@ final class MessageCellView: NSTableCellView {
     /// place so the avatars line up. `message` is what a message row
     /// shows (`ListController.rowMessage`: the summary, or in search the
     /// excerpt and the folder).
-    func configure(_ row: ListRow, message: RowMessage, reserveExpander: Bool, appearance: RowAppearance) {
+    func configure(_ row: ListRow, message: RowMessage, reserveExpander: Bool, appearance: RowAppearance, mine: Bool = false) {
         applyAppearance(appearance)
+        self.mine = mine
         invitation = invitationPill(row.message)
+        showSignature(SignatureView.listIcon(for: row.message.signature))
         // A brand and a msgid: nothing from mail.
         let pill = CRM.pillFor(row.message)
         crmPill.stringValue = pill?.label ?? ""
@@ -319,12 +330,35 @@ final class MessageCellView: NSTableCellView {
         applyIssue()
     }
 
+    /// The verdict's icon (nil: none), with its tooltip; the colour follows
+    /// the selection state (`applyColours`). A verdict's name is a fixed
+    /// text, nothing from the mail.
+    private func showSignature(_ icon: SignatureView.ListIcon?) {
+        signature = icon
+        signatureIcon.isHidden = icon == nil
+        if let icon {
+            signatureIcon.image = SignatureTint.image(icon.icon, description: icon.tooltip)
+            signatureIcon.toolTip = icon.tooltip
+            signatureIcon.setAccessibilityLabel(icon.tooltip)
+        } else {
+            signatureIcon.image = nil
+            signatureIcon.toolTip = nil
+        }
+        applySignatureTint()
+    }
+
+    private func applySignatureTint() {
+        guard let signature else { return }
+        signatureIcon.contentTintColor = emphasized ? .alternateSelectedControlTextColor : SignatureTint.color(signature.severity)
+    }
+
     /// Displays a message (message_row.go `SetMessage`). The first sender
     /// is shown; a message without one gets an empty name.
     private func setMessage(_ m: RowMessage) {
         let sender = m.from.first ?? Address(address: "")
         let name = displayName(sender)
         avatar.text = name
+        avatar.photoSource = ContactBook.avatarOfSender(address: sender.address, name: name, mine: mine)
         from.stringValue = name
         from.toolTip = formatAddress(sender)
         fill(subject: m.subject, snippet: m.snippet, date: m.date, unread: m.unread, flagged: m.flagged, attachments: m.hasAttachments)
@@ -347,6 +381,7 @@ final class MessageCellView: NSTableCellView {
     private func setThread(_ t: RowThread) {
         let first = t.participants.first ?? Address(address: "")
         avatar.text = displayName(first)
+        avatar.photoSource = ContactBook.avatarOfSender(address: first.address, name: avatar.text, mine: mine)
         from.stringValue = formatParticipants(t.participants)
         from.toolTip = t.participants.map(formatAddress).joined(separator: "\n")
         fill(subject: t.subject, snippet: t.snippet, date: t.date, unread: t.unread > 0, flagged: t.flagged, attachments: t.hasAttachments)
@@ -557,6 +592,7 @@ final class MessageCellView: NSTableCellView {
         preview.textColor = secondary
         renderPreview()
         attachment.contentTintColor = secondary
+        applySignatureTint()
         star.contentTintColor = emphasized ? .alternateSelectedControlTextColor : Tint.accent
         unreadDot.color = emphasized ? .alternateSelectedControlTextColor : Tint.accent
         badge.textColor = primary

@@ -157,9 +157,13 @@ func (im *issueMail) init() {
 // afterMailStored is the Stored hook of the mail syncers (IMAP, Graph).
 func (b *Backend) afterMailStored(ctx context.Context, accountID, messageID string, pol ingest.Policy) {
 	b.storedUnder(ctx, messageID, pol)
+	b.boardKnownTouch()
 	b.noteIssueMail(ctx, accountID, messageID)
 	b.noteInvitation(ctx, accountID, messageID)
 	b.noteCrmFollow(ctx, accountID, messageID)
+	b.noteSignature(accountID, messageID)
+	// Last: the rules may move the message (docs/api.md §4.21).
+	b.noteRules(ctx, accountID, messageID)
 }
 
 // afterIssueStored is the Stored hook of the issue-tracker syncer: the

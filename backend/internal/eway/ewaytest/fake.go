@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -109,6 +110,19 @@ func New() *Server {
 		override: map[string][]byte{},
 	}
 	f.Server = httptest.NewTLSServer(http.HandlerFunc(f.serve))
+	return f
+}
+
+// NewStandalone starts a fake for a program that is not a test
+// (cmd/malachi-devmail): plain http on ln, a loopback listener, which the
+// daemon accepts for a loopback host (eway.NormaliseServiceURL). Close
+// stops it.
+func NewStandalone(ln net.Listener) *Server {
+	f := New()
+	f.Server.Close()
+	f.Server = httptest.NewUnstartedServer(http.HandlerFunc(f.serve))
+	f.Server.Listener = ln
+	f.Server.Start()
 	return f
 }
 

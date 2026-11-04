@@ -156,6 +156,40 @@ const (
 	MethodAssistantProfileSet     = "assistant.profileSet"
 	MethodAssistantProfilePropose = "assistant.profilePropose"
 	MethodAssistantProfileResolve = "assistant.profileResolve"
+
+	// Address books and contacts (docs/api.md §4.19).
+	MethodAddressBookList = "addressBook.list"
+	MethodAddressBookSet  = "addressBook.set"
+	MethodContactList     = "contact.list"
+	MethodContactGet      = "contact.get"
+	MethodContactLookup   = "contact.lookup"
+	MethodContactCreate   = "contact.create"
+	MethodContactUpdate   = "contact.update"
+	MethodContactDelete   = "contact.delete"
+	MethodContactPhoto    = "contact.photo"
+
+	// Update check (docs/api.md §4.20).
+	MethodUpdateStatus        = "update.status"
+	MethodUpdateCheck         = "update.check"
+	MethodUpdateSetPrefs      = "update.setPrefs"
+	MethodUpdateDismiss       = "update.dismiss"
+	MethodUpdateDismissNotice = "update.dismissNotice"
+
+	// Mail rules (docs/api.md §4.21).
+	MethodRulesList    = "rules.list"
+	MethodRulesCreate  = "rules.create"
+	MethodRulesUpdate  = "rules.update"
+	MethodRulesDelete  = "rules.delete"
+	MethodRulesReorder = "rules.reorder"
+	MethodRulesTest    = "rules.test"
+	MethodRulesApply   = "rules.apply"
+	// Signatures and OpenPGP keys (docs/api.md §4.22).
+	MethodMessageSignature           = "message.signature"
+	MethodMessageSignatureRevocation = "message.signatureRevocation"
+	MethodPGPKeyImport               = "pgp.keyImport"
+	MethodPGPKeyVerify               = "pgp.keyVerify"
+	MethodPGPKeyList                 = "pgp.keyList"
+	MethodPGPKeyRemove               = "pgp.keyRemove"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -174,6 +208,13 @@ const (
 	NotifyInvitationsChanged = "notify.invitationsChanged"
 
 	NotifyAssistantProfileChanged = "notify.assistantProfileChanged"
+
+	NotifyContactsChanged = "notify.contactsChanged"
+
+	NotifyUpdateChanged = "notify.updateChanged"
+
+	NotifyRulesChanged      = "notify.rulesChanged"
+	NotifySignaturesChanged = "notify.signaturesChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -212,6 +253,15 @@ var AllMethods = []string{
 	MethodAccountDetectEway,
 	MethodCrmLookup, MethodCrmSearch, MethodCrmSave, MethodCrmRemove,
 	MethodAssistantProfileGet, MethodAssistantProfileSet, MethodAssistantProfilePropose, MethodAssistantProfileResolve,
+	MethodAddressBookList, MethodAddressBookSet,
+	MethodContactList, MethodContactGet, MethodContactLookup,
+	MethodContactCreate, MethodContactUpdate, MethodContactDelete,
+	MethodContactPhoto,
+	MethodUpdateStatus, MethodUpdateCheck, MethodUpdateSetPrefs, MethodUpdateDismiss, MethodUpdateDismissNotice,
+	MethodRulesList, MethodRulesCreate, MethodRulesUpdate, MethodRulesDelete,
+	MethodRulesReorder, MethodRulesTest, MethodRulesApply,
+	MethodMessageSignature, MethodMessageSignatureRevocation,
+	MethodPGPKeyImport, MethodPGPKeyVerify, MethodPGPKeyList, MethodPGPKeyRemove,
 }
 
 // AllNotifications lists every server-initiated notification.
@@ -220,4 +270,8 @@ var AllNotifications = []string{
 	NotifyBoardChanged, NotifyDraftsChanged,
 	NotifyCalendarChanged, NotifyCalendarState, NotifyEventAlert, NotifyInvitationsChanged,
 	NotifyAssistantProfileChanged,
+	NotifyContactsChanged,
+	NotifyUpdateChanged,
+	NotifyRulesChanged,
+	NotifySignaturesChanged,
 }

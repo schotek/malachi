@@ -37,6 +37,12 @@ import (
 // version is injected at build time: -ldflags "-X main.version=…".
 var version = "dev"
 
+// updateChannel is the package this build is installed from
+// (docs/services.md §2.3), injected by the package recipes:
+// -ldflags "-X main.updateChannel=macos-dmg". Without one the daemon never
+// checks for updates; MALACHI_UPDATE_CHANNEL overrides it for tests.
+var updateChannel = ""
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "malachid:", err)
@@ -115,6 +121,13 @@ func run() error {
 	setPreferredZone(log)
 	backend := core.New(version, st, cfg, log)
 	defer backend.Close() // idempotent; also on the early returns below
+	backend.Updates.Channel = updateChannel
+	if v, ok := os.LookupEnv("MALACHI_UPDATE_CHANNEL"); ok {
+		backend.Updates.Channel = v
+	}
+	if c := backend.Updates.Channel; c != "" {
+		log.Info("update channel", "channel", c)
+	}
 	switch v := strings.ToLower(os.Getenv("MALACHI_KEYRING")); v {
 	case "", "secretservice":
 		ks := secretservice.New(log)

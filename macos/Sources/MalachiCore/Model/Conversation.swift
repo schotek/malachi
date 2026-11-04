@@ -56,8 +56,11 @@ public enum Conversation {
         /// A message card: a mail message, or the description or a comment
         /// of an issue. Its body is shown in full.
         case message
-        /// A compact row of an issue's status or assignee changes: native
-        /// text only (never a web view), never unread, never marked read.
+        /// A compact row of an issue's status or assignee changes, or of an
+        /// answer to an invitation (`isInvitationReply`): native text only
+        /// (never a web view). An issue's event is never unread and never
+        /// marked read; an answer to an invitation keeps its mark and is
+        /// marked read like a card.
         case event
         /// The row on top that says how many older members are left out
         /// (thread.get returns the newest `API.Limits.maxThreadMessages`).
@@ -73,8 +76,9 @@ public enum Conversation {
         /// the address) of the first sender that has one, cleaned for one
         /// line (`Jira.clean`); "" when there is none.
         public var sender = ""
-        /// Marks an unread message card; an event and a sent card are never
-        /// unread, whatever their flags.
+        /// Marks an unread message card or answer to an invitation; an
+        /// issue's event and a sent card are never unread, whatever their
+        /// flags.
         public var unread = false
         /// Marks a card of the user's reply in a sent folder that the
         /// folder lacks (thread.get's `sent`): not a member of the folder,
@@ -344,7 +348,7 @@ public enum Conversation {
     /// goes out from a mail account. An event offers none; the other
     /// actions (move, trash, archive, junk) are never set here.
     public static func cardActions(_ account: Account, _ m: MessageSummary, composeAccount: Bool) -> Capabilities.Actions {
-        if Jira.isEvent(m.issue) {
+        if Jira.isEvent(m.issue) || isInvitationReply(m) {
             return Capabilities.Actions()
         }
         let a = Capabilities.available(Capabilities.Situation(
@@ -398,6 +402,9 @@ public enum Conversation {
             it.eventText = Jira.eventText(issue.changes)
             return it
         }
+        if isInvitationReply(s) {
+            return invitationReplyItem(it)
+        }
         it.unread = !hasFlag(s.flags, .seen)
         if let issue = s.issue {
             let c = Jira.issueCard(issue.info, item: issue)
@@ -448,11 +455,13 @@ public enum Conversation {
         return out
     }
 
-    /// conversation.markRead: the newest message card that is neither
-    /// queued in the outbox nor a sent card when it is unread, else nil.
+    /// conversation.markRead: the newest message card (or answer to an
+    /// invitation) that is neither queued in the outbox nor a sent card
+    /// when it is unread, else nil.
     private static func markRead(_ items: [Item]) -> MessageID? {
         for it in items.reversed() {
-            guard it.kind == .message, !it.sent, let s = it.message, s.outbox == nil else { continue }
+            let reply = it.kind == .event && it.message.map(isInvitationReply) == true
+            guard it.kind == .message || reply, !it.sent, let s = it.message, s.outbox == nil else { continue }
             return it.unread ? s.id : nil
         }
         return nil

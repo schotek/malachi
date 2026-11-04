@@ -123,6 +123,16 @@ public sealed class SuggestTests
         Assert.NotEmpty(Suggest.SuggestionTooltip(sent));
         Assert.NotEqual(Suggest.SuggestionTooltip(unnamed), Suggest.SuggestionTooltip(sent));
         Assert.Equal(Suggest.SuggestionTooltip(unnamed), Suggest.SuggestionTooltip(new Contact { Address = "a@x.example", Source = ContactSource.AddressBook, Book = "" }));
+        // A synchronised address book (docs/api.md §4.19): the book's icon,
+        // the book with its account in the tooltip, cleaned of bidi controls.
+        var synced = new Contact { Address = "a@x.example", Source = ContactSource.Contacts, Book = "Kontakty", ContactId = "p_1" };
+        Assert.Equal("x-office-address-book-symbolic", Suggest.SuggestionIcon(ContactSource.Contacts));
+        Assert.Equal("Kontakty · Microsoft 365 (jana@firma.cz)", Suggest.SuggestionTooltip(synced, "Microsoft 365 (jana@firma.cz)"));
+        Assert.Equal("Kontakty", Suggest.SuggestionTooltip(synced));
+        Assert.Equal("Rodina", Suggest.SuggestionTooltip(synced with { Book = "Rodina‮" }));
+        Assert.Equal("X", Suggest.SuggestionTooltip(new Contact { Address = "a@x.example", Source = ContactSource.Contacts }, "X"));
+        Assert.Equal("Address book", Suggest.SuggestionTooltip(new Contact { Address = "a@x.example", Source = ContactSource.Contacts }));
+        Assert.Equal(Suggest.SuggestionTooltip(unnamed), Suggest.SuggestionTooltip(new Contact { Address = "a@x.example", Source = ContactSource.Contacts }));
     }
 
     [Fact]

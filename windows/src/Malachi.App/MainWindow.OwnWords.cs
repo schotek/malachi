@@ -110,7 +110,7 @@ public sealed partial class MainWindow
 
     // While the one-shot requests can run and the box is the mail's (Mail;
     // the Board hides it, the Calendar's searches events).
-    private bool OwnWordsOffered => state.Assistant.CanRunInApp && mode == Core.Boards.Board.Mode.Mail;
+    private bool OwnWordsOffered => state.Assistant.CanRunInApp && mode == Core.Boards.Board.Mode.Mail && SearchBox.Visibility == Visibility.Visible;
 
     // Converts the box's words and searches for the query.
     private void SearchInOwnWords()

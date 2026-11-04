@@ -378,7 +378,10 @@ func exerciseCalDAV(tr Translator) {
 	w.Discovered.ServerURL = "http://127.0.0.1:5232"
 	w.Discovered.Certificate = nil
 	CertificateText(w, tr)
-	w.ListDone(&api.AccountListCalDAVCalendarsResult{Calendars: []api.CalDAVCalendar{{Href: "/a/"}}}, nil)
+	w.ListDone(&api.AccountListCalDAVCalendarsResult{AddressBooks: []api.CardDAVAddressBook{{Href: "/ab/"}}}, nil)
+	FoundLine(w, tr)
+	w.Listed = &api.AccountListCalDAVCalendarsResult{Calendars: []api.CalDAVCalendar{{Href: "/a/"}}}
+	w.Selected["/a/"] = true
 	FoundLine(w, tr)
 	w.BeginAdd()
 	WizardProgress(w, tr)

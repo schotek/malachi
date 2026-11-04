@@ -89,7 +89,7 @@ public sealed class ReaderHub : IDisposable
             Preview = new AttachmentPreview(opener, state),
             Windows = registry,
             FileTypes = policy,
-            Icons = new ChipIcons(new ShellFileTypes()),
+            Icons = ChipIcons.Shared,
             Issues = integration.Issues,
             Bulk = integration.Bulk,
             IssueSite = id => integration.Mailbox.Model.Account(id)?.Config.Jira?.SiteUrl ?? "",
@@ -153,6 +153,8 @@ public sealed class ReaderHub : IDisposable
         mainWindow.SetConversationPaging(up => conversation.Shown && conversation.PageBy(up));
 
         WireMainCommands(mainWindow.Commands, router);
+        // Print (Ctrl+P): the selection in Mail, the event or day in the Calendar.
+        mainWindow.InitializePrint(Services);
         // win.change-status pops up the Change Status menu of the issue card
         // on display (window.go).
         mainWindow.Commands.ChangeStatus.Handler = () => Pane.OpenStatusMenu();

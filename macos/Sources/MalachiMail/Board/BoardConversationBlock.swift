@@ -106,7 +106,13 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     /// Same indices as `state.members` and `messages`.
     private(set) var chatRows: [ConversationChatRow] = []
     /// The members of the detail on show, for the bubbles' double click.
-    private var messages: [Board.MessageCard] = []
+    private var messages: [Board.MessageCard] = [] {
+        didSet {
+            if messages != oldValue {
+                reportPhotos()
+            }
+        }
+    }
     /// The chat shows (the setting, read when it changes).
     private(set) var chatShown = false
     /// The bubbles show the short date (`ConversationLayout.chatCompactDates`).
@@ -355,6 +361,10 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             guard let self, let card else { return }
             self.userFolded(card, folded)
         }
+        card.onSignature = { [weak self, weak card] anchor in
+            guard let self, let card, let i = self.cards.firstIndex(where: { $0 === card }) else { return }
+            self.showSignature(of: i, relativeTo: anchor)
+        }
         card.onUnavailable = { [weak self, weak card] in
             guard let self, let card, let i = self.cards.firstIndex(where: { $0 === card }) else { return }
             _ = self.state.answered(i, html: false)
@@ -368,6 +378,23 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             }
         }
         return card
+    }
+
+    /// The badge of card `i`: the details popover of Mail's badge, for the
+    /// member's id, with the verdict `board.get` carried until the daemon's
+    /// details arrive. The samples have no message to ask about.
+    private func showSignature(of i: Int, relativeTo anchor: NSView) {
+        guard messages.indices.contains(i), let id = messages[i].id, let account else {
+            if actions.samples {
+                actions.onToast?(Board.Text.later)
+            }
+            return
+        }
+        let m = messages[i]
+        let s = MessageSummary(
+            id: id, accountId: account, folderId: FolderID(""), from: [Address(address: m.address)], subject: "",
+            date: m.date, snippet: "", flags: [], hasAttachments: false, size: 0)
+        delegate?.showSignature(of: s, summary: m.signature, relativeTo: anchor)
     }
 
     private func removeAllCards() {
@@ -510,6 +537,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         toggle.setChat(on)
         guard on != chatShown else { return }
         chatShown = on
+        reportPhotos()
         if status == nil, account != nil {
             cardsColumn.isHidden = on
             chatColumn.isHidden = !on
@@ -625,7 +653,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     /// for the user's own) and date, its text, or with Render HTML in Chat
     /// the HTML its body has (`chatBody`).
     private func renderChatRow(_ row: ConversationChatRow, _ m: Board.MessageCard, at i: Int?) {
-        row.showAvatar(name: m.sender, monochrome: monochrome)
+        row.showAvatar(name: m.sender, monochrome: monochrome, photo: Self.photoAvatar(m))
         row.bubble.showPlain(sender: m.from, date: m.date == .distantPast ? nil : m.date)
         row.bubble.setShortened(shortened(m, at: i))
         row.bubble.showBody(chatBody(m, at: i), monospace: false)
@@ -706,7 +734,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     private func applyChatAvatars() {
         for (i, row) in chatRows.enumerated() where messages.indices.contains(i) {
             let m = messages[i]
-            row.showAvatar(name: m.sender, monochrome: monochrome)
+            row.showAvatar(name: m.sender, monochrome: monochrome, photo: Self.photoAvatar(m))
         }
     }
 
@@ -771,6 +799,31 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         liveChanged()
+        reportPhotos()
+    }
+
+    // MARK: Contact photos
+
+    /// The photos' name of this block (a detail of the list and one of
+    /// the panel may both have one).
+    private lazy var photoView = "board-chat-\(UInt(bitPattern: ObjectIdentifier(self).hashValue))"
+
+    /// Whose contact photo replaces a bubble's initials (F10): the sender
+    /// of a message the user did not write.
+    static func photoAvatar(_ m: Board.MessageCard) -> ContactBook.Avatar? {
+        m.mine ? nil : ContactBook.avatarOfSender(address: m.address, name: m.sender, mine: false)
+    }
+
+    /// Tells the photos the senders of the bubbles while the chat shows in
+    /// a window, newest first; nothing otherwise.
+    private func reportPhotos() {
+        guard let photos = AppContacts.shared?.photos else { return }
+        guard chatShown, window != nil else {
+            photos.show(photoView)
+            return
+        }
+        let senders = messages.reversed().compactMap { Self.photoAvatar($0)?.sender }.filter { !$0.isEmpty }
+        photos.show(photoView, senders: senders)
     }
 
     override func viewDidHide() {

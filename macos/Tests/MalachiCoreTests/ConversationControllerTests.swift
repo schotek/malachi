@@ -648,6 +648,26 @@ private final class Harness {
         #expect(await h.fixture.bodyRequests.count == 2, "the trimmed body was held by the cache")
     }
 
+    /// A member with an invitation asks for message.get without the
+    /// paperclip: the daemon leaves the calendar part out of
+    /// `hasAttachments`, and the card is message.get's.
+    @Test func invitationAsksForMessageGet() async throws {
+        var list = messages()
+        list[0].invitation = InvitationSummary(method: .request, kind: .invitation, state: .unanswered, title: "Demo")
+        let h = try await Harness(messages: list)
+        defer { Task { await h.stop() } }
+        try await h.select(ListKey(thread: "t1"))
+        h.conversation.needsBody("a1")
+        try await waitUntil { h.conversation.loaded["a1"]?.complete == true }
+        #expect(await h.fixture.callCount(API.MessageGet.name) >= 1)
+        #expect(h.conversation.loaded["a1"]?.msg != nil)
+        let before = await h.fixture.callCount(API.MessageGet.name)
+        h.conversation.needsBody("a2")
+        try await waitUntil { h.conversation.loaded["a2"]?.body != nil }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await h.fixture.callCount(API.MessageGet.name) == before, "a plain member needs only its body")
+    }
+
     /// A failed message.get is not asked again on every scroll; the summary
     /// serves the card.
     @Test func failedGetIsNotAskedAgain() async throws {

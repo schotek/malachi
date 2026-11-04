@@ -13,6 +13,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/contextmenu"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/printing"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -29,6 +30,7 @@ import (
 var messageMenuActions = map[contextmenu.ItemID]string{
 	contextmenu.OpenMessage:  "win.open-message",
 	contextmenu.EditDraft:    "win.open-message",
+	contextmenu.Print:        "win.print",
 	contextmenu.Reply:        "win.reply",
 	contextmenu.ReplyAll:     "win.reply-all",
 	contextmenu.Forward:      "win.forward",
@@ -43,6 +45,7 @@ var messageMenuActions = map[contextmenu.ItemID]string{
 	contextmenu.CrmOpen:      "win." + crmActionOpen,
 	contextmenu.CrmEditLinks: "win." + crmActionEditLinks,
 	contextmenu.CrmRemove:    "win." + crmActionRemove,
+	contextmenu.CreateRule:   "win.create-rule",
 }
 
 // menuTriggers are the keys that open a row's menu.
@@ -134,8 +137,11 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 	assistantShown := w.assist != nil && w.assist.shown()
 	s := contextmenu.MessageState{
 		Count:         st.count,
+		MixedAccounts: st.mixed,
 		Open:          st.open,
 		Draft:         w.model.inDrafts(row.Message),
+		OfferPrint:    true,
+		Print:         st.count <= printing.MaxMessages,
 		Outbox:        st.outbox,
 		OfferReply:    st.supported.Reply,
 		OfferReplyAll: st.supported.ReplyAll,
@@ -160,6 +166,12 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 	// eWay-CRM by crm.OfferFor of the selected rows; a conversation's row
 	// offers nothing.
 	s.SetCrm(w.crmOffer(w.crmMainSubjects()))
+	// Create Rule from Message… for one message of a mail account
+	// (rules_menus.go); its action is on exactly when it is offered.
+	s.OfferRule = w.canCreateRule(rows)
+	if a := w.actions["create-rule"]; a != nil {
+		a.SetEnabled(s.OfferRule)
+	}
 	labels := contextmenu.Labels{Comment: st.comment, Flagged: st.flagged, Outbox: st.outbox, Count: st.count}
 	m := gio.NewMenu()
 	for _, g := range contextmenu.MessageItems(s) {
@@ -231,8 +243,8 @@ func (w *Window) attachFolderMenu(row gtk.Widgetter, idx int) {
 }
 
 // showFolderMenuAt shows the menu of the sidebar's row idx at (x, y) in
-// anchor: an account heading's or a folder's (the Favourites heading has
-// none). False when there is nothing to offer.
+// anchor: an account heading's, the Favourites heading's or a folder's.
+// False when there is nothing to offer.
 func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) bool {
 	if idx < 0 || idx >= len(w.model.entries) {
 		return false
@@ -243,8 +255,17 @@ func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) boo
 	var groups [][]contextmenu.Item
 	var labels contextmenu.Labels
 	switch {
+	case e.Unified:
+		// Only Check for new mail, of every account the item covers (a
+		// sync of all accounts); no folder to act on.
+		groups = [][]contextmenu.Item{{{ID: contextmenu.CheckMail, Enabled: true}}}
+		actions[contextmenu.CheckMail] = func() { w.startSync(api.SyncTriggerParams{}) }
 	case e.Header && e.Favourite:
-		return false
+		// The Favourites heading folds like an account's, and that is all
+		// it offers (contextmenu.FavouritesItems).
+		groups = contextmenu.FavouritesItems()
+		labels.Collapsed = e.Collapsed
+		actions[contextmenu.Fold] = w.toggleFavourites
 	case e.Header:
 		acc := e.Account.ID
 		groups = contextmenu.AccountItems(true)
@@ -257,6 +278,8 @@ func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) boo
 		if !ok {
 			f = e.Folder
 		}
+		// Apply Rules… for a folder of a mail account (rules_menus.go).
+		offerRules, rulesOn := w.rulesOfferedFor(e.Account, f)
 		groups = contextmenu.FolderItems(contextmenu.FolderState{
 			Selectable: f.Selectable,
 			Role:       f.Role,
@@ -264,11 +287,14 @@ func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) boo
 			Total:      f.Total,
 			CanDelete:  e.Account.Can(api.CapabilityDelete),
 			Foldable:   e.HasChildren && !e.Favourite,
+			OfferRules: offerRules,
+			Rules:      rulesOn,
 		})
 		labels = contextmenu.Labels{Junk: f.Role == api.RoleJunk, Favourite: e.Starred, Collapsed: e.Collapsed}
 		actions[contextmenu.CheckMail] = func() { w.checkFolder(f) }
 		actions[contextmenu.MarkAllRead] = func() { w.markFolderRead(k) }
 		actions[contextmenu.EmptyFolder] = func() { w.emptyFolder(k) }
+		actions[contextmenu.ApplyRules] = func() { w.applyRules(f) }
 		actions[contextmenu.Favourite] = func() { w.toggleFavourite(k) }
 		actions[contextmenu.Fold] = func() { w.toggleFolder(k) }
 	}
@@ -319,6 +345,8 @@ func (w *Window) emptyFolder(k folderKey) {
 	junk := f.Role == api.RoleJunk
 	q := contextmenu.EmptyQuestion(i18n.Tr, junk, f.Total)
 	widget.ConfirmDestructive(w, q.Heading, q.Body, q.Confirm, func() {
+		// The moves into the folder cannot be taken back any more.
+		w.undo.ForgetFolder(k.Account, k.Folder)
 		w.call(contextmenu.EmptyingText(i18n.Tr, junk), api.MethodFolderEmpty,
 			api.FolderEmptyParams{AccountID: k.Account, FolderID: k.Folder}, nil)
 	})

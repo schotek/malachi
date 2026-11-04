@@ -225,13 +225,25 @@ extension Cal {
 
         public mutating func setMailAccount(_ id: AccountID?) { mailAccount = id }
 
+        /// The server's address books (`account.listCalDAVCalendars`); empty
+        /// before the listing or for a server without CardDAV.
+        public var addressBooks: [CardDAVAddressBook] { listed?.addressBooks ?? [] }
+
+
         /// The mail-account popup: the server leaves invitations to us.
         public var showsMailAccount: Bool { listed?.scheduling == .client }
 
-        /// Add enabled: listed, a calendar selected.
+        /// caldav.go `CanAdd`: listed, a calendar selected or an address
+        /// book found (a server with only address books is added for its
+        /// contacts).
         public var canAdd: Bool {
             guard phase == .listed, let l = listed else { return false }
-            return l.calendars.contains { isSelected($0.href) }
+            return !l.addressBooks.isEmpty || anyCalendar
+        }
+
+        /// A selected calendar.
+        var anyCalendar: Bool {
+            (listed?.calendars ?? []).contains { isSelected($0.href) }
         }
 
         @discardableResult
@@ -242,11 +254,13 @@ extension Cal {
             return true
         }
 
-        /// caldav.go `AddParams`: the deselected calendars disabled and the
-        /// server's default (when selected) as the default calendar.
+        /// caldav.go `AddParams`: the deselected calendars disabled, the
+        /// server's default (when selected) as the default calendar and,
+        /// when the listing found address books, the contacts on with their
+        /// home set.
         public var addParams: AccountAddParams {
             var cfg = config
-            var cal = CalendarConfig(sync: true)
+            var cal = CalendarConfig(sync: anyCalendar)
             for c in listed?.calendars ?? [] {
                 if !isSelected(c.href) {
                     cal.disabledCalendars = (cal.disabledCalendars ?? []) + [c.href]
@@ -255,6 +269,12 @@ extension Cal {
                 }
             }
             cfg.calendar = cal
+            if let l = listed, !l.addressBooks.isEmpty {
+                // The server's address books come with the account: its
+                // contacts are on, the books chosen in Settings → Contacts.
+                cfg.caldav?.contacts = true
+                cfg.caldav?.addressBookHomeSetUrl = l.addressBookHomeSetUrl
+            }
             return AccountAddParams(config: cfg, credentials: Credentials(password: password))
         }
 
@@ -340,6 +360,13 @@ extension Cal {
             guard let l = listed else { return "" }
             let via = discovered?.foundVia ?? .url
             let n = l.calendars.count
+            let b = l.addressBooks.count
+            if n == 0 && b > 0 {
+                // TRANSLATORS: the Add CalDAV sheet's status for a server
+                // with address books and no calendar: how it was found and
+                // how many address books it has.
+                return L10n.N("Found through %s · %d address book", "Found through %s · %d address books", b, CalDAVWizard.foundVia(via), b)
+            }
             return L10n.N("Found through %s · %d calendar", "Found through %s · %d calendars", n, CalDAVWizard.foundVia(via), n)
         }
 

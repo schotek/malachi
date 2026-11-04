@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Malachi.Core.Api;
 using Malachi.Core.Boards;
 using Xunit;
 using static Malachi.Core.Boards.Board;
@@ -96,6 +97,16 @@ public sealed class BoardSampleTests
         Assert.Contains(snap.Cases, c => c.Reminded && c.Id.Value == "sample-22");
         Assert.Contains(snap.Cases, c => c.NewContact && c.Id.Value == "sample-23");
         Assert.All(snap.Cases, c => Assert.True(c.Date <= F.Now));
+    }
+
+    /// <summary>The badge shows on a card of the samples: a signed member in a case with no ids.</summary>
+    [Fact]
+    public void ASampleMemberIsSigned()
+    {
+        var signed = snap.Cases.SelectMany(c => c.Messages ?? []).Where(m => m.Signature is not null).ToList();
+        Assert.Single(signed);
+        Assert.Null(signed[0].Id);
+        Assert.Equal(SignatureStatus.Valid, signed[0].Signature!.Status.Value);
     }
 
     [Fact]

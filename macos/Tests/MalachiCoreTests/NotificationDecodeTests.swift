@@ -112,8 +112,29 @@ import Testing
         // hub reads it by name before decoding (`ProfileStore` refreshes),
         // so `DaemonNotification` reads it as `.unknown`.
         let profileSamples: [(String, String)] = [(API.Notify.assistantProfileChanged, "{}")]
-        #expect((samples + calendarSamples + profileSamples).map(\.0) == API.allNotifications)
-        for (method, params) in profileSamples {
+        // notify.contactsChanged is decoded by `ContactsChangedNotification
+        // .decode`; `DaemonNotification` reads it as `.unknown`.
+        let contactsSamples: [(String, String)] = [(API.Notify.contactsChanged, #"{"accountId":"acc_1","bookIds":["b_1"]}"#)]
+        // notify.updateChanged has no payload; the hub reads it by name
+        // (`UpdateController` refreshes), like the profile's.
+        let updateSamples: [(String, String)] = [(API.Notify.updateChanged, "{}")]
+        // notify.rulesChanged has no payload either; the hub reads it by
+        // name (`RulesController` lists again).
+        let rulesSamples: [(String, String)] = [(API.Notify.rulesChanged, "{}")]
+        // notify.signaturesChanged has no payload either; the hub reads it by
+        // name (the messages on display, the details popover and the key
+        // list ask again).
+        let signatureSamples: [(String, String)] = [(API.Notify.signaturesChanged, "{}")]
+        #expect((samples + calendarSamples + profileSamples + contactsSamples + updateSamples + rulesSamples + signatureSamples).map(\.0)
+            == API.allNotifications)
+        for (method, params) in profileSamples + updateSamples + rulesSamples + signatureSamples {
+            #expect(try CalendarNotification(raw(method, params)) == nil)
+            #expect(try ContactsChangedNotification.decode(raw(method, params)) == nil)
+            #expect(try DaemonNotification(raw(method, params)) == .unknown(method: method))
+        }
+        for (method, params) in contactsSamples {
+            #expect(try ContactsChangedNotification.decode(raw(method, params))
+                == ContactsChangedNotification(accountId: "acc_1", bookIds: ["b_1"]))
             #expect(try CalendarNotification(raw(method, params)) == nil)
             #expect(try DaemonNotification(raw(method, params)) == .unknown(method: method))
         }

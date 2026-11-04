@@ -897,21 +897,201 @@ Explicitly not defended: an organiser who controls the invitation's
 shows the address); a server that lies about scheduling and so receives
 or sends invitations twice.
 
+### 4.4 Contacts (vCard, CardDAV, Graph contacts)
+
+The address books ([api.md §4.19](api.md), [architecture.md
+§3.10](architecture.md)) hold what servers and other people wrote: a
+shared CardDAV collection, a contact someone else edited, a vCard a
+server rewrote. It is handled as mail is:
+
+- **Every vCard and Graph contact is hostile input.** `internal/vcard`
+  caps the card (`api.MaxVCardBytes`, 1 MiB; 500 properties; 256 KiB a
+  decoded line; 100 items a list), never panics (a panic of the patcher
+  is `ErrMalformed`), replaces invalid UTF-8 and cleans every string of
+  control, bidi and invisible characters before it reaches the model;
+  fuzz targets and the corpus `testdata/vcard` (with `pathological/`)
+  cover it. Graph contacts are cleaned and capped as Graph events are. A
+  card over the limits is not stored; an e-mail address that is not a
+  plain address is not indexed and not shown.
+- **Nothing is fetched from a contact**: no `PHOTO`, `LOGO`, `SOUND` or
+  `KEY` URL, no `URL` (clients open only `http`/`https` web addresses,
+  through "Open this link?"; a phone number is only copied). A photo
+  named by a link would work as a tracking pixel in a shared book: such
+  a contact has no photo.
+- **Photos are a third party's image data** (read only,
+  [address-book.md §9](plans/address-book.md)). Only an embedded vCard
+  `PHOTO` (base64, read leniently, the `PHOTO` line may be as long as the
+  card, 1 MiB) and a Microsoft 365 contact's `photo/$value` (through the
+  account's Graph client and limiter, at most 4 MiB, 15 s, 4 downloads
+  per account; on demand only, once per revision) are read.
+  `internal/contactphoto` checks the size before decoding (at most
+  4 MiB of input, 40 Mpx and 160 MiB decoded, two decodes at a time),
+  tells the format by its bytes and decodes JPEG, PNG and GIF (first
+  frame) with the standard library only (no cgo, no other registered
+  decoder; a declared type that is no image is refused), crops, scales to
+  at most 256 px and encodes anew as JPEG or PNG within 64 KiB: EXIF,
+  GPS, colour profiles and comments never leave the daemon and clients
+  get only the daemon's bytes (`contact.photo`, base64 in JSON). A
+  failure is no photo, stored as refused so it is not tried again for
+  that revision; the log gets the contact id and an error class. The
+  corpus `testdata/vcard/photos` (a 40 000 × 40 000 PNG of a few
+  kilobytes, a 65 000² JPEG header, a truncated JPEG, a GIF of 300
+  frames, a wrong and a non-image type, base64 garbage, `data:` and
+  `https:` photos) and the fuzz targets `FuzzNormalize` and `FuzzParse`
+  cover it. The MCP bridge never returns a photo.
+- **A photo on mail is not authentication.** Clients put a contact's
+  photo on mail from that contact (list, conversation cards, chat
+  bubbles, the header) by the exact `From` address only
+  (`contact.lookup` `withPhotos`), never by a display name, and never on
+  the user's own mail. `From` is not authenticated: a forged `From`
+  shows the real contact's photo, just as it shows the contact's name and
+  initials today, and as Apple Mail and Outlook do. The photo comes only
+  from the user's own address books, never from the mail; tying it to a
+  DKIM verdict is not done (the daemon verifies DKIM only for bulk mail,
+  §7.2). This risk is accepted knowingly (address-book F11).
+- **Text only to the UI.** Names, notes, labels and book names are shown
+  as plain text by every client; the MCP bridge puts them in its fence.
+- **Writes are the user's and patch.** `contact.create/update/delete`
+  go to the server first and change the cache after it accepted them;
+  an update rewrites only the properties the user changed and sends
+  every other line of the stored vCard back byte for byte (A6), guarded
+  by the revision (`If-Match`; on Graph the `changeKey` is compared
+  first): another client's change is `contactConflict`, never
+  overwritten. A synchronisation never writes to the server, so a
+  server's or a bug's empty listing can delete nothing there; deleting a
+  contact is only ever an explicit `contact.delete` (the MCP bridge has
+  none).
+- **Credentials.** The CardDAV side uses the caldav account's password
+  and its origin rules (§4.3): an address book home set on another
+  origin of the server's registrable domain over https (iCloud's and
+  Fastmail's contacts hosts) is trusted, one on another site is left out
+  without a request with the password; the pin applies to the server's
+  own host only. Graph contacts need the `Contacts.ReadWrite` scope,
+  asked for only by a sign-in made for the contacts (A15); without it
+  the account's books are `contactsConsentRequired` and the mail goes on.
+- **Logs.** The daemon logs counts, ids and error codes of contacts,
+  never a name, an address, a note or a card.
+
 ## 5. Signatures and encryption (EFAIL and friends)
 
-Not implemented in phase 1. When PGP/S/MIME arrives:
+Phase 1 (docs/plans/signatures.md, `docs/api.md` §4.22) verifies the
+signatures of incoming mail, S/MIME and OpenPGP/MIME. Nothing is signed,
+decrypted or encrypted, and the daemon holds no secret key; decryption,
+signing and encryption are later phases (the EFAIL rules at the end of
+this section are for them).
 
-- Decrypt/verify only in the backend; the UI sees a verdict and sanitised
-  content.
+**Where and when.** Only the daemon verifies (`internal/signature`,
+`internal/smime`, `internal/pgpsig`); the UI shows a verdict and plain
+text. The Stored hook of the mail syncers only queues a stored message;
+a worker reads the raw file afterwards (`core/signature_worker.go`), so
+verification never runs inside ingest or a write transaction of mail,
+and a hostile signature cannot stall the synchronisation. A verifier
+that panics or hits a limit gives the verdict `error`; the message is
+stored and shown like any other (S17). The verdict is a row of
+`message_signatures` (migration 0026) that goes with its message; the
+stored mail of the offline window is verified by a backfill in
+`core.Maintain`.
+
+**What counts (S4).** Only a signature over the whole message is a
+verdict: the topmost `multipart/signed` or opaque `signed-data`, or one
+of them as the first part of a `multipart/mixed` whose only other part is
+a `text/plain` after it (a list's footer, note `partialFooter`; that text
+is outside the signature and the note says so). A signed part deeper
+down (a forwarded message, an attachment, a signed part beside an
+unsigned HTML part) is no verdict — the 2019 "Johnny, you are fired"
+attacks wrap a genuinely signed part into a message the attacker wrote.
+Several `SignerInfo`s, several OpenPGP signature packets, or a
+`multipart/signed` that is not exactly two parts with a closing boundary
+are never a green verdict (`unsupported` or `invalid/malformed`).
+
+**Exact bytes (S3).** The signed part is cut out of the raw file as it is
+(`signature.Locate`: the bytes between the delimiter lines), never
+rebuilt by the parser, and canonicalised only by turning bare LF into
+CRLF; if that fails, the bytes as stored are tried once more. A server
+that rebuilds MIME (Microsoft Graph, Exchange) breaks clear signatures:
+on Graph accounts a mismatch of a clear signature is
+`unsupported/rebuilt`, never green and never red.
+
+**Identity (S5).** The signer is the certificate's `rfc822Name` (else the
+DN's `emailAddress`) or a user ID of the OpenPGP key, compared with the
+message's only `From` address (NFC, case-insensitive). A message with
+two `From` addresses never matches. A signature that verifies under
+another identity is `mismatch` (yellow), never green; the name shown is
+always the certificate's or key's, never the header's.
+
+**S/MIME trust (S7, S8, S10).** Roots are the system's
+(`x509.SystemCertPool`; the platform verifier on macOS and Windows),
+intermediates only those the message carries, nothing is fetched (no
+AIA chasing). The certificate must be valid when the message *arrived*
+(internal date), never judged by `signingTime`, which the signer
+writes. The leaf must allow e-mail protection (extended key usage
+`emailProtection` or `any`, key usage digital signature or
+non-repudiation). MD5 is invalid; SHA-1 and RSA under 2048 bits are
+`weak`; DSA is `unsupported`. The CMS parser is our own
+(`internal/smime` over `cryptobyte`): BER is normalised to DER with
+depth 32, 32 MiB and 100 000 elements as limits, at most 16
+certificates, repeated signed attributes are malformed (a second
+`messageDigest` cannot be the one checked), and unsigned attributes are
+ignored. The fingerprint of the roots is part of each S/MIME verdict's
+trust key; a change (checked at start and daily) recomputes them. Where
+the system pool cannot list its roots (macOS, Windows) the fingerprint
+names only the platform and such a change is noticed when a verdict is
+next computed.
+
+**Revocation (S9).** Only on the user's click
+(`message.signatureRevocation`): asking the issuer tells it the
+certificate is in use. `internal/revocation` asks OCSP, then the CRL, over
+`http`/`https` to public addresses only (the dial guard and host rules
+of `internal/oneclick`), without redirects or cookies, at most 1 MiB per
+answer and 15 s in all. An OCSP answer counts only when the issuer signed
+it, or a responder certificate the issuer issued with the OCSP-signing
+usage (`x/crypto/ocsp` alone would take any certificate of the issuer);
+a CRL only when the issuer signed it; answers far past their next update
+are refused. A revocation before the arrival makes the verdict
+`revoked`, after it a note. Only the class of a failure is logged.
+
+**OpenPGP keys (S12, §5 of the plan).** Public keys only, from the
+user's own mail and never from the network: the Autocrypt header of new
+mail (only when its `addr` is the message's only `From`, the mail is not
+bulk, list or in Junk/Trash, the key is a single public key whose user
+IDs all name that address — so a sender cannot plant a key that claims
+someone else — and no key is stored for the address yet; a different
+key for a known address is only offered, with the TOFU note
+`keyChanged`), a key attached to a message (imported on the user's
+click), or an import in Preferences. A key found automatically is
+`seen` (`validSeen`, green without the check mark); only the user's
+confirmation of the fingerprint makes it `verified`. Any data holding a
+secret key is refused whole; nothing is "extracted" from it. A key
+imported by the user may claim any user ID: it stays `seen` until the
+user confirms it. Inline OpenPGP signatures are never verified (they do
+not cover attachments or HTML): `unsupported` with `inlinePGP`.
+
+**Display and logs (S1, S16).** Every string from a certificate or key
+(names, addresses, distinguished names, user IDs, protected header
+values) is cleaned of control, format, bidi and invisible characters and
+capped at 256 bytes before it is stored or sent; clients show it as
+plain text only. Nothing of a certificate or key is logged: only the
+verdict class, the kind and message ids. The MCP bridge passes the
+verdict through `clean()` and the fence, and its instructions say that
+`valid` names the sender, not the truth of the content.
+
+**Opaque S/MIME (S14).** `signed-data` is only wrapped, not encrypted:
+the MIME parser unwraps it (as the root, or the first part of a root
+`multipart/mixed`, at most three wrappers deep) and shows the content
+like any message, numbering its parts inside the wrapper. The CMS is
+read without being trusted for that; the verdict is computed separately.
+Data that does not unwrap stays the `smime.p7m` attachment.
+
+**For the later phases (EFAIL).** When decryption arrives:
+
+- Decrypt only in the backend (a helper holds the secret keys); the UI
+  sees a verdict and sanitised content.
 - **EFAIL direct-exfiltration**: never render a message where encrypted
   and unencrypted MIME parts are mixed into one HTML document. Each
   encrypted part is rendered alone, and remote content is *always* blocked
   in decrypted content regardless of the user's `allow` policy.
 - **EFAIL malleability gadgets**: require MDC/AEAD for OpenPGP; refuse to
   show content whose integrity check failed, no "show anyway" button.
-- Signature verdicts are displayed with the signer's *verified* identity, not
-  the `From` header text; a valid signature by the wrong key is shown as a
-  warning, not a checkmark.
 
 ## 6. Credentials
 
@@ -1446,6 +1626,102 @@ everyone with access to that CRM can read it (unless saved as private).
 - **The local record** (`crm_links`) holds only the CRM item's GUID, the
   linked items' names as last read, the times and the privacy flag; it
   goes with either account.
+
+### 7.4 The update check
+
+The daemon asks once a day which versions of Malachi Mail exist
+([services.md §2](services.md), [api.md §4.20](api.md#420-update),
+`docs/plans/update-check.md`). It is the only request the daemon makes
+on its own that is not to a server of one of the user's accounts.
+
+- **What leaves**: a `GET` to `admin.malachimail.app/api/v1/updates`
+  (when that fails, the same file from the latest GitHub release) with
+  `User-Agent: MalachiMail/<version>` and, on the API, the `If-None-Match`
+  of the last answer. No cookie, no identifier, no channel, no query: the
+  server learns that some copy of a version asked, and the address it
+  asked from. A build without a channel (development, a store) never
+  asks; the user turns it off in the preferences and then nothing is
+  asked, also not after a start.
+- **What is trusted**: neither host. The envelope is Ed25519-signed with a
+  key that only the owner holds (never the Worker, never GitHub); the
+  public keys are compiled into the daemon by `keyId`
+  (`internal/update/keys.go`), the test key of `backend/testdata/update`
+  never among them. The signature covers the exact payload bytes and is
+  verified before the payload is parsed; then the payload is checked
+  whole by a strict reader (no duplicate or case-twin keys, integers as
+  integers, no lone surrogates) and against every rule of services.md
+  §2.3, with the owner's tool's own fixtures as tests. Any violation
+  discards the whole manifest and keeps the last accepted one.
+- **Replay**: a manifest older than the last accepted one, or more than a
+  day in the future, is refused, so an attacker with an old signed
+  manifest cannot hide a fix.
+- **Links**: every package URL is `https` on `github.com` or
+  `malachimail.app`, the info and notice links on `malachimail.app`,
+  exactly so (lower-case host, no port, no credentials, no fragment). The
+  daemon downloads and runs nothing; a client opens the URL in the
+  browser, which applies quarantine, Mark of the Web and SmartScreen.
+- **Text**: notes and notices are untrusted plain text; the daemon refuses
+  a manifest whose text has control, format, bidi or invisible characters
+  or is not NFC, and clients show it only as plain text (no markup,
+  `SetUseMarkup(false)`, `stringValue`, `TextBlock.Text`).
+- **The client's request**: the HTTP client follows no redirect from the
+  API (a sign-in page in front of it is a server failure), and from
+  GitHub only to `github.com` and `*.githubusercontent.com` over https;
+  bodies are capped at 256 KiB, a request at 30 s; the log carries the
+  failure class and the rule a manifest broke, never a body.
+
+### 7.5 Outgoing actions of the mail rules
+
+A mail rule (docs/api.md §4.21) may **forward** a message to one address
+or **answer it automatically** with a fixed text. Such a rule sends mail
+to other people by itself, on input an attacker controls (anyone can
+send mail to the inbox), without the user looking at each message. The
+threats are a mail loop (two automatic responders answering each other),
+backscatter (answering forged senders, mailing lists, bounces), flooding
+a third party through the user's account, and leaking mail to an
+address someone talked the user, or an agent, into adding.
+
+- **Only on the user's word.** A rule that is enabled with an outgoing
+  action is saved only with `confirmOutgoing` (the client asked the user;
+  again when the address or the text changes). The MCP bridge writes one
+  only with `-allow-modify` *and* `-allow-send`, and its instructions say
+  the user must have asked for that rule in the conversation; it can
+  neither run rules on stored mail nor delete them.
+- **Never automatically on old mail, never twice.** The automatic run
+  sees a Message-ID once (`rule_seen`) and leaves mail that arrived more
+  than a day before the rule was enabled or before the account was added
+  (a rule for every account and a new account's first sync); `rules.apply` never runs
+  outgoing actions. So enabling a rule cannot answer a mailbox's history,
+  and moving a message back into the inbox does not answer it again.
+- **Not to automatic or untrusted senders.** Nothing is sent for a
+  message that is bulk (any `internal/bulk` kind, classified again from
+  the headers when the row is not yet), carries `Auto-Submitted` other
+  than `no` or any `X-Loop` field, comes from one of the user's own
+  addresses (every account's), from `mailer-daemon`, `postmaster` or a
+  `noreply`/`no-reply`/`do-not-reply` address (checked on `From` and, for
+  a reply, on `Reply-To`, which is where it goes), or is in junk or sent
+  there by the same rules.
+- **Bounded.** A rule sends at most `RuleOutgoingPerHour` (20) messages an
+  hour, and an automatic reply goes to one sender at most once in
+  `RuleReplyInterval` (4 days, RFC 3834 §2). Both are reserved in one
+  store transaction per message, so concurrent syncers cannot exceed
+  them. Every refusal counts in the rule's `skipped`; nothing about the
+  message is logged but the class.
+- **Marked.** Every such message carries `Auto-Submitted: auto-forwarded`
+  or `auto-replied` and `X-Loop: <the account's address>`, so other
+  responders (and Malachi Mail itself on another account) recognise it.
+  The extra header fields go through `smtp.BuildInput.Headers`, which
+  accepts only plain field names the builder does not write itself and
+  printable ASCII values without line breaks: no field can be folded
+  into another.
+- **Contained.** The forward attaches the original as it came from the
+  server, as an attachment the receiver's client opens; a reply is plain
+  text the user wrote. Both go through the outbox like any message of the
+  user's (Sent copy, retries). A message that cannot be queued disables
+  the rule (`sendFailed`) rather than retrying it forever.
+- Recipients are fixed when the rule is saved (forward) or are the
+  message's own sender (reply): nothing in a message decides where mail
+  goes beyond who wrote it.
 
 ## 8. Local storage
 

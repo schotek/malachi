@@ -155,8 +155,6 @@ public sealed partial class MainWindow
                 ShowMailMode();
                 break;
         }
-        BoardView.ShowMode(mode);
-        CalendarView.ShowMode(mode);
         Commands.RefreshAll();
         SyncModeSwitch();
         SyncOwnWordsMode();
@@ -174,7 +172,7 @@ public sealed partial class MainWindow
         AssistantSplit.Visibility = Visibility.Collapsed;
         CalendarView.Visibility = Visibility.Collapsed;
         BoardView.Visibility = Visibility.Visible;
-        SearchArea.Visibility = Visibility.Collapsed;
+        SyncSearchArea();
         AppTitleBar.IsPaneToggleButtonVisible = false;
         AppTitleBar.IsBackButtonVisible = false;
         MoveToasts(BoardView.ToastLayer);
@@ -192,7 +190,7 @@ public sealed partial class MainWindow
         AssistantSplit.Visibility = Visibility.Visible;
         BoardView.Visibility = Visibility.Collapsed;
         CalendarView.Visibility = Visibility.Collapsed;
-        SearchArea.Visibility = Visibility.Visible;
+        SyncSearchArea();
         MoveToasts(MessagePane);
         ApplyLayout();
         Title = mailCaption;
@@ -260,6 +258,10 @@ public sealed partial class MainWindow
         // New Event: Mail and the Calendar (its handler is
         // MainWindow.Calendar.cs's NewEvent).
         Commands.NewEvent.Gate = () => Board.Allows(Board.Command.NewEvent, mode);
+        // Undo of a move of mail (Ctrl+Z; window/undo.go undoAccelAllowed):
+        // Mail and Board, never the Calendar. Its handler is the actions'
+        // (MainWindow.Panes.cs).
+        Commands.Undo.Gate = () => mode != Board.Mode.Calendar;
         // F10: the sidebar's primary menu in Mail, the page's "…" in Board
         // and Calendar.
         Commands.MainMenu.Handler = () =>
@@ -408,7 +410,6 @@ public sealed partial class MainWindow
         integration.BoardController.ToastRequested += (_, text) => Toasts.Show(text);
         BoardView.Attach(actions, Commands);
         AttachBoardParts(integration, actions);
-        BoardView.ShowMode(mode);
         // Show the Board, and Open at Launch once the preferences are known.
         boardEnabledToken = state.BoardPreferences.Observe(BoardPreferencesChanged);
         Closed += (_, _) =>

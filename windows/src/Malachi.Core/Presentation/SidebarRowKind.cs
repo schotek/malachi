@@ -19,4 +19,10 @@ public enum SidebarRowKind
 
     /// <summary>A folder, in the Favourites section or in its account's tree.</summary>
     Folder,
+
+    /// <summary>
+    /// The All Inboxes item (<see cref="Model.Unified"/>) at the very top:
+    /// selectable like a folder, but with no star and no fold arrow.
+    /// </summary>
+    Unified,
 }

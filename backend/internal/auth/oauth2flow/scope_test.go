@@ -314,3 +314,154 @@ func TestCleanScope(t *testing.T) {
 		t.Errorf("cleanScope kept %d bytes", len(got))
 	}
 }
+
+const scopeContactsRW = "https://graph.microsoft.com/Contacts.ReadWrite"
+
+// A contacts session asks for Contacts.ReadWrite; with Calendar too it
+// asks for both; the plain and the calendar sign-ins stay as they were.
+func TestContactsSessionScopes(t *testing.T) {
+	fp := newFakeProvider(t)
+	m := newTestManager(t, fp, nil)
+	start := func(cal, con bool) []string {
+		t.Helper()
+		_, u, _, err := m.Start(StartRequest{Provider: Microsoft, Client: fp.client(), Calendar: cal, Contacts: con})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return authScopes(t, u)
+	}
+	plain, cal, con, both := start(false, false), start(true, false), start(false, true), start(true, true)
+	for _, s := range providerScopes[Microsoft] {
+		for _, l := range [][]string{plain, cal, con, both} {
+			if !has(l, s) {
+				t.Errorf("mail scope %s missing: %v", s, l)
+			}
+		}
+	}
+	if has(plain, scopeContactsRW) || has(cal, scopeContactsRW) {
+		t.Errorf("contacts asked without Contacts: %v %v", plain, cal)
+	}
+	if !has(con, scopeContactsRW) || has(con, scopeCalRW) {
+		t.Errorf("contacts sign-in %v", con)
+	}
+	if !has(both, scopeContactsRW) || !has(both, scopeCalRW) || !has(both, scopeCalShared) {
+		t.Errorf("calendar+contacts sign-in %v", both)
+	}
+	if len(cal) != len(providerScopes[Microsoft])+2 {
+		t.Errorf("calendar sign-in changed: %v", cal)
+	}
+}
+
+// Google has no contacts provider yet; a keyed session is not reused for
+// other Contacts.
+func TestContactsSessionRefusedAndNotReused(t *testing.T) {
+	fp := newFakeProvider(t)
+	m := newTestManager(t, fp, nil)
+	req := googleReq(fp)
+	req.Contacts = true
+	if _, _, _, err := m.Start(req); apiCode(err) != api.CodeInvalidArgument {
+		t.Fatalf("google contacts session: %v", err)
+	}
+	if SupportsContacts(Google) || !SupportsContacts(Microsoft) {
+		t.Fatal("SupportsContacts")
+	}
+	ms := StartRequest{Provider: Microsoft, Client: fp.client(), Key: "acc_1", Calendar: true}
+	first, _, _, err := m.Start(ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms.Contacts = true
+	second, authURL, _, err := m.Start(ms)
+	if err != nil || second == first || !has(authScopes(t, authURL), scopeContactsRW) {
+		t.Fatalf("contacts request: %s %v", second, err)
+	}
+	if out, _ := m.Lookup(first); out.Status != StatusCancelled {
+		t.Fatalf("replaced session %+v", out)
+	}
+	if again, _, _, _ := m.Start(ms); again != second {
+		t.Fatalf("same request not reused: %s %s", second, again)
+	}
+}
+
+func TestHasContactsScope(t *testing.T) {
+	for in, want := range map[string]bool{
+		"":                          false,
+		"Mail.ReadWrite User.Read":  false,
+		"Contacts.Read":             false,
+		"Contacts.Read.Shared":      false,
+		"Calendars.ReadWrite":       false,
+		"contacts.readwrite":        true,
+		"Contacts.ReadWrite.Shared": true,
+		scopeContactsRW:             true,
+		"00000003-0000-0000-c000-000000000000/Contacts.ReadWrite": true,
+		"https://evil.example/Contacts.ReadWrite":                 false,
+		"XContacts.ReadWrite":                                     false,
+	} {
+		if got := HasContactsScope(in); got != want {
+			t.Errorf("HasContactsScope(%q) = %v", in, got)
+		}
+	}
+	g := Grant{Scope: "Mail.ReadWrite Contacts.ReadWrite"}
+	if !g.HasContactsScope() || g.HasCalendarScope() {
+		t.Errorf("grant %q", g.Scope)
+	}
+}
+
+// A contacts-only grant keeps KeyGrantedScope (the calendar stays off);
+// a refresh that drops the contacts removes it, one that adds them back
+// on top of the calendar rewrites it.
+func TestStoredScopeContacts(t *testing.T) {
+	ctx := context.Background()
+	scopeKey := string(testAccount) + "/" + KeyGrantedScope
+	f := newTSFixture(t, Microsoft, "")
+	f.fp.refreshValid["refresh-con"] = true
+	conScope := "Mail.ReadWrite " + scopeContactsRW
+	if err := f.ts.Seed(ctx, Grant{Provider: Microsoft, RefreshToken: "refresh-con", Scope: conScope}); err != nil {
+		t.Fatal(err)
+	}
+	if v := f.kr.items[scopeKey]; v != conScope {
+		t.Fatalf("scope item %q", v)
+	}
+	if ok, err := f.ts.ContactsConsent(ctx); err != nil || !ok {
+		t.Fatalf("contacts consent %v %v", ok, err)
+	}
+	if ok, err := f.ts.CalendarConsent(ctx); err != nil || ok {
+		t.Fatalf("calendar consent %v %v", ok, err)
+	}
+
+	// The provider narrows the grant on a refresh: the item goes.
+	f.fp.refreshScope = "Mail.ReadWrite User.Read"
+	f.ts.Invalidate()
+	if _, err := f.ts.AccessToken(ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.kr.mu.Lock()
+	_, kept := f.kr.items[scopeKey]
+	f.kr.mu.Unlock()
+	if kept {
+		t.Fatal("scope item kept after the contacts were dropped")
+	}
+
+	// Calendar granted; a refresh answer that adds the contacts records it.
+	both := scopeCalRW + " " + scopeContactsRW
+	if err := f.ts.Seed(ctx, Grant{Provider: Microsoft, RefreshToken: "refresh-con", Scope: scopeCalRW}); err != nil {
+		t.Fatal(err)
+	}
+	f.fp.refreshScope = both
+	f.ts.Invalidate()
+	if _, err := f.ts.AccessToken(ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.kr.mu.Lock()
+	v := f.kr.items[scopeKey]
+	f.kr.mu.Unlock()
+	if v != both {
+		t.Fatalf("scope item %q, want %q", v, both)
+	}
+	if ok, _ := f.ts.ContactsConsent(ctx); !ok {
+		t.Fatal("contacts not granted after the refresh")
+	}
+	if ok, _ := f.ts.CalendarConsent(ctx); !ok {
+		t.Fatal("calendar lost")
+	}
+}

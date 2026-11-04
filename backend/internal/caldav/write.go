@@ -18,19 +18,24 @@ import (
 // page is not an object (serverError); 404/410 are a *StatusError
 // (IsGone).
 func (c *Client) Get(ctx context.Context, href string) (Object, error) {
+	return c.get(ctx, href, "text/calendar", api.MaxICSBytes)
+}
+
+// get fetches one object of at most maxBytes.
+func (c *Client) get(ctx context.Context, href, accept string, maxBytes int) (Object, error) {
 	u, err := c.URL(href)
 	if err != nil {
 		return Object{}, err
 	}
-	a, err := c.do(ctx, request{method: http.MethodGet, url: u, accept: "text/calendar", limit: MaxObjectBytes})
+	a, err := c.do(ctx, request{method: http.MethodGet, url: u, accept: accept, limit: int64(maxBytes) + 64<<10})
 	if err != nil {
 		return Object{}, err
 	}
 	if ct := strings.ToLower(a.header.Get("Content-Type")); strings.HasPrefix(ct, "text/html") {
 		return Object{}, api.NewError(api.CodeServerError, "caldav: the server answered with a web page")
 	}
-	if len(a.body) > api.MaxICSBytes {
-		return Object{}, fmt.Errorf("%w: object over %d bytes", ErrTooLarge, api.MaxICSBytes)
+	if len(a.body) > maxBytes {
+		return Object{}, fmt.Errorf("%w: object over %d bytes", ErrTooLarge, maxBytes)
 	}
 	return Object{Href: u.EscapedPath(), ETag: strongETag(a.header.Get("ETag")), Data: a.body, Status: http.StatusOK}, nil
 }
@@ -42,8 +47,15 @@ func (c *Client) Get(ctx context.Context, href string) (Object, error) {
 // server sends none (or a weak one, RFC 4791 §5.3.4), the one of a
 // following GET; "" when even that has none.
 func (c *Client) Put(ctx context.Context, href string, data []byte, etag string) (string, error) {
-	if len(data) == 0 || len(data) > api.MaxICSBytes {
-		return "", api.NewError(api.CodeInvalidArgument, "caldav: object empty or over %d bytes", api.MaxICSBytes)
+	return c.put(ctx, href, data, etag, "text/calendar; charset=utf-8", api.MaxICSBytes, (*Client).Get)
+}
+
+// put is Put of one object of contentType, at most maxBytes; get reads it
+// back when the answer has no strong ETag.
+func (c *Client) put(ctx context.Context, href string, data []byte, etag, contentType string, maxBytes int,
+	get func(*Client, context.Context, string) (Object, error)) (string, error) {
+	if len(data) == 0 || len(data) > maxBytes {
+		return "", api.NewError(api.CodeInvalidArgument, "caldav: object empty or over %d bytes", maxBytes)
 	}
 	u, err := c.URL(href)
 	if err != nil {
@@ -58,7 +70,7 @@ func (c *Client) Put(ctx context.Context, href string, data []byte, etag string)
 	}
 	a, err := c.do(ctx, request{
 		method: http.MethodPut, url: u, body: data, headers: h,
-		contentType: "text/calendar; charset=utf-8",
+		contentType: contentType,
 	})
 	if err != nil {
 		return "", err
@@ -66,7 +78,7 @@ func (c *Client) Put(ctx context.Context, href string, data []byte, etag string)
 	if e := strongETag(a.header.Get("ETag")); e != "" {
 		return e, nil
 	}
-	o, err := c.Get(ctx, u.EscapedPath())
+	o, err := get(c, ctx, u.String())
 	if err != nil {
 		return "", err
 	}

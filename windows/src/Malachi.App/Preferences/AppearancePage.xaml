@@ -93,6 +93,15 @@ live (the colour scheme on every window and its title bar).
                     </tk:SettingsCard>
                 </StackPanel>
 
+                <!-- A group of its own, without a heading, as in GTK (unified-inbox);
+                     its texts are Core's (Unified.PreferenceTitle and
+                     PreferenceSubtitle), set in code. -->
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <tk:SettingsCard x:Name="UnifiedInboxCard">
+                        <ToggleSwitch x:Name="UnifiedInboxSwitch" AutomationProperties.AutomationId="UnifiedInbox" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
                 <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
                     <TextBlock
                         AutomationProperties.HeadingLevel="Level2"

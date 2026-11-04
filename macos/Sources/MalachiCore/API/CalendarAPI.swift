@@ -462,6 +462,12 @@ public struct CalDAVConfig: Codable, Sendable, Equatable {
     public var mailAccountId: AccountID?
     /// nil = auto.
     public var scheduling: CalDAVScheduling?
+    /// The CardDAV addressbook-home-set (from
+    /// `account.listCalDAVCalendars`).
+    public var addressBookHomeSetUrl: String?
+    /// Synchronise the address books of `addressBookHomeSetUrl`
+    /// (docs/api.md §4.19); absent reads false.
+    @DefaultFalse public var contacts: Bool
 
     public init(
         serverUrl: String,
@@ -470,7 +476,9 @@ public struct CalDAVConfig: Codable, Sendable, Equatable {
         username: String,
         certificateSha256: String? = nil,
         mailAccountId: AccountID? = nil,
-        scheduling: CalDAVScheduling? = nil
+        scheduling: CalDAVScheduling? = nil,
+        addressBookHomeSetUrl: String? = nil,
+        contacts: Bool = false
     ) {
         self.serverUrl = serverUrl
         self.principalUrl = principalUrl
@@ -479,6 +487,8 @@ public struct CalDAVConfig: Codable, Sendable, Equatable {
         self.certificateSha256 = certificateSha256
         self.mailAccountId = mailAccountId
         self.scheduling = scheduling
+        self.addressBookHomeSetUrl = addressBookHomeSetUrl
+        self.contacts = contacts
     }
 }
 
@@ -561,17 +571,26 @@ public struct AccountDiscoverCalDAVResult: Codable, Sendable, Equatable {
     public var foundVia: CalDAVFoundVia
     public var needsCredentials: Bool
     public var certificate: CertificateInfo?
+    /// What the anonymous discovery saw: CalDAV (calendar-access) and
+    /// CardDAV (addressbook). A server that authenticates before it answers
+    /// sets neither; the signed-in `account.listCalDAVCalendars` decides.
+    @DefaultFalse public var calendars: Bool
+    @DefaultFalse public var addressBooks: Bool
 
     public init(
         serverUrl: String,
         foundVia: CalDAVFoundVia,
         needsCredentials: Bool,
-        certificate: CertificateInfo? = nil
+        certificate: CertificateInfo? = nil,
+        calendars: Bool = false,
+        addressBooks: Bool = false
     ) {
         self.serverUrl = serverUrl
         self.foundVia = foundVia
         self.needsCredentials = needsCredentials
         self.certificate = certificate
+        self.calendars = calendars
+        self.addressBooks = addressBooks
     }
 }
 
@@ -598,6 +617,11 @@ public struct AccountListCalDAVCalendarsResult: Codable, Sendable, Equatable {
     /// `.server` or `.client`.
     public var scheduling: CalDAVScheduling
     @NullAsEmpty public var calendars: [CalDAVCalendar]
+    /// The principal's CardDAV addressbook-home-set; nil when the server
+    /// has none.
+    public var addressBookHomeSetUrl: String?
+    /// The home set's address books (≤ `maxAddressBooksPerAccount`).
+    @NullAsEmpty public var addressBooks: [CardDAVAddressBook]
 
     public init(
         principalUrl: String,
@@ -605,7 +629,9 @@ public struct AccountListCalDAVCalendarsResult: Codable, Sendable, Equatable {
         displayName: String? = nil,
         addresses: [String] = [],
         scheduling: CalDAVScheduling,
-        calendars: [CalDAVCalendar] = []
+        calendars: [CalDAVCalendar] = [],
+        addressBookHomeSetUrl: String? = nil,
+        addressBooks: [CardDAVAddressBook] = []
     ) {
         self.principalUrl = principalUrl
         self.homeSetUrl = homeSetUrl
@@ -613,6 +639,8 @@ public struct AccountListCalDAVCalendarsResult: Codable, Sendable, Equatable {
         self.addresses = addresses
         self.scheduling = scheduling
         self.calendars = calendars
+        self.addressBookHomeSetUrl = addressBookHomeSetUrl
+        self.addressBooks = addressBooks
     }
 }
 
@@ -1882,6 +1910,8 @@ public struct InvitationSummary: Codable, Sendable, Equatable {
     public var organizer: Address?
     /// A reply: the attendee who answered.
     public var replyFrom: Address?
+    /// A reply: the attendee's answer (the card's `response` says the same).
+    public var replyResponse: EventResponse?
     /// The organiser is one of the account's own addresses: the request is
     /// `processed`, its card has no response path and may carry `eventId`
     /// (Show in Calendar).
@@ -1898,6 +1928,7 @@ public struct InvitationSummary: Codable, Sendable, Equatable {
         allDay: Bool = false,
         organizer: Address? = nil,
         replyFrom: Address? = nil,
+        replyResponse: EventResponse? = nil,
         ownEvent: Bool = false
     ) {
         self.method = method
@@ -1910,6 +1941,7 @@ public struct InvitationSummary: Codable, Sendable, Equatable {
         self.allDay = allDay
         self.organizer = organizer
         self.replyFrom = replyFrom
+        self.replyResponse = replyResponse
         self.ownEvent = ownEvent
     }
 }

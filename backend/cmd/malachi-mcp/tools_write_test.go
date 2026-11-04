@@ -12,7 +12,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-var readTools = []string{"create_draft", "find_free_time", "get_attachment", "get_event", "get_user_profile", "list_accounts", "list_board", "list_calendars", "list_events", "list_folders", "list_invitations", "list_messages", "list_transitions", "read_message", "search_messages", "sync_status", "trigger_sync"}
+var readTools = []string{"create_draft", "find_free_time", "get_attachment", "get_contact", "get_event", "get_user_profile", "list_accounts", "list_board", "list_calendars", "list_events", "list_folders", "list_invitations", "list_messages", "list_rules", "list_transitions", "read_message", "search_contacts", "search_messages", "sync_status", "trigger_sync"}
 
 const (
 	fxReplyAttribution   = "On Wed, 23 Sep 2026 10:00 UTC, Alice Example <alice@example.org> wrote:"
@@ -23,7 +23,7 @@ var triageTools = []string{"add_commitment", "annotate_case", "list_triage_queue
 
 func TestToolGatingByFlags(t *testing.T) {
 	with := func(extra ...string) []string { return append(append([]string{}, readTools...), extra...) }
-	modify := []string{"create_event", "delete_messages", "mark_messages", "move_messages", "transition_issue", "unsubscribe"}
+	modify := []string{"create_contact", "create_event", "create_rule", "delete_messages", "mark_messages", "move_messages", "transition_issue", "unsubscribe", "update_contact", "update_rule"}
 	cases := []struct {
 		modify, send, triage bool
 		want                 []string
@@ -80,6 +80,10 @@ func TestAnnotations(t *testing.T) {
 		"find_free_time": {true, false, true, false}, "list_invitations": {true, false, true, false},
 		"create_event":     {false, true, true, true},
 		"get_user_profile": {true, false, true, false},
+		"search_contacts":  {true, false, true, false}, "get_contact": {true, false, true, false},
+		"create_contact": {false, false, false, false}, "update_contact": {false, false, true, false},
+		"list_rules":  {true, false, true, false},
+		"create_rule": {false, true, false, true}, "update_rule": {false, true, true, true},
 	}
 	if len(tools) != len(want) {
 		t.Fatalf("%d tools, want %d", len(tools), len(want))

@@ -48,6 +48,43 @@ private func summary(_ inv: InvitationSummary? = nil) -> MessageSummary {
         #expect(showsInvitationCard(nil))
     }
 
+    /// The row's preview of an invitation is its time, of a reply the
+    /// answer; anything else keeps the snippet.
+    @Test func previewOfARow() {
+        let c = card(.unanswered)
+        let time = Cal.summaryTimeLine(c.summary, calEnv)
+        #expect(!time.isEmpty)
+        #expect(invitationPreview(summary(c.summary), snippet: "____", env: calEnv) == time)
+        #expect(invitationPreview(summary(), snippet: "Hello", env: calEnv) == "Hello")
+        var other = c.summary
+        other.kind = .other
+        #expect(invitationPreview(summary(other), snippet: "Hello", env: calEnv) == "Hello")
+        var timeless = c.summary
+        timeless.start = nil
+        timeless.end = nil
+        timeless.startDate = nil
+        timeless.allDay = false
+        #expect(invitationPreview(summary(timeless), snippet: "Hello", env: calEnv) == "Hello")
+        let reply = InvitationSummary(method: .reply, kind: .reply, state: .processed, title: "", replyResponse: .declined)
+        #expect(invitationPreview(summary(reply), snippet: "", env: calEnv) == "Invitation declined")
+        #expect(summaryMessage(summary(reply)).snippet == "Invitation declined")
+    }
+
+    /// The calendar part of the card shown gets no chip; with the
+    /// account's switch off (no card) it is a file like any other.
+    @Test func cardHidesItsPartsChip() {
+        let c = card(.unanswered)
+        let atts = [
+            Attachment(partId: c.partId, filename: "invite.ics", contentType: "text/calendar", size: 4096, inline: false),
+            Attachment(partId: "9", filename: "agenda.pdf", contentType: "application/pdf", size: 1000, inline: false),
+        ]
+        let m = Message(summary: summary(c.summary), attachments: atts, invitation: c)
+        #expect(ChipPlan(m, nil, cardOn: true).chips.map(\.attachment.filename) == ["agenda.pdf"])
+        #expect(ChipPlan(m, nil, cardOn: false).chips.count == 2)
+        #expect(ChipPlan(m, nil, embedded: true, cardOn: true).chips.count == 2)
+        #expect(chipAttachments(atts, nil, card: c).map(\.filename) == ["agenda.pdf"])
+    }
+
     @Test func clockLineWithTheRepetition() {
         var c = card(.unanswered)
         let plain = Cal.cardTimeLine(c, env: calEnv)

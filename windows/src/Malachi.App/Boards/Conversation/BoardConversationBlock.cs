@@ -92,6 +92,7 @@ using Malachi.App.Controls;
 using Malachi.App.Reader;
 using Malachi.App.Reader.Conversation;
 using Malachi.App.Resources;
+using Malachi.App.Signatures;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
@@ -227,8 +228,8 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         top.Children.Add(chatToggle);
         top.Children.Add(showButton);
 
+        hover.Style = (Style)Application.Current.Resources["DimCaptionLabelStyle"];
         hover.FontSize = 12;
-        hover.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         hover.MaxLines = 1;
         hover.TextWrapping = TextWrapping.NoWrap;
         hover.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -503,6 +504,21 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
 
     // For the cards
 
+    /// <summary>
+    /// Gives a card's signature badge the application and the detail's window
+    /// for its flyout; false without the application (the samples), where the
+    /// badge stays hidden.
+    /// </summary>
+    internal bool AttachBadge(SignatureBadgeButton badge)
+    {
+        if (services is null)
+        {
+            return false;
+        }
+        badge.Attach(services, () => host.HostWindow);
+        return true;
+    }
+
     /// <summary>A card's arrow: the state decides, the limit may fold another.</summary>
     internal void UserFolded(BoardMessageCardView card, bool folded)
     {
@@ -672,7 +688,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             Text = s.Note,
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Style = (Style)Application.Current.Resources["DimLabelStyle"],
         };
         row.Children.Add(note);
         statusPanel.Children.Add(row);
@@ -1084,6 +1100,12 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         return row;
     }
 
+    // The address whose contact's photo stands for member m's sender (its
+    // MessageCard.Address, docs/plans/address-book.md F10); "" for the
+    // user's own and the samples.
+    private static string PhotoSenderOf(CoreBoard.MessageCard m) =>
+        Malachi.Core.Contacts.ContactBook.AvatarOfSender(m.Address, m.Sender, m.Mine).Sender;
+
     // The AutomationId of the bubble of member i.
     private static string ChatBubbleId(int i) => "BoardChatBubble:" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -1097,7 +1119,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         row.Bubble.ShowPlain(ChatBubbleId(i), m.From, m.Date);
         var body = ChatBodyOf(m, out var reload);
         row.Bubble.ShowBody(body, monospaceText: false, reloadPictures: reload);
-        row.ShowAvatar(m.Sender, monochrome);
+        row.ShowAvatar(m.Sender, monochrome, PhotoSenderOf(m));
     }
 
     // What member m's bubble shows: the case's text, or, with the preference
@@ -1454,7 +1476,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         {
             if (chatShows.TryGetValue(row, out var m))
             {
-                row.ShowAvatar(m.Sender, monochrome);
+                row.ShowAvatar(m.Sender, monochrome, PhotoSenderOf(m));
             }
         }
     }

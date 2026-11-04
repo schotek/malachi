@@ -111,6 +111,9 @@ public actor RPCClient {
     private var framer = LineFramer()
     private var nextID = 1
     private var pending: [Int: CheckedContinuation<Data, any Error>] = [:]
+    /// Calls sent and not yet answered: what a test waits on to know that a
+    /// reply it released has reached its caller.
+    var pendingCalls: Int { pending.count }
     private var timeouts: [Int: Task<Void, Never>] = [:]
     private var connectContinuation: CheckedContinuation<Void, any Error>?
     public private(set) var state: State = .disconnected(reason: nil)

@@ -14,6 +14,8 @@
 // - 1200×760 and at least 360×294 (window.blp), the size and the
 //   maximised state kept in the gschema keys GTK declares
 //   (window-width, window-height, window-maximized; U10);
+// - the update check's banner under the title bar, in every mode
+//   (MainWindow.Updates.cs);
 // - the three modes, Mail, Board and Calendar (MainWindow.Mode.cs: the
 //   switch in the title bar, the board's and the calendar's pages in place
 //   of the panes; MainWindow.Calendar.cs);
@@ -100,6 +102,10 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) => hook.Dispose();
         InitializePanes();
         InitializeMode();
+        // The update check's banner and question (MainWindow.Updates.cs).
+        InitializeUpdates();
+        // The bars as the user arranged them (MainWindow.Toolbars.cs).
+        InitializeToolbars();
     }
 
     /// <summary>The user asked to close the window (the caption's button, Alt+F4); the app decides.</summary>
@@ -116,6 +122,9 @@ public sealed partial class MainWindow : Window
 
     /// <summary>The toast overlay over the message pane (window.go Toast).</summary>
     public IToasts Toasts => ToastsHost;
+
+    /// <summary>The same overlay for the toasts with a button (window/undo.go: Undo of a move).</summary>
+    public IActionToasts ActionToasts => ToastsHost;
 
     /// <summary>The title bar's search box (window.blp search_entry); the list's search follows it (MainWindow.Panes.cs).</summary>
     public Microsoft.UI.Xaml.Controls.AutoSuggestBox Search => SearchBox;

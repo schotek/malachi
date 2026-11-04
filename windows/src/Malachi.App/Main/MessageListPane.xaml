@@ -25,6 +25,7 @@ inbox sections are collapsed (as macOS).
     xmlns:main="using:Malachi.App.Main"
     xmlns:p="using:Malachi.Core.Presentation"
     xmlns:res="using:Malachi.App.Resources"
+    xmlns:toolbars="using:Malachi.App.Toolbars"
     IsTabStop="False">
     <Grid>
         <Grid.RowDefinitions>
@@ -37,28 +38,34 @@ inbox sections are collapsed (as macOS).
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- The list's header bar: Check for New Mail, and list_title. -->
+        <!-- The list's header bar: the Message List section of the user's
+             toolbar-mail layout (Toolbars/ToolbarStrip; by default Check for
+             New Mail), and list_title, centred. -->
         <Grid
             x:Name="HeaderRow"
             Height="44"
             Padding="8,0"
+            Background="Transparent"
             ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button
-                x:Name="RefreshButton"
-                Width="40"
-                Height="32"
-                Padding="0"
-                AutomationProperties.AutomationId="RefreshButton"
-                AutomationProperties.Name="{l:T Msgid='Check for New Mail'}"
-                Style="{StaticResource SubtleButtonStyle}"
-                ToolTipService.ToolTip="{l:T Msgid='Check for New Mail'}">
-                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-refresh-symbolic')}" />
-            </Button>
+            <toolbars:ToolbarStrip x:Name="HeaderStrip" SizeChanged="OnHeaderStripSizeChanged">
+                <Button
+                    x:Name="RefreshButton"
+                    Width="40"
+                    Height="32"
+                    Padding="0"
+                    toolbars:ToolbarStrip.Item="refresh"
+                    AutomationProperties.AutomationId="RefreshButton"
+                    AutomationProperties.Name="{l:T Msgid='Check for New Mail'}"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='Check for New Mail'}">
+                    <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-refresh-symbolic')}" />
+                </Button>
+            </toolbars:ToolbarStrip>
             <StackPanel
                 x:Name="ListTitle"
                 Grid.Column="1"
@@ -80,8 +87,11 @@ inbox sections are collapsed (as macOS).
                     Style="{StaticResource DimCaptionLabelStyle}"
                     TextTrimming="CharacterEllipsis" />
             </StackPanel>
-            <!-- Balances the refresh button, so the title stays centred. -->
-            <Border Grid.Column="2" Width="40" />
+            <!-- Balances the strip, so the title stays centred (as wide as the strip). -->
+            <Border
+                x:Name="HeaderBalance"
+                Grid.Column="2"
+                Width="40" />
         </Grid>
 
         <!-- search_scope: where a search looks; only while one runs.

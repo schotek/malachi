@@ -96,7 +96,7 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
     var flags: ActionFlags {
         let rows = list.selectedRows
         return rows.count > 1
-            ? Selection.combine(rows.map { actions.actionFlags(for: $0) })
+            ? Selection.combineAccounts(rows.map { actions.actionFlags(for: $0) }, accounts: rows.map { $0.message.accountId })
             : actions.actionFlags(for: rows.first)
     }
 
@@ -121,6 +121,37 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         } else if let s = rows.first?.message {
             actions.openMessage(s)
         }
+    }
+
+    func printSelected() {
+        let window = mainWindow()
+        let mailbox = list.mailbox
+        let cache = cache
+        let role: @MainActor (MessageSummary) -> FolderRole? = { s in
+            mailbox.model.folderRole(FolderKey(account: s.accountId, folder: s.folderId))
+        }
+        list.selectedIDs { [weak self] rows, _ in
+            guard let self else { return }
+            // The rows' messages with their accounts: a conversation row's
+            // folder members, else the row's message.
+            var messages: [MessageSummary] = []
+            for r in rows {
+                let ids = mailbox.model.rowIDs(r) ?? [r.message.id]
+                for id in ids {
+                    if let s = self.actions.summary(id) {
+                        messages.append(s)
+                    } else if id == r.message.id {
+                        messages.append(r.message)
+                    }
+                }
+            }
+            let layout: Printing.Layout = rows.count > 1 ? .pages : (messages.count > 1 ? .conversation : .single)
+            PrintController.printMessages(messages, layout: layout, cache: cache, role: role, window: window)
+        }
+    }
+
+    func printCalendar(_ calendar: CalendarController) {
+        PrintController.printCalendar(calendar, cache: cache, window: mainWindow())
     }
 
     func moveSelected(to folder: FolderID) {
@@ -220,6 +251,14 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         actions.openCompose(.reply, id)
     }
 
+    func printMessage(_ summary: MessageSummary, from window: NSWindow?) {
+        let mailbox = list.mailbox
+        let s = actions.summary(summary.id) ?? summary
+        PrintController.printMessages([s], layout: .single, cache: cache, role: { s in
+            mailbox.model.folderRole(FolderKey(account: s.accountId, folder: s.folderId))
+        }, window: window)
+    }
+
     func replyAll(_ id: MessageID) {
         actions.openCompose(.replyAll, id)
     }
@@ -307,6 +346,18 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     func folderRole(of summary: MessageSummary) -> FolderRole {
         actions.mailbox.model.folderRole(FolderKey(account: summary.accountId, folder: summary.folderId))
+    }
+
+    // MARK: Signatures (docs/plans/signatures.md §6)
+
+    /// The badge's popover: the verdict of message `s` in detail. The
+    /// confirmation of a key is asked on the badge's window.
+    func showSignature(of s: MessageSummary, relativeTo anchor: NSView) {
+        showSignature(of: s, summary: cache.loaded(s.id)?.msg?.signature, relativeTo: anchor)
+    }
+
+    func showSignature(of s: MessageSummary, summary: SignatureSummary?, relativeTo anchor: NSView) {
+        SignatureDetailsPopover.show(s, summary: summary, relativeTo: anchor, state: state, window: anchor.window)
     }
 
     // MARK: Unsubscribing (window/bulk.go)

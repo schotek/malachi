@@ -5,7 +5,8 @@
 // (the MessageActions of the selection and the MessageActionDelegate of one
 // message: flags, reply, replyAll, forward, trash, junk, archive,
 // toggleFlag, markRead, markUnread, loadImages, trustSender,
-// downloadPictures, retryOutbox, isDraft, editDraft, newMessage, and the
+// downloadPictures, retryOutbox, isDraft, editDraft, newMessage,
+// printSelected (the messages and layout of a print), and the
 // quick-reply bar's quickReplyAttribution, prepareQuickReply and
 // openCompose(_:_:ownHTML:from:opened:); the
 // draft cards' Edit and Discard are conversation_draft.go's, a Windows
@@ -31,6 +32,7 @@ using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers;
 using Malachi.Core.Model;
+using Malachi.Core.Printing;
 using Malachi.Core.Selections;
 
 namespace Malachi.Core.Presentation;
@@ -62,7 +64,7 @@ public sealed class MessageActionRouter
     /// <summary>
     /// What the main window's per-message commands allow now (actions.go
     /// <c>setMessageActionsSensitive</c>); several rows combine their flags
-    /// (<see cref="Selection.Combine"/>).
+    /// (<see cref="Selection.CombineAccounts"/>).
     /// </summary>
     public ActionFlags Flags
     {
@@ -70,7 +72,7 @@ public sealed class MessageActionRouter
         {
             var rows = list.SelectedRows;
             return rows.Count > 1
-                ? Selection.Combine([.. rows.Select(actions.ActionFlagsFor)])
+                ? Selection.CombineAccounts([.. rows.Select(actions.ActionFlagsFor)], [.. rows.Select(r => r.Message.AccountId)])
                 : actions.ActionFlagsFor(rows.Count == 1 ? rows[0] : null);
         }
     }
@@ -127,6 +129,49 @@ public sealed class MessageActionRouter
 
     /// <summary>win.trust-sender, for the message the pane shows.</summary>
     public void TrustSender() => ForSelected(actions.TrustSender);
+
+    /// <summary>
+    /// Whether Print (Ctrl+P) takes the selection: one row, or several up to
+    /// <see cref="Print.MaxMessages"/> (macOS's validation of <c>printMail:</c>).
+    /// </summary>
+    public bool CanPrint
+    {
+        get
+        {
+            var f = Flags;
+            return f.On && f.Count <= Print.MaxMessages;
+        }
+    }
+
+    /// <summary>
+    /// The messages Print takes from the selection (macOS
+    /// <c>printSelected</c>): a conversation row's folder members, else the
+    /// row's message, with the layout <see cref="PrintComposer.LayoutFor"/>
+    /// gives them.
+    /// </summary>
+    public void PrintSelection(Action<IReadOnlyList<MessageSummary>, Print.Layout> done)
+    {
+        ArgumentNullException.ThrowIfNull(done);
+        list.SelectedIds((rows, _) =>
+        {
+            var messages = new List<MessageSummary>();
+            foreach (var r in rows)
+            {
+                foreach (var id in actions.Mailbox.Model.RowIds(r) ?? [r.Message.Id])
+                {
+                    if (actions.Summary(id) is { } s)
+                    {
+                        messages.Add(s);
+                    }
+                    else if (id == r.Message.Id)
+                    {
+                        messages.Add(r.Message);
+                    }
+                }
+            }
+            done(messages, PrintComposer.LayoutFor(rows.Count, messages.Count));
+        });
+    }
 
     // One message (message_window.go, the msg.* group; the pane's banners and bar)
 

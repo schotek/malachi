@@ -4,6 +4,7 @@
 package window
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
+	"github.com/schotek/malachi/ui/internal/contacts"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/htmlview"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -99,6 +101,8 @@ type boardChat struct {
 	updateQueued  bool
 	layoutTries   int
 	watchers      []func()
+	// photoView is the chat's name for the photo hub.
+	photoView string
 }
 
 func newBoardChat(b *boardConversation) *boardChat {
@@ -115,6 +119,11 @@ func newBoardChat(b *boardConversation) *boardChat {
 	c.toggle.SetChild(c.toggleContent)
 	c.column = gtk.NewBox(gtk.OrientationVertical, 0)
 	c.column.ConnectMap(c.queueSize)
+	// The senders' photos (contact_photos.go) while the chat shows.
+	c.photoView = fmt.Sprintf("board-chat:%p", c)
+	b.p.w.photoHub().addPhotoView(c.photoView, c.photoAvatars)
+	c.column.ConnectMap(b.p.w.photosChanged)
+	c.column.ConnectUnmap(b.p.w.photosChanged)
 	return c
 }
 
@@ -238,6 +247,13 @@ func (c *boardChat) apply(d *board.Detail) {
 	}
 	c.visible = true
 	c.stack.SetVisible(true)
+	// GtkStack leaves a page that is hidden (the cards' column while the
+	// conversation loads) for another and does not come back to it.
+	if c.shown {
+		c.stack.SetVisibleChildName(boardChatPage)
+	} else {
+		c.stack.SetVisibleChildName(boardChatCards)
+	}
 	chatExpandedScope(&c.expanded, &c.expandedScope, string(d.ID))
 	if d.AccountID != c.account {
 		c.entries = map[api.MessageID]*loadedMessage{}
@@ -329,6 +345,7 @@ func (c *boardChat) render() {
 	c.rows, c.byID = next, nextByID
 	c.followSize()
 	c.queueUpdate()
+	c.b.p.w.photosChanged()
 }
 
 // show shows member m in row: the header names From ("You" for the
@@ -336,7 +353,7 @@ func (c *boardChat) render() {
 // the date is formatted as Mail's chat formats it, and the text is the
 // case's own (never a placeholder, never the monospace setting's).
 func (c *boardChat) show(row *chatRow, m board.MessageCard) {
-	if old, ok := c.cards[row]; ok && old == m && row.bubble.compact == c.compact {
+	if old, ok := c.cards[row]; ok && board.SameCard(old, m) && row.bubble.compact == c.compact {
 		return
 	}
 	c.cards[row] = m
@@ -353,6 +370,7 @@ func (c *boardChat) show(row *chatRow, m board.MessageCard) {
 	row.row = conversation.ChatRow{Kind: conversation.ChatBubble, Side: side, Item: item}
 	row.showMessage(item, bubbleAttachments{}, c.compact)
 	row.avatar.SetText(m.Sender)
+	row.photo = contacts.AvatarOfSender(m.Address, m.Sender, m.Mine)
 	row.bubble.showBody(conversation.BubbleText(m.Text), false, false)
 }
 
@@ -474,6 +492,7 @@ func (c *boardChat) close() {
 	}
 	c.watchers = nil
 	c.closed = true
+	c.b.p.w.photoHub().removePhotoView(c.photoView)
 }
 
 // bubbleGap is the empty side of a row whose bubble fills its maximum (an

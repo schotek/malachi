@@ -344,6 +344,16 @@ func InvitationSummaryOf(inv Invitation, answeredSeq int, cancelled, newer, know
 		_ = json.Unmarshal(inv.Card, &sum) // the card's static fields; a damaged one reads as invalid below
 	}
 	sum.Method = inv.Method
+	sum.ReplyResponse = ""
+	if inv.Method == api.InvitationMethodReply && len(inv.Card) > 0 {
+		// A reply's card keeps the attendee's answer as its response.
+		var reply struct {
+			Response api.EventResponse `json:"response"`
+		}
+		if json.Unmarshal(inv.Card, &reply) == nil {
+			sum.ReplyResponse = reply.Response
+		}
+	}
 	if sum.Title == "" {
 		sum.Title = inv.Title
 	}
@@ -466,6 +476,10 @@ func attachInvitationsTo(ctx context.Context, q querier, msgs []*Message) error 
 	}
 	// Every listing passes here; the CRM flag (migration 0021) rides along.
 	if err := attachCrmSavedTo(ctx, q, msgs); err != nil {
+		return err
+	}
+	// And the signature verdicts (migration 0026).
+	if err := attachSignaturesTo(ctx, q, msgs); err != nil {
 		return err
 	}
 	ids := make([]string, 0, len(msgs))

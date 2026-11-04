@@ -26,6 +26,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/style"
+	"github.com/schotek/malachi/ui/internal/widget"
 	"github.com/schotek/malachi/ui/internal/window"
 )
 
@@ -97,6 +98,9 @@ func main() {
 		// (capabilities.CanComposeNew): a Jira account only comments.
 		mgr.OnAccountsChanged = func() { newMessage.SetEnabled(mgr.CanComposeNew()) }
 		mgr.Assistant = assist
+		// A click on an attachment tile of a compose window previews it
+		// as the tiles of a message do.
+		mgr.PreviewAttachment = window.PreviewDraftAttachment(log)
 		mgr.OnSent = func(text string) {
 			if mainWin != nil {
 				// A short confirmation: the outbox folder and the "sent"
@@ -204,7 +208,14 @@ func main() {
 		sup.Stop()
 	})
 
-	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, func() calendardata.DataSource { return calendarOf(mainWin)() }, openNotified, func() { requestExit(app.Quit) })
+	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, func() calendardata.DataSource { return calendarOf(mainWin)() }, openNotified, func() {
+		// A changed contact form asks first; Board's replies settle after.
+		window.ConfirmContactsQuit(func(ok bool) {
+			if ok {
+				requestExit(app.Quit)
+			}
+		})
+	}, func() *window.Window { return mainWin })
 	// The calendar's notifications (window/calendar_alerts.go): a click
 	// that started the application presents the main window first.
 	addCalendarActions(app, func() *window.Window {
@@ -240,7 +251,15 @@ func addUninstalledIconPath() {
 // settings store and the Assistant state, which exist only after startup
 // has run; show presents the main window. It returns app.compose, which
 // follows the accounts that write mail.
-func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, cal func() calendardata.DataSource, openNotified func(api.AccountID, api.MessageID), requestQuit func()) *gio.SimpleAction {
+// The website and its form for reporting a problem with the app: the
+// About dialog's links and Report an Issue at the end of the status line
+// (macOS AppLinks, Windows AppLinks).
+const (
+	websiteURL     = "https://malachimail.app"
+	reportIssueURL = "https://malachimail.app/#report"
+)
+
+func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, cal func() calendardata.DataSource, openNotified func(api.AccountID, api.MessageID), requestQuit func(), mainWindow func() *window.Window) *gio.SimpleAction {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
 	app.AddAction(newMessage)
@@ -274,12 +293,41 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 		d.SetDeveloperName("Malachi Mail contributors")
 		d.SetVersion(version)
 		d.SetLicenseType(gtk.LicenseGPL30)
-		d.SetWebsite("https://github.com/schotek/malachi")
-		d.SetIssueURL("https://github.com/schotek/malachi/issues")
-		d.SetComments(i18n.T("A native mail client for the GNOME desktop."))
+		d.SetWebsite(websiteURL)
+		d.SetIssueURL(reportIssueURL)
+		comments := i18n.T("A native mail client for the GNOME desktop.")
+		// The update check's status line (Check Now is in Preferences →
+		// General); the comments are Pango markup, the line is not.
+		if line := window.UpdateAboutLine(); line != "" {
+			comments += "\n\n" + glib.MarkupEscapeText(line)
+		}
+		d.SetComments(comments)
 		d.Present(app.ActiveWindow())
 	})
 	app.AddAction(about)
+
+	// app.report-issue: Report an Issue at the end of the status bar
+	// (window.blp) opens the About
+	// dialog's issue link, the website's report form, in the browser.
+	reportIssue := gio.NewSimpleAction("report-issue", nil)
+	reportIssue.ConnectActivate(func(*glib.Variant) {
+		widget.LaunchURI(app.ActiveWindow(), reportIssueURL, func(err error) {
+			if err != nil {
+				log.Warn("could not open the report form", "err", err)
+			}
+		})
+	})
+	app.AddAction(reportIssue)
+
+	// app.contacts opens the Contacts window (window.OpenContacts) from the
+	// main menu; no shortcut (docs/plans/address-book.md §8).
+	contactsAction := gio.NewSimpleAction("contacts", nil)
+	contactsAction.ConnectActivate(func(*glib.Variant) {
+		if w := mainWindow(); w != nil {
+			w.OpenContacts()
+		}
+	})
+	app.AddAction(contactsAction)
 
 	prefs := gio.NewSimpleAction("preferences", nil)
 	prefs.ConnectActivate(func(*glib.Variant) {

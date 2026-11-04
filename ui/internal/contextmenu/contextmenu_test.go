@@ -84,6 +84,14 @@ func TestMessageItems(t *testing.T) {
 		{"queued comment of an issue tracker", func(MessageState) MessageState {
 			return MessageState{Outbox: true, Trash: true}
 		}, "open | toggleFlag- | trash"},
+		{"a client that prints", func(s MessageState) MessageState {
+			s.OfferPrint, s.Print = true, true
+			return s
+		}, "open print | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant"},
+		{"too many rows to print", func(s MessageState) MessageState {
+			s.OfferPrint = true
+			return s
+		}, "open print- | reply replyAll forward | markUnread toggleFlag | archive moveTo junk trash | assistant"},
 	}
 	for _, c := range cases {
 		if got := show(MessageItems(c.s(mail))); got != c.want {
@@ -109,6 +117,26 @@ func TestMessageItemsSeveral(t *testing.T) {
 	}
 	if got := Label(identity{}, OpenMessage, Labels{Count: 1}); got != "Open in New Window" {
 		t.Errorf("label of one: %q", got)
+	}
+}
+
+// Several rows of several accounts (the All Inboxes list): Forward, Move
+// To and Save to eWay-CRM stay but are disabled; one row is never mixed.
+func TestMessageItemsMixedAccounts(t *testing.T) {
+	s := mail
+	s.Count, s.Open, s.Reply, s.ReplyAll, s.MixedAccounts = 2, true, false, false, true
+	s.OfferCrm, s.Crm = true, true
+	if got := show(MessageItems(s)); got != "open | forward- | crmSave- | markUnread toggleFlag | archive moveTo- junk trash | assistant" {
+		t.Errorf("mixed: %s", got)
+	}
+	s.MixedAccounts = false
+	if got := show(MessageItems(s)); got != "open | forward | crmSave | markUnread toggleFlag | archive moveTo junk trash | assistant" {
+		t.Errorf("one account: %s", got)
+	}
+	one := mail
+	one.MixedAccounts = true
+	if got := show(MessageItems(one)); got != show(MessageItems(mail)) {
+		t.Errorf("one row: %s", got)
 	}
 }
 
@@ -179,6 +207,9 @@ func TestFolderItems(t *testing.T) {
 	if got := show(AccountItems(true)); got != "checkMail | fold" {
 		t.Errorf("account: %s", got)
 	}
+	if got := show(FavouritesItems()); got != "fold" {
+		t.Errorf("FavouritesItems = %q", got)
+	}
 	if got := show(AccountItems(false)); got != "checkMail" {
 		t.Errorf("account without folding: %s", got)
 	}
@@ -235,6 +266,7 @@ func TestLabels(t *testing.T) {
 		want string
 	}{
 		{OpenMessage, Labels{}, "Open in New Window"},
+		{Print, Labels{}, "_Print…"},
 		{EditDraft, Labels{}, "Edit"},
 		{Reply, Labels{}, "Reply"},
 		{Reply, Labels{Comment: true}, "Comment"},

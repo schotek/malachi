@@ -11,7 +11,11 @@
 #
 # Run it on the target release (CI: .github/workflows/deb.yml), with the
 # build dependencies of README "Building from source" installed plus dpkg-dev:
-#   ./scripts/build-deb.sh          → build/malachi_<version>_<arch>.deb
+#   ./scripts/build-deb.sh          → build/Malachi-Mail-<version>-linux-<arch>.deb
+#
+# The file is named as every release file (docs/releasing.md §1): the
+# git describe version and x64/arm64; the package inside is still malachi
+# with dpkg's version and architecture.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,8 +37,15 @@ done
 # hyphen as the Debian revision; the hyphens therefore become "+", which
 # also sorts a development build after the tag it follows.
 VERSION="$(cat .version 2>/dev/null || git describe --tags --always --dirty | sed 's/^v//')"
+FILE_VERSION="$VERSION"
 VERSION="${VERSION//-/+}-1"
 ARCH="$(dpkg-architecture -qDEB_HOST_ARCH)"
+# The daemon of a .deb checks for updates of this package
+# (docs/services.md §2.3); the Makefile reads UPDATE_CHANNEL.
+case "$ARCH" in
+    amd64) export UPDATE_CHANNEL=linux-deb-x64 ;;
+    arm64) export UPDATE_CHANNEL=linux-deb-arm64 ;;
+esac
 
 rm -rf "$STAGE"
 # The licences and THIRD-PARTY-NOTICES.md go where Debian keeps a package's
@@ -78,7 +89,11 @@ printf '%s\n' "$CONTROL" > "$STAGE/DEBIAN/control"
 # group-writable, and dpkg-deb records root:root ownership.
 chmod -R u+rwX,go+rX,go-w "$STAGE"
 
-OUT="build/${PKG}_${VERSION}_${ARCH}.deb"
+case "$ARCH" in
+    amd64) FILE_ARCH=x64 ;;
+    *) FILE_ARCH="$ARCH" ;;
+esac
+OUT="build/Malachi-Mail-${FILE_VERSION}-linux-${FILE_ARCH}.deb"
 dpkg-deb --root-owner-group --build "$STAGE" "$OUT"
 dpkg-deb --info "$OUT"
 dpkg-deb --contents "$OUT"

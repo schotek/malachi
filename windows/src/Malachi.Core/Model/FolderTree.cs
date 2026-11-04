@@ -141,31 +141,39 @@ public static class FolderTree
     }
 
     /// <summary>
-    /// Lays the sidebar out (model.go <c>sortFolders</c>): the Favourites
-    /// section when anything is pinned (<see cref="FavouriteSection"/>), then
-    /// the enabled accounts in list order (<see cref="MailSidebarAccounts"/>:
-    /// no calendar-only CalDAV account), each preceded by a header row when
-    /// there are at least two of them or a Favourites section above them,
-    /// then the account's folders as a tree. Roots are ordered by (roleRank,
-    /// path); the children of a folder follow it, ordered the same way. Depth
-    /// comes from <c>parentId</c>; folders whose parent chain is cyclic or
-    /// deeper than <see cref="MaxFolderDepth"/> are appended after the tree
-    /// with a depth counted from their display path. Non-selectable
-    /// containers are kept so their children have somewhere to hang.
+    /// Lays the sidebar out (model.go <c>sidebarEntries</c>; <c>sortFolders</c>
+    /// without <paramref name="unifiedInbox"/>): the Favourites section when
+    /// the All Inboxes item is shown (<paramref name="unifiedInbox"/> with at
+    /// least two mail accounts, <see cref="Unified.Shown"/>) or anything is
+    /// pinned (<see cref="FavouriteSection"/>), then the enabled accounts in
+    /// list order (<see cref="MailSidebarAccounts"/>: no calendar-only CalDAV
+    /// account), each preceded by a header row when there are at least two
+    /// of them or a Favourites section above them, then the account's
+    /// folders as a tree. Roots are ordered by (roleRank, path); the children
+    /// of a folder follow it, ordered the same way. Depth comes from
+    /// <c>parentId</c>; folders whose parent chain is cyclic or deeper than
+    /// <see cref="MaxFolderDepth"/> are appended after the tree with a depth
+    /// counted from their display path. Non-selectable containers are kept
+    /// so their children have somewhere to hang.
     /// </summary>
     public static IReadOnlyList<FolderEntry> SortFolders(
         IReadOnlyList<Account> accounts,
         IReadOnlyDictionary<AccountId, IReadOnlyList<Folder>> folders,
         CollapseState collapsed,
-        FavouriteState favourites)
+        FavouriteState favourites,
+        bool unifiedInbox = false)
     {
+        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(folders);
         ArgumentNullException.ThrowIfNull(collapsed);
         var enabled = MailSidebarAccounts(accounts);
-        var output = new List<FolderEntry>(FavouriteSection(enabled, folders, favourites));
+        var output = new List<FolderEntry>();
+        var item = Unified.Shown(accounts, unifiedInbox) ? UnifiedEntry(accounts, folders) : null;
+        var favouriteRows = FavouriteSection(enabled, folders, favourites, collapsed, item);
+        output.AddRange(favouriteRows);
         // A single account needs no heading of its own, unless a Favourites
         // section sits above its folders and the two would run into each other.
-        var headers = enabled.Count >= 2 || output.Count > 0;
+        var headers = enabled.Count >= 2 || favouriteRows.Count > 0;
         foreach (var a in enabled)
         {
             // Only a header can fold a whole account away, and headers only
@@ -185,24 +193,46 @@ public static class FolderTree
     }
 
     /// <summary>
+    /// The sidebar row of the All Inboxes item (model.go <c>unifiedEntryOf</c>,
+    /// Swift <c>unifiedEntry</c>): a row of the Favourites section
+    /// (<see cref="FolderEntry.Favourite"/>) at depth 0, whose badge is the
+    /// unread count of the inboxes it covers (<see cref="Unified.Unread"/>).
+    /// </summary>
+    public static FolderEntry UnifiedEntry(
+        IReadOnlyList<Account> accounts,
+        IReadOnlyDictionary<AccountId, IReadOnlyList<Folder>> folders) =>
+        new() { IsUnified = true, Favourite = true, Badge = Unified.Unread(Unified.Inboxes(accounts, folders)) };
+
+    /// <summary>
     /// The block at the top of the sidebar (model.go <c>favouriteSection</c>):
-    /// a heading and one row per pinned folder, in tree order (accounts in
-    /// list order, then roles, then names), each at depth 0 and without its
-    /// children. A pin that does not resolve (the folder gone or renamed on
-    /// the server, its account switched off, a container that cannot be
-    /// opened, an outbox with nothing in it) is left out silently; when none
-    /// resolves there is no section at all. Account folds do not apply here:
-    /// the section is what stays in view while the tree is folded away.
+    /// a heading, the All Inboxes item when it is shown (<paramref name="unified"/>,
+    /// its row: the first of the section) and one row per pinned folder, in
+    /// tree order (accounts in list order, then roles, then names), each at
+    /// depth 0 and without its children. A pin that does not resolve (the
+    /// folder gone or renamed on the server, its account switched off, a
+    /// container that cannot be opened, an outbox with nothing in it) is
+    /// left out silently; when none resolves and there is no item there is
+    /// no section at all. The heading folds like an account's
+    /// (<see cref="CollapseState.FavouritesCollapsed"/>): folded, the section
+    /// is its heading alone, the item and the pins out of sight while their
+    /// folders stay listed in the tree. Account folds do not apply here: the
+    /// section is what stays in view while the tree is folded away.
     /// </summary>
     public static IReadOnlyList<FolderEntry> FavouriteSection(
         IReadOnlyList<Account> enabled,
         IReadOnlyDictionary<AccountId, IReadOnlyList<Folder>> folders,
-        FavouriteState favourites)
+        FavouriteState favourites,
+        CollapseState? collapsed = null,
+        FolderEntry? unified = null)
     {
         ArgumentNullException.ThrowIfNull(enabled);
         ArgumentNullException.ThrowIfNull(folders);
         ArgumentNullException.ThrowIfNull(favourites);
         var rows = new List<FolderEntry>();
+        if (unified is { } item)
+        {
+            rows.Add(item);
+        }
         foreach (var a in enabled)
         {
             var pinned = VisibleFolders(FoldersOf(folders, a.Id))
@@ -216,7 +246,13 @@ public static class FolderTree
         {
             return [];
         }
-        return [new FolderEntry { Header = true, Favourite = true }, .. rows];
+        var folded = collapsed?.FavouritesCollapsed() ?? false;
+        var heading = new FolderEntry { Header = true, Favourite = true, HasChildren = true, Collapsed = folded };
+        if (folded)
+        {
+            return [heading];
+        }
+        return [heading, .. rows];
     }
 
     /// <summary>
@@ -533,20 +569,30 @@ public static class FolderTree
     public static string FolderCountsText(Folder f)
     {
         ArgumentNullException.ThrowIfNull(f);
-        if (f.Total <= 0)
+        return CountsText(f.Unread, f.Total, f.Role == FolderRole.Outbox);
+    }
+
+    /// <summary>
+    /// <see cref="FolderCountsText"/> over bare numbers: the All Inboxes
+    /// list's subtitle (<see cref="Unified.Unread"/> and
+    /// <see cref="Unified.Total"/> of the inboxes it covers).
+    /// </summary>
+    public static string CountsText(int unread, int total, bool outbox = false)
+    {
+        if (total <= 0)
         {
             return "";
         }
-        if (f.Role == FolderRole.Outbox || f.Unread <= 0)
+        if (outbox || unread <= 0)
         {
             // TRANSLATORS: subtitle of the message list; %d is the number of
             // messages in the folder.
-            return L10n.N("%d message", "%d messages", f.Total);
+            return L10n.N("%d message", "%d messages", total);
         }
         // TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
         // the first %d is the number of unread messages (the plural follows
         // it), the second the number of all messages in the folder.
-        return L10n.N("%d unread of %d", "%d unread of %d", f.Unread, f.Unread, f.Total);
+        return L10n.N("%d unread of %d", "%d unread of %d", unread, unread, total);
     }
 
     /// <summary>

@@ -203,7 +203,10 @@ final class RecipientSuggestionsController: NSObject, NSTableViewDataSource, NST
     private func search(_ token: String) {
         gen += 1
         let gen = gen
-        let params = ContactSearchParams(accountId: account(), query: token, limit: suggestLimit)
+        // The address books of the sending account, or all of them (the
+        // key contacts-suggest-scope, Settings → Contacts).
+        let scope = AppContacts.shared?.state.settings.contactsSuggestScope
+        let params = ContactSearchParams(accountId: account(), query: token, limit: suggestLimit, scope: scope)
         let client = client
         Task { [weak self] in
             let outcome: Result<ContactSearchResult, any Error>
@@ -340,7 +343,13 @@ final class RecipientSuggestionsController: NSObject, NSTableViewDataSource, NST
             row.leadingAnchor.constraint(equalTo: cell.leadingAnchor),
             row.trailingAnchor.constraint(equalTo: cell.trailingAnchor),
         ])
-        cell.toolTip = suggestionTooltip(c)
+        // A synchronised book's account: the sending one when the scope is
+        // the account's books ("Contacts · Microsoft 365 (…)"), else unknown.
+        var bookAccount = ""
+        if c.source == .contacts, let contacts = AppContacts.shared, contacts.state.settings.contactsSuggestScope == .account {
+            bookAccount = contacts.accountLabel(account())
+        }
+        cell.toolTip = suggestionTooltip(c, account: bookAccount)
         return cell
     }
 }

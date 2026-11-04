@@ -467,7 +467,9 @@ func (c *conversationController) takeMarkRead() api.MessageID {
 
 // needsBody: the card of member id is near the viewport, and its body is
 // fetched unless held already (message.body; message.get as well when
-// details, or when the message has attachments, whose chips need it). An
+// details, or when the message has attachments, whose chips need it, an
+// invitation, whose card is message.get's, or a signature verdict, whose
+// badge names the signer from message.get). An
 // event has no body. The entry is held in loaded and announced through
 // onLoaded whenever a half of it arrives. The body is the variant the user
 // chose for the card: without its quoted history unless revealed
@@ -477,7 +479,7 @@ func (c *conversationController) needsBody(id api.MessageID, details bool) {
 	if !ok || jira.IsEvent(s.Issue) {
 		return
 	}
-	full := (details || s.HasAttachments || wantsOffer(s)) && !c.noGet[id]
+	full := (details || s.HasAttachments || wantsOffer(s) || s.Invitation != nil || s.Signature != nil) && !c.noGet[id]
 	reveal := c.quoted.IsRevealed(id)
 	if lm := c.loaded[id]; lm != nil && lm.quotedShown == reveal && lm.bodySettled() && (!full || lm.msg != nil) {
 		return

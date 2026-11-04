@@ -392,8 +392,15 @@ public static partial class Cal
         /// <summary>caldav.go <c>ShowsMailAccount</c>: the mail-account popup: the server leaves the invitations to the client.</summary>
         public bool ShowsMailAccount => Listed is { } l && l.Scheduling == CalDAVScheduling.Client;
 
-        /// <summary>caldav.go <c>CanAdd</c>: Add enabled: listed, a calendar selected.</summary>
-        public bool CanAdd => Phase == WizardPhase.Listed && Listed is { } l && l.Calendars.Any(c => IsSelected(c.Href));
+        /// <summary>
+        /// caldav.go <c>CanAdd</c>: Add enabled: listed, a calendar selected or
+        /// an address book found (a server with only address books is added
+        /// for its contacts).
+        /// </summary>
+        public bool CanAdd => Phase == WizardPhase.Listed && Listed is { } l && (l.AddressBooks.Count > 0 || AnyCalendar);
+
+        // caldav.go anyCalendar: a selected calendar.
+        private bool AnyCalendar => Listed is { } l && l.Calendars.Any(c => IsSelected(c.Href));
 
         /// <summary>caldav.go <c>BeginAdd</c>: starts account.add with <see cref="AddParams"/>; false when it cannot.</summary>
         public bool BeginAdd()
@@ -431,8 +438,14 @@ public static partial class Cal
                 }
                 var cfg = Config() with
                 {
-                    Calendar = new CalendarConfig { Sync = true, DisabledCalendars = disabled, DefaultCalendar = defaultCalendar },
+                    Calendar = new CalendarConfig { Sync = AnyCalendar, DisabledCalendars = disabled, DefaultCalendar = defaultCalendar },
                 };
+                if (Listed is { AddressBooks.Count: > 0 } listed && cfg.CalDAV is { } dav)
+                {
+                    // The server's address books come with the account: its
+                    // contacts are on, the books chosen in Preferences → Contacts.
+                    cfg = cfg with { CalDAV = dav with { AddressBookHomeSetUrl = listed.AddressBookHomeSetUrl, Contacts = true } };
+                }
                 return new AccountAddParams { Config = cfg, Credentials = new Credentials { Password = Password } };
             }
         }
@@ -554,6 +567,13 @@ public static partial class Cal
                 }
                 var via = Discovered?.FoundVia ?? CalDAVFoundVia.Url;
                 var n = l.Calendars.Count;
+                if (l.AddressBooks.Count is var b && n == 0 && b > 0)
+                {
+                    // TRANSLATORS: the Add CalDAV sheet's status for a server with
+                    // address books and no calendar: how it was found and how many
+                    // address books it has.
+                    return L10n.N("Found through %s · %d address book", "Found through %s · %d address books", b, FoundVia(via), b);
+                }
                 // TRANSLATORS: the Add CalDAV sheet's status: how the server was found
                 // and how many calendars it has.
                 return L10n.N("Found through %s · %d calendar", "Found through %s · %d calendars", n, FoundVia(via), n);

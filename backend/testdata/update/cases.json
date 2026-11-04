@@ -1,0 +1,464 @@
+[
+  {
+    "file": "good.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "several channels, a withdrawn release, a notice"
+  },
+  {
+    "file": "good-minimal.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "required fields only, compact JSON, no notes.cs, no notice"
+  },
+  {
+    "file": "good-empty.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "no releases at all"
+  },
+  {
+    "file": "good-unknown-channel.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "unknown channel is ignored (warning)",
+    "warningPath": "releases[0].packages.solaris-pkg"
+  },
+  {
+    "file": "good-unknown-field.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "unknown top-level field is ignored (warning)",
+    "warningPath": "extra"
+  },
+  {
+    "file": "good-issuedat-now-plus-24h.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "issuedAt exactly one day ahead is still accepted"
+  },
+  {
+    "file": "good-issuedat-equal-last.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "issuedAt equal to lastIssuedAt is accepted",
+    "lastIssuedAt": "2026-10-28T12:00:00Z"
+  },
+  {
+    "file": "good-notes-4000-bytes.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "notes.en of exactly 4000 UTF-8 bytes"
+  },
+  {
+    "file": "good-emoji-zwj.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "ZWJ inside an emoji sequence and VS16 after an emoji survive cleaning"
+  },
+  {
+    "file": "good-envelope-256k.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "ok",
+    "note": "envelope of exactly 256 KiB"
+  },
+  {
+    "file": "bad-signature.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "signature",
+    "note": "one bit of the signature flipped"
+  },
+  {
+    "file": "bad-signature-other-payload.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "signature",
+    "note": "valid signature of a different payload"
+  },
+  {
+    "file": "unknown-keyid.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "unknownKey",
+    "note": "keyId not among the public keys"
+  },
+  {
+    "file": "noncanonical-base64.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "payload base64 with non-zero unused bits"
+  },
+  {
+    "file": "unpadded-base64.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "payload base64 without padding"
+  },
+  {
+    "file": "base64-with-newlines.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "MIME-style line breaks in the payload base64"
+  },
+  {
+    "file": "base64url.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "payload base64 in the URL-safe alphabet"
+  },
+  {
+    "file": "short-signature.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "signature of 63 bytes"
+  },
+  {
+    "file": "oversize-envelope.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "tooLarge",
+    "note": "envelope of 256 KiB + 1 byte (otherwise valid)"
+  },
+  {
+    "file": "oversize-payload.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "tooLarge",
+    "note": "payload of 192 KiB + 1 byte; its base64 alone exceeds the envelope limit, so a payload over 192 KiB never fits a valid envelope"
+  },
+  {
+    "file": "not-json.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "envelope is not JSON"
+  },
+  {
+    "file": "envelope-array.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "envelope is an array"
+  },
+  {
+    "file": "envelope-missing-signature.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "signature field missing"
+  },
+  {
+    "file": "envelope-case-twin.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "extra field KeyID, which Go's decoder matches case-insensitively"
+  },
+  {
+    "file": "envelope-duplicate-key.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "format",
+    "note": "keyId twice"
+  },
+  {
+    "file": "payload-not-json.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "payload is truncated JSON",
+    "errorPath": ""
+  },
+  {
+    "file": "payload-not-utf8.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "payload has invalid UTF-8",
+    "errorPath": ""
+  },
+  {
+    "file": "payload-bom.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "payload starts with a UTF-8 BOM",
+    "errorPath": ""
+  },
+  {
+    "file": "payload-array.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "payload is not an object",
+    "errorPath": ""
+  },
+  {
+    "file": "duplicate-versions.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "two releases 0.1.3",
+    "errorPath": "releases[1].version"
+  },
+  {
+    "file": "wrong-order.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "releases oldest first",
+    "errorPath": "releases[1].version"
+  },
+  {
+    "file": "leading-zero.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "version with a leading zero",
+    "errorPath": "releases[0].version"
+  },
+  {
+    "file": "version-v-prefix.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "version with a v prefix",
+    "errorPath": "releases[0].version"
+  },
+  {
+    "file": "version-suffix.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "version with a suffix",
+    "errorPath": "releases[0].version"
+  },
+  {
+    "file": "giant-notes.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "notes.en of 4001 bytes",
+    "errorPath": "releases[0].notes.en"
+  },
+  {
+    "file": "giant-notice.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "notice text of 1002 bytes",
+    "errorPath": "notice.text.en"
+  },
+  {
+    "file": "http-url.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "package url over http",
+    "errorPath": "releases[0].packages.macos-dmg.url"
+  },
+  {
+    "file": "foreign-host.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "package url on a foreign host",
+    "errorPath": "releases[0].packages.macos-dmg.url"
+  },
+  {
+    "file": "lookalike-host.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "host with the allowed one as a prefix",
+    "errorPath": "releases[0].packages.macos-dmg.url"
+  },
+  {
+    "file": "uppercase-host.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "allowed host in another case (stricter than needed)",
+    "errorPath": "releases[0].packages.macos-dmg.url"
+  },
+  {
+    "file": "port.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "explicit port, even :443",
+    "errorPath": "releases[0].packages.macos-dmg.url"
+  },
+  {
+    "file": "userinfo.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "credentials in the url",
+    "errorPath": "releases[0].packages.macos-dmg.url"
+  },
+  {
+    "file": "fragment.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "fragment in the url",
+    "errorPath": "releases[0].packages.macos-dmg.url"
+  },
+  {
+    "file": "infourl-github.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "infoUrl on github.com",
+    "errorPath": "releases[0].infoUrl"
+  },
+  {
+    "file": "notice-url-github.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "notice.url on github.com",
+    "errorPath": "notice.url"
+  },
+  {
+    "file": "issuedat-future.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "issuedAt one day and one second ahead",
+    "errorPath": "issuedAt"
+  },
+  {
+    "file": "issuedat-older.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "issuedAt older than the last accepted manifest",
+    "errorPath": "issuedAt",
+    "lastIssuedAt": "2026-10-29T00:00:00Z"
+  },
+  {
+    "file": "issuedat-offset.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "issuedAt with an offset instead of Z",
+    "errorPath": "issuedAt"
+  },
+  {
+    "file": "bidi-notes.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "RLO/PDF bidi controls in notes",
+    "errorPath": "releases[0].notes.en"
+  },
+  {
+    "file": "zero-width-notes.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "zero-width space in notes.cs",
+    "errorPath": "releases[0].notes.cs"
+  },
+  {
+    "file": "crlf-notes.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "CRLF in notes (the daemon rewrites it)",
+    "errorPath": "releases[0].notes.en"
+  },
+  {
+    "file": "nfd-notes.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "decomposed (NFD) text",
+    "errorPath": "releases[0].notes.cs"
+  },
+  {
+    "file": "lone-surrogate.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "lone surrogate escape in notes",
+    "errorPath": "releases[1].notes.en"
+  },
+  {
+    "file": "schema-2.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "schema 2",
+    "errorPath": "schema"
+  },
+  {
+    "file": "schema-float.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "schema written as 1.0 (Go cannot decode it into an int)",
+    "errorPath": "schema"
+  },
+  {
+    "file": "schema-case-twin.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "extra Schema field, which Go matches case-insensitively",
+    "errorPath": "Schema"
+  },
+  {
+    "file": "duplicate-key.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "schema twice",
+    "errorPath": "schema"
+  },
+  {
+    "file": "size-exponent.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "size in exponent notation",
+    "errorPath": "releases[0].packages.macos-dmg.size"
+  },
+  {
+    "file": "size-zero.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "package size 0",
+    "errorPath": "releases[0].packages.macos-dmg.size"
+  },
+  {
+    "file": "bad-sha256.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "sha256 in upper case",
+    "errorPath": "releases[0].packages.macos-dmg.sha256"
+  },
+  {
+    "file": "short-sha256.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "sha256 of 63 digits",
+    "errorPath": "releases[0].packages.macos-dmg.sha256"
+  },
+  {
+    "file": "too-many-releases.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "33 releases",
+    "errorPath": "releases"
+  },
+  {
+    "file": "too-many-packages.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "17 packages",
+    "errorPath": "releases[0].packages"
+  },
+  {
+    "file": "withdrawn-string.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "withdrawn as a string",
+    "errorPath": "releases[0].withdrawn"
+  },
+  {
+    "file": "missing-infourl.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "release without infoUrl",
+    "errorPath": "releases[0].infoUrl"
+  },
+  {
+    "file": "missing-notes-en.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "notes without en",
+    "errorPath": "releases[0].notes.en"
+  },
+  {
+    "file": "notice-bad-id.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "notice id with a space",
+    "errorPath": "notice.id"
+  },
+  {
+    "file": "notice-bad-below.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "notice.below not a version",
+    "errorPath": "notice.below"
+  },
+  {
+    "file": "publishedat-bad.json",
+    "now": "2026-10-28T12:00:00Z",
+    "expect": "manifest",
+    "note": "publishedAt without a time",
+    "errorPath": "releases[0].publishedAt"
+  }
+]

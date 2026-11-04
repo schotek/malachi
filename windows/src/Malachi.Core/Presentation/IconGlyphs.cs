@@ -70,6 +70,13 @@ public static class IconGlyphs
         ["web-browser"] = G(0xE774),
         ["dialog-warning"] = G(0xE7BA),
         ["dialog-error"] = G(0xE783),
+        // Signed mail (ui/internal/signature): the font has one shield (EA18, Segoe MDL2 Assets
+        // "Shield"; to be checked on Windows 11 with the other glyphs), not Adwaita's full, half and
+        // empty ones. The three names share it: the badge's colour tells green, yellow and grey
+        // apart, and a key not confirmed (security-medium) is drawn fainter (docs/windows-port.md §11.18).
+        ["security-high"] = G(0xEA18),
+        ["security-medium"] = G(0xEA18),
+        ["security-low"] = G(0xEA18),
         ["dialog-question"] = Unknown,
         ["emblem-ok"] = G(0xE930),
         ["list-add"] = G(0xE710),
@@ -94,6 +101,10 @@ public static class IconGlyphs
         ["goa-account"] = G(0xE715),
         ["avatar-default"] = G(0xE77B),
         ["sidebar-show"] = G(0xE8A0),
+        // The toolbar's Undo (docs/plans/toolbar-customization.md T10).
+        ["edit-undo"] = G(0xE7A7),
+        // The toolbar's Print (docs/plans/toolbar-customization.md §8).
+        ["document-print"] = G(0xE749),
         ["preferences-system"] = G(0xE713),
         // The strip of an automated message (bulk mail): the same gear.
         ["applications-system"] = G(0xE713),
@@ -143,9 +154,22 @@ public static class IconGlyphs
         // D9; macOS bubble.left.and.bubble.right, GTK's own
         // malachi-chat-symbolic): ChatBubbles.
         ["malachi-chat"] = G(0xE8F2),
+        // Report an Issue at the end of the status line (window.blp; macOS
+        // exclamationmark.bubble, GTK's own malachi-report-symbolic):
+        // Feedback.
+        ["malachi-report"] = G(0xED15),
         // The quick-reply bar's Open in a Window (docs/plans/chat-view.md
         // Q2; macOS arrow.up.forward.square): OpenInNewWindow.
         ["window-new"] = G(0xE8A7),
+        // The mail rules' page of the Preferences (docs/plans/rules.md R14;
+        // GTK's funnel-symbolic, the Windows page has folder-saved-search):
+        // Filter.
+        ["funnel"] = G(0xE71C),
+        // The Contacts window (docs/plans/address-book.md §5; GTK
+        // contacts_detail.go): Copy of the detail, and a website row's
+        // link that opens in the browser (Link).
+        ["edit-copy"] = G(0xE8C8),
+        ["adw-external-link"] = G(0xE71B),
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Whether <paramref name="gtkName"/> has a glyph of its own.</summary>

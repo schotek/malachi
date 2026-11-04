@@ -1,0 +1,14 @@
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//Fastmail//EN
+UID:fm-1234
+FN:Ann O'Neil
+N:O'Neil;Ann;;Dr.;
+EMAIL;TYPE=work:ann@work.example
+EMAIL:ann@personal.example
+TEL;TYPE=cell:+44 7700 900123
+ADR;TYPE=work:;Suite 5;10 Downing St;London;;SW1A 2AA;United Kingdom
+BDAY:19750101
+NOTE;LANGUAGE=en:Multi\nline\, note
+X-FM-ONLINE-OTHER:matrix:@ann:example.org
+END:VCARD

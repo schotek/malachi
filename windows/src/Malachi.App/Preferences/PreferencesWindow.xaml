@@ -12,6 +12,10 @@ names (Accounts: system-users, Integrations: application-x-addon,
 General: preferences-system, Appearance: applications-graphics, AI:
 applications-science), with the Calendar page after General as macOS has
 it (x-office-calendar, the Calendar mode's icon; docs/calendar.md §5.8),
+the Contacts page right after it (x-office-address-book;
+docs/plans/address-book.md W3), the Rules page right after Integrations
+(folder-saved-search, the Filter glyph; docs/plans/rules.md R14), the
+Security page after Contacts (security-high; docs/plans/signatures.md §6),
 and the
 visible page with the toast overlay over it. There is no search field
 (windows/README.md, as macOS) and no Settings item of the NavigationView's
@@ -92,6 +96,15 @@ then.
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
+                    x:Name="RulesItem"
+                    AutomationProperties.AutomationId="RulesPage"
+                    Content="{l:T Msgid='Rules'}"
+                    Tag="rules">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('folder-saved-search')}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     x:Name="GeneralItem"
                     AutomationProperties.AutomationId="GeneralPage"
                     Content="{l:T Msgid='General'}"
@@ -107,6 +120,26 @@ then.
                     Tag="calendar">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="{x:Bind res:Icons.Glyph('x-office-calendar')}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="ContactsItem"
+                    AutomationProperties.AutomationId="ContactsPage"
+                    Content="{l:T Msgid='Contacts'}"
+                    Tag="contacts">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('x-office-address-book')}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <!-- Security (docs/plans/signatures.md §6): the OpenPGP keys of
+                     signed mail; the shield stands for security-high. -->
+                <NavigationViewItem
+                    x:Name="SecurityItem"
+                    AutomationProperties.AutomationId="SecurityPage"
+                    Content="{l:T Msgid='Security', Context='preferences page'}"
+                    Tag="security">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('security-high')}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem

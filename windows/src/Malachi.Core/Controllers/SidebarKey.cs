@@ -33,7 +33,8 @@ public readonly record struct SidebarKey(bool Header, bool Favourite, AccountId?
     public static SidebarKey Of(FolderEntry entry)
     {
         System.ArgumentNullException.ThrowIfNull(entry);
-        return new(entry.Header, entry.Favourite, entry.Account?.Id, entry.Folder?.Id);
+        // The All Inboxes row has neither an account nor a folder of its own: its sentinel key names it.
+        return entry.IsUnified ? ForFolder(Unified.Key, false) : new(entry.Header, entry.Favourite, entry.Account?.Id, entry.Folder?.Id);
     }
 
     /// <summary>The key of <paramref name="k"/>'s row in the tree, or in the Favourites section when <paramref name="favourite"/>.</summary>

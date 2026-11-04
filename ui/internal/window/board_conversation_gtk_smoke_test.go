@@ -175,6 +175,16 @@ func smokeBoardConversationChat(t *testing.T, p *boardPage, flush func(), withCa
 	if got := b.chat.toggleContent.Label(); got != board.ChatToggleLabel(false, i18n.Tr) {
 		t.Fatalf("toggle off says %q", got)
 	}
+	// A conversation still loading hides the cards' column; GtkStack then
+	// shows the chat page and must be put back once the cards are there.
+	loading := board.Detail{ID: d.ID, AccountID: d.AccountID, ConversationTitle: d.ConversationTitle, MessagesLoading: true}
+	b.apply(&loading)
+	flush()
+	b.apply(&d)
+	flush()
+	if b.chat.stack.VisibleChildName() != boardChatCards || !b.column.Mapped() {
+		t.Fatalf("after loading the block shows %q, the cards mapped %v", b.chat.stack.VisibleChildName(), b.column.Mapped())
+	}
 	cards := append([]*boardConversationCard(nil), b.cards...)
 	if len(cards) != len(d.Messages) {
 		t.Fatalf("%d cards for %d messages", len(cards), len(d.Messages))

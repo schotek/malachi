@@ -23,6 +23,7 @@ public sealed class AppHooks
     private Action<Window?>? addAccount;
     private Action<Window?>? addJiraAccount;
     private Action<Window?>? addCalDAVCalendar;
+    private Action? openContacts;
     private Func<bool>? canComposeNew;
     private Action? composeNew;
     private Action? checkForNewMail;
@@ -58,6 +59,13 @@ public sealed class AppHooks
     {
         get => addCalDAVCalendar;
         set => Set(ref addCalDAVCalendar, value);
+    }
+
+    /// <summary>Opens the Contacts window (app.contacts: the "…" menus, without a key).</summary>
+    public Action? OpenContacts
+    {
+        get => openContacts;
+        set => Set(ref openContacts, value);
     }
 
     /// <summary>

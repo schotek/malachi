@@ -5,12 +5,13 @@
 // windows/README.md), over GTK's accelerators: ui/main.go addActions
 // (app.compose Ctrl+N, app.preferences Ctrl+comma, app.quit Ctrl+Q, in
 // every window), window.go MessageAccels (win.* of the main window:
-// Delete, a, j, u, s, Ctrl+R, Ctrl+F), message_window.go messageShortcuts
+// Delete, a, j, u, s, Ctrl+R, Ctrl+F, Ctrl+Z), message_window.go messageShortcuts
 // (msg.*: Delete, a, j, u, s), the Escape shortcut controllers of
 // message_window.blp, embedded_window.blp and compose.blp, compose.blp's
 // compose.send (Ctrl+Return) and compose.save (Ctrl+S),
-// accounts_reorder.go (Ctrl+Up, Ctrl+Down) and F10, which GtkWindow gives
-// to the primary menu (window.blp's MenuButton with primary: true); macOS:
+// accounts_reorder.go (Ctrl+Up, Ctrl+Down), F10, which GtkWindow gives
+// to the primary menu (window.blp's MenuButton with primary: true), and
+// Print's Ctrl+P (docs/plans/toolbar-customization.md §8); macOS:
 // App/MainMenu.swift's key table with command-r and Actions.swift's
 // bareKeyActions.
 //
@@ -21,7 +22,9 @@
 // besides Escape, and Ctrl+Shift+N is the calendar's New Event (its
 // Primary+Alt+N, Shift standing for Alt as in Cal.Press). The single keys
 // (Delete, A, J, U, S) do nothing while a text input has the focus, where
-// they type (GTK setTypingAccels); the compose editor counts as one, and
+// they type (GTK setTypingAccels), and neither does Undo's Ctrl+Z (undo.go
+// undoAccelAllowed: a text input takes back its own typing); the compose
+// editor counts as one, and
 // keeps Escape for its bridge (the bridge closes the window through its own
 // message, as in GTK and macOS).
 
@@ -53,6 +56,9 @@ public static class ShortcutMap
         (KeyChord.Bare(VirtualKey.J), ShortcutCommand.Junk),
         (KeyChord.Bare(VirtualKey.U), ShortcutCommand.MarkUnread),
         (KeyChord.Bare(VirtualKey.S), ShortcutCommand.ToggleFlag),
+        // Print (macOS ⌘P): a Ctrl chord, so no text input lifts it; the
+        // command's gate decides (nothing on the Board).
+        (KeyChord.Ctrl(VirtualKey.P), ShortcutCommand.Print),
     ];
 
     // F10 opens the primary menu from anywhere in the window, a text input
@@ -72,11 +78,25 @@ public static class ShortcutMap
         // command's gate (Board.Allows) keeps it to Mail and the Calendar,
         // and a Ctrl chord, so no text input lifts it either.
         (KeyChord.CtrlShift(VirtualKey.N), ShortcutCommand.NewEvent),
+        // Undo of the newest move of mail (window/undo.go win.undo): its
+        // gate keeps it to Mail and Board; Resolve lifts it while a text
+        // input or an editor has the keyboard.
+        (KeyChord.Ctrl(VirtualKey.Z), ShortcutCommand.Undo),
     ];
 
     private static readonly (KeyChord Chord, ShortcutCommand Command)[] Close =
     [
         (KeyChord.Bare(VirtualKey.Escape), ShortcutCommand.CloseWindow),
+        (KeyChord.Ctrl(VirtualKey.W), ShortcutCommand.CloseWindow),
+    ];
+
+    // The Contacts window: its search (contacts_window.go installShortcuts'
+    // Ctrl+F, and Ctrl+E as in the main window) and Ctrl+W; Escape stays
+    // with the search box and the form, which it would drop unasked.
+    private static readonly (KeyChord Chord, ShortcutCommand Command)[] Contacts =
+    [
+        (KeyChord.Ctrl(VirtualKey.F), ShortcutCommand.Search),
+        (KeyChord.Ctrl(VirtualKey.E), ShortcutCommand.Search),
         (KeyChord.Ctrl(VirtualKey.W), ShortcutCommand.CloseWindow),
     ];
 
@@ -156,6 +176,11 @@ public static class ShortcutMap
             {
                 return null;
             }
+            if (command == ShortcutCommand.Undo && (context.TextInputFocused || context.EditorFocused))
+            {
+                // The text input's own Ctrl+Z (undo.go undoAccelAllowed).
+                return null;
+            }
             if (command == ShortcutCommand.CloseWindow && chord.Key == VirtualKey.Escape && context.EditorFocused)
             {
                 return null;
@@ -203,6 +228,7 @@ public static class ShortcutMap
             WindowKind.Compose => Compose.Concat(Close),
             WindowKind.Preferences => Reorder.Concat(Close),
             WindowKind.Wizard => Close,
+            WindowKind.Contacts => Contacts,
             // The attachment previewer closes as Sushi and Quick Look do.
             WindowKind.Other => Close,
             _ => [],

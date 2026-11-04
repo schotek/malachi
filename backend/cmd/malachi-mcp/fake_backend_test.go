@@ -74,6 +74,11 @@ type fakeBackend struct {
 	sends             []api.MessageSendParams
 	triggers          []api.SyncTriggerParams
 	nextDraft         int
+	// rules, ruleCreates and ruleUpdates are the mail rules of
+	// tools_rules_test.go.
+	rules       []api.Rule
+	ruleCreates []api.RulesCreateParams
+	ruleUpdates []api.RulesUpdateParams
 
 	// transitions is what issue.transitions answers for a message, and
 	// transitionCalls what issue.transition was asked (each moves the
@@ -112,6 +117,15 @@ type fakeBackend struct {
 	freeTimeCalls    []api.CalendarFindFreeTimeParams
 	invitationCalls  []api.InvitationListParams
 	eventCreateCalls []api.EventCreateParams
+
+	// Contacts (tools_contacts_test.go): the canned books and cards and
+	// what the contact methods were asked.
+	books          []api.AddressBook
+	contactCards   map[api.ContactID]api.ContactCard
+	contactLists   []api.ContactListParams
+	contactCreates []api.ContactCreateParams
+	contactPhotos  int
+	contactUpdates []api.ContactUpdateParams
 
 	searchResults []api.SearchResult // what every search.query answers
 	searchCalls   []api.SearchQueryParams

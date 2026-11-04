@@ -4,7 +4,8 @@
 #   scripts/flatpak-vendor.sh   (once per dependency change; needs network)
 #   make flatpak                (flatpak-builder --user --install-deps-from=flathub …)
 # `make flatpak` runs the vendor script for you. CI does the same on every
-# push to main, for x86_64 and aarch64 (.github/workflows/flatpak.yml).
+# version tag, for x86_64 and aarch64 (.github/workflows/flatpak.yml), and
+# attaches the bundles to the tag's GitHub release.
 #
 # Runtime version: GNOME 48 matches the GTK 4.18 / libadwaita 1.7 / GLib 2.84
 # stack the project is developed against in the Fedora 42 Toolbx, and the
@@ -116,8 +117,11 @@ modules:
     # into /app/share/licenses/io.github.schotek.Malachi. flatpak-builder
     # 1.4.5+ also records the module's top-level LICENSE and LICENSING.md in
     # the malachi/ directory beside them; those two are copies.
+    # UPDATE_CHANNEL: the daemon of this Flatpak checks for updates of the
+    # .flatpak bundle (docs/services.md §2.3). A Flathub build must leave
+    # it out: Flathub updates the app itself (docs/plans/update-check.md U6).
     build-commands:
-      - PREFIX=/app ./scripts/build.sh install
+      - UPDATE_CHANNEL=linux-flatpak-$(case "$FLATPAK_ARCH" in aarch64) echo arm64 ;; *) echo x64 ;; esac) PREFIX=/app ./scripts/build.sh install
     sources:
       # The working tree, for local testing. A published build must take
       # the tag instead, so the version compiled in is the released one

@@ -58,7 +58,7 @@ public sealed partial class CrmToolbarButton : UserControl
             });
             if (item.Destructive)
             {
-                entry.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+                entry.Style = (Style)Application.Current.Resources["CriticalMenuFlyoutItemStyle"];
             }
             var id = item.Id;
             entry.Click += (_, _) => MenuChosen?.Invoke(this, id);

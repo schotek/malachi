@@ -150,6 +150,7 @@ public sealed partial class MessageView : UserControl
             IssueSite = services.IssueSite,
             CanTransition = services.Issues.CanTransition,
             IssueBusy = services.Issues.IsBusy,
+            InvitationCardOn = s => InvitationReading.ShowsInvitationCard(services.AccountOf(s.AccountId)),
         };
         Reader.Toast = text => services.ToastIn(HostWindow, text);
         Reader.PropertyChanged += OnReaderChanged;
@@ -158,6 +159,9 @@ public sealed partial class MessageView : UserControl
         Reader.Addresses.RowChanged += (_, kind) => FillAddressRow(kind);
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
+        SignatureBadge.Attach(services, () => HostWindow);
+        // The No Accounts page's note on the update check (ui/internal/updates WizardNote).
+        UpdateNote.Text = Malachi.Core.Updates.UpdateCheck.WizardNote();
         UpdateBodyFit();
         chips = new MessageChips(services, this, () => HostWindow, () => FocusBody(), logger);
 
@@ -632,6 +636,7 @@ public sealed partial class MessageView : UserControl
         // same one with what loaded since: the bar answers it.
         FeedQuickReply();
         RenderInvitation(r);
+        RenderSignature(r);
         RenderCrm();
         if (headersOf == r.Summary.Id)
         {
@@ -652,6 +657,20 @@ public sealed partial class MessageView : UserControl
         invitation.Show(r.Summary, r.Loaded?.Msg, InvitationReading.ShowsInvitationCard(services.AccountOf(r.Summary.AccountId)));
     }
 
+    // The badge of a signed message (docs/plans/signatures.md §6): the verdict
+    // message.get carried, with the From address the explanation of a
+    // signature of someone else names; an attached message has none.
+    private void RenderSignature(ReaderRender r)
+    {
+        if (Reader.Mode == ReaderMode.Embedded)
+        {
+            SignatureBadge.Show(null, r.Summary.Id, "");
+            return;
+        }
+        var from = r.Summary.From.Count > 0 ? r.Summary.From[0].Email : "";
+        SignatureBadge.Show(r.Loaded?.Msg?.Signature, r.Summary.Id, from);
+    }
+
     // openInvitationLink: Join Video Call through the link confirmation of
     // the view's window, as a link the daemon did not list.
     private void OpenInvitationLink(string url) => _ = services.Links.OpenAsync(new ActivatedLink(url, url), [], HostWindow);
@@ -659,6 +678,13 @@ public sealed partial class MessageView : UserControl
     // The headers' share of the page: past it they scroll.
     private void OnMessagePageSizeChanged(object sender, SizeChangedEventArgs e) =>
         HeaderScroller.MaxHeight = Math.Max(0, Math.Floor(e.NewSize.Height * HeaderShare));
+
+    /// <summary>
+    /// The body on display is drawn: the text, or an HTML body whose web
+    /// view has finished loading (the <c>shot=</c> step of
+    /// MainWindow.DevStart.cs waits for it; a cold WebView2 takes seconds).
+    /// </summary>
+    internal bool DevelopmentBodyShown => web is null || !web.IsLoading;
 
     // htmlView: made on first use, so a plain-text mailbox never starts a
     // web process; one per view, reused.

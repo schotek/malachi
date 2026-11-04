@@ -1082,6 +1082,44 @@ public sealed class MailboxControllerFoldersTests
         Assert.True(h.Sync.Closed, "the mailbox closes its status line");
     }
 
+    // The All Inboxes item (ui/internal/unified): the first row, selectable,
+    // titled and counted from the inboxes it covers, and gone with its
+    // setting, the selection falling back to the initial folder.
+    [Fact]
+    public async Task TheAllInboxesItemIsSelectableAndFollowsItsSetting()
+    {
+        var (accounts, folders) = TestAccounts();
+        var log = new Log();
+        await using var h = await MailboxControllerHarness.StartAsync(
+            f =>
+            {
+                f.SetAccounts(accounts);
+                f.SetFolders(folders);
+            },
+            wire: x => Wire(x, log),
+            prepare: settings => settings.UnifiedInbox = true);
+        await h.IdleAsync();
+        // The item is the first row of the Favourites section.
+        Assert.True(h.Mailbox.Model.Entries[0].Header && h.Mailbox.Model.Entries[0].Favourite);
+        var first = h.Mailbox.Model.Entries[1];
+        Assert.True(first.IsUnified);
+        Assert.Equal(Unified.Unread(h.Mailbox.Model.UnifiedInboxes), first.Badge);
+        Assert.Equal(Inbox1, h.Mailbox.Model.Selected);
+
+        await h.On(() => h.Mailbox.SelectFolder(Unified.Key, false));
+        Assert.Equal(Unified.Key, h.Mailbox.Model.Selected);
+        Assert.Equal(SidebarKey.Of(first), h.Mailbox.SelectedEntryKey);
+        Assert.Equal("All Inboxes", h.Mailbox.SelectedFolderTitle);
+        Assert.Equal(Unified.Key, h.Mailbox.Model.ListFolder);
+        Assert.True(h.Mailbox.Model.ListIsUnified);
+
+        // Switched off, the item goes and the selection with it.
+        await h.On(() => { h.Settings.UnifiedInbox = false; });
+        await h.IdleAsync();
+        Assert.DoesNotContain(h.Mailbox.Model.Entries, e => e.IsUnified);
+        Assert.Equal(Inbox1, h.Mailbox.Model.Selected);
+    }
+
     private static List<string> FolderIds(IEnumerable<FolderEntry> entries) =>
         [.. entries.Where(e => !e.Header && e.Folder is not null).Select(e => e.Folder!.Id.Value)];
 

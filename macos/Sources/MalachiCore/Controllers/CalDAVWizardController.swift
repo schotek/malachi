@@ -110,6 +110,11 @@ public final class CalDAVWizardController {
         }
     }
 
+    /// A found address book as the sheet lists it: its name cleaned.
+    public var listedAddressBooks: [String] {
+        wizard.addressBooks.map { Cal.cleanLine($0.name) }
+    }
+
     // MARK: Fields
 
     public func edit(name: String, server: String, username: String, password: String) {

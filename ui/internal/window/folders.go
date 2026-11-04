@@ -16,6 +16,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/unified"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -211,7 +212,9 @@ func (w *Window) rebuildFolderList() {
 	w.folderRows = make(map[rowKey]*folderRow, len(w.model.entries))
 	for idx, e := range w.model.entries {
 		if e.Header && e.Favourite {
-			row, _ := newHeaderRow(i18n.T("Favourites"), "", false, false)
+			row, twisty := newHeaderRow(i18n.T("Favourites"), "", e.Collapsed, true)
+			twisty.ConnectClicked(w.toggleFavourites)
+			w.attachFolderMenu(row, idx)
 			w.folderList.Append(row)
 			continue
 		}
@@ -225,10 +228,17 @@ func (w *Window) rebuildFolderList() {
 		}
 		k := folderKey{Account: e.Account.ID, Folder: e.Folder.ID}
 		subtitle := ""
-		if e.Favourite && several {
+		if e.Favourite && !e.Unified && several {
 			subtitle = accountLabel(e.Account)
 		}
 		r := newFolderRow(e, subtitle)
+		if e.Unified && several {
+			// The All Inboxes item names no account, but its row is as
+			// tall as a pinned folder's two-line row, so every row of the
+			// section has one rhythm and the name stands centred (macOS
+			// and Windows give the row the subtitle row's height too).
+			r.SetSizeRequest(-1, twoLineRowHeight())
+		}
 		if e.HasChildren && r.twisty != nil {
 			r.twisty.ConnectClicked(func() { w.toggleFolder(k) })
 		}
@@ -271,12 +281,12 @@ func (w *Window) rebuildFolderList() {
 }
 
 // newHeaderRow builds a heading row with its fold arrow: an account, or the
-// Favourites section, which does not fold (foldable false keeps the arrow's
-// space so the headings line up, but nothing to click). badge, when given,
-// is a capsule after the text (the kind of a Jira account,
-// accountHeaderBadge). The row cannot be selected or activated, so the
-// row-selected handler never sees it; the arrow is a button and receives
-// its clicks regardless.
+// Favourites section, which folds the same way (toggleFavourites); foldable
+// false keeps the arrow's space so the headings line up, but nothing to
+// click. badge, when given, is a capsule after the text (the kind of a Jira
+// account, accountHeaderBadge). The row cannot be selected or activated, so
+// the row-selected handler never sees it; the arrow is a button and
+// receives its clicks regardless.
 func newHeaderRow(text, badge string, collapsed, foldable bool) (*gtk.ListBoxRow, *gtk.Button) {
 	row := gtk.NewListBoxRow()
 	row.SetActivatable(false)
@@ -315,6 +325,9 @@ func newHeaderRow(text, badge string, collapsed, foldable bool) (*gtk.ListBoxRow
 // role folder (whatever the server calls it) and for a fixed view of a Jira
 // account (jira.VirtualFolderTitle), the server's name otherwise.
 func folderTitle(f api.Folder) string {
+	if f.ID == unified.KeyFolder {
+		return unified.Title(i18n.Tr)
+	}
 	switch f.Role {
 	case api.RoleInbox:
 		return i18n.C("folder", "Inbox")
@@ -403,9 +416,11 @@ func newFolderRow(e folderEntry, subtitle string) *folderRow {
 	// AddSuffix appends, so the star ends up at the far right, after the
 	// badge. A container that cannot be opened cannot be pinned either.
 	var star *gtk.Button
-	if e.Folder.Selectable {
+	if e.Folder.Selectable && !e.Unified {
 		star = newStar(e.Starred)
 		row.AddSuffix(star)
+	} else if e.Unified {
+		row.AddSuffix(starSlot())
 	}
 
 	if !e.Folder.Selectable {
@@ -416,6 +431,23 @@ func newFolderRow(e folderEntry, subtitle string) *folderRow {
 	r := &folderRow{ActionRow: row, badge: badge, twisty: twisty, star: star}
 	r.setUnread(e.Badge)
 	return r
+}
+
+// twoLineRowHeight is the natural height of a folder row with an account
+// under its name, measured on a throwaway row with the rows' styles
+// (newFolderRow's CSS classes), so it follows the font and the theme
+// rather than a number of pixels.
+func twoLineRowHeight() int {
+	probe := adw.NewActionRow()
+	probe.AddCSSClass("folder-row")
+	probe.AddCSSClass("favourite")
+	probe.SetTitle("X")
+	probe.SetTitleLines(1)
+	probe.SetSubtitle("X")
+	probe.SetSubtitleLines(1)
+	probe.AddPrefix(gtk.NewImageFromIconName("mail-inbox-symbolic"))
+	_, natural, _, _ := probe.Measure(gtk.OrientationVertical, -1)
+	return natural
 }
 
 // showEmptySidebarStatus explains an empty sidebar: no account, none
@@ -526,6 +558,9 @@ func (w *Window) onSyncFinished(prev, cur api.SyncState) {
 	}
 	w.loadFolders(cur.AccountID, w.model.foldersGen)
 	w.verifyNotifications(cur.AccountID)
+	if w.unifiedSyncFinished(cur) {
+		return
+	}
 	sel := w.model.selected
 	if sel.Account != cur.AccountID {
 		return
@@ -565,7 +600,7 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 	if s.FolderID == "" {
 		s.FolderID = n.FolderID
 	}
-	if k == w.model.listFolder {
+	if w.model.listCovers(k) {
 		if _, _, known := w.model.message(s.ID); known {
 			return // delivered twice; the badge was adjusted the first time
 		}
@@ -585,7 +620,7 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			}
 			if w.model.applyNewMessage(s, w.model.listFilter, sel) {
 				w.syncRows()
-				w.refetchReplies(s.ThreadID)
+				w.refetchReplies(w.model.threadKey(s.AccountID, s.ThreadID))
 			} else {
 				w.loadMessages()
 			}
@@ -599,7 +634,7 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			}
 			w.showListState()
 		}
-	} else if n.AccountID == w.model.listFolder.Account {
+	} else if n.AccountID == w.model.listFolder.Account && !w.model.listIsUnified() {
 		// A reply the user sent may belong to a listed conversation.
 		w.applyNewMessageElsewhere(s)
 	}

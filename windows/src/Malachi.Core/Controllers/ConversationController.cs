@@ -456,8 +456,8 @@ public sealed partial class ConversationController : IDisposable
     /// body is fetched unless held already (<c>message.body</c>;
     /// <c>message.get</c> as well when <paramref name="details"/>, or when the
     /// message has attachments, whose chips need it, or is a newsletter or a
-    /// mailing list, whose strip needs its offer, unless it failed for
-    /// this member before). An event has no body. The entry is held in
+    /// mailing list, whose strip needs its offer, or has a signature verdict,
+    /// whose badge needs the signer, unless it failed for this member before). An event has no body. The entry is held in
     /// <see cref="Loaded"/> and announced through <see cref="EntryLoaded"/>
     /// whenever a half of it arrives. The body is the variant the user chose
     /// for the card: without its quoted history unless revealed
@@ -469,7 +469,7 @@ public sealed partial class ConversationController : IDisposable
         {
             return;
         }
-        var full = (details || s.HasAttachments || BulkReading.WantsOffer(s)) && !noGet.Contains(id);
+        var full = (details || s.HasAttachments || BulkReading.WantsOffer(s) || s.Invitation is not null || s.Signature is not null) && !noGet.Contains(id);
         var reveal = quoted.IsRevealed(id);
         if (loaded.TryGetValue(id, out var held) && held.QuotedShown == reveal && held.BodySettled && (!full || held.Msg is not null))
         {

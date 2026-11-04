@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/schotek/malachi/backend/internal/calsync"
 	"github.com/schotek/malachi/backend/internal/jira"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/internal/transport"
@@ -194,9 +195,18 @@ func capabilitiesFor(c api.AccountConfig) []api.AccountCapability {
 	case api.AccountGraph:
 		// The calendar capability does not flicker with consent or sync
 		// state (docs/calendar.md D16).
-		return append(append([]api.AccountCapability{}, api.MailCapabilities...), api.CapabilityCalendar)
+		// Neither does contacts (docs/api.md §4.19).
+		return append(append([]api.AccountCapability{}, api.MailCapabilities...), api.CapabilityCalendar, api.CapabilityContacts)
 	case api.AccountCalDAV:
-		return []api.AccountCapability{api.CapabilityCalendar}
+		// Calendars and/or address books (CalDAVConfig.Contacts).
+		caps := []api.AccountCapability{}
+		if calsync.CalDAVHasCalendars(c) {
+			caps = append(caps, api.CapabilityCalendar)
+		}
+		if c.CalDAV != nil && c.CalDAV.Contacts {
+			caps = append(caps, api.CapabilityContacts)
+		}
+		return caps
 	case api.AccountEway:
 		return []api.AccountCapability{api.CapabilityCrm}
 	case api.AccountJira:

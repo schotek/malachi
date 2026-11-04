@@ -42,6 +42,7 @@ public sealed class WindowCommands
             [ShortcutCommand.ShowCalendar] = ShowCalendar,
             [ShortcutCommand.NewEvent] = NewEvent,
             [ShortcutCommand.MainMenu] = MainMenu,
+            [ShortcutCommand.Undo] = Undo,
             [ShortcutCommand.Reply] = Reply,
             [ShortcutCommand.ReplyAll] = ReplyAll,
             [ShortcutCommand.Forward] = Forward,
@@ -55,6 +56,7 @@ public sealed class WindowCommands
             [ShortcutCommand.SaveDraft] = SaveDraft,
             [ShortcutCommand.MoveUp] = MoveUp,
             [ShortcutCommand.MoveDown] = MoveDown,
+            [ShortcutCommand.Print] = Print,
         };
         // The per-message commands follow Flags unless a screen says otherwise.
         Reply.CanExecute = () => flags.Reply;
@@ -69,6 +71,9 @@ public sealed class WindowCommands
         LoadImages.CanExecute = () => flags.LoadImages;
         TrustSender.CanExecute = () => flags.TrustSender;
         ChangeStatus.CanExecute = () => flags.ChangeStatus;
+        // Print takes one row, or several up to Print.MaxMessages (macOS's
+        // validation of printMail:); the Calendar's screen says otherwise.
+        Print.CanExecute = () => flags.On && flags.Count <= Core.Printing.Print.MaxMessages;
     }
 
     /// <summary>app.compose (Ctrl+N).</summary>
@@ -85,6 +90,9 @@ public sealed class WindowCommands
 
     /// <summary>Add CalDAV Calendar… (macOS addCalDAVAccount:, docs/calendar.md §5.8): the Add CalDAV Calendar window.</summary>
     public AppCommand AddCalDAVCalendar { get; } = new(nameof(AddCalDAVCalendar));
+
+    /// <summary>app.contacts: the Contacts window (the "…" menus, no key; contacts_window.go).</summary>
+    public AppCommand Contacts { get; } = new(nameof(Contacts));
 
     /// <summary>app.about.</summary>
     public AppCommand About { get; } = new(nameof(About));
@@ -116,6 +124,12 @@ public sealed class WindowCommands
 
     /// <summary>The main window's primary menu (F10), while its button is shown.</summary>
     public AppCommand MainMenu { get; } = new(nameof(MainMenu));
+
+    /// <summary>
+    /// win.undo (Ctrl+Z; window/undo.go undoLast): takes back the newest
+    /// move of mail. The main window's, gated to Mail and Board.
+    /// </summary>
+    public AppCommand Undo { get; } = new(nameof(Undo));
 
     /// <summary>Reply (Ctrl+R).</summary>
     public AppCommand Reply { get; } = new(nameof(Reply));
@@ -173,6 +187,13 @@ public sealed class WindowCommands
     public AppCommand MoveDown { get; } = new(nameof(MoveDown));
 
     /// <summary>
+    /// Print (Ctrl+P; docs/plans/toolbar-customization.md §8, macOS
+    /// printMail:): the main window's selection, or the Calendar's event or
+    /// day, and a message window's message.
+    /// </summary>
+    public AppCommand Print { get; } = new(nameof(Print));
+
+    /// <summary>
     /// What the window's current message allows (the list's selection in
     /// the main window, the message of a message window); the per-message
     /// commands are re-validated when it changes.
@@ -187,7 +208,7 @@ public sealed class WindowCommands
                 return;
             }
             flags = value;
-            foreach (var c in (AppCommand[])[Reply, ReplyAll, Forward, Trash, Archive, Junk, MarkRead, MarkUnread, ToggleFlag, LoadImages, TrustSender, ChangeStatus])
+            foreach (var c in (AppCommand[])[Reply, ReplyAll, Forward, Trash, Archive, Junk, MarkRead, MarkUnread, ToggleFlag, LoadImages, TrustSender, ChangeStatus, Print])
             {
                 c.Refresh();
             }
@@ -200,7 +221,7 @@ public sealed class WindowCommands
     /// <summary>Every command, for re-validating them all (a hook was wired).</summary>
     public IEnumerable<AppCommand> All =>
     [
-        .. byShortcut.Values, AddAccount, AddJiraAccount, AddCalDAVCalendar, About, MarkRead, LoadImages, TrustSender, ChangeStatus
+        .. byShortcut.Values, AddAccount, AddJiraAccount, AddCalDAVCalendar, Contacts, About, MarkRead, LoadImages, TrustSender, ChangeStatus
     ];
 
     /// <summary>Re-validates every command.</summary>

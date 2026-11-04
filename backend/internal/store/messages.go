@@ -94,6 +94,12 @@ type Message struct {
 	// (crm_links, migration 0021), filled by the listings with Invitation
 	// for api.MessageSummary.CrmSaved. Read only.
 	CrmSaved bool
+
+	// Signature is the message's verdict (message_signatures, migration
+	// 0026), filled by the listings with Invitation for
+	// api.MessageSummary.Signature and api.Message.Signature; nil without
+	// one. Read only.
+	Signature *api.SignatureSummary
 }
 
 // MessageRef identifies a message whose body is still to be fetched, by
@@ -964,6 +970,28 @@ func (s *Store) MarkBodyState(ctx context.Context, id string, state BodyState) e
 	return nil
 }
 
+// SetHasAttachments sets the paperclip of the message (has_attachments)
+// without touching its content: the invitation hook leaves out the
+// calendar part it shows as a card. A row with the value already is left
+// as it is (no update, no board trigger). ErrNotFound for an unknown id.
+func (s *Store) SetHasAttachments(ctx context.Context, id string, has bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE messages SET has_attachments = ?, updated_at = ?
+		WHERE id = ? AND has_attachments != ?`, boolInt(has), nowStamp(), id, boolInt(has))
+	if err != nil {
+		return fmt.Errorf("set has attachments: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		var one int
+		if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM messages WHERE id = ?`, id).Scan(&one); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("set has attachments: %w", err)
+		}
+	}
+	return nil
+}
+
 // ListMessages pages through a folder. The cursor is opaque and bound to
 // the sort order it was issued for: a cursor from the other order (or a
 // malformed one) is ErrBadCursor. It does not encode the filter, so a
@@ -973,25 +1001,9 @@ func (s *Store) MarkBodyState(ctx context.Context, id string, state BodyState) e
 // (Message.Hidden) are left out. ErrNotFound when the account has no such
 // folder.
 func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor string, limit int, sortOrder api.SortOrder, listFilter api.MessageFilter) (items []Message, next string, total int, err error) {
-	if limit <= 0 {
-		limit = 50
+	if err := checkSortCursor(cursor, sortOrder, "d", "a"); err != nil {
+		return nil, "", 0, err
 	}
-	var prefix, cmp, order string
-	switch sortOrder {
-	case "", api.SortDateDesc:
-		prefix, cmp, order = "d", "<", "DESC"
-	case api.SortDateAsc:
-		prefix, cmp, order = "a", ">", "ASC"
-	default:
-		return nil, "", 0, fmt.Errorf("list messages: unsupported sort %q", sortOrder)
-	}
-	var cursorStamp, cursorID string
-	if cursor != "" {
-		if cursorStamp, cursorID, err = decodeSortCursor(cursor, prefix); err != nil {
-			return nil, "", 0, err
-		}
-	}
-
 	var exists int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM folders WHERE id = ? AND account_id = ?`, folderID, accountID).Scan(&exists); err != nil {
 		return nil, "", 0, fmt.Errorf("list messages: %w", err)
@@ -999,9 +1011,117 @@ func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor st
 	if exists == 0 {
 		return nil, "", 0, ErrNotFound
 	}
+	return s.listMessagesWhere(ctx, ` WHERE folder_id = ? AND account_id = ? AND hidden = 0`, []any{folderID, accountID},
+		"d", "a", cursor, limit, sortOrder, listFilter)
+}
 
-	where := ` WHERE folder_id = ? AND account_id = ? AND hidden = 0`
-	args := []any{folderID, accountID}
+// FolderRef names one folder of one account.
+type FolderRef struct {
+	AccountID, FolderID string
+}
+
+// ListMessagesIn pages through several folders at once (the unified
+// listing, docs/api.md §4.3), merged by (date, id) as ListMessages orders
+// one folder; message ids are unique across accounts, so the order and
+// the cursor are well defined. The cursor has prefixes of its own ("u"
+// newest first, "U" oldest first): a ListMessages cursor is ErrBadCursor
+// here and the other way round. A ref whose folder the account does not
+// have is skipped; no folder at all is an empty page. Filter, limit and
+// hidden rows as ListMessages; total counts every folder under the filter.
+func (s *Store) ListMessagesIn(ctx context.Context, folders []FolderRef, cursor string, limit int, sortOrder api.SortOrder, listFilter api.MessageFilter) (items []Message, next string, total int, err error) {
+	if err := checkSortCursor(cursor, sortOrder, "u", "U"); err != nil {
+		return nil, "", 0, err
+	}
+	refs, err := s.existingFolders(ctx, folders)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list messages: %w", err)
+	}
+	ids := refFolderIDs(refs)
+	if len(ids) == 0 {
+		return []Message{}, "", 0, nil
+	}
+	return s.listMessagesWhere(ctx, ` WHERE folder_id IN (`+inPlaceholders(len(ids))+`) AND hidden = 0`, toAny(ids),
+		"u", "U", cursor, limit, sortOrder, listFilter)
+}
+
+// existingFolders keeps the refs whose folder belongs to the account, in
+// the order given, each folder once.
+func (s *Store) existingFolders(ctx context.Context, folders []FolderRef) ([]FolderRef, error) {
+	var out []FolderRef
+	seen := map[string]bool{}
+	for _, f := range folders {
+		if f.FolderID == "" || f.AccountID == "" || seen[f.FolderID] {
+			continue
+		}
+		var n int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM folders WHERE id = ? AND account_id = ?`, f.FolderID, f.AccountID).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			seen[f.FolderID] = true
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
+// refFolderIDs is the folder ids of the refs.
+func refFolderIDs(refs []FolderRef) []string {
+	ids := make([]string, len(refs))
+	for i, r := range refs {
+		ids[i] = r.FolderID
+	}
+	return ids
+}
+
+// checkSortCursor rejects an unsupported sort order and a cursor that is
+// not one of this order's (prefix desc or asc).
+func checkSortCursor(cursor string, sortOrder api.SortOrder, desc, asc string) error {
+	prefix, _, err := messageCursorPrefix(sortOrder, desc, asc)
+	if err != nil {
+		return err
+	}
+	if cursor != "" {
+		if _, _, err := decodeSortCursor(cursor, prefix); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// messageCursorPrefix resolves the sort order to the cursor prefix, the
+// comparison of the keyset and the SQL order.
+func messageCursorPrefix(sortOrder api.SortOrder, desc, asc string) (prefix, cmp string, err error) {
+	switch sortOrder {
+	case "", api.SortDateDesc:
+		return desc, "<", nil
+	case api.SortDateAsc:
+		return asc, ">", nil
+	default:
+		return "", "", fmt.Errorf("list messages: unsupported sort %q", sortOrder)
+	}
+}
+
+// listMessagesWhere is the keyset page of ListMessages and ListMessagesIn
+// over the rows of where (with its arguments).
+func (s *Store) listMessagesWhere(ctx context.Context, where string, args []any, desc, asc, cursor string, limit int, sortOrder api.SortOrder, listFilter api.MessageFilter) (items []Message, next string, total int, err error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	prefix, cmp, err := messageCursorPrefix(sortOrder, desc, asc)
+	if err != nil {
+		return nil, "", 0, err
+	}
+	order := "DESC"
+	if cmp == ">" {
+		order = "ASC"
+	}
+	var cursorStamp, cursorID string
+	if cursor != "" {
+		if cursorStamp, cursorID, err = decodeSortCursor(cursor, prefix); err != nil {
+			return nil, "", 0, err
+		}
+	}
 	switch listFilter {
 	case "", api.FilterAll:
 	case api.FilterUnread:
@@ -1016,6 +1136,7 @@ func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor st
 	}
 
 	query := `SELECT ` + messageColumns + ` FROM messages` + where
+	args = append([]any(nil), args...)
 	if cursor != "" {
 		query += ` AND (date ` + cmp + ` ? OR (date = ? AND id ` + cmp + ` ?))`
 		args = append(args, cursorStamp, cursorStamp, cursorID)

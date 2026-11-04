@@ -9,6 +9,7 @@ package core
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -30,6 +31,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/contacts"
 	"github.com/schotek/malachi/backend/internal/contacts/eds"
+	"github.com/schotek/malachi/backend/internal/contactsync"
 	"github.com/schotek/malachi/backend/internal/discover"
 	"github.com/schotek/malachi/backend/internal/eway"
 	"github.com/schotek/malachi/backend/internal/graph"
@@ -37,6 +39,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/jira"
 	"github.com/schotek/malachi/backend/internal/outbox"
 	"github.com/schotek/malachi/backend/internal/remoteimg"
+	"github.com/schotek/malachi/backend/internal/revocation"
 	"github.com/schotek/malachi/backend/internal/rpc"
 	"github.com/schotek/malachi/backend/internal/sanitize"
 	"github.com/schotek/malachi/backend/internal/smtp"
@@ -72,6 +75,17 @@ type Backend struct {
 	// touch the network.
 	LookupTXT    func(ctx context.Context, domain string) ([]string, error)
 	OneClickPost func(ctx context.Context, rawURL string) error
+
+	// SignatureRoots returns the trusted S/MIME roots and a fingerprint of
+	// them (plan S7); nil = the system's (systemRoots). SignatureNow is the
+	// verifier's clock (nil = time.Now). CheckRevocation asks the
+	// certificate's OCSP responder or CRL (nil = internal/revocation's
+	// strict client). Fields so tests use a test root, a fixed time and a
+	// fake responder; sig is the worker's state (signature_worker.go).
+	SignatureRoots  func() (*x509.CertPool, string)
+	SignatureNow    func() time.Time
+	CheckRevocation func(ctx context.Context, cert, issuer *x509.Certificate) (revocation.Result, error)
+	sig             sigState
 
 	// unsubBusy are the unsubscriptions in flight (account + key), under
 	// unsubMu (unsubscribe.go).
@@ -165,6 +179,14 @@ type Backend struct {
 	// supervisor behind Supervisor and the calendar of Graph accounts
 	// beside their mail (graphWithCalendar). calendarEngine returns it.
 	calSync *calsync.Supervisor
+	// contactSync is the address book engine (internal/contactsync),
+	// run beside the graph and caldav kinds' supervisors (withContacts);
+	// cn gathers notify.contactsChanged (contacts_book.go).
+	contactSync *contactsync.Supervisor
+	cn          contactsNotify
+	// photoFetch bounds and joins the downloads of contact.photo
+	// (contacts_photo.go).
+	photoFetch contactPhotoFetches
 	// graphLimiters are the request limiters of Graph accounts, one per
 	// account shared by its mail syncer, outbox and calendar (D13), under
 	// graphLimMu.
@@ -236,10 +258,19 @@ type Backend struct {
 	board boardState
 	// dn gathers notify.draftsChanged (drafts_notify.go).
 	dn draftNotify
+	// rules is the state of the mail rules: the cached list, the
+	// coalesced notification and the outgoing queues (rules_service.go,
+	// rules_outgoing.go).
+	rules rulesState
 
 	// profileMu serialises the writes of the assistant profile and its
 	// proposals (assistant_profile.go).
 	profileMu sync.Mutex
+
+	// Updates configures the update check (update_service.go); main sets
+	// the channel before StartSync, tests the client, keys and clock.
+	Updates UpdateSettings
+	upd     updater
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -280,6 +311,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 	}
 	b.im.init()
 	b.board.init()
+	b.sig.init()
 	b.DetectJiraSite = func(ctx context.Context, rawURL string) (api.AccountDetectSiteResult, error) {
 		return jira.DetectSite(ctx, b.JiraHTTP, rawURL)
 	}
@@ -367,11 +399,19 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		UserAgent: eway.UserAgent(version),
 		Log:       log.With("component", "eway"),
 	})
+	// The address book engine: beside the graph and caldav kinds.
+	b.contactSync = contactsync.New(contactsync.Options{
+		Store:     st,
+		Providers: b.contactsProvider,
+		Changed:   func(accountID string, bookIDs []string) { b.contactsChanged(accountID, bookIDs...) },
+		Log:       log,
+	})
 	b.Supervisor = newKindSupervisor(map[api.AccountKind]SyncSupervisor{
-		api.AccountIMAP:   imapSync,
-		api.AccountGraph:  &graphWithCalendar{mail: graphSync, cal: b.calSync},
+		api.AccountIMAP: imapSync,
+		api.AccountGraph: &withContacts{SyncSupervisor: &graphWithCalendar{mail: graphSync, cal: b.calSync},
+			contacts: b.contactSync},
 		api.AccountJira:   b.jiraSync,
-		api.AccountCalDAV: b.calSync.Mail(),
+		api.AccountCalDAV: &withContacts{SyncSupervisor: b.calSync.Mail(), contacts: b.contactSync, triggers: true},
 		api.AccountEway:   b.ewaySync,
 	})
 	// Through b.Supervisor, not the values above: tests swap it.
@@ -384,6 +424,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		FilesSentCopyFor: func(a store.Account) bool { return serverFilesSentCopy(a.Config) },
 		Trigger:          trigger,
 		Changed:          b.outboxChanged,
+		Collected:        b.collectedChanged,
 		Log:              log,
 	})
 	graphOutbox := outbox.NewSupervisor(outbox.SupervisorDeps{
@@ -395,6 +436,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		FilesSentCopyFor: func(store.Account) bool { return true },
 		Trigger:          trigger,
 		Changed:          b.outboxChanged,
+		Collected:        b.collectedChanged,
 		Log:              log,
 	})
 	// An issue tracker's outbox holds comments, which the jira supervisor
@@ -591,8 +633,18 @@ func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
 	done := make(chan struct{})
 	issueMailDone := b.startIssueMail(ctx)
 	boardDone := b.startBoard(ctx)
+	updatesDone := b.startUpdates(ctx)
+	sigDone := b.startSignatures(ctx)
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(6)
+	go func() {
+		defer wg.Done()
+		<-sigDone
+	}()
+	go func() {
+		defer wg.Done()
+		<-updatesDone
+	}()
 	go func() {
 		defer wg.Done()
 		<-issueMailDone
@@ -672,6 +724,13 @@ func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillInvitations(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill invitations", "err", err)
 	}
+	// Opaque S/MIME first (S14): what it unwraps is verified after it.
+	if err := b.backfillOpaque(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill opaque S/MIME", "err", errClass(err))
+	}
+	if err := b.backfillSignatures(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill signatures", "err", errClass(err))
+	}
 	// The raw maintenance loop runs beside the attachment sweep; Maintain
 	// returns once it has stopped too.
 	rawDone := make(chan struct{})
@@ -692,6 +751,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 	b.reevaluateIssueMail(ctx)
 	b.boardUpkeep(ctx)
 	b.crmFollowSweep(ctx)
+	b.pruneRuleLedgers(ctx)
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
@@ -703,6 +763,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 			b.reevaluateIssueMail(ctx)
 			b.boardUpkeep(ctx)
 			b.crmFollowSweep(ctx)
+			b.pruneRuleLedgers(ctx)
 		}
 	}
 }
@@ -1047,7 +1108,7 @@ func (b *Backend) dropCalendarCache(ctx context.Context, old, next store.Account
 // calendarCacheDropped compares two configurations of an account: all
 // its calendar rows go, or those of the remote ids newly disabled.
 func calendarCacheDropped(old, next api.AccountConfig) (all bool, calendars []string) {
-	had := old.Protocol() == api.AccountCalDAV || (old.Protocol() == api.AccountGraph && old.Calendar != nil && old.Calendar.Sync)
+	had := calsync.CalDAVHasCalendars(old) || (old.Protocol() == api.AccountGraph && old.Calendar != nil && old.Calendar.Sync)
 	if !had {
 		return false, nil
 	}
@@ -1056,7 +1117,7 @@ func calendarCacheDropped(old, next api.AccountConfig) (all bool, calendars []st
 		return true, nil
 	case next.Protocol() == api.AccountGraph && (next.Calendar == nil || !next.Calendar.Sync):
 		return true, nil
-	case next.Protocol() == api.AccountCalDAV && !sameCalDAVLogin(old, next):
+	case next.Protocol() == api.AccountCalDAV && (!sameCalDAVLogin(old, next) || !calsync.CalDAVHasCalendars(next)):
 		return true, nil
 	}
 	var before []string

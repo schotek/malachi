@@ -65,6 +65,17 @@
     <value nick="agenda" value="3"/>
   </enum>
 
+  <enum id="io.github.schotek.Malachi.ContactsSuggestScope">
+    <value nick="account" value="0"/>
+    <value nick="all" value="1"/>
+  </enum>
+
+  <enum id="io.github.schotek.Malachi.ToolbarDisplayMode">
+    <value nick="icon" value="0"/>
+    <value nick="icon-and-label" value="1"/>
+    <value nick="label" value="2"/>
+  </enum>
+
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
     <!-- Window geometry -->
     <key name="window-width" type="i">
@@ -103,6 +114,11 @@
     <key name="favourite-folders" type="as">
       <default>[]</default>
       <summary>Folders pinned to the Favourites section of the sidebar</summary>
+    </key>
+    <key name="unified-inbox" type="b">
+      <default>true</default>
+      <summary>Show All Inboxes in the sidebar</summary>
+      <description>With two or more mail accounts, an item at the top of the sidebar lists the inboxes of all of them together.</description>
     </key>
 
     <!-- General (UI behaviour). Mail options such as the sync interval and
@@ -296,6 +312,40 @@
       <default>'week'</default>
       <summary>The view the Calendar was shown in last</summary>
       <description>Day, Week, Month or Agenda, written whenever the user changes the Calendar's view; applied when the Calendar shows.</description>
+    </key>
+    <key name="contacts-suggest-scope" enum="io.github.schotek.Malachi.ContactsSuggestScope">
+      <default>'account'</default>
+      <summary>Which address books complete recipients</summary>
+      <description>The address books of the account the message is written from (with the recently used addresses), or every address book; the scope of contact.search.</description>
+    </key>
+    <!-- The user's arrangement of the main window's toolbars
+         (ui/internal/toolbar, docs/plans/toolbar-customization.md):
+         item ids in order with the sections' separators ("|list");
+         empty means the default toolbar. -->
+    <key name="toolbar-mail" type="as">
+      <default>[]</default>
+      <summary>The items of the Mail toolbar</summary>
+      <description>The toolbar's items in order, as the user arranged them; empty for the default toolbar.</description>
+    </key>
+    <key name="toolbar-board-list" type="as">
+      <default>[]</default>
+      <summary>The items of the Board's toolbar in the List style</summary>
+      <description>The toolbar's items in order, as the user arranged them; empty for the default toolbar.</description>
+    </key>
+    <key name="toolbar-board-flow" type="as">
+      <default>[]</default>
+      <summary>The items of the Board's toolbar in the Columns and Today styles</summary>
+      <description>The toolbar's items in order, as the user arranged them; empty for the default toolbar.</description>
+    </key>
+    <key name="toolbar-calendar" type="as">
+      <default>[]</default>
+      <summary>The items of the Calendar's toolbar</summary>
+      <description>The toolbar's items in order, as the user arranged them; empty for the default toolbar.</description>
+    </key>
+    <key name="toolbar-display-mode" enum="io.github.schotek.Malachi.ToolbarDisplayMode">
+      <default>'icon'</default>
+      <summary>What the toolbars' items show</summary>
+      <description>Icons only, icons with their labels or labels only, for every toolbar of the main window.</description>
     </key>
   </schema>
 </schemalist>

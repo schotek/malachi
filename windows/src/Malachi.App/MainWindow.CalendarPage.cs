@@ -64,7 +64,12 @@ public sealed partial class MainWindow
         CalendarView.AssistantToggleRequested += (_, _) => ToggleCalendarAssistant();
         CalendarView.AddCalDAVRequested += (_, _) => state.ShowAddCalDAVCalendar(this, null);
         CalendarView.SyncMicrosoftRequested += (_, _) => OpenCalendarPreferences();
-        CalendarView.SearchFocusRequested += (_, _) => SearchBox.Focus(FocusState.Keyboard);
+        CalendarView.SearchFocusRequested += (_, _) =>
+        {
+            // O5: the box shows for the search when the layout has none.
+            RevealSearchForTyping();
+            SearchBox.Focus(FocusState.Keyboard);
+        };
         // The status line and the panel follow the mode: the page's
         // visibility is the Calendar's.
         CalendarView.RegisterPropertyChangedCallback(UIElement.VisibilityProperty, (_, _) => CalendarShownChanged());

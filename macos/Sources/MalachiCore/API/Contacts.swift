@@ -14,12 +14,15 @@ public struct Contact: Codable, Sendable, Equatable {
     public var source: ContactSource
     /// The address book the contact came from; nil for a collected address.
     public var book: String?
+    /// The contact of a `.contacts` suggestion (`contact.get`).
+    public var contactId: ContactID?
 
-    public init(name: String? = nil, address: String, source: ContactSource, book: String? = nil) {
+    public init(name: String? = nil, address: String, source: ContactSource, book: String? = nil, contactId: ContactID? = nil) {
         self.name = name
         self.address = address
         self.source = source
         self.book = book
+        self.contactId = contactId
     }
 }
 
@@ -29,11 +32,15 @@ public struct ContactSearchParams: Codable, Sendable, Equatable {
     public var accountId: AccountID
     public var query: String
     public var limit: Int?
+    /// Which synchronised address books are read (the setting
+    /// contacts-suggest-scope); nil = `.account`.
+    public var scope: ContactSearchScope?
 
-    public init(accountId: AccountID, query: String, limit: Int? = nil) {
+    public init(accountId: AccountID, query: String, limit: Int? = nil, scope: ContactSearchScope? = nil) {
         self.accountId = accountId
         self.query = query
         self.limit = limit
+        self.scope = scope
     }
 }
 

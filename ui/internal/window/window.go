@@ -33,9 +33,11 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/maildate"
 	"github.com/schotek/malachi/ui/internal/quickreply"
+	"github.com/schotek/malachi/ui/internal/rulesctl"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/sound"
+	"github.com/schotek/malachi/ui/internal/undo"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -182,6 +184,15 @@ type Window struct {
 	// issues is the controller of the Change Status menus of Jira issues
 	// (issue_actions.go), shared by the pane and the message windows.
 	issues *issueActions
+	// chipContacts is the address chips' contacts item (contacts_chips.go),
+	// shared by the pane, the conversation cards and the message windows;
+	// made on first use.
+	chipContacts *chipContacts
+	// rules is the controller of the mail rules behind the context menus
+	// (rules_menus.go), made on first use; rulesToast is the progress toast
+	// of a running Apply Rules….
+	rules      *rulesctl.Controller
+	rulesToast *adw.Toast
 
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
@@ -198,6 +209,9 @@ type Window struct {
 	syncSpinner      *adw.Spinner
 	syncLabel        *gtk.Label
 	connIcon         *gtk.Image
+	// statusNote is the note at the end of the status bar (status.go
+	// statusTexts).
+	statusNote *gtk.Label
 
 	refreshButton   *gtk.Button
 	searchButton    *gtk.ToggleButton
@@ -260,6 +274,8 @@ type Window struct {
 	modeStack         *gtk.Stack
 	modeSwitchMail    *adw.ToggleGroup
 	settingModeSwitch bool
+	// printRows is how many rows win.print would print in Mail (print.go).
+	printRows int
 	// modeSwitchBoardOn is Show the Board as the mode switches show it
 	// (setModeSwitchBoardEnabled): a switch built later, the board page's,
 	// takes it over.
@@ -280,6 +296,14 @@ type Window struct {
 	// applyMessageAccels.
 	typingAllowsAccels bool
 
+	// undo is the session's moves of mail Undo takes back (undo.go);
+	// undoToast the toast of the newest, undoReselect what the next list
+	// of the folder on display selects after an Undo.
+	undo         undo.Stack
+	undoGroup    int // last group id of an action across accounts (nextUndoGroup)
+	undoToast    *adw.Toast
+	undoReselect []undo.Moved
+
 	// boardPage is the board's own page (board.go), built once on first use
 	// (ensureBoard): the first switch to Board, or at launch when the
 	// application's board triage wants the board's data running in the
@@ -296,6 +320,10 @@ type Window struct {
 	// window's CRM controls (crm.go, crm_actions.go).
 	crmState *crmState
 	crmMain  *crmControls
+	// mailBar is the Mail mode's customizable toolbar (toolbar_mail.go).
+	mailBar *mailToolbar
+	// updates is the update check's banner and question (updates.go).
+	updates *updateView
 	// RequestClose settles inline drafts before closing the main window.
 	RequestClose         func()
 	boardAutoStartRemove func()
@@ -360,13 +388,6 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		folderStack:      b.GetObject("folder_stack").Cast().(*gtk.Stack),
 		folderList:       b.GetObject("folder_list").Cast().(*gtk.ListBox),
 		folderStatusPage: b.GetObject("folder_status_page").Cast().(*adw.StatusPage),
-		statusButton:     b.GetObject("status_button").Cast().(*gtk.MenuButton),
-		statusPopover:    b.GetObject("status_popover").Cast().(*gtk.Popover),
-		statusAccounts:   b.GetObject("status_accounts").Cast().(*gtk.ListBox),
-		statusDaemon:     b.GetObject("status_daemon").Cast().(*gtk.Label),
-		syncSpinner:      b.GetObject("sync_spinner").Cast().(*adw.Spinner),
-		syncLabel:        b.GetObject("sync_label").Cast().(*gtk.Label),
-		connIcon:         b.GetObject("connection_icon").Cast().(*gtk.Image),
 
 		refreshButton:   b.GetObject("refresh_button").Cast().(*gtk.Button),
 		searchButton:    b.GetObject("search_button").Cast().(*gtk.ToggleButton),
@@ -395,6 +416,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		outboxBanner:   b.GetObject("outbox_banner").Cast().(*adw.Banner),
 		draftBanner:    b.GetObject("draft_banner").Cast().(*adw.Banner),
 	}
+	w.bindStatusBar(b)
 	w.SetApplication(&app.Application)
 	w.issues = &issueActions{
 		client:  c,
@@ -424,6 +446,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.pane.toast = w.Toast
 	w.pane.onQuoted = w.setPaneQuoted
 	w.registerActions()
+	w.setupPrint(b)
 	w.crmState = newCrmState()
 	w.crmMain = newCrmControls(w, "win", &w.ApplicationWindow.Window, b, func(a *gio.SimpleAction) {
 		w.AddAction(a)
@@ -499,6 +522,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}
 	w.model.favourites = loadFavourites(s)
 	s.OnChanged(settings.KeyFavouriteFolders, w.onFavouritesChanged)
+	// The All Inboxes item follows its preference (unified.go).
+	w.model.unifiedOn = s.UnifiedInbox()
+	s.OnChanged(settings.KeyUnifiedInbox, w.unifiedSettingChanged)
 	// The filter is deliberately not persisted: a window that came back
 	// still hiding most of the mailbox would be read as lost mail.
 	w.model.listFilter = api.FilterAll
@@ -593,6 +619,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// The popover's rows are brought up to date as it opens and, while it
 	// is open, with every refresh of the status line (status.go).
 	w.statusPopover.ConnectShow(w.refreshStatusPopover)
+	// A little above the line rather than on its top edge, as the Windows
+	// flyout and the macOS panel (StatusFlyout) stand.
+	w.statusPopover.SetOffset(0, -8)
 	// The line names the time of the last check ("Up to date · 15:04"): it
 	// is redrawn every minute so that a day later it shows the date.
 	glib.TimeoutSecondsAdd(statusRefreshSeconds, func() bool {
@@ -620,8 +649,10 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	if m, ok := b.GetObject("primary_menu").Cast().(gio.MenuModeller); ok {
 		w.mainMenu = m
 	}
+	w.setupMailToolbar(b)
 	w.setupBoardMode()
 	w.setupModeMemory()
+	w.setupUpdates(b)
 	w.wireModeKeys()
 	w.wireTypingGate()
 	w.startDevelopmentScript()
@@ -877,6 +908,8 @@ var MessageAccels = map[string]string{
 	"win.toggle-flag": "s",
 	"win.refresh":     "<Control>r",
 	"win.search":      "<Control>f",
+	"win.undo":        "<Control>z",
+	"win.print":       PrintAccel,
 }
 
 // registerActions adds the win.* actions. All but refresh start disabled;
@@ -902,6 +935,7 @@ func (w *Window) registerActions() {
 	w.addAction("show-board", true, func() { w.setMode(board.ModeBoard) })
 	w.addAction("show-calendar", true, func() { w.setMode(board.ModeCalendar) })
 	w.addAction("search", true, w.startSearch)
+	w.addAction("undo", true, w.undoLast)
 	w.addAction("trash", false, forRows(func(rows []listRow, ids []api.MessageID) { w.trashIDs(w, ids, selectionSubject(rows)) }))
 	w.addAction("archive", false, forRows(func(_ []listRow, ids []api.MessageID) { w.archiveIDs(ids) }))
 	w.addAction("junk", false, forRows(func(rows []listRow, ids []api.MessageID) { w.junkIDs(w, ids, selectionSubject(rows)) }))
@@ -921,6 +955,9 @@ func (w *Window) registerActions() {
 		w.addAction(r.name, false, forSelected(func(id api.MessageID) { w.openCompose(r.kind, id) }))
 	}
 	w.addAction("forward", false, w.forwardSelection)
+	// Create Rule from Message… of the message menu (rules_menus.go); the
+	// menu enables it when it offers it.
+	w.addAction("create-rule", false, w.createRuleFromSelection)
 	moveTo := gio.NewSimpleAction("move-to", glib.NewVariantType("s"))
 	moveTo.SetEnabled(false)
 	moveTo.ConnectActivate(func(v *glib.Variant) {
@@ -1064,6 +1101,7 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		go w.fetchSystemInfo()
 		w.loadAccounts()
 		w.loadSyncStatus()
+		w.rulesRefresh()
 		// The compose windows' accounts, and whether New Message is on
 		// (an issue tracker alone writes no mail), may have changed with
 		// the daemon.

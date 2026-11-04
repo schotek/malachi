@@ -441,6 +441,27 @@ final class MessageWebView: NSView {
             viewerDocument(body: body, compact: sized, chat: chat ? Self.chatColours() : nil), baseURL: nil)
     }
 
+    /// The print (docs/plans/toolbar-customization.md §8, `Printing`): a
+    /// fragment of the application's escaped header HTML around the
+    /// sanitiser's bodies, loaded like a body (same document, CSP, rule
+    /// list and scheme handler). `onFinishedLoading` says when it can be
+    /// printed.
+    func loadPrint(fragment: String) {
+        load(body: fragment, reload: true)
+    }
+
+    /// Called when a loaded document finished (its pictures included).
+    var onFinishedLoading: (@MainActor () -> Void)?
+
+    /// The print operation of the loaded document (`WKWebView.printOperation`).
+    func printOperation(with info: NSPrintInfo) -> NSPrintOperation {
+        let op = web.printOperation(with: info)
+        // WebKit lays the pages out over the operation's view, which has
+        // no size off screen.
+        op.view?.frame = bounds
+        return op
+    }
+
     /// The colours of a chat bubble's document in the dark appearance (the
     /// text bubbles' `labelColor` and `linkColor` there, as CSS) and the
     /// text bubbles' body size at 100 % (the page zoom adds the setting).
@@ -600,6 +621,10 @@ extension MessageWebView: WKNavigationDelegate {
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         processTerminated()
     }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        onFinishedLoading?()
+    }
 }
 
 extension MessageWebView: WKUIDelegate {
@@ -648,7 +673,7 @@ private final class ViewerWebView: WKWebView {
             return
         }
         // WebKit's items were not found by their identifiers: our own.
-        menu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "")) // macOS-only string
+        menu.addItem(NSMenuItem(title: L10n.T("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: ""))
         if let href = hoveredHref, !href.isEmpty {
             let link = NSMenuItem(title: "Copy Link", action: #selector(copyLink(_:)), keyEquivalent: "") // macOS-only string
             link.target = self

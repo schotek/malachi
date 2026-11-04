@@ -184,6 +184,8 @@ public partial class App : Application
                 SettleBoardReplies = main.SettleBoardRepliesAsync,
                 // A Quit the user abandoned: the board shows its replies again.
                 Abandoned = main.QuitAbandoned,
+                // The Contacts window's unsaved form: Discard or Cancel the Quit.
+                ContactForm = () => s.Contacts.ConfirmQuitAsync(),
                 // The compose windows save their drafts; an event editor with
                 // changes cannot save without asking (Save sends invitations),
                 // so it is asked its close question with the drafts that failed.
@@ -234,6 +236,8 @@ public partial class App : Application
         }
         Program.AppLaunched(this);
         s.Connection.Start();
+        // The MALACHI_START development aid (MainWindow.DevStart.cs): nothing without the variable.
+        main.ApplyDevelopmentStart();
         if (pendingQuit is { } reason)
         {
             _ = quit.QuitAsync(reason);

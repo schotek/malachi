@@ -132,10 +132,16 @@ extension Board {
         /// The quoted history, the signature or the rest past the cap was
         /// cut off `text`.
         public var trimmed: Bool
+        /// The sender's address as the daemon sent it (the chat bubble's
+        /// contact photo, F10); "" for the samples.
+        public var address: String
+        /// The verdict of the message's signature (`board.get`), as
+        /// `Message.signature`; nil when it has none.
+        public var signature: SignatureSummary?
 
         public init(
             id: MessageID? = nil, folder: FolderID? = nil, from: String, date: Date, text: String,
-            mine: Bool = false, trimmed: Bool = false
+            mine: Bool = false, trimmed: Bool = false, address: String = "", signature: SignatureSummary? = nil
         ) {
             self.id = id
             self.folder = folder
@@ -144,6 +150,8 @@ extension Board {
             self.text = text
             self.mine = mine
             self.trimmed = trimmed
+            self.address = address
+            self.signature = signature
         }
     }
 

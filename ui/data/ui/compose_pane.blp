@@ -250,6 +250,25 @@ Box pane_root {
     }
   }
 
+  // Attachment tiles in a shaded band over the formatting bar; shown only
+  // when non-empty. Never squeezed by the editor (it would cut them off).
+  FlowBox attachments_box {
+    visible: false;
+    selection-mode: none;
+    max-children-per-line: 6;
+    homogeneous: false;
+    column-spacing: 8;
+    row-spacing: 8;
+    margin-start: 12;
+    margin-end: 12;
+    margin-top: 2;
+    margin-bottom: 6;
+
+    styles [
+      "attachments-band",
+    ]
+  }
+
   // Every control keeps focus in the editor so commands act on the page
   // selection.
   Box format_toolbar {
@@ -405,17 +424,6 @@ Box pane_root {
     ]
   }
 
-  // Attachment chips; shown only when non-empty.
-  FlowBox attachments_box {
-    visible: false;
-    selection-mode: none;
-    max-children-per-line: 6;
-    homogeneous: false;
-    margin-start: 12;
-    margin-end: 12;
-    margin-top: 6;
-    margin-bottom: 6;
-  }
 }
 
 // The header field labels share one width so the entries line up.

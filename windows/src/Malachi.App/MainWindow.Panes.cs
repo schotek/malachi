@@ -98,9 +98,12 @@ public sealed partial class MainWindow
     {
         list = integration.List;
         new SelectionActions(integration.Actions, integration.List, () => this).Install(Commands);
+        // Ctrl+Z: the newest move of mail back (window/undo.go undoLast).
+        Commands.Undo.Handler = integration.Actions.UndoLast;
         SidebarPane.Attach(integration.Mailbox, integration.Actions, Commands);
         ListPane.Attach(integration.List, integration.Sync, integration.Actions, Commands);
         MessageCommands.Attach(Commands);
+        AttachRules();
         StatusLine.Attach(integration.Sync, integration.Mailbox);
 
         var repair = new AccountRepair(state, integration.Mailbox, integration.Sync, text => Toasts.Show(text));
@@ -108,6 +111,7 @@ public sealed partial class MainWindow
         ListPane.CertBannerInvoked += (_, _) => repair.CertBannerButton();
         ListPane.ReconnectRequested += (_, _) => state.Connection.ReconnectNow();
         StatusLine.ActionRequested += (_, st) => repair.StatusAction(st);
+        StatusLine.ReportIssueRequested += (_, _) => _ = state.OpenUrlAsync(Core.Model.AppLinks.ReportIssue);
         // status.go showOutbox: the account's outbox, and the list it shows.
         StatusLine.OutboxRequested += (_, acc) =>
         {
@@ -128,6 +132,8 @@ public sealed partial class MainWindow
     // list, and the box takes the keyboard with its text selected.
     private void BeginSearch()
     {
+        // O5: the box shows for the search when the layout has none.
+        RevealSearchForTyping();
         Navigate(layout.ShowList);
         ListPane.CancelFocusList();
         SearchBox.Focus(FocusState.Keyboard);
@@ -217,6 +223,12 @@ public sealed partial class MainWindow
 
     private void OnPaneToggleRequested(TitleBar sender, object args)
     {
+        if (mailSidebarFolded && layout.Mode == PaneMode.Wide)
+        {
+            mailSidebarFolded = false;
+            ApplyLayout();
+            return;
+        }
         layout.ToggleSidebar();
         ApplyLayout();
         if (layout.SidebarOverlay)
@@ -275,15 +287,19 @@ public sealed partial class MainWindow
         }
         // The message pane keeps what its buttons need (GTK's minimum width).
         var messageMinimum = Math.Max(PaneLayout.MessageMinimum, MessageCommands.MinimumWidth);
-        var widths = PaneLayout.Widths(layout.Mode, content, state.Settings.FolderPaneWidth, state.Settings.MessageListWidth, messageMinimum);
         var inline = layout.SidebarInline;
+        // The toolbar's sidebar toggle folded the wide layout's sidebar
+        // (MainWindow.Toolbars.cs): the list and the message take its room.
+        var folded = inline && mailSidebarFolded;
+        var room = folded ? content + PaneLayout.ClampSidebar(state.Settings.FolderPaneWidth) : content;
+        var widths = PaneLayout.Widths(layout.Mode, room, state.Settings.FolderPaneWidth, state.Settings.MessageListWidth, messageMinimum);
         PaneSplit.DisplayMode = inline ? SplitViewDisplayMode.Inline : SplitViewDisplayMode.Overlay;
         PaneSplit.OpenPaneLength = widths.Sidebar;
-        PaneSplit.IsPaneOpen = inline || layout.SidebarOverlay;
+        PaneSplit.IsPaneOpen = (inline && !folded) || layout.SidebarOverlay;
         OverlayBackground.Visibility = inline ? Visibility.Collapsed : Visibility.Visible;
-        SidebarSizer.Visibility = inline ? Visibility.Visible : Visibility.Collapsed;
-        ContentLayer.BorderThickness = inline ? new Thickness(1, 1, 0, 0) : new Thickness(0, 1, 0, 0);
-        ContentLayer.CornerRadius = inline ? new CornerRadius(8, 0, 0, 0) : new CornerRadius(0);
+        SidebarSizer.Visibility = inline && !folded ? Visibility.Visible : Visibility.Collapsed;
+        ContentLayer.BorderThickness = inline && !folded ? new Thickness(1, 1, 0, 0) : new Thickness(0, 1, 0, 0);
+        ContentLayer.CornerRadius = inline && !folded ? new CornerRadius(8, 0, 0, 0) : new CornerRadius(0);
 
         if (layout.Mode == PaneMode.Narrow)
         {
@@ -308,7 +324,9 @@ public sealed partial class MainWindow
         ListPane.Visibility = layout.ListVisible ? Visibility.Visible : Visibility.Collapsed;
         MessagePane.Visibility = layout.MessageVisible ? Visibility.Visible : Visibility.Collapsed;
         // The pane and back buttons are the mail's panes' (none in Board and Calendar).
-        AppTitleBar.IsPaneToggleButtonVisible = layout.PaneToggleVisible && mode == Core.Boards.Board.Mode.Mail;
+        // A sidebar the toolbar's toggle folded comes back with it, or the
+        // title bar's pane button (the toggle may stand in the folded row).
+        AppTitleBar.IsPaneToggleButtonVisible = (layout.PaneToggleVisible || folded) && mode == Core.Boards.Board.Mode.Mail;
         AppTitleBar.IsBackButtonVisible = layout.BackVisible && mode == Core.Boards.Board.Mode.Mail;
         // The narrow title bar has the back and pane buttons beside the box.
         SearchBox.MinWidth = layout.Mode == PaneMode.Narrow ? 120 : 240;

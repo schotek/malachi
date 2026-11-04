@@ -39,6 +39,7 @@ gets the sanitiser's output only.
     xmlns:l="using:Malachi.App.Localization"
     xmlns:local="using:Malachi.App.Reader"
     xmlns:res="using:Malachi.App.Resources"
+    xmlns:signatures="using:Malachi.App.Signatures"
     IsTabStop="False">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -501,6 +502,14 @@ gets the sanitiser's output only.
                     Content="{l:T Msgid='Add CalDAV Calendar…'}"
                     CornerRadius="18"
                     Style="{StaticResource SubtleButtonStyle}" />
+                <!-- The update check's first-run note (ui/internal/updates WizardNote), a dim caption under the buttons as on macOS; set in code. -->
+                <TextBlock
+                    x:Name="UpdateNote"
+                    Margin="0,12,0,0"
+                    AutomationProperties.AutomationId="UpdateCheckNote"
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
             </StackPanel>
 
             <!-- "message": the headers stay put at the top; the body below
@@ -629,6 +638,13 @@ gets the sanitiser's output only.
                                 Style="{StaticResource DimCaptionLabelStyle}"
                                 Text="{x:Bind Reader.DateText, Mode=OneWay}"
                                 Visibility="{x:Bind local:ReaderBind.VisibleIfText(Reader.DateText), Mode=OneWay}" />
+
+                            <!-- The badge of a signed message (docs/plans/signatures.md §6,
+                                 ui/internal/signature BadgeFor): the verdict's shield and
+                                 sentence, a click opens the details; set in code
+                                 (RenderSignature), hidden without a verdict and in an
+                                 attached message's window. -->
+                            <signatures:SignatureBadgeButton x:Name="SignatureBadge" />
 
                             <!-- message_attachments (window/attachments.go). -->
                             <local:WrapBox

@@ -42,6 +42,7 @@ public sealed class TrayMenuTests
         Assert.NotEqual("&New Message", newMessage);
         Assert.Equal(1, newMessage.Count(c => c == '&'));
         Assert.NotEqual("Check for New Mail", cs.Translate("Check for New Mail"));
+        Assert.Equal("Kone&c", TrayMenu.FromGtkLabel(cs.Translate("_Quit")));
     }
 
     [Theory]

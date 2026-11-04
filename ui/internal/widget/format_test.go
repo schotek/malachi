@@ -47,8 +47,11 @@ func TestFormatAddress(t *testing.T) {
 
 func TestFormatSize(t *testing.T) {
 	cases := map[int64]string{
-		5: "5 B", 2048: "2 KiB", 3 << 20: "3.0 MiB",
-		1<<30 - 1: "1024.0 MiB", 1 << 30: "1.0 GiB", 5<<30 + 512<<20: "5.5 GiB",
+		5: "5 B", 999: "999 B", 1000: "1.0 kB", 42_100: "42.1 kB",
+		56_320: "56.3 kB", 99_949: "99.9 kB", 99_950: "100 kB",
+		999_499: "999 kB", 999_500: "1.0 MB", 7_549_747: "7.5 MB",
+		123_456_789: "123 MB", 999_500_000: "1.0 GB", 5_500_000_000: "5.5 GB",
+		300_000_000_000: "300 GB",
 	}
 	for in, want := range cases {
 		if got := FormatSize(in); got != want {
@@ -121,5 +124,14 @@ func TestStrftime(t *testing.T) {
 		if got := Strftime(at, format); got != want {
 			t.Errorf("Strftime(%q) = %q, want %q", format, got, want)
 		}
+	}
+}
+
+func TestAttachmentSummary(t *testing.T) {
+	if got, want := AttachmentSummary(2, 254_800), "2 attachments · 255 kB"; got != want {
+		t.Errorf("AttachmentSummary = %q, want %q", got, want)
+	}
+	if got, want := AttachmentSummary(1, 7_800), "1 attachment · 7.8 kB"; got != want {
+		t.Errorf("AttachmentSummary = %q, want %q", got, want)
 	}
 }

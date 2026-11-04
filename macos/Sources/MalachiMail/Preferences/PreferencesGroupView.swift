@@ -194,6 +194,16 @@ final class PreferencesGroupView: NSView {
         fatalError("not used")
     }
 
+    /// The radius of the boxed list (12, Adwaita's); the status flyout's
+    /// card has the Windows client's 8.
+    var boxCornerRadius: CGFloat {
+        get { box.cornerRadius }
+        set {
+            box.cornerRadius = newValue
+            box.contentView?.layer?.cornerRadius = newValue
+        }
+    }
+
     /// Replaces the rows of the boxed list; dividers go between them. A
     /// hidden row and its divider are taken out of the layout.
     func setRows(_ rows: [NSView]) {

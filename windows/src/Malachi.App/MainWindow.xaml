@@ -20,7 +20,8 @@ PaneLayout). The pane widths are dragged with the toolkit's sizers
 Board mode (Boards/BoardPage) and the Calendar mode (Calendars/CalendarPage)
 take their place under the same title bar, whose Mail/Board/Calendar switch
 sits before the search box, and over the same status line
-(MainWindow.Mode.cs).
+(MainWindow.Mode.cs). Between the title bar and the modes, the update
+check's banner (MainWindow.Updates.cs), shown in every mode.
 -->
 <Window
     x:Class="Malachi.App.MainWindow"
@@ -32,6 +33,7 @@ sits before the search box, and over the same status line
     xmlns:controls="using:Malachi.App.Controls"
     xmlns:l="using:Malachi.App.Localization"
     xmlns:main="using:Malachi.App.Main"
+    xmlns:reader="using:Malachi.App.Reader"
     xmlns:res="using:Malachi.App.Resources"
     xmlns:tk="using:CommunityToolkit.WinUI.Controls">
     <Window.SystemBackdrop>
@@ -40,6 +42,7 @@ sits before the search box, and over the same status line
     <Grid x:Name="Root">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -47,7 +50,7 @@ sits before the search box, and over the same status line
         <!-- Where Mica is not available the window paints itself. -->
         <Border
             x:Name="SolidBackground"
-            Grid.RowSpan="3"
+            Grid.RowSpan="4"
             Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
             Visibility="Collapsed" />
 
@@ -157,7 +160,27 @@ sits before the search box, and over the same status line
              (AssistantSplit), the board (BoardView) or the calendar
              (CalendarView), one shown at a time; the hidden ones keep their
              state. -->
-        <Grid x:Name="ModeHost" Grid.Row="1">
+        <!-- The update check's banner (ui/internal/updates BannerFor;
+             MainWindow.Updates.cs): under the title bar in every mode, a
+             newer version or a notice as information, a security release
+             as a warning; its buttons in the reference's order, the first
+             the accent one. The title is plain text and wraps. -->
+        <InfoBar
+            x:Name="UpdateBar"
+            Grid.Row="1"
+            AutomationProperties.AutomationId="UpdateBanner"
+            IsClosable="False"
+            IsOpen="False">
+            <InfoBar.Content>
+                <reader:WrapBox
+                    x:Name="UpdateBarButtons"
+                    Margin="0,0,0,8"
+                    ChildSpacing="8"
+                    LineSpacing="8" />
+            </InfoBar.Content>
+        </InfoBar>
+
+        <Grid x:Name="ModeHost" Grid.Row="2">
             <!-- assistant_split: the assistant panel on the right of the panes
                  (window.blp; ui/internal/assistant, the In App target), a pane of
                  its own wider than 1180 and an overlay otherwise (Core's
@@ -281,6 +304,6 @@ sits before the search box, and over the same status line
 
         <!-- The status line across the bottom edge (window.blp status_button,
              at the bottom of the window as on macOS). -->
-        <main:StatusBarView x:Name="StatusLine" Grid.Row="2" />
+        <main:StatusBarView x:Name="StatusLine" Grid.Row="3" />
     </Grid>
 </Window>

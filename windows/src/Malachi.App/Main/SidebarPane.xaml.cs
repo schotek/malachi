@@ -21,11 +21,13 @@
 // on the row clicked and leaves the selection alone: Check for New Mail;
 // Mark All as Read and Empty Trash or Empty Junk (always asked); Add to or
 // Remove from Favourites and Expand or Collapse. An account heading's has
-// Check for New Mail and its folding, the Favourites heading none. A
+// Check for New Mail and its folding, the Favourites heading its folding
+// alone; the All Inboxes row's has Check for New Mail, for every account. A
 // right click, Shift+F10 or the Menu key opens it.
 //
 // Windows addition (windows/README.md): Left and Right fold an account
-// heading too (its arrow is not a tab stop in a ListView's row). A row
+// heading and the Favourites heading too (their arrows are not tab stops
+// in a ListView's row). A row
 // chosen by click or Enter is FolderChosen, which closes the folded
 // sidebar's overlay (window.go: outerSplit.SetShowContent).
 
@@ -40,6 +42,7 @@ using Malachi.Core.ContextMenus;
 using Malachi.Core.Controllers;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Presentation;
+using Malachi.Core.Rules;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -68,8 +71,31 @@ public sealed partial class SidebarPane : UserControl
     /// <summary>The rows, in the mailbox's order.</summary>
     public ObservableCollection<SidebarRow> Rows { get; } = [];
 
+    /// <summary>
+    /// The main window's Apply Rules… (MainWindow.Rules.cs): the folder
+    /// menu's item of a folder of a mail account runs the account's rules on
+    /// its messages after the question (contextmenu.go ApplyRules); none
+    /// before the Integration.
+    /// </summary>
+    internal Action<Folder>? ApplyRules { get; set; }
+
+    /// <summary>
+    /// Whether an enabled rule runs on the account's mail (the rules
+    /// controller's AppliesTo): Apply Rules… is disabled without one.
+    /// </summary>
+    internal Func<AccountId, bool>? RulesApply { get; set; }
+
     /// <summary>The folder list, for the keyboard (the overlay puts the focus there).</summary>
     public ListView List => FolderList;
+
+    /// <summary>The header's strip: the Folders section of the user's toolbar-mail layout (MainWindow.Toolbars.cs).</summary>
+    internal Toolbars.ToolbarStrip ToolbarStrip => HeaderStrip;
+
+    /// <summary>The header bar (a right click on an empty spot offers Customize Toolbar…).</summary>
+    internal FrameworkElement ToolbarBar => HeaderRow;
+
+    /// <summary>The header's New Message button (the display mode shows its label).</summary>
+    internal Button NewMessage => NewMessageButton;
 
     /// <summary>
     /// Installs the sidebar-facing callbacks of <paramref name="controller"/>
@@ -85,21 +111,9 @@ public sealed partial class SidebarPane : UserControl
         ArgumentNullException.ThrowIfNull(commands);
         mailbox = controller;
         actions = actionsController;
-        CommandBinding.Bind(MenuMail, commands.ShowMail);
-        CommandBinding.Bind(MenuBoard, commands.ShowBoard);
-        CommandBinding.Bind(MenuCalendar, commands.ShowCalendar);
-        // The sidebar shows in Mail only: its menu checks Mail.
-        PrimaryMenu.Opening += (_, _) =>
-        {
-            MenuMail.IsChecked = true;
-            MenuBoard.IsChecked = false;
-            MenuCalendar.IsChecked = false;
-        };
         CommandBinding.Bind(NewMessageButton, commands.NewMessage);
         CommandBinding.Bind(MenuNewMessage, commands.NewMessage);
-        CommandBinding.Bind(MenuAddAccount, commands.AddAccount);
-        CommandBinding.Bind(MenuAddJiraAccount, commands.AddJiraAccount);
-        CommandBinding.Bind(MenuAddCalDAVCalendar, commands.AddCalDAVCalendar);
+        CommandBinding.Bind(MenuContacts, commands.Contacts);
         CommandBinding.Bind(MenuPreferences, commands.Preferences);
         CommandBinding.Bind(MenuAbout, commands.About);
         CommandBinding.Bind(MenuQuit, commands.Quit);
@@ -124,14 +138,18 @@ public sealed partial class SidebarPane : UserControl
         }
     }
 
-    /// <summary>A heading's or a folder's fold arrow (collapse.go toggleAccount, toggleFolder).</summary>
+    /// <summary>A heading's or a folder's fold arrow (collapse.go toggleAccount, toggleFavourites, toggleFolder).</summary>
     internal void ToggleFold(SidebarRow row)
     {
         if (mailbox is null || !row.TwistyActive)
         {
             return;
         }
-        if (row.Kind == SidebarRowKind.AccountHeading && row.Account is { } acc)
+        if (row.Kind == SidebarRowKind.FavouritesHeading)
+        {
+            mailbox.ToggleFavourites();
+        }
+        else if (row.Kind == SidebarRowKind.AccountHeading && row.Account is { } acc)
         {
             mailbox.ToggleAccount(acc);
         }
@@ -264,7 +282,11 @@ public sealed partial class SidebarPane : UserControl
             return;
         }
         var collapse = e.Key == WinKey.Left;
-        if (row.Kind == SidebarRowKind.AccountHeading && row.Account is { } acc)
+        if (row.Kind == SidebarRowKind.FavouritesHeading)
+        {
+            e.Handled = m.SetFavouritesCollapsed(collapse);
+        }
+        else if (row.Kind == SidebarRowKind.AccountHeading && row.Account is { } acc)
         {
             e.Handled = m.SetAccountCollapsed(acc, collapse);
         }
@@ -305,11 +327,25 @@ public sealed partial class SidebarPane : UserControl
         var run = new Dictionary<ContextMenu.ItemId, Action>();
         switch (row.Kind)
         {
+            case SidebarRowKind.FavouritesHeading:
+                // The Favourites heading folds like an account's, and that
+                // is all it offers (ContextMenu.FavouritesItems).
+                groups = ContextMenu.FavouritesItems();
+                labels = new ContextMenu.Labels { Collapsed = row.Collapsed };
+                run[ContextMenu.ItemId.Fold] = () => ToggleFold(row);
+                break;
             case SidebarRowKind.AccountHeading when row.Account is { } acc:
                 groups = ContextMenu.AccountItems(row.TwistyActive);
                 labels = new ContextMenu.Labels { Collapsed = row.Collapsed };
                 run[ContextMenu.ItemId.CheckMail] = () => m.TriggerSync(acc);
                 run[ContextMenu.ItemId.Fold] = () => ToggleFold(row);
+                break;
+            case SidebarRowKind.Unified:
+                // The All Inboxes item: checking every account is all it
+                // offers (no folder to pin, fold, mark read or empty).
+                groups = ContextMenu.AccountItems(false);
+                labels = new ContextMenu.Labels();
+                run[ContextMenu.ItemId.CheckMail] = m.TriggerSyncAll;
                 break;
             case SidebarRowKind.Folder when row.Folder is { } k && m.Model.Folder(k) is { } f:
                 groups = ContextMenu.FolderItems(new ContextMenu.FolderState
@@ -320,11 +356,20 @@ public sealed partial class SidebarPane : UserControl
                     Total = f.Total,
                     CanDelete = m.Model.Account(k.Account)?.Can(Capability.Delete) ?? false,
                     Foldable = row.TwistyActive && !row.Key.Favourite,
+                    // Apply Rules…: a folder of a mail account that holds messages,
+                    // enabled with an enabled rule for the account (RuleBook.AppliesToAccount).
+                    OfferRules = ApplyRules is not null && m.Model.Account(k.Account) is { } ruleAccount
+                        && RuleBook.MailAccounts([ruleAccount]).Count > 0 && RuleBook.CanApplyIn(f),
+                    Rules = RulesApply?.Invoke(k.Account) ?? false,
                 });
                 labels = new ContextMenu.Labels { Junk = f.Role == FolderRole.Junk, Favourite = row.Starred, Collapsed = row.Collapsed };
                 run[ContextMenu.ItemId.CheckMail] = () => m.TriggerSync(k);
                 run[ContextMenu.ItemId.Favourite] = () => m.ToggleFavourite(k);
                 run[ContextMenu.ItemId.Fold] = () => ToggleFold(row);
+                if (ApplyRules is { } apply)
+                {
+                    run[ContextMenu.ItemId.ApplyRules] = () => apply(f);
+                }
                 if (actions is { } a)
                 {
                     run[ContextMenu.ItemId.MarkAllRead] = () => a.MarkFolderRead(k);

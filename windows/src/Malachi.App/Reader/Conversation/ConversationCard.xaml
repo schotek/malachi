@@ -29,6 +29,7 @@ only); the web view gets the sanitiser's output only.
     xmlns:controls="using:Malachi.App.Controls"
     xmlns:l="using:Malachi.App.Localization"
     xmlns:reader="using:Malachi.App.Reader"
+    xmlns:signatures="using:Malachi.App.Signatures"
     IsTabStop="False">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -89,6 +90,10 @@ only); the web view gets the sanitiser's output only.
                             VerticalAlignment="Center"
                             Style="{StaticResource ConversationCaptionStyle}"
                             Visibility="Collapsed" />
+                        <!-- The badge of a signed message (ui/internal/signature
+                             BadgeFor): the verdict and its details, set with the
+                             message (RenderSignature); hidden without a verdict. -->
+                        <signatures:SignatureBadgeButton x:Name="SignatureBadge" />
                     </reader:WrapBox>
                     <!-- The hover buttons: shown while the pointer is over the card
                          or one of them has the focus; hidden, they keep their room

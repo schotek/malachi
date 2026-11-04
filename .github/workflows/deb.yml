@@ -18,17 +18,6 @@ on:
   push:
     # Only release tags (v1.2.3); pushes to main build nothing.
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
-  pull_request:
-    paths:
-      - packaging/debian/**
-      - scripts/build.sh
-      - scripts/build-deb.sh
-      # The licences scripts/build.sh installs.
-      - LICENSE
-      - LICENSING.md
-      - THIRD-PARTY-NOTICES.md
-      - backend/LICENSE
-      - .github/workflows/deb.yml
   workflow_dispatch:
 
 permissions:
@@ -118,6 +107,9 @@ jobs:
           sudo apt-get remove -y malachi
 
       - uses: actions/upload-artifact@v4
+        # Only for the release: any signed-in GitHub user can download the
+        # artifacts of a public repository.
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: malachi-deb-${{ matrix.arch }}
           path: build/*.deb

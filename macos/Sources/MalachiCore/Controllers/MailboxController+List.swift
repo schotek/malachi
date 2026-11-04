@@ -174,6 +174,9 @@ public final class ListController {
     /// Show in Mail (`reveal`, MailboxController+Reveal): the message to
     /// select once its folder's first page is listed.
     var pendingReveal: PendingReveal?
+    /// What the next first page of the folder on display selects after an
+    /// Undo (`relistAfterUndo`; window.go `undoReselect`).
+    private var undoReselect: [Undo.Moved] = []
 
     /// Installs the list half into `mailbox`'s hooks and publishes the
     /// initial state (the folder the mailbox has selected, if any, is
@@ -212,6 +215,7 @@ public final class ListController {
         failureWaiters = [:]
         refetchAfter = []
         pendingReveal = nil
+        undoReselect = []
     }
 
     // MARK: Loading
@@ -270,10 +274,12 @@ public final class ListController {
             loadThreadPage(k, gen)
             return
         }
-        let params = MessageListParams(
-            accountId: k.account, folderId: k.folder, page: Page(limit: API.Limits.defaultPageLimit),
-            sort: .dateDesc, filter: mailbox.model.listFilter
-        )
+        let params = k.isUnified
+            ? Unified.messageParams(filter: mailbox.model.listFilter)
+            : MessageListParams(
+                accountId: k.account, folderId: k.folder, page: Page(limit: API.Limits.defaultPageLimit),
+                sort: .dateDesc, filter: mailbox.model.listFilter
+            )
         mailbox.perform(API.MessageList.self, params) { [weak self] outcome in
             guard let self, gen == self.mailbox.model.listGen else { return }
             defer { self.finishReveal() }
@@ -290,7 +296,7 @@ public final class ListController {
                 self.showListState()
             case .success(let res):
                 self.mailbox.model.setMessages(res.messages, page: res.page)
-                self.reconcile(.keep)
+                self.reconcile(.keep, announce: self.takeUndoReselect())
             }
         }
     }
@@ -316,10 +322,12 @@ public final class ListController {
     /// Runs thread.list for folder `k`, first page (threads.go
     /// `loadThreadPage`); `gen` is the list generation the reply belongs to.
     private func loadThreadPage(_ k: FolderKey, _ gen: UInt64) {
-        let params = ThreadListParams(
-            accountId: k.account, folderId: k.folder, page: Page(limit: API.Limits.defaultPageLimit),
-            sort: .dateDesc, filter: mailbox.model.listFilter
-        )
+        let params = k.isUnified
+            ? Unified.threadParams(filter: mailbox.model.listFilter)
+            : ThreadListParams(
+                accountId: k.account, folderId: k.folder, page: Page(limit: API.Limits.defaultPageLimit),
+                sort: .dateDesc, filter: mailbox.model.listFilter
+            )
         mailbox.perform(API.ThreadList.self, params) { [weak self] outcome in
             guard let self, gen == self.mailbox.model.listGen else { return }
             defer { self.finishReveal() }
@@ -334,8 +342,8 @@ public final class ListController {
                 self.mailbox.model.listErr = err
                 self.showListState()
             case .success(let res):
-                self.mailbox.model.setThreads(res.threads, page: res.page)
-                self.syncRows()
+                self.mailbox.model.setThreads(k.isUnified ? res.threads.map(Unified.scopedConversation) : res.threads, page: res.page)
+                self.reconcile(.keep, announce: self.takeUndoReselect())
                 self.fetchExpandedMembers()
                 self.announceSelectedMembers()
             }
@@ -385,10 +393,12 @@ public final class ListController {
         mailbox.model.loadingMore = true
         showLoadMore()
         if m.grouped {
-            let params = ThreadListParams(
-                accountId: k.account, folderId: k.folder, page: Page(cursor: cursor, limit: API.Limits.defaultPageLimit),
-                sort: .dateDesc, filter: m.listFilter
-            )
+            let params = k.isUnified
+                ? Unified.threadParams(filter: m.listFilter, cursor: cursor)
+                : ThreadListParams(
+                    accountId: k.account, folderId: k.folder, page: Page(cursor: cursor, limit: API.Limits.defaultPageLimit),
+                    sort: .dateDesc, filter: m.listFilter
+                )
             mailbox.perform(API.ThreadList.self, params) { [weak self] outcome in
                 guard let self, gen == self.mailbox.model.listGen else { return }
                 self.mailbox.model.loadingMore = false
@@ -398,16 +408,18 @@ public final class ListController {
                     self.mailbox.toast(rpcErrorText(L10n.T("Loading more messages"), err))
                     self.showLoadMore()
                 case .success(let res):
-                    self.mailbox.model.appendThreads(res.threads, page: res.page)
+                    self.mailbox.model.appendThreads(k.isUnified ? res.threads.map(Unified.scopedConversation) : res.threads, page: res.page)
                     self.syncRows()
                 }
             }
             return
         }
-        let params = MessageListParams(
-            accountId: k.account, folderId: k.folder, page: Page(cursor: cursor, limit: API.Limits.defaultPageLimit),
-            sort: .dateDesc, filter: m.listFilter
-        )
+        let params = k.isUnified
+            ? Unified.messageParams(filter: m.listFilter, cursor: cursor)
+            : MessageListParams(
+                accountId: k.account, folderId: k.folder, page: Page(cursor: cursor, limit: API.Limits.defaultPageLimit),
+                sort: .dateDesc, filter: m.listFilter
+            )
         mailbox.perform(API.MessageList.self, params) { [weak self] outcome in
             guard let self, gen == self.mailbox.model.listGen else { return }
             self.mailbox.model.loadingMore = false
@@ -570,11 +582,13 @@ public final class ListController {
     /// (threads.go `reconcileRows`, messages.go `rebuildMessageRows`). The
     /// index of the selected row is read off the rows as they were before
     /// the model moved on, as the GTK code reads it off the widgets.
-    func reconcile(_ hint: SelectionHint) {
+    /// `announce` tells the views of the selection even when its keys did
+    /// not change (an Undo set them, `takeUndoReselect`).
+    func reconcile(_ hint: SelectionHint, announce: Bool = false) {
         let prev = selectedKeys
         let prevIdx = prev.first.flatMap { k in rows.firstIndex { $0.key == k } } ?? -1
         rows = currentRows()
-        var changed = false
+        var changed = announce
         if !prev.isEmpty {
             if hint == .clear {
                 selectedKeys = []
@@ -713,10 +727,25 @@ public final class ListController {
     /// The thread.get of `ensureMembers` and `refetchMembers`.
     private func fetchMembers(_ tid: ThreadID, quiet: Bool = false) {
         guard let k = mailbox.model.listFolder else { return }
+        var account = k.account
+        var folder = k.folder
+        if k.isUnified {
+            // The All Inboxes list has no folder of its own: the
+            // conversation's account is the row's and its folder the one
+            // its newest message lies in (docs/api.md §4.4, "Unified
+            // listing").
+            guard let i = mailbox.model.tindex[tid] else { return }
+            let t = mailbox.model.threads[i]
+            account = t.accountId
+            folder = t.latest.folderId
+        }
+        // The model's thread ids are account-scoped in this list; the
+        // daemon's is the raw one (`Unified.scopedThread`).
+        let wire = k.isUnified ? Unified.rawThread(tid) : tid
         mailbox.model.members[tid]?.fetching = true
         let gen = mailbox.model.listGen
         let params = ThreadGetParams(
-            accountId: k.account, threadId: tid, folderId: k.folder, withSent: true, withDrafts: true)
+            accountId: account, threadId: wire, folderId: folder, withSent: true, withDrafts: true)
         mailbox.perform(API.ThreadGet.self, params) { [weak self] outcome in
             guard let self, gen == self.mailbox.model.listGen, self.mailbox.model.members[tid] != nil else { return }
             self.mailbox.model.members[tid]?.fetching = false
@@ -738,7 +767,14 @@ public final class ListController {
                     fn()
                 }
             case .success(let res):
-                self.mailbox.model.setMembers(tid, res.thread, res.messages, sent: res.sent, drafts: res.drafts)
+                if k.isUnified {
+                    let acc = res.thread.accountId
+                    self.mailbox.model.setMembers(
+                        tid, Unified.scopedConversation(res.thread), res.messages.map { Unified.scoped($0, account: acc) },
+                        sent: res.sent.map { Unified.scoped($0, account: acc) }, drafts: res.drafts)
+                } else {
+                    self.mailbox.model.setMembers(tid, res.thread, res.messages, sent: res.sent, drafts: res.drafts)
+                }
                 self.syncRows()
                 if let row = self.selectedRow, row.key.thread == tid {
                     self.refreshActionFlags()
@@ -827,11 +863,13 @@ public final class ListController {
         announceSelection()
     }
 
-    /// `Selection.restrict` over the rows of `keys`: the keys within the
-    /// account of `latest`, the row the user added last.
+    /// `Selection.restrictIn` over the rows of `keys`: the keys within the
+    /// account of `latest`, the row the user added last; in the All Inboxes
+    /// list (decision U2) the selection may span accounts and every key
+    /// stays.
     public func restrict(_ keys: [ListKey], latest: ListKey) -> [ListKey] {
         let rows = keys.compactMap { k in row(for: k).map { (key: k, account: $0.message.accountId) } }
-        return Selection.restrict(rows, latest: latest)
+        return Selection.restrictIn(rows, latest: latest, crossAccount: mailbox.model.listIsUnified)
     }
 
     /// window.go `onMessageRowSelected` for the current `selectedKey`. A
@@ -919,7 +957,8 @@ public final class ListController {
     public func refreshActionFlags() {
         let rows = selectedRows
         let f = rows.count > 1
-            ? Selection.combine(rows.map { messageActionState($0, model: mailbox.model) })
+            ? Selection.combineAccounts(
+                rows.map { messageActionState($0, model: mailbox.model) }, accounts: rows.map { $0.message.accountId })
             : messageActionState(rows.first, model: mailbox.model)
         guard f != actionFlags else { return }
         actionFlags = f
@@ -1023,8 +1062,9 @@ public final class ListController {
     /// filter would have listed it anyway.
     public func applyNewMessage(_ n: NewMessageNotification) {
         let k = FolderKey(account: n.accountId, folder: n.folderId)
-        let s = n.message
-        guard k == mailbox.model.listFolder, mailbox.model.message(s.id) == nil else { return }
+        // The All Inboxes list keys its conversations by account and thread.
+        let s = mailbox.model.listIsUnified ? Unified.scoped(n.message, account: n.accountId) : n.message
+        guard mailbox.model.listCovers(k), mailbox.model.message(s.id) == nil else { return }
         let m = mailbox.model
         if m.loading || m.listErr != nil {
             return
@@ -1065,13 +1105,21 @@ public final class ListController {
     /// (their conversations have no replies of their own).
     public func applyNewMessageElsewhere(_ n: NewMessageNotification) {
         let m = mailbox.model
-        guard m.grouped, !m.loading, let k = m.listFolder, k.account == n.accountId, k.folder != n.folderId,
-              let tid = n.message.threadId, m.tindex[tid] != nil,
+        guard m.grouped, !m.loading, let k = m.listFolder, listShowsAccount(k, n.accountId),
+              k.isUnified || k.folder != n.folderId,
+              let tid = (k.isUnified ? Unified.scoped(n.message, account: n.accountId) : n.message).threadId,
+              m.tindex[tid] != nil,
               m.folderRole(FolderKey(account: n.accountId, folder: n.folderId)) == .sent
         else { return }
         let listed = folderRole(k)
         guard listed != .sent, listed != .outbox else { return }
         refetchMembers(tid)
+    }
+
+    /// Whether the list on `k` shows conversations of `account`: the
+    /// listed folder's account, or any account the All Inboxes list covers.
+    private func listShowsAccount(_ k: FolderKey, _ account: AccountID) -> Bool {
+        k.isUnified ? Unified.accounts(mailbox.model.accounts).contains(account) : k.account == account
     }
 
     /// notify.messagesChanged named a sent folder of the account of the
@@ -1092,8 +1140,8 @@ public final class ListController {
     /// account than the listed folder's.
     public func refreshDrafts(_ n: DraftsChangedNotification) {
         let model = mailbox.model
-        guard model.grouped, !model.loading, let k = model.listFolder, k.account == n.accountId else { return }
-        var want = Set(n.threadIds)
+        guard model.grouped, !model.loading, let k = model.listFolder, listShowsAccount(k, n.accountId) else { return }
+        var want = Set(n.threadIds.map { k.isUnified ? Unified.scopedThread($0, account: n.accountId) : $0 })
         if n.threadIds.isEmpty {
             if let row = selectedRow, row.thread, let tid = row.key.thread {
                 want.insert(tid)
@@ -1198,5 +1246,45 @@ public final class ListController {
             loadMessages()
         }
         onOutboxRefreshed?(acc)
+    }
+}
+
+// MARK: Undo
+
+extension ListController {
+    /// Lists the folder on display again after an Undo took messages back
+    /// (ActionsController+Undo `afterUndo`), selecting the rows of `back`,
+    /// the messages that came back to it, once its first page arrives
+    /// (window.go `afterUndo`, `takeUndoReselect`).
+    public func relistAfterUndo(_ back: [Undo.Moved]) {
+        undoReselect = back
+        loadMessages()
+    }
+
+    /// The rows of the messages Undo brought back to the folder just listed
+    /// again (a message's row, or its conversation's), made the selection,
+    /// once; called when a first page of the list is in the model, before
+    /// its rows are published. True when the selection was set.
+    func takeUndoReselect() -> Bool {
+        let back = undoReselect
+        undoReselect = []
+        guard !back.isEmpty else { return false }
+        let m = mailbox.model
+        var keys: [ListKey] = []
+        for b in back {
+            let candidates = [
+                ListKey(message: b.messageId),
+                ListKey(thread: b.threadId, message: b.messageId),
+                b.threadId.map { ListKey(thread: $0) },
+            ].compactMap { $0 }
+            if let k = candidates.first(where: { m.rowIndexOf($0) >= 0 }), !keys.contains(k) {
+                keys.append(k)
+            }
+        }
+        guard !keys.isEmpty else { return false }
+        // In list order, as a selection is (`select(keys:)`).
+        keys.sort { m.rowIndexOf($0) < m.rowIndexOf($1) }
+        selectedKeys = keys
+        return true
     }
 }

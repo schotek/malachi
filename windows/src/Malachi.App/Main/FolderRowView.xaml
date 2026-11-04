@@ -27,9 +27,13 @@ row shows is Core's SidebarRow; every text is plain.
     xmlns:res="using:Malachi.App.Resources"
     IsTabStop="False">
     <UserControl.Resources>
-        <!-- The title box at 88 % (style.go row.folder-row). -->
+        <!-- The title box at 88 % (style.go row.folder-row), on a line of
+             its own height rather than the body's 20, so that the account
+             under a pinned folder's name sits close to it. -->
         <Style x:Key="FolderTitleStyle" BasedOn="{StaticResource BodyLabelStyle}" TargetType="TextBlock">
             <Setter Property="FontSize" Value="13" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
         </Style>
         <!-- caption-heading dim-label. -->
         <Style x:Key="FolderHeadingStyle" BasedOn="{StaticResource DimCaptionLabelStyle}" TargetType="TextBlock">
@@ -38,7 +42,7 @@ row shows is Core's SidebarRow; every text is plain.
     </UserControl.Resources>
     <Grid
         x:Name="RowRoot"
-        MinHeight="26"
+        MinHeight="{x:Bind main:FolderRowView.RowMinHeight(Row.TwoLines), Mode=OneWay}"
         Margin="{x:Bind main:FolderRowView.RowMargin(Row.Indent, Row.IsHeading), Mode=OneWay}"
         Background="Transparent"
         ColumnSpacing="6"
@@ -132,6 +136,14 @@ row shows is Core's SidebarRow; every text is plain.
                 Text="{x:Bind Row.Badge, Mode=OneWay}"
                 TextLineBounds="Tight" />
         </Border>
+
+        <!-- starSlot: the All Inboxes row keeps the star's place. -->
+        <Border
+            Grid.Column="4"
+            Width="18"
+            Height="18"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind main:FolderRowView.StarSlot(Row.Kind), Mode=OneWay}" />
 
         <!-- newStar: Add to / Remove from Favourites; waits for the pointer,
              the selection or the keyboard, but a filled star in the tree. -->

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-25 20:35+0000\n"
+"POT-Creation-Date: 2026-11-04 12:54+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:279
+#: ui/main.go:298
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -44,7 +44,8 @@ msgstr ""
 
 #: ui/internal/accountwizard/jira_flow.go:257
 #: ui/internal/accountwizard/wizard.go:252 ui/internal/crm/text.go:129
-#: ui/internal/crm/text.go:435 ui/data/ui/jira_account.ui:31
+#: ui/internal/crm/text.go:435 ui/internal/window/rules_editor.go:149
+#: ui/data/ui/jira_account.ui:31
 msgid "_Save"
 msgstr ""
 
@@ -79,7 +80,7 @@ msgid ""
 "Accounts, then come back here."
 msgstr ""
 
-#: ui/internal/accountwizard/linked.go:177 ui/internal/window/sync.go:485
+#: ui/internal/accountwizard/linked.go:177 ui/internal/window/sync.go:491
 msgid "Could not open Online Accounts; open GNOME Settings yourself"
 msgstr ""
 
@@ -102,7 +103,8 @@ msgid "_Sign In with %s"
 msgstr ""
 
 #. TRANSLATORS: progressive form for the RPC error text
-#: ui/internal/accountwizard/oauth.go:140 ui/internal/window/sync.go:513
+#: ui/internal/accountwizard/oauth.go:140 ui/internal/window/sync.go:519
+#: ui/internal/window/contacts_consent.go:32
 msgid "Starting the sign-in"
 msgstr ""
 
@@ -233,7 +235,7 @@ msgstr ""
 msgid "_Trust"
 msgstr ""
 
-#: ui/internal/accountwizard/trust.go:167
+#: ui/internal/accountwizard/trust.go:167 ui/internal/signature/text.go:242
 msgctxt "certificate"
 msgid "SHA-256 fingerprint"
 msgstr ""
@@ -245,25 +247,25 @@ msgctxt "certificate"
 msgid "Previously trusted"
 msgstr ""
 
-#: ui/internal/accountwizard/trust.go:171
+#: ui/internal/accountwizard/trust.go:171 ui/internal/signature/text.go:268
 msgctxt "certificate"
 msgid "Issued to"
 msgstr ""
 
-#: ui/internal/accountwizard/trust.go:172
+#: ui/internal/accountwizard/trust.go:172 ui/internal/signature/text.go:270
 msgctxt "certificate"
 msgid "Issued by"
 msgstr ""
 
 #. TRANSLATORS: validity period of a certificate: two dates
-#: ui/internal/accountwizard/trust.go:176
+#: ui/internal/accountwizard/trust.go:176 ui/internal/signature/text.go:282
 #, c-format
 msgctxt "certificate"
 msgid "%s to %s"
 msgstr ""
 
 #. TRANSLATORS: label of a certificate's validity period
-#: ui/internal/accountwizard/trust.go:178
+#: ui/internal/accountwizard/trust.go:178 ui/internal/signature/text.go:272
 msgctxt "certificate"
 msgid "Valid"
 msgstr ""
@@ -506,7 +508,8 @@ msgid "The assistant stopped: %s"
 msgstr ""
 
 #. TRANSLATORS: The menu that hands the selected mail to Claude Desktop or Claude Code, and its settings group.
-#: ui/internal/assistant/assistant.go:476 ui/internal/contextmenu/text.go:85
+#: ui/internal/assistant/assistant.go:476 ui/internal/contextmenu/text.go:88
+#: ui/internal/toolbar/text.go:156
 msgid "Assistant"
 msgstr ""
 
@@ -1328,30 +1331,32 @@ msgstr ""
 msgid "The sender's server refused the request."
 msgstr ""
 
-#: ui/internal/compose/pane.go:223 ui/internal/compose/pane.go:1053
-#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:204
-#: ui/internal/window/event_editor_popovers.go:36
+#: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1048
+#: ui/internal/toolbar/text.go:217 ui/internal/jira/settings.go:123
+#: ui/internal/contacts/form.go:460 ui/internal/window/assistant_panel.go:204
+#: ui/internal/window/event_editor_popovers.go:36 ui/internal/rules/text.go:180
+#: ui/internal/rules/text.go:269
 msgid "Remove"
 msgstr ""
 
-#: ui/internal/compose/pane.go:328
+#: ui/internal/compose/pane.go:329
 msgid "The editor crashed; your last text was restored"
 msgstr ""
 
-#: ui/internal/compose/pane.go:488 ui/internal/compose/draft.go:381
+#: ui/internal/compose/pane.go:489 ui/internal/compose/draft.go:381
 msgid "Using placeholder account"
 msgstr ""
 
-#: ui/internal/compose/pane.go:611 ui/data/ui/compose.ui:10
-#: ui/data/ui/compose.ui:48
+#: ui/internal/compose/pane.go:612 ui/internal/toolbar/text.go:133
+#: ui/data/ui/compose.ui:10 ui/data/ui/compose.ui:48
 msgid "New Message"
 msgstr ""
 
-#: ui/internal/compose/pane.go:702
+#: ui/internal/compose/pane.go:703
 msgid "Save changes to this draft?"
 msgstr ""
 
-#: ui/internal/compose/pane.go:703 ui/internal/compose/write.go:167
+#: ui/internal/compose/pane.go:704 ui/internal/compose/write.go:167
 #: ui/internal/widget/consent.go:47 ui/internal/widget/rpc.go:196
 #: ui/internal/window/assistant_panel.go:223
 #: ui/internal/window/board_quit.go:30
@@ -1361,60 +1366,68 @@ msgstr ""
 #: ui/internal/window/calendar_detail.go:899
 #: ui/internal/window/preferences_calendar.go:488
 #: ui/internal/window/preferences_calendar.go:1016
+#: ui/internal/window/contacts_detail.go:254
+#: ui/internal/window/rules_editor.go:148
+#: ui/internal/window/rules_editor.go:722 ui/internal/signature/text.go:418
+#: ui/internal/signature/text.go:429 ui/internal/signature/text.go:504
 #: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr ""
 
-#: ui/internal/compose/pane.go:704 ui/internal/compose/draft.go:748
+#: ui/internal/compose/pane.go:705 ui/internal/compose/draft.go:748
 #: ui/internal/compose/rewrite.go:112 ui/internal/compose/write.go:169
 #: ui/internal/conversation/drafts.go:114 ui/internal/board/text.go:357
 #: ui/data/ui/compose.ui:121
 msgid "_Discard"
 msgstr ""
 
-#: ui/internal/compose/pane.go:705 ui/data/ui/compose.ui:104
+#: ui/internal/compose/pane.go:706 ui/data/ui/compose.ui:104
 msgid "_Save Draft"
 msgstr ""
 
-#: ui/internal/compose/pane.go:922 ui/data/ui/compose_pane.ui:289
-#: ui/data/ui/compose_pane.ui:445
+#: ui/internal/compose/pane.go:928 ui/data/ui/compose_pane.ui:306
+#: ui/data/ui/compose_pane.ui:450
 msgid "Paragraph"
 msgstr ""
 
-#: ui/internal/compose/pane.go:925
+#: ui/internal/compose/pane.go:931
 #, c-format
 msgid "Heading %s"
 msgstr ""
 
-#: ui/internal/compose/pane.go:946 ui/internal/compose/pane_layout.go:31
+#: ui/internal/compose/pane.go:952 ui/internal/compose/pane_layout.go:31
 #: ui/data/ui/compose.ui:54
 msgid "Attach Files"
 msgstr ""
 
-#: ui/internal/compose/pane.go:973
+#: ui/internal/compose/pane.go:979
 msgid "Only local files can be attached"
 msgstr ""
 
-#: ui/internal/compose/pane.go:982 ui/data/ui/compose_pane.ui:382
+#: ui/internal/compose/pane.go:988 ui/data/ui/compose_pane.ui:399
 msgid "Insert Image"
 msgstr ""
 
-#: ui/internal/compose/pane.go:984
+#: ui/internal/compose/pane.go:990
 msgid "Images"
 msgstr ""
 
-#: ui/internal/compose/pane.go:998
+#: ui/internal/compose/pane.go:1004
 msgid "Only local images can be inserted"
 msgstr ""
 
-#: ui/internal/compose/pane.go:1012
+#: ui/internal/compose/pane.go:1018
 #, c-format
 msgid "Attaching %s…"
 msgstr ""
 
-#: ui/internal/compose/pane.go:1021
+#: ui/internal/compose/pane.go:1027
 #, c-format
 msgid "Attaching %s"
+msgstr ""
+
+#: ui/internal/compose/pane.go:1075 ui/internal/window/attachments.go:574
+msgid "Opening the attachment"
 msgstr ""
 
 #: ui/internal/compose/pane_layout.go:42
@@ -1530,28 +1543,28 @@ msgstr ""
 msgid "To: %s"
 msgstr ""
 
-#: ui/internal/compose/quoted.go:146 ui/internal/window/date_groups.go:96
+#: ui/internal/compose/quoted.go:147 ui/internal/window/date_groups.go:96
 msgid "Expanded"
 msgstr ""
 
-#: ui/internal/compose/quoted.go:149 ui/internal/window/date_groups.go:94
+#: ui/internal/compose/quoted.go:150 ui/internal/window/date_groups.go:94
 msgid "Collapsed"
 msgstr ""
 
 #. TRANSLATORS: tooltip of a recipient suggestion that came from a
 #. system address book whose name is unknown.
-#: ui/internal/compose/suggest.go:300
+#: ui/internal/compose/suggest.go:308 ui/internal/contacts/text.go:215
 msgid "Address book"
 msgstr ""
 
 #. TRANSLATORS: tooltip of a recipient suggestion that is an address
 #. the user has written to before.
-#: ui/internal/compose/suggest.go:304
+#: ui/internal/compose/suggest.go:312
 msgid "Recently used"
 msgstr ""
 
 #. TRANSLATORS: In the menu of several selected messages: opens each in a window of its own; %d is their number.
-#: ui/internal/contextmenu/text.go:47
+#: ui/internal/contextmenu/text.go:48
 #, c-format
 msgid "Open %d Message in a New Window"
 msgid_plural "Open %d Messages in New Windows"
@@ -1559,150 +1572,156 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
-#: ui/internal/contextmenu/text.go:50
+#: ui/internal/contextmenu/text.go:51
 msgid "Open in New Window"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
-#: ui/internal/calendar/detail.go:256 ui/data/ui/window.ui:588
+#: ui/internal/contextmenu/text.go:53 ui/internal/conversation/drafts.go:108
+#: ui/internal/calendar/detail.go:256 ui/internal/contacts/text.go:131
+#: ui/data/ui/window.ui:512
 msgid "Edit"
 msgstr ""
 
 #. TRANSLATORS: the Reply action of an issue: writes a comment.
-#: ui/internal/contextmenu/text.go:55 ui/internal/jira/compose.go:162
+#: ui/internal/contextmenu/text.go:58 ui/internal/jira/compose.go:162
 msgid "Comment"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
-#: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:293
+#: ui/internal/contextmenu/text.go:60 ui/internal/toolbar/text.go:142
+#: ui/internal/jira/compose.go:164 ui/internal/board/text.go:374
+#: ui/internal/window/conversation_card.go:302
 #: ui/internal/window/quick_reply_bar.go:194 ui/data/ui/message_window.ui:44
-#: ui/data/ui/window.ui:473
+#: ui/data/ui/window.ui:398
 msgid "Reply"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:59
-#: ui/internal/window/conversation_card.go:294
+#: ui/internal/contextmenu/text.go:62 ui/internal/toolbar/text.go:144
+#: ui/internal/window/conversation_card.go:303
 #: ui/internal/window/quick_reply_bar.go:192 ui/data/ui/message_window.ui:50
-#: ui/data/ui/window.ui:480
+#: ui/data/ui/window.ui:405
 msgid "Reply All"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:61
-#: ui/internal/window/conversation_card.go:295 ui/data/ui/message_window.ui:56
-#: ui/data/ui/window.ui:487
+#: ui/internal/contextmenu/text.go:64 ui/internal/toolbar/text.go:146
+#: ui/internal/window/conversation_card.go:304 ui/data/ui/message_window.ui:56
+#: ui/data/ui/window.ui:412
 msgid "Forward"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:592
-#: ui/data/ui/window.ui:1168
+#: ui/internal/contextmenu/text.go:66 ui/internal/toolbar/text.go:163
+#: ui/data/ui/message_window.ui:592 ui/data/ui/window.ui:1252
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
-#: ui/data/ui/window.ui:1164
+#: ui/internal/contextmenu/text.go:68 ui/data/ui/message_window.ui:588
+#: ui/data/ui/window.ui:1248
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:68 ui/internal/board/text.go:351
-#: ui/internal/window/actions.go:63
+#: ui/internal/contextmenu/text.go:71 ui/internal/board/text.go:351
+#: ui/internal/window/actions.go:64
 msgid "Unstar"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:70 ui/internal/window/actions.go:66
-#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:514
+#: ui/internal/contextmenu/text.go:73 ui/internal/toolbar/text.go:154
+#: ui/internal/window/actions.go:62 ui/data/ui/message_window.ui:74
+#: ui/data/ui/window.ui:439
 msgid "Star"
 msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
-#: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1184
+#: ui/internal/contextmenu/text.go:75 ui/internal/jira/transitions.go:87
+#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1268
 msgid "Change Status"
 msgstr ""
 
 #. TRANSLATORS: After Answering, Move the Invitation Message: to the
 #. archive.
-#: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:824
-#: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:132
-#: ui/data/ui/window.ui:574
+#: ui/internal/contextmenu/text.go:77 ui/internal/toolbar/text.go:148
+#: ui/internal/board/text.go:824 ui/internal/calendar/preferences.go:318
+#: ui/data/ui/message_window.ui:132 ui/data/ui/window.ui:498
 msgid "Archive"
 msgstr ""
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/contextmenu/text.go:76 ui/internal/board/text.go:1065
+#: ui/internal/contextmenu/text.go:79 ui/internal/toolbar/text.go:167
+#: ui/internal/board/text.go:1065
 msgid "Move To"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:582
-#: ui/data/ui/window.ui:1158
+#: ui/internal/contextmenu/text.go:81 ui/internal/toolbar/text.go:165
+#: ui/data/ui/message_window.ui:582 ui/data/ui/window.ui:1242
 msgid "Mark as Junk"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:81 ui/internal/window/outbox.go:240
+#: ui/internal/contextmenu/text.go:84 ui/internal/window/outbox.go:240
 msgid "Cancel Sending"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:83 ui/internal/window/outbox.go:242
-#: ui/data/ui/message_window.ui:125 ui/data/ui/window.ui:566
+#: ui/internal/contextmenu/text.go:86 ui/internal/toolbar/text.go:150
+#: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:125
+#: ui/data/ui/window.ui:491
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:95 ui/internal/window/status.go:269
-#: ui/data/ui/preferences.ui:217 ui/data/ui/window.ui:246
+#: ui/internal/contextmenu/text.go:98 ui/internal/toolbar/text.go:140
+#: ui/internal/window/status.go:270 ui/data/ui/preferences.ui:257
+#: ui/data/ui/window.ui:171
 msgid "Check for New Mail"
 msgstr ""
 
 #. TRANSLATORS: In the menu of a folder in the sidebar.
-#: ui/internal/contextmenu/text.go:98
+#: ui/internal/contextmenu/text.go:101
 msgid "Mark All as Read"
 msgstr ""
 
 #. TRANSLATORS: In the menu of the Junk folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:102
+#: ui/internal/contextmenu/text.go:105
 msgid "Empty Junk"
 msgstr ""
 
 #. TRANSLATORS: In the menu of the Trash folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:105
+#: ui/internal/contextmenu/text.go:108
 msgid "Empty Trash"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:108 ui/internal/window/favourites.go:113
+#: ui/internal/contextmenu/text.go:111 ui/internal/window/favourites.go:113
 msgid "Remove from Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:110 ui/internal/window/favourites.go:111
+#: ui/internal/contextmenu/text.go:113 ui/internal/window/favourites.go:111
 msgid "Add to Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:395
-#: ui/internal/window/board_conversation.go:488
-#: ui/internal/window/conversation_card.go:473 ui/internal/window/folders.go:65
+#: ui/internal/contextmenu/text.go:116 ui/internal/widget/message_row.go:441
+#: ui/internal/window/board_conversation.go:491
+#: ui/internal/window/conversation_card.go:482 ui/internal/window/folders.go:66
 msgid "Expand"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:391
-#: ui/internal/window/board_conversation.go:491
-#: ui/internal/window/conversation_card.go:471 ui/internal/window/folders.go:62
+#: ui/internal/contextmenu/text.go:118 ui/internal/widget/message_row.go:437
+#: ui/internal/window/board_conversation.go:494
+#: ui/internal/window/conversation_card.go:480 ui/internal/window/folders.go:63
 msgid "Collapse"
 msgstr ""
 
 #. TRANSLATORS: The heading of the question before the Trash is emptied.
-#: ui/internal/contextmenu/text.go:132
+#: ui/internal/contextmenu/text.go:135
 msgid "Empty the Trash?"
 msgstr ""
 
 #. TRANSLATORS: The button that empties the Trash or the Junk folder.
-#: ui/internal/contextmenu/text.go:134
+#: ui/internal/contextmenu/text.go:137
 msgid "_Empty"
 msgstr ""
 
 #. TRANSLATORS: The heading of the question before the Junk folder is emptied.
-#: ui/internal/contextmenu/text.go:138
+#: ui/internal/contextmenu/text.go:141
 msgid "Empty the Junk Folder?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages the folder shows.
-#: ui/internal/contextmenu/text.go:141
+#: ui/internal/contextmenu/text.go:144
 #, c-format
 msgid ""
 "%d message will be deleted for good. Older messages that are only on the "
@@ -1714,12 +1733,12 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: What failed when a message could not be moved to another folder.
-#: ui/internal/contextmenu/text.go:150
+#: ui/internal/contextmenu/text.go:153
 msgid "Moving the message"
 msgstr ""
 
 #. TRANSLATORS: What failed when messages could not be moved to another folder; %d is their number.
-#: ui/internal/contextmenu/text.go:153
+#: ui/internal/contextmenu/text.go:156
 #, c-format
 msgid "Moving %d message"
 msgid_plural "Moving %d messages"
@@ -1727,17 +1746,17 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: What failed when a folder could not be marked read.
-#: ui/internal/contextmenu/text.go:159
+#: ui/internal/contextmenu/text.go:162
 msgid "Marking the folder as read"
 msgstr ""
 
 #. TRANSLATORS: What failed when the Junk folder could not be emptied.
-#: ui/internal/contextmenu/text.go:166
+#: ui/internal/contextmenu/text.go:169
 msgid "Emptying the Junk folder"
 msgstr ""
 
 #. TRANSLATORS: What failed when the Trash could not be emptied.
-#: ui/internal/contextmenu/text.go:169
+#: ui/internal/contextmenu/text.go:172
 msgid "Emptying the Trash"
 msgstr ""
 
@@ -1756,6 +1775,310 @@ msgid "Cancel sending %d message?"
 msgid_plural "Cancel sending %d messages?"
 msgstr[0] ""
 msgstr[1] ""
+
+#. TRANSLATORS: The sidebar item and the list of the inboxes of every mail account together.
+#: ui/internal/unified/text.go:19
+msgid "All Inboxes"
+msgstr ""
+
+#. TRANSLATORS: A switch in Preferences; "All Inboxes" is the sidebar item's name.
+#: ui/internal/unified/text.go:25
+msgid "Show All Inboxes"
+msgstr ""
+
+#. TRANSLATORS: The subtitle of the "Show All Inboxes" switch in Preferences.
+#: ui/internal/unified/text.go:31
+msgid "In the sidebar when you have more than one mail account"
+msgstr ""
+
+#. TRANSLATORS: File menu item that prints the selected message, conversation, event or day.
+#: ui/internal/printing/printing.go:37
+msgid "_Print…"
+msgstr ""
+
+#. TRANSLATORS: toolbar button that prints the selected message, conversation, event or day.
+#: ui/internal/printing/printing.go:43 ui/internal/toolbar/text.go:169
+msgid "Print"
+msgstr ""
+
+#: ui/internal/printing/printing.go:71 ui/data/ui/compose_pane.ui:172
+msgid "Subject"
+msgstr ""
+
+#: ui/internal/printing/printing.go:75
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
+#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
+#: ui/data/ui/window.ui:796
+msgid "From"
+msgstr ""
+
+#: ui/internal/printing/printing.go:76
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
+#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
+#: ui/data/ui/window.ui:822
+msgid "To"
+msgstr ""
+
+#: ui/internal/printing/printing.go:77
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
+#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
+#: ui/data/ui/window.ui:850
+msgid "Cc"
+msgstr ""
+
+#: ui/internal/printing/printing.go:78 ui/data/ui/compose_pane.ui:138
+msgid "Bcc"
+msgstr ""
+
+#: ui/internal/printing/printing.go:79
+msgid "Date"
+msgstr ""
+
+#: ui/internal/printing/printing.go:80
+msgid "Attachments"
+msgstr ""
+
+#. TRANSLATORS: a group in Preferences → General with the toolbar's display mode and its editor.
+#: ui/internal/toolbar/text.go:26
+msgid "Toolbar"
+msgstr ""
+
+#. TRANSLATORS: a button in Preferences and a context menu item of a toolbar; it opens the toolbar editor.
+#: ui/internal/toolbar/text.go:33
+msgid "Customize Toolbar…"
+msgstr ""
+
+#. TRANSLATORS: the title of the dialog where the user arranges a toolbar's items.
+#: ui/internal/toolbar/text.go:39
+msgid "Customize Toolbar"
+msgstr ""
+
+#. TRANSLATORS: a row in Preferences: whether the toolbar's buttons show icons, text or both.
+#: ui/internal/toolbar/text.go:45
+msgid "Toolbar Display"
+msgstr ""
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with an icon and a label.
+#: ui/internal/toolbar/text.go:57
+msgid "Icons and Text"
+msgstr ""
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with a label and no icon.
+#: ui/internal/toolbar/text.go:60
+msgid "Text Only"
+msgstr ""
+
+#. TRANSLATORS: a choice of the Toolbar Display row: buttons with an icon and no label.
+#: ui/internal/toolbar/text.go:63
+msgid "Icons Only"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:70 ui/internal/board/text.go:57
+#: ui/data/ui/preferences.ui:253
+msgid "Mail"
+msgstr ""
+
+#. TRANSLATORS: the toolbar of the Board in its List style, in the toolbar editor.
+#: ui/internal/toolbar/text.go:73
+msgid "Board – List"
+msgstr ""
+
+#. TRANSLATORS: the toolbar of the Board in its Columns and Today styles, in the toolbar editor.
+#: ui/internal/toolbar/text.go:76
+msgid "Board – Columns and Today"
+msgstr ""
+
+#. TRANSLATORS: the window's third mode beside Mail and Board: the calendar.
+#: ui/internal/toolbar/text.go:78 ui/internal/toolbar/text.go:105
+#: ui/internal/board/text.go:72
+msgid "Calendar"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:89 ui/internal/jira/settings.go:100
+#: ui/data/ui/window.ui:66
+msgid "Folders"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:94 ui/data/ui/preferences.ui:478
+msgid "Message List"
+msgstr ""
+
+#. TRANSLATORS: the part of the Board's toolbar over its list of cases, in the toolbar editor.
+#: ui/internal/toolbar/text.go:97
+msgid "Cases"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:99 ui/data/ui/message_window.ui:38
+#: ui/data/ui/window.ui:389
+msgid "Message"
+msgstr ""
+
+#. TRANSLATORS: the part of the Board's toolbar over the shown case, in the toolbar editor.
+#: ui/internal/toolbar/text.go:102
+msgid "Case Detail"
+msgstr ""
+
+#. TRANSLATORS: the window's second mode beside Mail: the conversations
+#. that need something, sorted into four states.
+#: ui/internal/toolbar/text.go:107 ui/internal/board/text.go:65
+#: ui/data/ui/preferences.ui:125 ui/data/ui/preferences.ui:689
+msgid "Board"
+msgstr ""
+
+#. TRANSLATORS: in the toolbar editor, the button that shows or hides the sidebar and the part of a toolbar over the sidebar.
+#: ui/internal/toolbar/text.go:114
+msgid "Sidebar"
+msgstr ""
+
+#. TRANSLATORS: a fixed gap between toolbar buttons, in the toolbar editor.
+#: ui/internal/toolbar/text.go:123
+msgid "Space"
+msgstr ""
+
+#. TRANSLATORS: a gap that takes the toolbar's free room, in the toolbar editor.
+#: ui/internal/toolbar/text.go:126
+msgid "Flexible Space"
+msgstr ""
+
+#. TRANSLATORS: the toolbar's switch between Mail, Board and Calendar, in the toolbar editor.
+#: ui/internal/toolbar/text.go:131
+msgid "Mode Switch"
+msgstr ""
+
+#. TRANSLATORS: the Contacts window (address books of the user's
+#. accounts), its menu item and its Preferences page.
+#: ui/internal/toolbar/text.go:135 ui/internal/contacts/text.go:50
+msgid "Contacts"
+msgstr ""
+
+#. TRANSLATORS: the toolbar item that filters the message list (All, Unread, Flagged), in the toolbar editor.
+#: ui/internal/toolbar/text.go:138
+msgid "Filter"
+msgstr ""
+
+#. TRANSLATORS: context menu of a message: opens the dialog that saves it to eWay-CRM.
+#: ui/internal/toolbar/text.go:152 ui/internal/crm/text.go:90
+msgid "Save to eWay-CRM…"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:158 ui/internal/window/attachments.go:201
+#: ui/data/ui/message_window.ui:62 ui/data/ui/window.ui:427
+msgid "More Actions"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1135
+#: ui/data/ui/window.ui:178
+msgid "Search"
+msgstr ""
+
+#. TRANSLATORS: the button of a toast that takes back what was just
+#. done (an archive).
+#: ui/internal/toolbar/text.go:171 ui/internal/board/text.go:905
+#: ui/internal/undo/text.go:45
+msgid "Undo"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:173 ui/internal/window/conversation_card.go:797
+#: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:259
+#: ui/data/ui/message_window.ui:598 ui/data/ui/window.ui:634
+#: ui/data/ui/window.ui:1258
+msgid "Load _Images"
+msgstr ""
+
+#. TRANSLATORS: the Board's switch between its List, Columns and Today styles, in the toolbar editor.
+#: ui/internal/toolbar/text.go:176
+msgid "Board Style"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:178 ui/internal/board/text.go:132
+msgctxt "account filter"
+msgid "All Accounts"
+msgstr ""
+
+#. TRANSLATORS: a button: the assistant reads the conversations on the
+#. board and adds notes (titles, summaries, tasks, deadlines).
+#: ui/internal/toolbar/text.go:180 ui/internal/board/text.go:384
+msgid "✦ Triage"
+msgstr ""
+
+#. TRANSLATORS: the board's filter and section of the finished cases,
+#. and the button that marks a case finished.
+#: ui/internal/toolbar/text.go:182 ui/internal/board/text.go:138
+msgid "Done"
+msgstr ""
+
+#. TRANSLATORS: a button that takes a case off the board until a
+#. chosen time.
+#: ui/internal/toolbar/text.go:184 ui/internal/board/text.go:370
+msgid "Remind…"
+msgstr ""
+
+#. TRANSLATORS: a button and menu item of the board: the case's received
+#. messages go to the trash and the case is done.
+#: ui/internal/toolbar/text.go:186 ui/internal/board/text.go:917
+#: ui/internal/calendar/detail.go:272 ui/internal/calendar/detail.go:313
+#: ui/internal/contacts/text.go:146
+msgid "Delete"
+msgstr ""
+
+#. TRANSLATORS: the board's style that shows the day (what needs the
+#. user, deadlines), a group of deadlines and a deadline's day.
+#. TRANSLATORS: the calendar's toolbar button that goes to today.
+#. TRANSLATORS: the heading of today's events in the agenda.
+#: ui/internal/toolbar/text.go:188 ui/internal/board/text.go:210
+#: ui/internal/calendar/text.go:44 ui/internal/calendar/agenda.go:107
+#: ui/internal/maildate/groups.go:39
+msgid "Today"
+msgstr ""
+
+#. TRANSLATORS: the Calendar's pair of buttons that step to the previous and next day, week or month, in the toolbar editor.
+#: ui/internal/toolbar/text.go:191
+msgid "Previous and Next"
+msgstr ""
+
+#. TRANSLATORS: the Calendar's switch between Day, Week, Month and Agenda, in the toolbar editor.
+#: ui/internal/toolbar/text.go:194
+msgid "Calendar View"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:196 ui/internal/calendar/text.go:67
+msgid "Search Events"
+msgstr ""
+
+#: ui/internal/toolbar/text.go:198 ui/internal/calendar/text.go:61
+msgid "New Event"
+msgstr ""
+
+#. TRANSLATORS: the subtitle of a toolbar item in the editor whose feature is off at the moment (e.g. no eWay-CRM account).
+#: ui/internal/toolbar/text.go:207
+msgid "Hidden while unavailable"
+msgstr ""
+
+#. TRANSLATORS: a button of the toolbar editor that opens the list of items to add.
+#: ui/internal/toolbar/text.go:213
+msgid "Add Item…"
+msgstr ""
+
+#. TRANSLATORS: a button of the toolbar editor that gives the chosen toolbar its default items back.
+#: ui/internal/toolbar/text.go:223
+msgid "Restore Defaults"
+msgstr ""
+
+#. TRANSLATORS: the question before the toolbar editor restores the default toolbar.
+#: ui/internal/toolbar/text.go:229
+msgid "Restore the Default Toolbar?"
+msgstr ""
+
+#. TRANSLATORS: %s is the toolbar's name, e.g. "Mail" or "Board – List".
+#: ui/internal/toolbar/text.go:235
+#, c-format
+msgid "Your changes to the “%s” toolbar will be lost."
+msgstr ""
+
+#: ui/internal/toolbar/text.go:239 ui/internal/calendar/editor.go:245
+#: ui/internal/contacts/text.go:140 ui/internal/updates/updates.go:195
+msgid "Cancel"
+msgstr ""
 
 #. TRANSLATORS: a comment on a service-desk request that the customer reads too.
 #: ui/internal/jira/compose.go:74
@@ -1807,7 +2130,7 @@ msgstr ""
 
 #. TRANSLATORS: a field of a Jira issue.
 #: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1075
-#: ui/data/ui/preferences.ui:654
+#: ui/data/ui/preferences.ui:723
 msgid "Status"
 msgstr ""
 
@@ -1890,7 +2213,7 @@ msgid "The Jira site rejected the token of %s"
 msgstr ""
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
-#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:801
+#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:725
 msgid "Add _Jira Account…"
 msgstr ""
 
@@ -2025,22 +2348,22 @@ msgid_plural "Select at most %d spaces"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:252
-#: ui/data/ui/preferences.ui:272
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:292
+#: ui/data/ui/preferences.ui:312
 msgid "1 week"
 msgstr ""
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:253
-#: ui/data/ui/preferences.ui:273
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:293
+#: ui/data/ui/preferences.ui:313
 msgid "1 month"
 msgstr ""
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:254
-#: ui/data/ui/preferences.ui:274
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:294
+#: ui/data/ui/preferences.ui:314
 msgid "3 months"
 msgstr ""
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:255
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:295
 msgid "1 year"
 msgstr ""
 
@@ -2058,7 +2381,7 @@ msgid "Jira Account"
 msgstr ""
 
 #: ui/internal/jira/settings.go:85 ui/internal/crm/text.go:428
-#: ui/internal/calendar/caldav.go:363 ui/data/ui/account_wizard.ui:145
+#: ui/internal/calendar/caldav.go:379 ui/data/ui/account_wizard.ui:145
 msgid "Account Name"
 msgstr ""
 
@@ -2079,10 +2402,6 @@ msgstr ""
 #. TRANSLATORS: switch; the changes are listed among the comments of an issue.
 #: ui/internal/jira/settings.go:99
 msgid "Show Status and Assignee Changes"
-msgstr ""
-
-#: ui/internal/jira/settings.go:100 ui/data/ui/window.ui:59
-msgid "Folders"
 msgstr ""
 
 #: ui/internal/jira/settings.go:101
@@ -2245,8 +2564,8 @@ msgid "Needs fields in Jira"
 msgstr ""
 
 #: ui/internal/jira/transitions.go:98
-#: ui/internal/window/conversation_card.go:173 ui/internal/window/folders.go:89
-#: ui/internal/window/messages.go:266
+#: ui/internal/window/conversation_card.go:178 ui/internal/window/folders.go:90
+#: ui/internal/window/messages.go:255
 msgid "Loading…"
 msgstr ""
 
@@ -2416,11 +2735,6 @@ msgid_plural "Save %d Messages to eWay-CRM…"
 msgstr[0] ""
 msgstr[1] ""
 
-#. TRANSLATORS: context menu of a message: opens the dialog that saves it to eWay-CRM.
-#: ui/internal/crm/text.go:90
-msgid "Save to eWay-CRM…"
-msgstr ""
-
 #. TRANSLATORS: placeholder of the search field of the Save to eWay-CRM dialog.
 #: ui/internal/crm/text.go:119
 msgid "Search eWay-CRM"
@@ -2509,9 +2823,9 @@ msgstr[1] ""
 msgid "Removed from eWay-CRM"
 msgstr ""
 
-#: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
-#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:615
-#: ui/internal/window/notify.go:136
+#: ui/internal/crm/text.go:289 ui/internal/board/view.go:863
+#: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:625
+#: ui/internal/window/notify.go:149
 msgid "(No subject)"
 msgstr ""
 
@@ -2530,6 +2844,7 @@ msgstr ""
 
 #: ui/internal/crm/text.go:296 ui/internal/window/accounts_page.go:339
 #: ui/internal/window/preferences_calendar.go:460
+#: ui/internal/signature/text.go:430
 msgid "_Remove"
 msgstr ""
 
@@ -2614,7 +2929,7 @@ msgstr ""
 msgid "User Name"
 msgstr ""
 
-#: ui/internal/crm/text.go:430 ui/internal/calendar/caldav.go:361
+#: ui/internal/crm/text.go:430 ui/internal/calendar/caldav.go:377
 #: ui/data/ui/account_wizard.ui:94
 msgid "Password"
 msgstr ""
@@ -2636,69 +2951,69 @@ msgid "Malachi Mail connects to eWay-CRM over https only."
 msgstr ""
 
 #. TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
-#: ui/internal/conversation/chat.go:152 ui/internal/board/text.go:804
+#: ui/internal/conversation/chat.go:179 ui/internal/board/text.go:804
 msgid "Show as Chat"
 msgstr ""
 
 #. TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
-#: ui/internal/conversation/chat.go:155 ui/internal/board/text.go:807
+#: ui/internal/conversation/chat.go:182 ui/internal/board/text.go:807
 msgid "Show as Thread"
 msgstr ""
 
 #. TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
-#: ui/internal/conversation/chat.go:164 ui/internal/board/text.go:817
+#: ui/internal/conversation/chat.go:191 ui/internal/board/text.go:817
 msgid ""
 "Others on the left, your messages on the right; double-click opens the "
 "message"
 msgstr ""
 
 #. TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
-#: ui/internal/conversation/chat.go:167
+#: ui/internal/conversation/chat.go:194
 msgid "Back to the timeline: the messages as cards, newest first"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, a message in the chat layout of a conversation shows its formatting (HTML) instead of plain text.
-#: ui/internal/conversation/chat.go:185 ui/data/ui/preferences.ui:461
+#: ui/internal/conversation/chat.go:212 ui/data/ui/preferences.ui:530
 msgid "Render HTML in Chat"
 msgstr ""
 
 #. TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
-#: ui/internal/conversation/chat.go:192 ui/data/ui/preferences.ui:462
+#: ui/internal/conversation/chat.go:219 ui/data/ui/preferences.ui:531
 msgid ""
 "Messages in the chat layout as they were sent, in a locked web view, instead "
 "of their plain text"
 msgstr ""
 
 #. TRANSLATORS: the hint under a shortened message in the chat layout of a conversation; a click on the message shows all of it.
-#: ui/internal/conversation/chat.go:265
+#: ui/internal/conversation/chat.go:292
 msgid "Show More"
 msgstr ""
 
 #. TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
-#: ui/internal/conversation/chat.go:273 ui/data/ui/preferences.ui:452
+#: ui/internal/conversation/chat.go:300 ui/data/ui/preferences.ui:521
 msgid "Conversations"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:281 ui/data/ui/preferences.ui:467
+#: ui/internal/conversation/chat.go:308 ui/data/ui/preferences.ui:536
 msgid "Shorten My Messages in Chat"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:288 ui/data/ui/preferences.ui:473
+#: ui/internal/conversation/chat.go:315 ui/data/ui/preferences.ui:542
 msgid "Shorten Others' Messages in Chat"
 msgstr ""
 
 #. TRANSLATORS: the subtitle of the "Shorten My Messages in Chat" and "Shorten Others' Messages in Chat" switches in Preferences → Message list.
-#: ui/internal/conversation/chat.go:296 ui/data/ui/preferences.ui:468
-#: ui/data/ui/preferences.ui:474
+#: ui/internal/conversation/chat.go:323 ui/data/ui/preferences.ui:537
+#: ui/data/ui/preferences.ui:543
 msgid ""
 "About three lines of each message in its bubble; a click shows the whole "
 "message"
 msgstr ""
 
 #. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
-#: ui/internal/conversation/conversation.go:380
+#: ui/internal/conversation/conversation.go:383
 #, c-format
 msgid "%d earlier message is not shown"
 msgid_plural "%d earlier messages are not shown"
@@ -2719,6 +3034,30 @@ msgstr ""
 #. TRANSLATORS: a button above a conversation in the reading pane; shows every message whole.
 #: ui/internal/conversation/fold.go:159
 msgid "Expand All"
+msgstr ""
+
+#. TRANSLATORS: a row of a conversation: someone (named beside it)
+#. accepted the invitation.
+#: ui/internal/conversation/invitation.go:25
+msgid "Invitation accepted"
+msgstr ""
+
+#. TRANSLATORS: a row of a conversation: someone (named beside it)
+#. answered the invitation with Maybe.
+#: ui/internal/conversation/invitation.go:29
+msgid "Invitation tentatively accepted"
+msgstr ""
+
+#. TRANSLATORS: a row of a conversation: someone (named beside it)
+#. declined the invitation.
+#: ui/internal/conversation/invitation.go:33
+msgid "Invitation declined"
+msgstr ""
+
+#. TRANSLATORS: a row of a conversation: someone (named beside it)
+#. answered the invitation, the answer none of the usual three.
+#: ui/internal/conversation/invitation.go:37
+msgid "Replied to the invitation"
 msgstr ""
 
 #. TRANSLATORS: the tooltip of the three-dot button under a message whose quoted earlier messages show; hides them.
@@ -2763,22 +3102,6 @@ msgstr ""
 msgid "Forward…"
 msgstr ""
 
-#: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:213
-msgid "Mail"
-msgstr ""
-
-#. TRANSLATORS: the window's second mode beside Mail: the conversations
-#. that need something, sorted into four states.
-#: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:85
-#: ui/data/ui/preferences.ui:620
-msgid "Board"
-msgstr ""
-
-#. TRANSLATORS: the window's third mode beside Mail and Board: the calendar.
-#: ui/internal/board/text.go:72
-msgid "Calendar"
-msgstr ""
-
 #. TRANSLATORS: a state of the board, its column and filter: the
 #. cases that need the user now (a deadline, an escalation).
 #: ui/internal/board/text.go:81
@@ -2808,17 +3131,6 @@ msgstr ""
 msgid "Overview"
 msgstr ""
 
-#: ui/internal/board/text.go:132
-msgctxt "account filter"
-msgid "All Accounts"
-msgstr ""
-
-#. TRANSLATORS: the board's filter and section of the finished cases,
-#. and the button that marks a case finished.
-#: ui/internal/board/text.go:138
-msgid "Done"
-msgstr ""
-
 #. TRANSLATORS: the number of cases on the board, after the account
 #. filter: "All Accounts · 23 cases".
 #: ui/internal/board/text.go:145
@@ -2831,8 +3143,8 @@ msgstr[1] ""
 #. TRANSLATORS: tooltip of the member count of a conversation row.
 #. TRANSLATORS: subtitle of the message list; %d is the number of
 #. messages in the folder.
-#: ui/internal/board/text.go:150 ui/internal/widget/message_row.go:255
-#: ui/internal/window/folders.go:353
+#: ui/internal/board/text.go:150 ui/internal/widget/message_row.go:269
+#: ui/internal/window/folders.go:366
 #, c-format
 msgid "%d message"
 msgid_plural "%d messages"
@@ -2881,15 +3193,6 @@ msgstr ""
 #: ui/internal/board/text.go:201
 msgctxt "deadline"
 msgid "Later"
-msgstr ""
-
-#. TRANSLATORS: the board's style that shows the day (what needs the
-#. user, deadlines), a group of deadlines and a deadline's day.
-#. TRANSLATORS: the calendar's toolbar button that goes to today.
-#. TRANSLATORS: the heading of today's events in the agenda.
-#: ui/internal/board/text.go:210 ui/internal/calendar/text.go:44
-#: ui/internal/calendar/agenda.go:107 ui/internal/maildate/groups.go:39
-msgid "Today"
 msgstr ""
 
 #: ui/internal/board/text.go:239
@@ -3014,18 +3317,6 @@ msgstr ""
 
 #: ui/internal/board/text.go:364
 msgid "Move Back to Board"
-msgstr ""
-
-#. TRANSLATORS: a button that takes a case off the board until a
-#. chosen time.
-#: ui/internal/board/text.go:370
-msgid "Remind…"
-msgstr ""
-
-#. TRANSLATORS: a button: the assistant reads the conversations on the
-#. board and adds notes (titles, summaries, tasks, deadlines).
-#: ui/internal/board/text.go:384
-msgid "✦ Triage"
 msgstr ""
 
 #: ui/internal/board/text.go:388
@@ -3249,7 +3540,9 @@ msgstr ""
 
 #. TRANSLATORS: a name and a short badge after it, such as "Work
 #. (IMAP)" or "Offer (Reminded)".
-#: ui/internal/board/text.go:634
+#. TRANSLATORS: an address book with its account, e.g. "Contacts
+#. (jana@example.org)"; also a brand with an address.
+#: ui/internal/board/text.go:634 ui/internal/contacts/model.go:96
 #, c-format
 msgid "%s (%s)"
 msgstr ""
@@ -3258,7 +3551,10 @@ msgstr ""
 #. party and the date, such as "Jana Nováková · 2 Oct 2026 14:05".
 #. TRANSLATORS: two parts of one line of the calendar, e.g. "Work ·
 #. Calendar" (account and calendar) or "10:00–11:30 · Room B".
+#. TRANSLATORS: two parts of one line, e.g. "All Contacts · 412" or
+#. "Contacts · Microsoft 365" (address book and account).
 #: ui/internal/board/text.go:646 ui/internal/calendar/text.go:354
+#: ui/internal/contacts/text.go:98
 #, c-format
 msgid "%s · %s"
 msgstr ""
@@ -3359,7 +3655,7 @@ msgid "The conversation could not be loaded."
 msgstr ""
 
 #: ui/internal/board/text.go:766 ui/internal/window/assistant_panel.go:707
-#: ui/internal/window/status.go:324 ui/data/ui/window.ui:442
+#: ui/internal/window/status.go:323 ui/data/ui/window.ui:367
 msgid "Try Again"
 msgstr ""
 
@@ -3436,46 +3732,33 @@ msgstr ""
 msgid "Marked as done. No message was in the inbox."
 msgstr ""
 
-#: ui/internal/board/text.go:898
+#: ui/internal/board/text.go:898 ui/internal/undo/text.go:21
 #, c-format
 msgid "Archived %d message."
 msgid_plural "Archived %d messages."
 msgstr[0] ""
 msgstr[1] ""
 
-#. TRANSLATORS: the button of a toast that takes back what was just
-#. done (an archive).
-#: ui/internal/board/text.go:905
-msgid "Undo"
-msgstr ""
-
 #: ui/internal/board/text.go:910
 msgid "Could not undo the archive."
-msgstr ""
-
-#. TRANSLATORS: a button and menu item of the board: the case's received
-#. messages go to the trash and the case is done.
-#: ui/internal/board/text.go:917 ui/internal/calendar/detail.go:272
-#: ui/internal/calendar/detail.go:313
-msgid "Delete"
 msgstr ""
 
 #: ui/internal/board/text.go:924
 msgid "Marked as done. No received message was left to delete."
 msgstr ""
 
-#: ui/internal/board/text.go:926
+#: ui/internal/board/text.go:926 ui/internal/undo/text.go:35
 #, c-format
 msgid "Moved %d message to Trash."
 msgid_plural "Moved %d messages to Trash."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/board/text.go:933 ui/internal/window/actions.go:42
+#: ui/internal/board/text.go:933 ui/internal/window/actions.go:43
 msgid "Move to Trash?"
 msgstr ""
 
-#: ui/internal/board/text.go:933 ui/internal/window/actions.go:47
+#: ui/internal/board/text.go:933 ui/internal/window/actions.go:48
 msgid "Move to _Trash"
 msgstr ""
 
@@ -3507,7 +3790,7 @@ msgstr ""
 msgid "Changing the promise"
 msgstr ""
 
-#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:270
+#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:280
 msgid "Removing the star"
 msgstr ""
 
@@ -4059,7 +4342,7 @@ msgstr ""
 
 #. TRANSLATORS: the shortcuts window: the key that shows the mail in the
 #. main window.
-#: ui/internal/board/keys.go:72
+#: ui/internal/board/keys.go:72 ui/internal/contacts/text.go:121
 msgid "Show Mail"
 msgstr ""
 
@@ -4106,16 +4389,8 @@ msgstr ""
 msgid "Next"
 msgstr ""
 
-#: ui/internal/calendar/text.go:61
-msgid "New Event"
-msgstr ""
-
 #: ui/internal/calendar/text.go:64
 msgid "Edit Event"
-msgstr ""
-
-#: ui/internal/calendar/text.go:67
-msgid "Search Events"
 msgstr ""
 
 #. TRANSLATORS: an event without a title.
@@ -4196,8 +4471,8 @@ msgid ""
 "Preferences → Calendar."
 msgstr ""
 
-#: ui/internal/calendar/text.go:196 ui/internal/window/sync.go:566
-#: ui/data/ui/window.ui:329
+#: ui/internal/calendar/text.go:196 ui/internal/window/sync.go:572
+#: ui/data/ui/window.ui:254
 msgid "Open Preferences"
 msgstr ""
 
@@ -4250,7 +4525,7 @@ msgid "The calendar cannot be changed while offline."
 msgstr ""
 
 #. TRANSLATORS: strftime format for a time of day, e.g. "15:04".
-#: ui/internal/calendar/text.go:248 ui/internal/widget/format.go:104
+#: ui/internal/calendar/text.go:248 ui/internal/widget/format.go:105
 #, no-c-format
 msgid "%H:%M"
 msgstr ""
@@ -4270,13 +4545,17 @@ msgid "%A %-d %B"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a day and month, e.g. "14 October".
-#: ui/internal/calendar/text.go:272
+#. TRANSLATORS: strftime format of a birthday without a year, e.g.
+#. "14 March".
+#: ui/internal/calendar/text.go:272 ui/internal/contacts/detail.go:232
 #, no-c-format
 msgid "%-d %B"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date, e.g. "14 October 2026".
-#: ui/internal/calendar/text.go:279
+#. TRANSLATORS: strftime format of a birthday with its year, e.g. "14
+#. March 1980".
+#: ui/internal/calendar/text.go:279 ui/internal/contacts/detail.go:238
 #, no-c-format
 msgid "%-d %B %Y"
 msgstr ""
@@ -4402,7 +4681,7 @@ msgstr ""
 #. events than room; %d is how many are not shown.
 #. TRANSLATORS: the chip after the first few recipients of a message;
 #. %d is how many more there are. Clicking it lists them all.
-#: ui/internal/calendar/month.go:249 ui/internal/window/addresses.go:221
+#: ui/internal/calendar/month.go:249 ui/internal/window/addresses.go:265
 #, c-format
 msgid "+%d more"
 msgid_plural "+%d more"
@@ -4803,7 +5082,7 @@ msgid "Custom…"
 msgstr ""
 
 #. TRANSLATORS: the editor's Repeat popup: the event does not repeat.
-#: ui/internal/calendar/recurrence.go:336 ui/data/ui/preferences.ui:237
+#: ui/internal/calendar/recurrence.go:336 ui/data/ui/preferences.ui:277
 msgid "Never"
 msgstr ""
 
@@ -4881,10 +5160,6 @@ msgstr[1] ""
 
 #: ui/internal/calendar/editor.go:225
 msgid "Save and Send Invitations"
-msgstr ""
-
-#: ui/internal/calendar/editor.go:245
-msgid "Cancel"
 msgstr ""
 
 #: ui/internal/calendar/editor.go:256
@@ -5033,7 +5308,9 @@ msgstr ""
 msgid "If you don’t save, your changes are lost."
 msgstr ""
 
-#: ui/internal/calendar/editor.go:460
+#. TRANSLATORS: the button that drops the unsaved changes of a
+#. contact.
+#: ui/internal/calendar/editor.go:460 ui/internal/contacts/text.go:271
 msgid "Discard"
 msgstr ""
 
@@ -5456,15 +5733,15 @@ msgstr ""
 
 #. TRANSLATORS: the action of an invitation's notification that opens
 #. the message.
-#: ui/internal/calendar/notifications.go:114
+#: ui/internal/calendar/notifications.go:122
 msgid "Show"
 msgstr ""
 
-#: ui/internal/calendar/notifications.go:121
+#: ui/internal/calendar/notifications.go:129
 msgid "An event was cancelled"
 msgstr ""
 
-#: ui/internal/calendar/notifications.go:123
+#: ui/internal/calendar/notifications.go:131
 #, c-format
 msgid "%s cancelled the event"
 msgstr ""
@@ -5637,130 +5914,140 @@ msgctxt "mail account"
 msgid "None"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:346
+#: ui/internal/calendar/caldav.go:362
 msgid "Add CalDAV Calendar"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:350
+#: ui/internal/calendar/caldav.go:366
 msgid ""
 "Nextcloud, Fastmail, iCloud, Radicale and other servers that speak CalDAV."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:357
+#: ui/internal/calendar/caldav.go:373
 msgid "Server Address"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:359
+#: ui/internal/calendar/caldav.go:375
 msgid "Username"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:382
+#: ui/internal/calendar/caldav.go:398
 msgid ""
 "The password goes to the system keyring. Malachi Mail never shows it again."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:386
+#: ui/internal/calendar/caldav.go:402
 msgid "Discover Calendars"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:392
+#: ui/internal/calendar/caldav.go:408
 msgid "Looking for calendars…"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:394
+#: ui/internal/calendar/caldav.go:410
 msgid "Adding the account…"
 msgstr ""
 
 #. TRANSLATORS: how a CalDAV server was found: a DNS record.
-#: ui/internal/calendar/caldav.go:406
+#: ui/internal/calendar/caldav.go:422
 msgid "a DNS SRV record"
 msgstr ""
 
 #. TRANSLATORS: how a CalDAV server was found: at the address typed.
-#: ui/internal/calendar/caldav.go:409
+#: ui/internal/calendar/caldav.go:425
 msgid "the address you entered"
 msgstr ""
 
+#. TRANSLATORS: the Add CalDAV sheet's status for a server with
+#. address books and no calendar: how it was found and how many
+#. address books it has.
+#: ui/internal/calendar/caldav.go:443
+#, c-format
+msgid "Found through %s · %d address book"
+msgid_plural "Found through %s · %d address books"
+msgstr[0] ""
+msgstr[1] ""
+
 #. TRANSLATORS: the Add CalDAV sheet's status: how the server was found
 #. and how many calendars it has.
-#: ui/internal/calendar/caldav.go:425
+#: ui/internal/calendar/caldav.go:447
 #, c-format
 msgid "Found through %s · %d calendar"
 msgid_plural "Found through %s · %d calendars"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/calendar/caldav.go:435
+#: ui/internal/calendar/caldav.go:457
 #, c-format
 msgid "The calendars are at %s."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:439
+#: ui/internal/calendar/caldav.go:461
 msgid "Certificate"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:446 ui/internal/calendarctl/account.go:476
+#: ui/internal/calendar/caldav.go:468 ui/internal/calendarctl/account.go:476
 msgid "Trusted by you"
 msgstr ""
 
 #. TRANSLATORS: the certificate row of the Add CalDAV sheet; %s is
 #. the certificate's issuer.
-#: ui/internal/calendar/caldav.go:451
+#: ui/internal/calendar/caldav.go:473
 #, c-format
 msgid "Verified (%s)"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:453 ui/internal/calendarctl/account.go:480
+#: ui/internal/calendar/caldav.go:475 ui/internal/calendarctl/account.go:480
 msgid "Verified"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:455 ui/internal/calendarctl/account.go:478
+#: ui/internal/calendar/caldav.go:477 ui/internal/calendarctl/account.go:478
 msgid "Not encrypted (local server)"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:461
+#: ui/internal/calendar/caldav.go:483
 msgid "Trust Certificate…"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:464
+#: ui/internal/calendar/caldav.go:486 ui/internal/contacts/text.go:407
 msgid "Calendars"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:474
+#: ui/internal/calendar/caldav.go:496
 msgid "Not shown in Mail; in Calendar with the CALDAV capsule."
 msgstr ""
 
 #. TRANSLATORS: the Add CalDAV sheet's button that adds the account.
-#: ui/internal/calendar/caldav.go:480
+#: ui/internal/calendar/caldav.go:502
 msgctxt "caldav"
 msgid "Add"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:490
+#: ui/internal/calendar/caldav.go:512
 msgid "The server did not accept the username or password."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:492
+#: ui/internal/calendar/caldav.go:514
 msgid "The server’s certificate is not trusted."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:494
+#: ui/internal/calendar/caldav.go:516
 msgid "The server could not be reached."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:496
+#: ui/internal/calendar/caldav.go:518
 msgid "The server answered, but it is not a CalDAV server."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:498
+#: ui/internal/calendar/caldav.go:520
 msgid "This is not a server address Malachi Mail can use."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:500
+#: ui/internal/calendar/caldav.go:522
 msgid "The password could not be stored in the system keyring."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:502
+#: ui/internal/calendar/caldav.go:524
 msgid "The calendars could not be found."
 msgstr ""
 
@@ -5786,55 +6073,651 @@ msgstr ""
 msgid "Select Next Event"
 msgstr ""
 
+#. TRANSLATORS: the Contacts window's sidebar row that lists the
+#. contacts of every address book.
+#: ui/internal/contacts/text.go:57
+msgid "All Contacts"
+msgstr ""
+
+#. TRANSLATORS: the Contacts window's address book of the addresses the
+#. user has written to (read only).
+#: ui/internal/contacts/text.go:64
+msgid "Recently Used"
+msgstr ""
+
+#. TRANSLATORS: the Contacts window's sidebar heading of the address
+#. book kept on this computer (Recently Used).
+#: ui/internal/contacts/text.go:72
+msgid "On This Computer"
+msgstr ""
+
+#: ui/internal/contacts/text.go:76
+msgid "Search Contacts"
+msgstr ""
+
+#: ui/internal/contacts/text.go:80
+msgid "New Contact"
+msgstr ""
+
+#: ui/internal/contacts/text.go:84
+#, c-format
+msgid "%d contact"
+msgid_plural "%d contacts"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the number of recently used e-mail addresses.
+#: ui/internal/contacts/text.go:90
+#, c-format
+msgid "%d address"
+msgid_plural "%d addresses"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the Contacts window's status bar; %s is a relative time
+#. such as "3 minutes ago".
+#: ui/internal/contacts/text.go:106
+#, c-format
+msgid "Contacts synchronized %s"
+msgstr ""
+
+#. TRANSLATORS: the contact detail's button that writes a new message to
+#. the contact.
+#: ui/internal/contacts/text.go:117
+msgid "Write Email"
+msgstr ""
+
+#. TRANSLATORS: the contact detail's button that copies the whole
+#. contact as plain text.
+#: ui/internal/contacts/text.go:127
+msgid "Copy"
+msgstr ""
+
+#. TRANSLATORS: the contact form's button that saves the contact.
+#: ui/internal/contacts/text.go:136
+msgctxt "contacts"
+msgid "Done"
+msgstr ""
+
+#: ui/internal/contacts/text.go:143
+msgid "Delete Contact…"
+msgstr ""
+
+#. TRANSLATORS: a capsule beside a contact whose address book cannot be
+#. changed.
+#: ui/internal/contacts/text.go:152
+msgid "Read Only"
+msgstr ""
+
+#. TRANSLATORS: a contact without any name.
+#: ui/internal/contacts/text.go:158
+msgid "No Name"
+msgstr ""
+
+#. TRANSLATORS: the contact detail's footer; the first %s is the
+#. address book's name, the second the account it belongs to.
+#: ui/internal/contacts/text.go:166
+#, c-format
+msgid "Address book %s · %s"
+msgstr ""
+
+#: ui/internal/contacts/text.go:174
+msgid "Show Contact"
+msgstr ""
+
+#: ui/internal/contacts/text.go:177
+msgid "Add to Contacts…"
+msgstr ""
+
+#. TRANSLATORS: the Add to Contacts popover's button that saves the
+#. new contact.
+#: ui/internal/contacts/text.go:186
+msgctxt "contacts"
+msgid "Add"
+msgstr ""
+
+#. TRANSLATORS: a short confirmation after Add to Contacts saved the
+#. new contact.
+#: ui/internal/contacts/text.go:193
+msgid "Contact added"
+msgstr ""
+
+#: ui/internal/contacts/text.go:197
+msgid "More Details…"
+msgstr ""
+
+#. TRANSLATORS: under the name of a new contact taken from a message's
+#. header: the sender wrote it, so it may be false.
+#: ui/internal/contacts/text.go:204
+msgid "The sender wrote this name — check it."
+msgstr ""
+
+#. TRANSLATORS: the question before a contact is deleted; %s is its
+#. name.
+#: ui/internal/contacts/text.go:242
+#, c-format
+msgid "Delete contact %s?"
+msgstr ""
+
+#. TRANSLATORS: %s is the account, e.g. "Microsoft 365
+#. (jana@example.org)".
+#: ui/internal/contacts/text.go:245
+#, c-format
+msgid ""
+"The contact will also be deleted on the server %s and on every device that "
+"synchronizes it."
+msgstr ""
+
+#: ui/internal/contacts/text.go:255
+msgid "The contact changed meanwhile"
+msgstr ""
+
+#: ui/internal/contacts/text.go:256
+msgid ""
+"Someone changed the contact on another device. Load the new version; the "
+"details you changed stay in the form."
+msgstr ""
+
+#. TRANSLATORS: the button that loads the server's new version of a
+#. contact into the form.
+#: ui/internal/contacts/text.go:259
+msgid "Reload"
+msgstr ""
+
+#: ui/internal/contacts/text.go:267
+msgid "Discard Changes?"
+msgstr ""
+
+#: ui/internal/contacts/text.go:268
+msgid "The changes to this contact have not been saved."
+msgstr ""
+
+#: ui/internal/contacts/text.go:277
+msgid "Copied to Clipboard"
+msgstr ""
+
+#: ui/internal/contacts/text.go:282
+#, c-format
+msgid "Microsoft needs your permission to access the contacts of %s."
+msgstr ""
+
+#. TRANSLATORS: the button that signs in again to give Microsoft's
+#. permission to the contacts.
+#: ui/internal/contacts/text.go:290
+msgid "Allow…"
+msgstr ""
+
+#: ui/internal/contacts/text.go:296
+msgid "Allow contacts access in the desktop’s Online Accounts settings."
+msgstr ""
+
+#: ui/internal/contacts/text.go:321
+msgid "No Address Books"
+msgstr ""
+
+#: ui/internal/contacts/text.go:322
+msgid ""
+"Turn on contacts from Microsoft 365 or a CardDAV server in Preferences. "
+"Until then, here are the addresses you have written to."
+msgstr ""
+
+#: ui/internal/contacts/text.go:324
+msgid "No Contacts"
+msgstr ""
+
+#: ui/internal/contacts/text.go:326
+msgid "No Contacts Found"
+msgstr ""
+
+#: ui/internal/contacts/text.go:326
+msgid "Try another name, company or address."
+msgstr ""
+
+#: ui/internal/contacts/text.go:328
+msgid "No Contact Selected"
+msgstr ""
+
+#: ui/internal/contacts/text.go:334
+msgid "Open Preferences…"
+msgstr ""
+
+#: ui/internal/contacts/text.go:343
+msgid "The contact no longer exists."
+msgstr ""
+
+#: ui/internal/contacts/text.go:345
+msgid "The address book no longer exists."
+msgstr ""
+
+#: ui/internal/contacts/text.go:347
+msgid "This address book cannot be changed."
+msgstr ""
+
+#: ui/internal/contacts/text.go:354
+msgid "Microsoft needs your permission to access these contacts."
+msgstr ""
+
+#: ui/internal/contacts/text.go:356
+msgid "Contacts cannot be changed while offline."
+msgstr ""
+
+#: ui/internal/contacts/text.go:358
+msgid "The contact could not be saved. Check its details."
+msgstr ""
+
+#: ui/internal/contacts/text.go:368
+msgid "Sync Contacts"
+msgstr ""
+
+#: ui/internal/contacts/text.go:373
+msgid "Edit the server, password and certificate on the Calendar page."
+msgstr ""
+
+#. TRANSLATORS: the Preferences group that decides which address books
+#. complete the recipients of a new message.
+#: ui/internal/contacts/text.go:380
+msgid "Recipient Suggestions"
+msgstr ""
+
+#: ui/internal/contacts/text.go:386
+msgid "All Address Books"
+msgstr ""
+
+#: ui/internal/contacts/text.go:388
+msgid "Address Books of the Account You Write From"
+msgstr ""
+
+#: ui/internal/contacts/text.go:397
+msgid ""
+"Add a Microsoft 365 account or a CardDAV server to see its contacts here."
+msgstr ""
+
+#. TRANSLATORS: the heading of the address books a CardDAV server has.
+#: ui/internal/contacts/text.go:403
+msgid "Address Books"
+msgstr ""
+
+#: ui/internal/contacts/text.go:411
+msgid "Add Calendar and Contacts (CalDAV/CardDAV)"
+msgstr ""
+
+#. TRANSLATORS: the contact form's label choice for an e-mail address,
+#. phone or address without a label.
+#: ui/internal/contacts/detail.go:61
+msgid "No Label"
+msgstr ""
+
+#. TRANSLATORS: the label of a work e-mail address in the
+#. contact form (lower case, like the other labels).
+#: ui/internal/contacts/detail.go:79
+msgctxt "email label"
+msgid "work"
+msgstr ""
+
+#. TRANSLATORS: the label of a personal e-mail address.
+#: ui/internal/contacts/detail.go:82
+msgctxt "email label"
+msgid "home"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:84
+msgctxt "email label"
+msgid "other"
+msgstr ""
+
+#. TRANSLATORS: the label of a postal address at work.
+#: ui/internal/contacts/detail.go:91
+msgctxt "address label"
+msgid "work"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:93
+msgctxt "address label"
+msgid "home"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:95
+msgctxt "address label"
+msgid "other"
+msgstr ""
+
+#. TRANSLATORS: the label of a work website in the contact form.
+#: ui/internal/contacts/detail.go:100
+msgctxt "url label"
+msgid "work"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:102
+msgctxt "url label"
+msgid "home"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:104
+msgctxt "url label"
+msgid "other"
+msgstr ""
+
+#. TRANSLATORS: the label of a mobile phone number.
+#: ui/internal/contacts/detail.go:111
+msgctxt "phone label"
+msgid "mobile"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:113
+msgctxt "phone label"
+msgid "work"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:115
+msgctxt "phone label"
+msgid "home"
+msgstr ""
+
+#. TRANSLATORS: the label of a company's main phone number.
+#: ui/internal/contacts/detail.go:118
+msgctxt "phone label"
+msgid "main"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:120
+msgctxt "phone label"
+msgid "fax"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:122
+msgctxt "phone label"
+msgid "pager"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:124
+msgctxt "phone label"
+msgid "other"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail (lower case).
+#: ui/internal/contacts/detail.go:138
+msgid "work email"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:140
+msgid "home email"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:142
+msgid "other email"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail: an e-mail address
+#. without a label.
+#: ui/internal/contacts/detail.go:146
+msgid "email"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail: a phone
+#. number without a label.
+#: ui/internal/contacts/detail.go:151
+msgid "phone"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail: a postal
+#. address without a label.
+#: ui/internal/contacts/detail.go:158
+msgid "address"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:164
+msgid "work website"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:166
+msgid "home website"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail: a web address.
+#: ui/internal/contacts/detail.go:169
+msgid "website"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:412
+msgid "birthday"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:422
+msgid "nickname"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:426
+msgid "note"
+msgstr ""
+
+#. TRANSLATORS: the contact form's button that adds an e-mail
+#. address row.
+#: ui/internal/contacts/form.go:449
+msgid "Add Email"
+msgstr ""
+
+#: ui/internal/contacts/form.go:451
+msgid "Add Phone"
+msgstr ""
+
+#: ui/internal/contacts/form.go:453
+msgid "Add Address"
+msgstr ""
+
+#: ui/internal/contacts/form.go:455
+msgid "Add Website"
+msgstr ""
+
+#: ui/internal/contacts/form.go:463
+msgid "Add Birthday"
+msgstr ""
+
+#. TRANSLATORS: placeholders of the contact form's fields.
+#: ui/internal/contacts/form.go:470
+msgid "First Name"
+msgstr ""
+
+#: ui/internal/contacts/form.go:472
+msgid "Last Name"
+msgstr ""
+
+#: ui/internal/contacts/form.go:474
+msgid "Middle Name"
+msgstr ""
+
+#. TRANSLATORS: a title before a name, such as "Ing." or "Dr.".
+#: ui/internal/contacts/form.go:477
+msgid "Prefix"
+msgstr ""
+
+#. TRANSLATORS: a title after a name, such as "Ph.D." or "Jr.".
+#: ui/internal/contacts/form.go:480
+msgid "Suffix"
+msgstr ""
+
+#: ui/internal/contacts/form.go:482
+msgid "Nickname"
+msgstr ""
+
+#: ui/internal/contacts/form.go:484
+msgid "Company"
+msgstr ""
+
+#: ui/internal/contacts/form.go:486
+msgid "Job Title"
+msgstr ""
+
+#: ui/internal/contacts/form.go:488
+msgid "Email"
+msgstr ""
+
+#: ui/internal/contacts/form.go:490
+msgid "Phone"
+msgstr ""
+
+#: ui/internal/contacts/form.go:492
+msgid "Website"
+msgstr ""
+
+#: ui/internal/contacts/form.go:494
+msgid "Birthday"
+msgstr ""
+
+#: ui/internal/contacts/form.go:496
+msgid "Note"
+msgstr ""
+
+#: ui/internal/contacts/form.go:517
+msgid "Street"
+msgstr ""
+
+#: ui/internal/contacts/form.go:519
+msgid "Postal Code"
+msgstr ""
+
+#: ui/internal/contacts/form.go:521
+msgid "City"
+msgstr ""
+
+#. TRANSLATORS: a part of a postal address: state, province or
+#. region.
+#: ui/internal/contacts/form.go:525
+msgid "Region"
+msgstr ""
+
+#: ui/internal/contacts/form.go:527
+msgid "Country"
+msgstr ""
+
+#. TRANSLATORS: the label of the choice where a new contact is saved.
+#: ui/internal/contacts/form.go:533
+msgid "Address Book"
+msgstr ""
+
+#. TRANSLATORS: the label of a new contact's name in Add to Contacts.
+#: ui/internal/contacts/form.go:539 ui/internal/rules/text.go:229
+msgid "Name"
+msgstr ""
+
+#: ui/internal/contacts/form.go:564
+msgid "Enter a name, a company or an email address."
+msgstr ""
+
+#: ui/internal/contacts/form.go:566
+msgid "This text is too long."
+msgstr ""
+
+#. TRANSLATORS: %s is what the user typed as an e-mail address.
+#: ui/internal/contacts/form.go:585
+#, c-format
+msgid "%s is not a valid email address."
+msgstr ""
+
+#: ui/internal/contacts/form.go:610
+msgid "A website must be an address starting with http:// or https://."
+msgstr ""
+
+#: ui/internal/contacts/form.go:616
+msgid "Enter a valid date."
+msgstr ""
+
+#. TRANSLATORS: Microsoft 365 is a brand.
+#: ui/internal/contacts/form.go:645
+#, c-format
+msgid "A Microsoft 365 contact has at most %d email address."
+msgid_plural "A Microsoft 365 contact has at most %d email addresses."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/contacts/form.go:660
+msgid "A Microsoft 365 contact has one work, one home and one other address."
+msgstr ""
+
+#: ui/internal/contacts/form.go:670
+msgid "A Microsoft 365 contact has only one website."
+msgstr ""
+
+#: ui/internal/contacts/form.go:723
+msgid "The server did not accept the marked detail. Correct it and try again."
+msgstr ""
+
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
-#: ui/internal/widget/format.go:62
+#: ui/internal/widget/format.go:63
 msgctxt "participant list separator"
 msgid ", "
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date in the current year in
 #. the message list, e.g. "2 Sep".
-#: ui/internal/widget/format.go:91
+#: ui/internal/widget/format.go:92
 #, no-c-format
 msgid "%-d %b"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date in another year in the
 #. message list, e.g. "2025-09-02".
-#: ui/internal/widget/format.go:96
+#: ui/internal/widget/format.go:97
 #, no-c-format
 msgid "%Y-%m-%d"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a full date and time, e.g.
 #. "Wed, 2 Sep 2026 at 15:04".
-#: ui/internal/widget/format.go:113
+#: ui/internal/widget/format.go:114
 #, no-c-format
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr ""
 
-#. TRANSLATORS: file size in gibibytes.
-#: ui/internal/widget/format.go:122
-#, c-format
-msgid "%.1f GiB"
-msgstr ""
-
-#. TRANSLATORS: file size in mebibytes.
-#: ui/internal/widget/format.go:125
-#, c-format
-msgid "%.1f MiB"
-msgstr ""
-
-#. TRANSLATORS: file size in kibibytes.
-#: ui/internal/widget/format.go:128
-#, c-format
-msgid "%.0f KiB"
-msgstr ""
-
 #. TRANSLATORS: file size in bytes.
-#: ui/internal/widget/format.go:131
+#: ui/internal/widget/format.go:124
 #, c-format
 msgid "%d B"
+msgstr ""
+
+#. TRANSLATORS: file size in gigabytes; %s is the number with its
+#. decimal separator, e.g. "1.5".
+#: ui/internal/widget/format.go:131
+#, c-format
+msgid "%s GB"
+msgstr ""
+
+#. TRANSLATORS: file size in megabytes; %s is the number with its
+#. decimal separator, e.g. "7.2".
+#: ui/internal/widget/format.go:135
+#, c-format
+msgid "%s MB"
+msgstr ""
+
+#. TRANSLATORS: file size in kilobytes; %s is the number with its
+#. decimal separator, e.g. "41.1".
+#: ui/internal/widget/format.go:139
+#, c-format
+msgid "%s kB"
+msgstr ""
+
+#. TRANSLATORS: the decimal separator of numbers such as file sizes
+#. ("41.1 kB"); "," in Czech.
+#: ui/internal/widget/format.go:153
+msgctxt "decimal separator"
+msgid "."
+msgstr ""
+
+#: ui/internal/widget/format.go:182
+#, c-format
+msgid "%d attachment"
+msgid_plural "%d attachments"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the line over the attachments of a message: the number
+#. of attachments and their total size, e.g. "2 attachments · 255 kB".
+#: ui/internal/widget/format.go:185
+#, c-format
+msgctxt "attachment summary"
+msgid "%s · %s"
 msgstr ""
 
 #: ui/internal/widget/rpc.go:35
@@ -6057,6 +6940,7 @@ msgid "Loading accounts"
 msgstr ""
 
 #: ui/internal/window/accounts_page.go:192
+#: ui/internal/window/preferences_rules.go:240
 msgid "Drag to reorder, or press Ctrl+Up and Ctrl+Down"
 msgstr ""
 
@@ -6094,19 +6978,19 @@ msgstr ""
 msgid "Removing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:432 ui/internal/window/status.go:77
-#: ui/internal/window/sync.go:214
+#: ui/internal/window/accounts_page.go:432 ui/internal/window/status.go:78
+#: ui/internal/window/sync.go:220
 msgid "Paused"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:434 ui/internal/window/status.go:113
+#: ui/internal/window/accounts_page.go:434 ui/internal/window/status.go:114
 msgid "Syncing…"
 msgstr ""
 
 #. TRANSLATORS: account status in Settings → Accounts; %s says why.
 #. TRANSLATORS: status line of an account that cannot reach its
 #. server and keeps trying; %s is an account name.
-#: ui/internal/window/accounts_page.go:438 ui/internal/window/sync.go:248
+#: ui/internal/window/accounts_page.go:438 ui/internal/window/sync.go:254
 #, c-format
 msgid "Offline: %s"
 msgstr ""
@@ -6115,8 +6999,8 @@ msgstr ""
 msgid "Offline"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:442 ui/internal/window/status.go:121
-#: ui/internal/window/sync.go:229
+#: ui/internal/window/accounts_page.go:442 ui/internal/window/status.go:122
+#: ui/internal/window/sync.go:235
 msgid "Sign-in required"
 msgstr ""
 
@@ -6135,183 +7019,178 @@ msgid "Saving the account order"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:45
+#: ui/internal/window/actions.go:46
 #, c-format
 msgid "Move %d message to Trash?"
 msgid_plural "Move %d messages to Trash?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:208
+#: ui/internal/window/actions.go:215
 msgid "Marking the message as read"
 msgstr ""
 
-#: ui/internal/window/actions.go:210
+#: ui/internal/window/actions.go:217
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:212
+#: ui/internal/window/actions.go:219
 msgid "Marking the message as unread"
 msgstr ""
 
-#: ui/internal/window/actions.go:214
+#: ui/internal/window/actions.go:221
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:266
+#: ui/internal/window/actions.go:276
 msgid "Starring the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:268
+#: ui/internal/window/actions.go:278
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:272
+#: ui/internal/window/actions.go:282
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:345
+#: ui/internal/window/actions.go:358
 msgid "Moving the message to Trash"
 msgstr ""
 
-#: ui/internal/window/actions.go:347
+#: ui/internal/window/actions.go:360
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:407
+#: ui/internal/window/actions.go:432
 msgid "Archiving the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:409
+#: ui/internal/window/actions.go:434
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:410
+#: ui/internal/window/actions.go:435
 msgid "This account has no archive folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:436 ui/internal/window/actions.go:450
+#: ui/internal/window/actions.go:468 ui/internal/window/actions.go:482
 msgid "This account has no junk folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:439
+#: ui/internal/window/actions.go:471
 msgid "Mark as junk?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:442
+#: ui/internal/window/actions.go:474
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:444
+#: ui/internal/window/actions.go:476
 msgid "Mark as _Junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:447
+#: ui/internal/window/actions.go:479
 msgid "Marking the message as junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:449
+#: ui/internal/window/actions.go:481
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/addresses.go:150
+#: ui/internal/window/addresses.go:159
 msgid "Address copied"
 msgstr ""
 
-#: ui/internal/window/addresses.go:177
+#: ui/internal/window/addresses.go:220
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:1136
+#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1214
 msgid "_New Message"
 msgstr ""
 
-#: ui/internal/window/assistant_panel.go:1003
+#: ui/internal/window/assistant_panel.go:1006
 #: ui/internal/window/conversation_draft.go:190 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr ""
 
-#: ui/internal/window/attachments.go:101
+#: ui/internal/window/attachments.go:102
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr ""
 
-#: ui/internal/window/attachments.go:185 ui/data/ui/message_window.ui:62
-#: ui/data/ui/window.ui:502
-msgid "More Actions"
-msgstr ""
-
-#: ui/internal/window/attachments.go:228 ui/internal/window/attachments.go:507
+#: ui/internal/window/attachments.go:244 ui/internal/window/attachments.go:535
 msgid ""
 "Programs and scripts are not opened directly; save the file and decide "
 "yourself."
 msgstr ""
 
-#: ui/internal/window/attachments.go:243
+#: ui/internal/window/attachments.go:259
 msgid "_View"
 msgstr ""
 
-#: ui/internal/window/attachments.go:245
+#: ui/internal/window/attachments.go:261
 msgid "_Open"
 msgstr ""
 
-#: ui/internal/window/attachments.go:249
+#: ui/internal/window/attachments.go:265
 msgid "Save _As…"
 msgstr ""
 
-#: ui/internal/window/attachments.go:277
+#: ui/internal/window/attachments.go:306
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:627
+#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:637
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:629
+#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:639
 msgid "This message could not be read."
 msgstr ""
 
-#. TRANSLATORS: %s is a size such as "16.0 MiB".
-#: ui/internal/window/attachments.go:341
+#. TRANSLATORS: %s is a size such as "16.8 MB".
+#: ui/internal/window/attachments.go:381
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
 msgstr ""
 
 #. TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
-#: ui/internal/window/attachments.go:346
+#: ui/internal/window/attachments.go:386
 msgid "On the server only; it is downloaded when you open it"
 msgstr ""
 
-#: ui/internal/window/attachments.go:426
+#: ui/internal/window/attachments.go:466
 msgid "Attachment"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of files written.
-#: ui/internal/window/attachments.go:483
+#: ui/internal/window/attachments.go:511
 #, c-format
 msgid "Saved %d attachment"
 msgid_plural "Saved %d attachments"
@@ -6319,37 +7198,34 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: the first %d is how many failed, the second how many there were.
-#: ui/internal/window/attachments.go:486
+#: ui/internal/window/attachments.go:514
 #, c-format
 msgid "%d of %d attachments could not be saved"
 msgstr ""
 
-#: ui/internal/window/attachments.go:527 ui/internal/window/attachments.go:554
-#: ui/internal/window/attachments.go:567
+#: ui/internal/window/attachments.go:555 ui/internal/window/attachments.go:582
+#: ui/internal/window/attachments.go:601 ui/internal/window/attachments.go:619
+#: ui/internal/window/attachments.go:629
 msgid "The attachment could not be opened"
 msgstr ""
 
-#: ui/internal/window/attachments.go:546
-msgid "Opening the attachment"
-msgstr ""
-
-#: ui/internal/window/attachments.go:579
+#: ui/internal/window/attachments.go:646
 msgid "Save Attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:595
+#: ui/internal/window/attachments.go:662
 msgid "Saving the attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:611
+#: ui/internal/window/attachments.go:678
 msgid "Save Attachments"
 msgstr ""
 
-#: ui/internal/window/attachments.go:631
+#: ui/internal/window/attachments.go:698
 msgid "Saving the attachments"
 msgstr ""
 
-#: ui/internal/window/board_quit.go:41 ui/data/ui/window.ui:97
+#: ui/internal/window/board_quit.go:41 ui/data/ui/window.ui:105
 msgid "Main Menu"
 msgstr ""
 
@@ -6373,54 +7249,30 @@ msgstr ""
 msgid "Preparing the reply"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:27
-#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
-#: ui/data/ui/window.ui:860
-msgid "From"
-msgstr ""
-
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:55
-#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
-#: ui/data/ui/window.ui:886
-msgid "To"
-msgstr ""
-
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:101
-#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
-#: ui/data/ui/window.ui:914
-msgid "Cc"
-msgstr ""
-
-#: ui/internal/window/conversation_card.go:737
-#: ui/internal/window/message_view.go:330
+#: ui/internal/window/conversation_card.go:758
+#: ui/internal/window/message_view.go:339
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:776 ui/data/ui/embedded_window.ui:61
-#: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
-#: ui/data/ui/window.ui:710 ui/data/ui/window.ui:1174
-msgid "Load _Images"
-msgstr ""
-
-#: ui/internal/window/conversation_card.go:777 ui/data/ui/message_window.ui:265
-#: ui/data/ui/window.ui:716
+#: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:265
+#: ui/data/ui/window.ui:640
 msgid "Always From This _Sender"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:778 ui/data/ui/message_window.ui:267
-#: ui/data/ui/window.ui:718
+#: ui/internal/window/conversation_card.go:799 ui/data/ui/message_window.ui:267
+#: ui/data/ui/window.ui:642
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:296
-#: ui/data/ui/window.ui:747
+#: ui/internal/window/conversation_card.go:819 ui/data/ui/message_window.ui:296
+#: ui/data/ui/window.ui:671
 msgid "_Download Pictures"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:984
-#: ui/internal/window/message_view.go:534
+#: ui/internal/window/conversation_card.go:1005
+#: ui/internal/window/message_view.go:543
 msgid "Loading the message"
 msgstr ""
 
@@ -6449,54 +7301,54 @@ msgstr ""
 msgid "Loading the images"
 msgstr ""
 
-#: ui/internal/window/folders.go:103 ui/internal/window/folders.go:435
+#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:467
 msgid "Folders Unavailable"
 msgstr ""
 
-#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:436
+#: ui/internal/window/folders.go:105 ui/internal/window/folders.go:468
 msgid "Loading folders"
 msgstr ""
 
-#: ui/internal/window/folders.go:214
+#: ui/internal/window/folders.go:215
 msgid "Favourites"
 msgstr ""
 
-#: ui/internal/window/folders.go:320
+#: ui/internal/window/folders.go:333
 msgctxt "folder"
 msgid "Inbox"
 msgstr ""
 
-#: ui/internal/window/folders.go:322
+#: ui/internal/window/folders.go:335
 msgctxt "folder"
 msgid "Drafts"
 msgstr ""
 
-#: ui/internal/window/folders.go:324
+#: ui/internal/window/folders.go:337
 msgctxt "folder"
 msgid "Sent"
 msgstr ""
 
-#: ui/internal/window/folders.go:326
+#: ui/internal/window/folders.go:339
 msgctxt "folder"
 msgid "Trash"
 msgstr ""
 
-#: ui/internal/window/folders.go:328
+#: ui/internal/window/folders.go:341
 msgctxt "folder"
 msgid "Junk"
 msgstr ""
 
-#: ui/internal/window/folders.go:330
+#: ui/internal/window/folders.go:343
 msgctxt "folder"
 msgid "Archive"
 msgstr ""
 
-#: ui/internal/window/folders.go:332
+#: ui/internal/window/folders.go:345
 msgctxt "folder"
 msgid "All Mail"
 msgstr ""
 
-#: ui/internal/window/folders.go:334
+#: ui/internal/window/folders.go:347
 msgctxt "folder"
 msgid "Outbox"
 msgstr ""
@@ -6504,102 +7356,102 @@ msgstr ""
 #. TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
 #. the first %d is the number of unread messages (the plural follows
 #. it), the second the number of all messages in the folder.
-#: ui/internal/window/folders.go:358
+#: ui/internal/window/folders.go:371
 #, c-format
 msgid "%d unread of %d"
 msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:427 ui/data/ui/window.ui:780
+#: ui/internal/window/folders.go:459 ui/data/ui/window.ui:704
 msgid "No Accounts"
 msgstr ""
 
-#: ui/internal/window/folders.go:428
+#: ui/internal/window/folders.go:460
 msgid "Add a mail account in Preferences to see its folders here."
 msgstr ""
 
-#: ui/internal/window/folders.go:430
+#: ui/internal/window/folders.go:462
 msgid "No Enabled Accounts"
 msgstr ""
 
-#: ui/internal/window/folders.go:431
+#: ui/internal/window/folders.go:463
 msgid "Enable an account in Preferences to see its folders here."
 msgstr ""
 
-#: ui/internal/window/folders.go:440
+#: ui/internal/window/folders.go:472
 msgid "No Folders Yet"
 msgstr ""
 
-#: ui/internal/window/folders.go:441
+#: ui/internal/window/folders.go:473
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
-#: ui/internal/window/message_view.go:621
-#: ui/internal/window/message_view.go:633
+#: ui/internal/window/message_view.go:631
+#: ui/internal/window/message_view.go:643
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:625
+#: ui/internal/window/message_view.go:635
 msgid "Downloading…"
 msgstr ""
 
-#: ui/internal/window/messages.go:88 ui/internal/window/messages.go:264
-#: ui/internal/window/threads.go:46
+#: ui/internal/window/messages.go:82 ui/internal/window/messages.go:253
+#: ui/internal/window/threads.go:40
 msgid "Loading messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:177 ui/internal/window/threads.go:82
+#: ui/internal/window/messages.go:166 ui/internal/window/threads.go:71
 msgid "Loading more messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:256
+#: ui/internal/window/messages.go:245
 msgid "Select a folder"
 msgstr ""
 
-#: ui/internal/window/messages.go:257
+#: ui/internal/window/messages.go:246
 msgid "Choose a folder in the sidebar to see its messages."
 msgstr ""
 
-#: ui/internal/window/messages.go:259
+#: ui/internal/window/messages.go:248
 msgid "Not Synchronised"
 msgstr ""
 
-#: ui/internal/window/messages.go:260
+#: ui/internal/window/messages.go:249
 msgid ""
 "Messages moved here are archived on the server; the folder itself is not "
 "downloaded."
 msgstr ""
 
-#: ui/internal/window/messages.go:263
+#: ui/internal/window/messages.go:252
 msgid "Messages Unavailable"
 msgstr ""
 
-#: ui/internal/window/messages.go:268
+#: ui/internal/window/messages.go:257
 msgid "No Unread Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:269
+#: ui/internal/window/messages.go:258
 msgid "Everything in this folder has been read."
 msgstr ""
 
-#: ui/internal/window/messages.go:271
+#: ui/internal/window/messages.go:260
 msgid "No Flagged Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:272
+#: ui/internal/window/messages.go:261
 msgid "No message in this folder carries a flag."
 msgstr ""
 
-#: ui/internal/window/messages.go:274
+#: ui/internal/window/messages.go:263
 msgid "No Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:275
+#: ui/internal/window/messages.go:264
 msgid "This folder is empty."
 msgstr ""
 
-#: ui/internal/window/notify.go:123
+#: ui/internal/window/notify.go:136
 msgid "New message"
 msgstr ""
 
@@ -6619,7 +7471,7 @@ msgstr ""
 msgid "Sending the message"
 msgstr ""
 
-#: ui/internal/window/outbox.go:75 ui/data/ui/window.ui:323
+#: ui/internal/window/outbox.go:75 ui/data/ui/window.ui:248
 msgid "Retry"
 msgstr ""
 
@@ -6637,84 +7489,84 @@ msgstr ""
 msgid "Cancel sending this message?"
 msgstr ""
 
-#: ui/internal/window/outbox.go:205 ui/internal/window/selection.go:410
+#: ui/internal/window/outbox.go:205 ui/internal/window/selection.go:414
 msgid "Do Not _Send"
 msgstr ""
 
-#: ui/internal/window/outbox.go:217 ui/internal/window/selection.go:423
+#: ui/internal/window/outbox.go:217 ui/internal/window/selection.go:427
 msgid "Cancelling the send"
 msgstr ""
 
-#: ui/internal/window/preferences.go:368
+#: ui/internal/window/preferences.go:385
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:397
+#: ui/internal/window/preferences.go:414
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:460
+#: ui/internal/window/preferences.go:477
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:496
+#: ui/internal/window/preferences.go:513
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:498
+#: ui/internal/window/preferences.go:515
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
-#. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:502
+#. TRANSLATORS: %s is a size such as "1.2 GB".
+#: ui/internal/window/preferences.go:519
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
-#. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:506
+#. TRANSLATORS: %s is a size such as "1.2 GB".
+#: ui/internal/window/preferences.go:523
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:644
+#: ui/internal/window/preferences.go:661
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:647
+#: ui/internal/window/preferences.go:664
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:650
+#: ui/internal/window/preferences.go:667
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:685
+#: ui/internal/window/preferences.go:702
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:691
+#: ui/internal/window/preferences.go:708
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:738
+#: ui/internal/window/preferences.go:755
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:783
+#: ui/internal/window/preferences.go:800
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:786
+#: ui/internal/window/preferences.go:803
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:789
+#: ui/internal/window/preferences.go:806
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
@@ -6745,6 +7597,7 @@ msgid "Changing the remote content preference"
 msgstr ""
 
 #: ui/internal/window/remote.go:264 ui/internal/window/remote.go:290
+#: ui/internal/window/contacts_detail.go:249
 msgid "Open This Link?"
 msgstr ""
 
@@ -6755,11 +7608,12 @@ msgid "The link is shown as “%s” but leads to %s."
 msgstr ""
 
 #: ui/internal/window/remote.go:270 ui/internal/window/remote.go:296
+#: ui/internal/window/contacts_detail.go:255
 msgid "_Open Link"
 msgstr ""
 
 #. TRANSLATORS: %s is the link's real destination.
-#: ui/internal/window/remote.go:292
+#: ui/internal/window/remote.go:292 ui/internal/window/contacts_detail.go:251
 #, c-format
 msgid "This link leads to %s."
 msgstr ""
@@ -6780,187 +7634,187 @@ msgid_plural "%d pictures of this message are on the server only"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search.go:258
+#: ui/internal/window/search.go:268
 msgid "Loading more results"
 msgstr ""
 
-#: ui/internal/window/search.go:310 ui/internal/window/search_ownwords.go:154
-#: ui/data/ui/window.ui:270
+#: ui/internal/window/search.go:320 ui/internal/window/search_ownwords.go:154
+#: ui/data/ui/window.ui:195
 msgid "Search Mail"
 msgstr ""
 
-#: ui/internal/window/search.go:314
+#: ui/internal/window/search.go:324
 msgid "Search Failed"
 msgstr ""
 
-#: ui/internal/window/search.go:315
+#: ui/internal/window/search.go:325
 msgid "Searching"
 msgstr ""
 
-#: ui/internal/window/search.go:317
+#: ui/internal/window/search.go:327
 msgid "Searching…"
 msgstr ""
 
-#: ui/internal/window/search.go:319
+#: ui/internal/window/search.go:329
 msgid "No Results"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Folder search scope; %s is a folder.
-#: ui/internal/window/search.go:342
+#: ui/internal/window/search.go:353
 #, c-format
 msgid "Search in %s"
 msgstr ""
 
-#: ui/internal/window/search.go:344
+#: ui/internal/window/search.go:355
 msgid "Select a folder to search in it"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Account search scope; %s is an account.
-#: ui/internal/window/search.go:348
+#: ui/internal/window/search.go:359
 #, c-format
 msgid "Search every folder of %s except Trash and Junk"
 msgstr ""
 
-#: ui/internal/window/search.go:352
+#: ui/internal/window/search.go:363
 msgid "Search every account except Trash and Junk"
 msgstr ""
 
 #. TRANSLATORS: where a search result lies, shown in its row:
 #. the folder, then the account.
-#: ui/internal/window/search_model.go:150
+#: ui/internal/window/search_model.go:152
 #, c-format
 msgctxt "search result origin"
 msgid "%s · %s"
 msgstr ""
 
-#: ui/internal/window/search_model.go:162
+#: ui/internal/window/search_model.go:164
 msgid "Searches the mail stored on this computer."
 msgstr ""
 
-#: ui/internal/window/search_model.go:164
+#: ui/internal/window/search_model.go:166
 msgid "Searches all mail stored on this computer."
 msgstr ""
 
-#: ui/internal/window/search_model.go:166
+#: ui/internal/window/search_model.go:168
 #, c-format
 msgid "Searches the mail of the last %d day stored on this computer."
 msgid_plural "Searches the mail of the last %d days stored on this computer."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search_model.go:178
+#: ui/internal/window/search_model.go:180
 #, c-format
 msgid "More than %d results"
 msgstr ""
 
-#: ui/internal/window/search_model.go:180
+#: ui/internal/window/search_model.go:182
 #, c-format
 msgid "%d result"
 msgid_plural "%d results"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search_model.go:188
+#: ui/internal/window/search_model.go:190
 msgid "Nothing in this folder matches."
 msgstr ""
 
-#: ui/internal/window/search_model.go:190
+#: ui/internal/window/search_model.go:192
 msgid ""
 "Nothing in this account matches. Trash and Junk are searched only when "
 "chosen as the folder."
 msgstr ""
 
-#: ui/internal/window/search_model.go:192
+#: ui/internal/window/search_model.go:194
 msgid ""
 "Nothing in any account matches. Trash and Junk are searched only when chosen "
 "as the folder."
 msgstr ""
 
 #. TRANSLATORS: %s is a folder or account name, %d the progress in percent.
-#: ui/internal/window/status.go:116 ui/internal/window/sync.go:220
+#: ui/internal/window/status.go:117 ui/internal/window/sync.go:226
 #, c-format
 msgid "Syncing %s… %d %%"
 msgstr ""
 
 #. TRANSLATORS: %s is a folder or account name.
-#: ui/internal/window/status.go:119 ui/internal/window/sync.go:223
+#: ui/internal/window/status.go:120 ui/internal/window/sync.go:229
 #, c-format
 msgid "Syncing %s…"
 msgstr ""
 
-#: ui/internal/window/status.go:134 ui/internal/window/sync.go:243
+#: ui/internal/window/status.go:135 ui/internal/window/sync.go:249
 msgid "Sync error"
 msgstr ""
 
-#: ui/internal/window/status.go:139 ui/internal/window/sync.go:250
+#: ui/internal/window/status.go:140 ui/internal/window/sync.go:256
 msgid "Offline, retrying"
 msgstr ""
 
 #. TRANSLATORS: state of an account; %s is the time of its last
 #. check for new mail, e.g. "15:04", or its date when that was
 #. before today.
-#: ui/internal/window/status.go:145
+#: ui/internal/window/status.go:146
 #, c-format
 msgid "Last synced %s"
 msgstr ""
 
-#: ui/internal/window/status.go:147 ui/internal/window/sync.go:257
+#: ui/internal/window/status.go:148 ui/internal/window/sync.go:263
 msgid "Up to date"
 msgstr ""
 
-#: ui/internal/window/status.go:184
+#: ui/internal/window/status.go:185
 msgid "Connecting to backend…"
 msgstr ""
 
-#: ui/internal/window/status.go:186
+#: ui/internal/window/status.go:187
 msgid "Backend unavailable"
 msgstr ""
 
-#: ui/internal/window/status.go:190
+#: ui/internal/window/status.go:191
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr ""
 
-#: ui/internal/window/status.go:196
+#: ui/internal/window/status.go:197
 msgid "Not syncing"
 msgstr ""
 
-#: ui/internal/window/status.go:202
+#: ui/internal/window/status.go:203
 msgid "Connected, but system.info failed"
 msgstr ""
 
-#: ui/internal/window/status.go:204
+#: ui/internal/window/status.go:205
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr ""
 
 #. TRANSLATORS: banner button
-#: ui/internal/window/status.go:328 ui/internal/window/sync.go:564
-#: ui/data/ui/window.ui:335
+#: ui/internal/window/status.go:327 ui/internal/window/sync.go:570
+#: ui/data/ui/window.ui:260
 msgid "_Edit Account…"
 msgstr ""
 
 #. TRANSLATORS: status line; %s is an account name.
-#: ui/internal/window/sync.go:227
+#: ui/internal/window/sync.go:233
 #, c-format
 msgid "Sign-in required: %s"
 msgstr ""
 
 #. TRANSLATORS: status line; %s is an account name.
-#: ui/internal/window/sync.go:241
+#: ui/internal/window/sync.go:247
 #, c-format
 msgid "Sync error: %s"
 msgstr ""
 
 #. TRANSLATORS: status line; %s is the time of the last check for
 #. new mail, e.g. "15:04", or its date when that was before today.
-#: ui/internal/window/sync.go:255
+#: ui/internal/window/sync.go:261
 #, c-format
 msgid "Up to date · %s"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages waiting in the outbox.
-#: ui/internal/window/sync.go:264
+#: ui/internal/window/sync.go:270
 #, c-format
 msgid "Sending %d message…"
 msgid_plural "Sending %d messages…"
@@ -6969,7 +7823,7 @@ msgstr[1] ""
 
 #. TRANSLATORS: status line; %d is the number of messages in the outbox
 #. whose sending failed.
-#: ui/internal/window/sync.go:272
+#: ui/internal/window/sync.go:278
 #, c-format
 msgid "%d message not sent"
 msgid_plural "%d messages not sent"
@@ -6977,104 +7831,100 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: account status (sidebar, Settings → Accounts)
-#: ui/internal/window/sync.go:280
+#: ui/internal/window/sync.go:286
 msgid "Certificate changed"
 msgstr ""
 
 #. TRANSLATORS: account status (sidebar, Settings → Accounts)
-#: ui/internal/window/sync.go:283
+#: ui/internal/window/sync.go:289
 msgid "Certificate problem"
 msgstr ""
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:328
+#: ui/internal/window/sync.go:334
 #, c-format
 msgid "The certificate of %s has changed"
 msgstr ""
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:331
+#: ui/internal/window/sync.go:337
 #, c-format
 msgid "The certificate of %s is not trusted"
 msgstr ""
 
-#: ui/internal/window/sync.go:381
+#: ui/internal/window/sync.go:387
 msgid "Checking for new mail…"
 msgstr ""
 
-#: ui/internal/window/sync.go:397
+#: ui/internal/window/sync.go:403
 msgid "Checking for new mail"
 msgstr ""
 
-#: ui/internal/window/sync.go:558 ui/data/ui/account_wizard.ui:308
+#: ui/internal/window/sync.go:564 ui/data/ui/account_wizard.ui:308
 msgid "Open Online Accounts"
 msgstr ""
 
 #. TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
-#: ui/internal/window/sync.go:561
+#: ui/internal/window/sync.go:567
 msgctxt "button"
 msgid "Sign In"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:586
+#: ui/internal/window/sync.go:592
 #, c-format
 msgid "Sign in to %s again in your browser"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:594
+#: ui/internal/window/sync.go:600
 #, c-format
 msgid "GNOME Online Accounts is not available; %s cannot sign in"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:597
+#: ui/internal/window/sync.go:603
 #, c-format
 msgid "Sign in to %s again in Settings → Online Accounts"
 msgstr ""
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:606
+#: ui/internal/window/sync.go:612
 #, c-format
 msgid "No password is stored for %s"
 msgstr ""
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:609
+#: ui/internal/window/sync.go:615
 #, c-format
 msgid "The server rejected the password of %s"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:612
+#: ui/internal/window/sync.go:618
 #, c-format
 msgid "The system keyring is unavailable; %s cannot sign in"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:615
+#: ui/internal/window/sync.go:621
 #, c-format
 msgid "%s needs attention"
 msgstr ""
 
-#: ui/internal/window/threads.go:184
+#: ui/internal/window/threads.go:173
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1025
+#: ui/internal/window/window.go:1062
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1097 ui/data/ui/window.ui:253
-msgid "Search"
-msgstr ""
-
-#: ui/internal/window/window.go:1103 ui/data/ui/window.ui:223
+#: ui/internal/window/window.go:1141 ui/data/ui/window.ui:148
 msgid "Messages"
 msgstr ""
 
-#: ui/internal/maildate/groups.go:37 ui/data/ui/window.ui:360
+#: ui/internal/maildate/groups.go:37 ui/data/ui/window.ui:285
 msgid "Flagged"
 msgstr ""
 
@@ -7101,6 +7951,1518 @@ msgstr ""
 #: ui/internal/window/preferences_calendar.go:649
 #: ui/data/ui/account_wizard.ui:198 ui/data/ui/account_wizard.ui:255
 msgid "_Forget"
+msgstr ""
+
+#. TRANSLATORS: the toast after messages went to the Junk folder;
+#. its button takes it back.
+#: ui/internal/undo/text.go:25
+#, c-format
+msgid "Moved %d message to Junk."
+msgid_plural "Moved %d messages to Junk."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the toast after Move To; %d is the number of
+#. messages, %s the name of the folder they went to.
+#: ui/internal/undo/text.go:30
+#, c-format
+msgid "Moved %d message to “%s”."
+msgid_plural "Moved %d messages to “%s”."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the toast after Move To, when the folder has no name.
+#: ui/internal/undo/text.go:33
+#, c-format
+msgid "Moved %d message."
+msgid_plural "Moved %d messages."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the button of the toast after a message was moved (to
+#. Trash, the archive, another folder); it moves it back. %s is the
+#. keyboard shortcut that does the same, like Ctrl+Z.
+#: ui/internal/undo/text.go:50
+#, c-format
+msgid "Undo (%s)"
+msgstr ""
+
+#. TRANSLATORS: the toast after Undo moved messages back to where they
+#. were.
+#: ui/internal/undo/text.go:58
+#, c-format
+msgid "Moved %d message back."
+msgid_plural "Moved %d messages back."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: Undo (Ctrl+Z) of a move to Trash or another folder
+#. failed.
+#: ui/internal/undo/text.go:65
+msgid "Could not move the messages back."
+msgstr ""
+
+#. TRANSLATORS: Ctrl+Z when no move of mail is left to take back.
+#: ui/internal/undo/text.go:71
+msgid "Nothing to undo."
+msgstr ""
+
+#. TRANSLATORS: %s is a version number such as 0.2.1
+#: ui/internal/updates/updates.go:122
+#, c-format
+msgid "Malachi Mail %s fixes a security problem. Please update."
+msgstr ""
+
+#: ui/internal/updates/updates.go:127 ui/internal/updates/updates.go:142
+#: ui/internal/updates/updates.go:194 ui/internal/updates/updates.go:229
+msgid "Download"
+msgstr ""
+
+#: ui/internal/updates/updates.go:129 ui/internal/updates/updates.go:145
+msgid "What's New"
+msgstr ""
+
+#. TRANSLATORS: %s is a version number such as 0.2.1
+#: ui/internal/updates/updates.go:137 ui/internal/updates/updates.go:271
+#, c-format
+msgid "Malachi Mail %s is available."
+msgstr ""
+
+#: ui/internal/updates/updates.go:146
+msgid "Remind Me Later"
+msgstr ""
+
+#: ui/internal/updates/updates.go:147
+msgid "Skip This Version"
+msgstr ""
+
+#: ui/internal/updates/updates.go:155 ui/internal/updates/updates.go:230
+msgid "More Information"
+msgstr ""
+
+#: ui/internal/updates/updates.go:157 ui/internal/updates/updates.go:231
+#: ui/internal/signature/text.go:377
+msgid "Close"
+msgstr ""
+
+#: ui/internal/updates/updates.go:190
+msgid "Security Update Available"
+msgstr ""
+
+#. TRANSLATORS: %s is a version number such as 0.2.1
+#: ui/internal/updates/updates.go:192
+#, c-format
+msgid ""
+"Malachi Mail %s fixes a security problem. Download the installer and install "
+"it once Malachi Mail has quit."
+msgstr ""
+
+#: ui/internal/updates/updates.go:196
+msgid "Quit Malachi Mail after the download starts"
+msgstr ""
+
+#. TRANSLATORS: %s is a version number such as 0.2.1
+#: ui/internal/updates/updates.go:225
+#, c-format
+msgid "What's New in Malachi Mail %s"
+msgstr ""
+
+#. TRANSLATORS: %s is a date
+#: ui/internal/updates/updates.go:227
+#, c-format
+msgid "Released %s"
+msgstr ""
+
+#: ui/internal/updates/updates.go:263
+msgid "Automatic update checks are off."
+msgstr ""
+
+#: ui/internal/updates/updates.go:265
+msgid "This build does not check for updates."
+msgstr ""
+
+#: ui/internal/updates/updates.go:267
+msgid "Checking for updates…"
+msgstr ""
+
+#: ui/internal/updates/updates.go:274
+msgid "Could not check for updates."
+msgstr ""
+
+#. TRANSLATORS: %s is the date and time of the last check
+#: ui/internal/updates/updates.go:278
+#, c-format
+msgid "You are using the latest version (checked %s)."
+msgstr ""
+
+#: ui/internal/updates/updates.go:280
+msgid "You are using the latest version."
+msgstr ""
+
+#: ui/internal/updates/updates.go:282
+msgid "Not checked for updates yet."
+msgstr ""
+
+#: ui/internal/updates/updates.go:286
+msgid "Check Now"
+msgstr ""
+
+#: ui/internal/updates/updates.go:296
+msgid "Updates"
+msgstr ""
+
+#: ui/internal/updates/updates.go:298
+msgid "Check for Updates Automatically"
+msgstr ""
+
+#: ui/internal/updates/updates.go:301
+msgid ""
+"Once a day, Malachi Mail asks its website which versions exist. It sends "
+"only its version number: nothing about you, your mail or your computer."
+msgstr ""
+
+#: ui/internal/updates/updates.go:306
+msgid ""
+"Malachi Mail checks once a day whether a new version exists and sends only "
+"its version number. You can turn this off in Preferences."
+msgstr ""
+
+#. TRANSLATORS: the Preferences page of the mail rules (filters that
+#. move, mark, forward or answer new mail).
+#: ui/internal/rules/text.go:42
+msgid "Rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:47
+msgid ""
+"Rules act on new mail in the inbox as it arrives, in the order of this list. "
+"Malachi Mail runs them on this computer, only while it is running."
+msgstr ""
+
+#: ui/internal/rules/text.go:52
+msgid "No Rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:57
+msgid ""
+"Move, mark or forward new messages automatically. You can also create a rule "
+"from a message in its context menu."
+msgstr ""
+
+#: ui/internal/rules/text.go:62
+msgid "Add Rule…"
+msgstr ""
+
+#: ui/internal/rules/text.go:67
+msgid "Edit Rule…"
+msgstr ""
+
+#: ui/internal/rules/text.go:72
+msgid "Remove Rule"
+msgstr ""
+
+#: ui/internal/rules/text.go:77
+msgid "Turn the rule on or off"
+msgstr ""
+
+#: ui/internal/rules/text.go:127
+msgid "Removed account"
+msgstr ""
+
+#: ui/internal/rules/text.go:132
+msgid "All Mail Accounts"
+msgstr ""
+
+#: ui/internal/rules/text.go:141
+msgid "Not used yet"
+msgstr ""
+
+#: ui/internal/rules/text.go:143
+#, c-format
+msgid "Used on %d message, last %s"
+msgid_plural "Used on %d messages, last %s"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:145
+#, c-format
+msgid "Used on %d message"
+msgid_plural "Used on %d messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: after the status line of a rule: messages it would
+#. have forwarded or answered and did not (bulk mail, an automatic
+#. message, the user's own address, a limit).
+#: ui/internal/rules/text.go:151
+#, c-format
+msgid "%s · %d outgoing message held back"
+msgid_plural "%s · %d outgoing messages held back"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:160
+msgid ""
+"The folder this rule moves messages to no longer exists, so the rule was "
+"turned off."
+msgstr ""
+
+#: ui/internal/rules/text.go:162
+msgid "This rule could not send a message, so it was turned off."
+msgstr ""
+
+#: ui/internal/rules/text.go:178
+#, c-format
+msgid "Remove the Rule “%s”?"
+msgstr ""
+
+#: ui/internal/rules/text.go:179
+msgid "Messages it already moved or marked stay as they are."
+msgstr ""
+
+#: ui/internal/rules/text.go:190
+msgid "Send Mail Automatically?"
+msgstr ""
+
+#: ui/internal/rules/text.go:191
+msgid "Turn On"
+msgstr ""
+
+#: ui/internal/rules/text.go:205
+#, c-format
+msgid ""
+"This rule forwards every matching message to %s and answers its sender, "
+"without asking you. Bulk mail, automatic messages and your own messages are "
+"never forwarded or answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:207
+#, c-format
+msgid ""
+"This rule forwards every matching message to %s without asking you. Bulk "
+"mail, automatic messages and your own messages are never forwarded."
+msgstr ""
+
+#: ui/internal/rules/text.go:209
+msgid ""
+"This rule answers the sender of every matching message without asking you, "
+"at most once in four days per sender. Bulk mail, automatic messages and your "
+"own messages are never answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:221
+msgid "New Rule"
+msgstr ""
+
+#. TRANSLATORS: the title of the editor of a stored mail rule.
+#: ui/internal/rules/text.go:224
+msgid "Edit Rule"
+msgstr ""
+
+#. TRANSLATORS: the label of the account choice of the rule editor.
+#: ui/internal/rules/text.go:236
+msgid "Apply to"
+msgstr ""
+
+#: ui/internal/rules/text.go:241
+msgid "When a new message arrives"
+msgstr ""
+
+#: ui/internal/rules/text.go:247
+msgid "and any of these conditions is met"
+msgstr ""
+
+#: ui/internal/rules/text.go:249
+msgid "and all of these conditions are met"
+msgstr ""
+
+#: ui/internal/rules/text.go:254
+msgid "Do the following"
+msgstr ""
+
+#: ui/internal/rules/text.go:259
+msgid "Add Condition"
+msgstr ""
+
+#: ui/internal/rules/text.go:264
+msgid "Add Action"
+msgstr ""
+
+#: ui/internal/rules/text.go:274
+msgid "Rule is on"
+msgstr ""
+
+#: ui/internal/rules/text.go:279
+msgid "Stop processing more rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:284
+msgid "Rules below this one do not run on a message this rule matched."
+msgstr ""
+
+#: ui/internal/rules/text.go:291
+msgctxt "rule field"
+msgid "From"
+msgstr ""
+
+#: ui/internal/rules/text.go:293
+msgctxt "rule field"
+msgid "To"
+msgstr ""
+
+#: ui/internal/rules/text.go:295
+msgctxt "rule field"
+msgid "Cc"
+msgstr ""
+
+#: ui/internal/rules/text.go:297
+msgctxt "rule field"
+msgid "To or Cc"
+msgstr ""
+
+#: ui/internal/rules/text.go:299
+msgctxt "rule field"
+msgid "Subject"
+msgstr ""
+
+#: ui/internal/rules/text.go:301
+msgctxt "rule field"
+msgid "Message text"
+msgstr ""
+
+#. TRANSLATORS: the List-Id of mailing-list mail.
+#: ui/internal/rules/text.go:304
+msgctxt "rule field"
+msgid "Mailing list ID"
+msgstr ""
+
+#: ui/internal/rules/text.go:306
+msgctxt "rule field"
+msgid "Bulk mail"
+msgstr ""
+
+#: ui/internal/rules/text.go:308
+msgctxt "rule field"
+msgid "Attachments"
+msgstr ""
+
+#. TRANSLATORS: Attachments [are] yes/no in the rule editor.
+#: ui/internal/rules/text.go:318
+msgctxt "rule operator"
+msgid "are"
+msgstr ""
+
+#: ui/internal/rules/text.go:322
+msgctxt "rule operator"
+msgid "contains"
+msgstr ""
+
+#: ui/internal/rules/text.go:324
+msgctxt "rule operator"
+msgid "does not contain"
+msgstr ""
+
+#: ui/internal/rules/text.go:326
+msgctxt "rule operator"
+msgid "is"
+msgstr ""
+
+#: ui/internal/rules/text.go:328
+msgctxt "rule operator"
+msgid "is not"
+msgstr ""
+
+#: ui/internal/rules/text.go:330
+msgctxt "rule operator"
+msgid "begins with"
+msgstr ""
+
+#: ui/internal/rules/text.go:332
+msgctxt "rule operator"
+msgid "ends with"
+msgstr ""
+
+#: ui/internal/rules/text.go:334
+msgctxt "rule operator"
+msgid "is from domain"
+msgstr ""
+
+#: ui/internal/rules/text.go:346
+msgctxt "bulk kind"
+msgid "any kind"
+msgstr ""
+
+#: ui/internal/rules/text.go:348
+msgctxt "bulk kind"
+msgid "newsletter"
+msgstr ""
+
+#: ui/internal/rules/text.go:350
+msgctxt "bulk kind"
+msgid "mailing list"
+msgstr ""
+
+#: ui/internal/rules/text.go:352
+msgctxt "bulk kind"
+msgid "automated message"
+msgstr ""
+
+#: ui/internal/rules/text.go:356
+msgctxt "attachments"
+msgid "none"
+msgstr ""
+
+#: ui/internal/rules/text.go:358
+msgctxt "attachments"
+msgid "present"
+msgstr ""
+
+#: ui/internal/rules/text.go:367
+msgid "example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:369
+msgid "Name or address"
+msgstr ""
+
+#: ui/internal/rules/text.go:371
+msgid "list.example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:373
+msgid "Text"
+msgstr ""
+
+#: ui/internal/rules/text.go:380
+msgctxt "rule action"
+msgid "Move to folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:382
+msgctxt "rule action"
+msgid "Mark as read"
+msgstr ""
+
+#: ui/internal/rules/text.go:384
+msgctxt "rule action"
+msgid "Star"
+msgstr ""
+
+#: ui/internal/rules/text.go:386
+msgctxt "rule action"
+msgid "Move to Trash"
+msgstr ""
+
+#: ui/internal/rules/text.go:388
+msgctxt "rule action"
+msgid "Move to Junk"
+msgstr ""
+
+#: ui/internal/rules/text.go:390
+msgctxt "rule action"
+msgid "Forward to"
+msgstr ""
+
+#: ui/internal/rules/text.go:392
+msgctxt "rule action"
+msgid "Reply automatically"
+msgstr ""
+
+#: ui/internal/rules/text.go:400
+msgid "Choose a Folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:405
+msgid "name@example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:411
+msgid "Subject (Re: and the original subject if empty)"
+msgstr ""
+
+#: ui/internal/rules/text.go:416
+msgid "Reply text"
+msgstr ""
+
+#: ui/internal/rules/text.go:422
+msgid ""
+"Each sender gets at most one automatic reply in four days. Bulk mail, "
+"automatic messages and your own messages are never answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:424
+msgid ""
+"The message is sent whole as an attachment. Bulk mail, automatic messages "
+"and your own messages are never forwarded."
+msgstr ""
+
+#: ui/internal/rules/text.go:432 ui/internal/rules/text.go:470
+msgid "Enter a name for the rule."
+msgstr ""
+
+#: ui/internal/rules/text.go:434
+msgid "This is too long."
+msgstr ""
+
+#: ui/internal/rules/text.go:436
+msgid "This contains characters that cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:438
+msgid "Add at least one condition."
+msgstr ""
+
+#: ui/internal/rules/text.go:440
+#, c-format
+msgid "A rule can have at most %d condition."
+msgid_plural "A rule can have at most %d conditions."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:442
+msgid "Enter a value."
+msgstr ""
+
+#: ui/internal/rules/text.go:444
+msgid "Choose how to compare."
+msgstr ""
+
+#: ui/internal/rules/text.go:446
+msgid "Add at least one action."
+msgstr ""
+
+#: ui/internal/rules/text.go:448
+#, c-format
+msgid "A rule can have at most %d action."
+msgid_plural "A rule can have at most %d actions."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:450
+msgid "This action is already in the rule."
+msgstr ""
+
+#: ui/internal/rules/text.go:452
+msgid "A rule can move a message to only one place."
+msgstr ""
+
+#: ui/internal/rules/text.go:454
+msgid "Choose an account to move messages to one of its folders."
+msgstr ""
+
+#: ui/internal/rules/text.go:456
+msgid "Choose a folder."
+msgstr ""
+
+#: ui/internal/rules/text.go:458
+msgid "Enter one valid email address."
+msgstr ""
+
+#: ui/internal/rules/text.go:460
+msgid "Enter the text of the reply."
+msgstr ""
+
+#: ui/internal/rules/text.go:472
+msgid "The account of this rule no longer exists."
+msgstr ""
+
+#: ui/internal/rules/text.go:474
+msgid "Rules that send mail need your confirmation."
+msgstr ""
+
+#: ui/internal/rules/text.go:476
+msgid "A condition of this rule cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:478
+msgid "An action of this rule cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:480
+msgid "This rule cannot be saved."
+msgstr ""
+
+#: ui/internal/rules/text.go:485
+msgid "This rule no longer exists."
+msgstr ""
+
+#: ui/internal/rules/text.go:491
+msgid "The rule could not be saved."
+msgstr ""
+
+#. TRANSLATORS: a button of the rule editor: shows which stored
+#. messages of a folder the rule would match.
+#: ui/internal/rules/text.go:498
+msgid "Try It"
+msgstr ""
+
+#: ui/internal/rules/text.go:504
+msgid "Try in"
+msgstr ""
+
+#: ui/internal/rules/text.go:510
+msgid "No message in this folder matches."
+msgstr ""
+
+#: ui/internal/rules/text.go:512
+#, c-format
+msgid "%d message in this folder matches."
+msgid_plural "%d messages in this folder match."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: a condition of a rule in its summary: field,
+#. comparison, quoted value ("From contains “acme”").
+#: ui/internal/rules/text.go:525
+#, c-format
+msgctxt "rule condition"
+msgid "%s %s “%s”"
+msgstr ""
+
+#. TRANSLATORS: a condition with a chosen value ("Bulk mail is newsletter").
+#: ui/internal/rules/text.go:528
+#, c-format
+msgctxt "rule condition"
+msgid "%s %s %s"
+msgstr ""
+
+#. TRANSLATORS: joins the conditions of a rule that all have to hold
+#. (with spaces around it).
+#: ui/internal/rules/text.go:540
+msgctxt "all conditions"
+msgid " and "
+msgstr ""
+
+#. TRANSLATORS: joins the conditions of a rule of which one has
+#. to hold (with spaces around it).
+#: ui/internal/rules/text.go:544
+msgctxt "any condition"
+msgid " or "
+msgstr ""
+
+#: ui/internal/rules/text.go:558
+msgid "move to a missing folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:560
+#, c-format
+msgid "move to “%s”"
+msgstr ""
+
+#: ui/internal/rules/text.go:562
+msgid "mark as read"
+msgstr ""
+
+#: ui/internal/rules/text.go:564
+msgid "star"
+msgstr ""
+
+#: ui/internal/rules/text.go:566
+msgid "move to Trash"
+msgstr ""
+
+#: ui/internal/rules/text.go:568
+msgid "move to Junk"
+msgstr ""
+
+#: ui/internal/rules/text.go:570
+#, c-format
+msgid "forward to %s"
+msgstr ""
+
+#: ui/internal/rules/text.go:572
+msgid "reply automatically"
+msgstr ""
+
+#: ui/internal/rules/text.go:589
+msgid "stop processing more rules"
+msgstr ""
+
+#. TRANSLATORS: joins the actions of a rule in its summary.
+#: ui/internal/rules/text.go:592
+msgctxt "rule actions"
+msgid ", "
+msgstr ""
+
+#. TRANSLATORS: the name of a rule made from a message; %s is the
+#. sender's name or address.
+#: ui/internal/rules/text.go:600
+#, c-format
+msgid "Messages from %s"
+msgstr ""
+
+#: ui/internal/rules/text.go:609
+msgid "Create Rule from Message…"
+msgstr ""
+
+#: ui/internal/rules/text.go:614
+msgid "Apply Rules…"
+msgstr ""
+
+#: ui/internal/rules/text.go:621
+#, c-format
+msgid "Apply Rules to “%s”?"
+msgstr ""
+
+#: ui/internal/rules/text.go:622
+msgid ""
+"The rules that are on run on the messages of this folder kept on this "
+"computer. Rules do not forward or reply to these messages."
+msgstr ""
+
+#: ui/internal/rules/text.go:623
+msgid "Apply"
+msgstr ""
+
+#: ui/internal/rules/text.go:629
+msgid "Applying rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:635
+msgid "The rules changed no message."
+msgstr ""
+
+#: ui/internal/rules/text.go:637
+#, c-format
+msgid "The rules changed %d message."
+msgid_plural "The rules changed %d messages."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:642
+msgid "The rules could not be applied."
+msgstr ""
+
+#: ui/internal/signature/text.go:24 ui/internal/signature/text.go:73
+msgid "Valid signature"
+msgstr ""
+
+#. TRANSLATORS: the header's badge of a signed message; %s is the
+#. signer's name and address from the certificate or key.
+#: ui/internal/signature/text.go:28
+#, c-format
+msgid "Signed by %s"
+msgstr ""
+
+#: ui/internal/signature/text.go:31 ui/internal/signature/text.go:79
+msgid "Signed by someone else"
+msgstr ""
+
+#. TRANSLATORS: the signature is valid but belongs to another address
+#. than the sender's; %s is the signer's name and address.
+#: ui/internal/signature/text.go:35
+#, c-format
+msgid "Signed by someone else: %s"
+msgstr ""
+
+#: ui/internal/signature/text.go:38 ui/internal/signature/text.go:81
+msgid "Untrusted signature"
+msgstr ""
+
+#: ui/internal/signature/text.go:41
+#, c-format
+msgid "Signed by %s, but the key had expired"
+msgstr ""
+
+#: ui/internal/signature/text.go:43
+#, c-format
+msgid "Signed by %s, but the certificate is not trusted"
+msgstr ""
+
+#: ui/internal/signature/text.go:46 ui/internal/signature/text.go:83
+msgid "Weak signature"
+msgstr ""
+
+#: ui/internal/signature/text.go:48
+#, c-format
+msgid "Signed by %s with a weak algorithm"
+msgstr ""
+
+#: ui/internal/signature/text.go:51
+msgid "Signed with a revoked key"
+msgstr ""
+
+#: ui/internal/signature/text.go:53
+msgid "Signed with a revoked certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:55 ui/internal/signature/text.go:85
+msgid "Invalid signature"
+msgstr ""
+
+#: ui/internal/signature/text.go:57
+msgid "Signed with an unknown OpenPGP key"
+msgstr ""
+
+#: ui/internal/signature/text.go:60
+msgid "Inline OpenPGP signature, not verified"
+msgstr ""
+
+#: ui/internal/signature/text.go:62 ui/internal/signature/text.go:94
+msgid "Signature not verified"
+msgstr ""
+
+#: ui/internal/signature/text.go:64 ui/internal/signature/text.go:96
+msgid "Signature could not be verified"
+msgstr ""
+
+#. TRANSLATORS: an OpenPGP signature that matches, made with a key
+#. found automatically that the user has not confirmed yet.
+#: ui/internal/signature/text.go:77
+msgid "Valid signature, key not confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:88
+msgid "Revoked key"
+msgstr ""
+
+#: ui/internal/signature/text.go:90
+msgid "Revoked certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:92
+msgid "Unknown key"
+msgstr ""
+
+#: ui/internal/signature/text.go:105
+msgid "The signature matches the message, and you confirmed the key."
+msgstr ""
+
+#: ui/internal/signature/text.go:107
+msgid ""
+"The signature matches the message, and the certificate was issued by an "
+"authority this computer trusts."
+msgstr ""
+
+#: ui/internal/signature/text.go:109
+msgid ""
+"The signature matches the message. The key was found automatically: compare "
+"its fingerprint with the sender to confirm it."
+msgstr ""
+
+#. TRANSLATORS: the first %s is the address of the certificate or
+#. key, the second the sender's address of the message.
+#: ui/internal/signature/text.go:114
+#, c-format
+msgid "The signature is valid, but it belongs to %s, not to the sender %s."
+msgstr ""
+
+#: ui/internal/signature/text.go:116
+msgid "The signature is valid, but it does not belong to the sender's address."
+msgstr ""
+
+#: ui/internal/signature/text.go:119
+msgid ""
+"The signature matches the message, but the key had expired when the message "
+"arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:121
+msgid ""
+"The signature matches the message, but the certificate cannot be trusted."
+msgstr ""
+
+#: ui/internal/signature/text.go:123
+msgid ""
+"The signature matches the message, but it uses an algorithm that is no "
+"longer considered safe."
+msgstr ""
+
+#: ui/internal/signature/text.go:125
+msgid ""
+"The message may have been changed after it was signed. Do not trust its "
+"content."
+msgstr ""
+
+#: ui/internal/signature/text.go:128
+msgid ""
+"The key was revoked before the message arrived. Do not trust its content."
+msgstr ""
+
+#: ui/internal/signature/text.go:130
+msgid ""
+"The certificate was revoked before the message arrived. Do not trust its "
+"content."
+msgstr ""
+
+#: ui/internal/signature/text.go:132
+msgid ""
+"The message is signed with an OpenPGP key that Malachi Mail does not have. "
+"Import the sender's key to verify it."
+msgstr ""
+
+#: ui/internal/signature/text.go:134
+msgid "Malachi Mail cannot verify this kind of signature."
+msgstr ""
+
+#: ui/internal/signature/text.go:136
+msgid "Malachi Mail could not verify the signature."
+msgstr ""
+
+#: ui/internal/signature/text.go:141
+msgid ""
+"A valid signature tells who sent the message, not that its content is true "
+"or safe."
+msgstr ""
+
+#: ui/internal/signature/text.go:151
+msgid "The key has expired since the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:153
+msgid "The certificate has expired since the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:155
+msgid "Whether the certificate was revoked has not been checked."
+msgstr ""
+
+#: ui/internal/signature/text.go:157
+msgid "The certificate was not revoked when last checked."
+msgstr ""
+
+#: ui/internal/signature/text.go:160
+msgid "The key was revoked after the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:162
+msgid "The certificate was revoked after the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:164
+msgid ""
+"A footer added after signing, such as a mailing list's, is not covered by "
+"the signature."
+msgstr ""
+
+#: ui/internal/signature/text.go:166
+msgid "The signed headers differ from the ones shown."
+msgstr ""
+
+#: ui/internal/signature/text.go:168
+msgid ""
+"Inline OpenPGP signatures are not verified: they do not cover attachments or "
+"formatting."
+msgstr ""
+
+#: ui/internal/signature/text.go:170
+msgid "This sender used a different key before."
+msgstr ""
+
+#: ui/internal/signature/text.go:172
+msgid "The signed content was unpacked from the signature."
+msgstr ""
+
+#: ui/internal/signature/text.go:182
+msgid "The message was changed after it was signed."
+msgstr ""
+
+#: ui/internal/signature/text.go:184
+msgid "The signature does not match the signer's certificate or key."
+msgstr ""
+
+#: ui/internal/signature/text.go:186
+msgid "The signature is damaged."
+msgstr ""
+
+#: ui/internal/signature/text.go:188
+msgid "The signature uses MD5, which is broken."
+msgstr ""
+
+#: ui/internal/signature/text.go:190
+msgid "The certificate is not meant for signing e-mail."
+msgstr ""
+
+#: ui/internal/signature/text.go:192
+msgid "The certificate was not issued by an authority this computer trusts."
+msgstr ""
+
+#: ui/internal/signature/text.go:194
+msgid "The certificate is self-signed."
+msgstr ""
+
+#: ui/internal/signature/text.go:196
+msgid "The certificate was not valid yet when the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:199
+msgid "The key had expired when the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:201
+msgid "The certificate had expired when the message arrived."
+msgstr ""
+
+#: ui/internal/signature/text.go:203
+msgid "The signature uses SHA-1, which is no longer considered safe."
+msgstr ""
+
+#: ui/internal/signature/text.go:205
+msgid "The signing key is shorter than 2048 bits."
+msgstr ""
+
+#: ui/internal/signature/text.go:207
+msgid "The signature uses an algorithm Malachi Mail does not support."
+msgstr ""
+
+#: ui/internal/signature/text.go:209
+msgid ""
+"The message has more than one signer, which Malachi Mail does not support."
+msgstr ""
+
+#: ui/internal/signature/text.go:211
+msgid ""
+"The mail server changed the message, so its signature cannot be checked."
+msgstr ""
+
+#: ui/internal/signature/text.go:213
+msgid "Malachi Mail does not support this kind of signed message."
+msgstr ""
+
+#: ui/internal/signature/text.go:215
+msgid "The signature is too large or too complex to check."
+msgstr ""
+
+#. TRANSLATORS: label of the details row with the signer's name and address
+#: ui/internal/signature/text.go:225
+msgctxt "signature"
+msgid "Signed by"
+msgstr ""
+
+#. TRANSLATORS: label of the row that says S/MIME or OpenPGP
+#: ui/internal/signature/text.go:228
+msgctxt "signature"
+msgid "Signature type"
+msgstr ""
+
+#. TRANSLATORS: label of the row that says why the signature is not valid
+#: ui/internal/signature/text.go:231
+msgctxt "signature"
+msgid "Problem"
+msgstr ""
+
+#. TRANSLATORS: label of the signing time; the signer writes it, so
+#. it is only a claim
+#: ui/internal/signature/text.go:235
+msgctxt "signature"
+msgid "Signed, as stated by the signer"
+msgstr ""
+
+#. TRANSLATORS: label of the time the message arrived
+#: ui/internal/signature/text.go:238
+msgctxt "signature"
+msgid "Arrived"
+msgstr ""
+
+#: ui/internal/signature/text.go:240
+msgctxt "signature"
+msgid "Algorithm"
+msgstr ""
+
+#: ui/internal/signature/text.go:244
+msgctxt "signature"
+msgid "Key fingerprint"
+msgstr ""
+
+#: ui/internal/signature/text.go:246
+msgctxt "signature"
+msgid "Key ID"
+msgstr ""
+
+#. TRANSLATORS: label of the row that says whether the OpenPGP key is confirmed
+#: ui/internal/signature/text.go:249
+msgctxt "signature"
+msgid "Key"
+msgstr ""
+
+#: ui/internal/signature/text.go:251
+msgctxt "signature"
+msgid "Key source"
+msgstr ""
+
+#. TRANSLATORS: label of the date the OpenPGP key was first seen
+#: ui/internal/signature/text.go:254
+msgctxt "signature"
+msgid "First seen"
+msgstr ""
+
+#: ui/internal/signature/text.go:256
+msgctxt "signature"
+msgid "User IDs"
+msgstr ""
+
+#. TRANSLATORS: label of the fingerprint of the key the sender used before
+#: ui/internal/signature/text.go:259
+msgctxt "signature"
+msgid "Previous key"
+msgstr ""
+
+#: ui/internal/signature/text.go:261
+msgctxt "signature"
+msgid "Expired"
+msgstr ""
+
+#: ui/internal/signature/text.go:263
+msgctxt "signature"
+msgid "Revoked"
+msgstr ""
+
+#. TRANSLATORS: label of the row with the result of the revocation check
+#: ui/internal/signature/text.go:266
+msgctxt "signature"
+msgid "Revocation"
+msgstr ""
+
+#. TRANSLATORS: label of the e-mail addresses a certificate names
+#: ui/internal/signature/text.go:275
+msgctxt "signature"
+msgid "E-mail addresses"
+msgstr ""
+
+#: ui/internal/signature/text.go:289
+msgid "Confirmed by you"
+msgstr ""
+
+#: ui/internal/signature/text.go:291
+msgid "Found automatically, not confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:293
+msgid "Not in Malachi Mail"
+msgstr ""
+
+#. TRANSLATORS: Autocrypt is a name; the key came in a message's header
+#: ui/internal/signature/text.go:301
+msgid "Autocrypt header of a message"
+msgstr ""
+
+#: ui/internal/signature/text.go:303
+msgid "Attached to a message"
+msgstr ""
+
+#: ui/internal/signature/text.go:305
+msgid "Imported by you"
+msgstr ""
+
+#. TRANSLATORS: %s is the date and time of the check
+#: ui/internal/signature/text.go:316
+#, c-format
+msgid "Not revoked (checked %s)"
+msgstr ""
+
+#. TRANSLATORS: %s is the date the certificate was revoked
+#: ui/internal/signature/text.go:321
+#, c-format
+msgid "Revoked on %s"
+msgstr ""
+
+#: ui/internal/signature/text.go:323
+msgctxt "revocation"
+msgid "Revoked"
+msgstr ""
+
+#. TRANSLATORS: the issuer does not know the certificate; %s is the
+#. date and time of the check
+#: ui/internal/signature/text.go:328
+#, c-format
+msgid "Unknown to the issuer (checked %s)"
+msgstr ""
+
+#: ui/internal/signature/text.go:331
+msgid "Not checked"
+msgstr ""
+
+#: ui/internal/signature/text.go:338
+msgid "Signer's Certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:340
+msgid "Intermediate Certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:342
+msgid "Root Certificate"
+msgstr ""
+
+#: ui/internal/signature/text.go:344
+msgid "Signed Headers"
+msgstr ""
+
+#: ui/internal/signature/text.go:353
+msgctxt "signed header"
+msgid "Subject"
+msgstr ""
+
+#: ui/internal/signature/text.go:355
+msgctxt "signed header"
+msgid "From"
+msgstr ""
+
+#: ui/internal/signature/text.go:357
+msgctxt "signed header"
+msgid "To"
+msgstr ""
+
+#: ui/internal/signature/text.go:359
+msgctxt "signed header"
+msgid "Cc"
+msgstr ""
+
+#: ui/internal/signature/text.go:361
+msgctxt "signed header"
+msgid "Reply-To"
+msgstr ""
+
+#: ui/internal/signature/text.go:363
+msgctxt "signed header"
+msgid "Date"
+msgstr ""
+
+#: ui/internal/signature/text.go:369
+msgid "Signature Details"
+msgstr ""
+
+#: ui/internal/signature/text.go:373
+msgid "Show Signature Details"
+msgstr ""
+
+#. TRANSLATORS: the button while the revocation check runs
+#: ui/internal/signature/text.go:386
+msgid "Checking…"
+msgstr ""
+
+#: ui/internal/signature/text.go:388
+msgid "Check Revocation Again"
+msgstr ""
+
+#. TRANSLATORS: button: ask the certificate's issuer whether the
+#. certificate was revoked
+#: ui/internal/signature/text.go:392
+msgid "Check Revocation"
+msgstr ""
+
+#: ui/internal/signature/text.go:394
+msgid "Import Key"
+msgstr ""
+
+#: ui/internal/signature/text.go:396
+msgid "Confirm Key…"
+msgstr ""
+
+#. TRANSLATORS: menu item: the key is no longer marked as confirmed
+#: ui/internal/signature/text.go:399
+msgid "Remove Confirmation"
+msgstr ""
+
+#: ui/internal/signature/text.go:401
+msgid "Remove Key…"
+msgstr ""
+
+#: ui/internal/signature/text.go:408
+msgid "Checking tells the certificate's issuer that the certificate is in use."
+msgstr ""
+
+#: ui/internal/signature/text.go:416
+msgid "Confirm This Key?"
+msgstr ""
+
+#: ui/internal/signature/text.go:417
+msgid ""
+"Compare this fingerprint with the one the sender gives you in person or in "
+"another way you trust."
+msgstr ""
+
+#. TRANSLATORS: the button that marks the OpenPGP key as confirmed
+#: ui/internal/signature/text.go:420
+msgid "_Confirm Key"
+msgstr ""
+
+#: ui/internal/signature/text.go:427
+msgid "Remove This Key?"
+msgstr ""
+
+#: ui/internal/signature/text.go:428
+msgid ""
+"Messages signed with it will show an unknown key until it is imported again."
+msgstr ""
+
+#: ui/internal/signature/text.go:437
+msgid "Key confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:438
+msgid "Confirmation removed"
+msgstr ""
+
+#: ui/internal/signature/text.go:439
+msgid "Key removed"
+msgstr ""
+
+#: ui/internal/signature/text.go:447
+msgid "Could not reach the certificate's issuer."
+msgstr ""
+
+#: ui/internal/signature/text.go:449
+msgid "The certificate's issuer did not answer in time."
+msgstr ""
+
+#: ui/internal/signature/text.go:451
+msgid "The certificate's issuer could not answer."
+msgstr ""
+
+#: ui/internal/signature/text.go:453
+msgid "The issuer's answer could not be verified."
+msgstr ""
+
+#: ui/internal/signature/text.go:455
+msgid "The certificate names an address Malachi Mail does not contact."
+msgstr ""
+
+#: ui/internal/signature/text.go:457
+msgid "Could not check whether the certificate was revoked."
+msgstr ""
+
+#: ui/internal/signature/text.go:465
+msgid "This is not an OpenPGP public key."
+msgstr ""
+
+#: ui/internal/signature/text.go:467
+msgid "The key cannot be read."
+msgstr ""
+
+#: ui/internal/signature/text.go:469
+msgid ""
+"This is a secret key. Import only the public key: Malachi Mail never stores "
+"secret keys."
+msgstr ""
+
+#: ui/internal/signature/text.go:471
+msgid "The key data is too large."
+msgstr ""
+
+#: ui/internal/signature/text.go:473
+msgid "Malachi Mail cannot store more keys. Remove keys you no longer need."
+msgstr ""
+
+#: ui/internal/signature/text.go:475
+msgid "The key could not be imported."
+msgstr ""
+
+#: ui/internal/signature/text.go:482
+#, c-format
+msgid "%d key imported"
+msgid_plural "%d keys imported"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/signature/text.go:484
+#, c-format
+msgid "%d key updated"
+msgid_plural "%d keys updated"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/signature/text.go:486
+msgid "The key was already imported."
+msgstr ""
+
+#: ui/internal/signature/text.go:499
+msgid "Import OpenPGP Key"
+msgstr ""
+
+#: ui/internal/signature/text.go:500
+msgid "Paste a public key, or choose a file with one."
+msgstr ""
+
+#: ui/internal/signature/text.go:501
+msgid "Choose File…"
+msgstr ""
+
+#. TRANSLATORS: name of the file type filter of the file chooser
+#: ui/internal/signature/text.go:503
+msgid "OpenPGP keys"
+msgstr ""
+
+#: ui/internal/signature/text.go:505
+msgid "_Import"
+msgstr ""
+
+#. TRANSLATORS: the Preferences page with the OpenPGP keys
+#: ui/internal/signature/text.go:522
+msgctxt "preferences page"
+msgid "Security"
+msgstr ""
+
+#: ui/internal/signature/text.go:523
+msgid "OpenPGP Keys"
+msgstr ""
+
+#: ui/internal/signature/text.go:524
+msgid ""
+"Keys of people whose signed mail you receive. Malachi Mail finds them in "
+"your mail and never looks them up online."
+msgstr ""
+
+#: ui/internal/signature/text.go:525
+msgid "No OpenPGP Keys"
+msgstr ""
+
+#: ui/internal/signature/text.go:526
+msgid "Import Key…"
+msgstr ""
+
+#: ui/internal/signature/text.go:527
+msgid "Could not load the keys."
+msgstr ""
+
+#: ui/internal/signature/text.go:534
+msgctxt "key trust"
+msgid "Confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:536
+msgctxt "key trust"
+msgid "Not confirmed"
+msgstr ""
+
+#: ui/internal/signature/text.go:544
+msgctxt "key state"
+msgid "Revoked"
+msgstr ""
+
+#: ui/internal/signature/text.go:546
+msgctxt "key state"
+msgid "Expired"
+msgstr ""
+
+#. TRANSLATORS: %s is a date
+#: ui/internal/signature/text.go:557
+#, c-format
+msgid "Found in a message header on %s"
+msgstr ""
+
+#. TRANSLATORS: %s is a date
+#: ui/internal/signature/text.go:560
+#, c-format
+msgid "Imported from a message on %s"
+msgstr ""
+
+#. TRANSLATORS: %s is a date
+#: ui/internal/signature/text.go:563
+#, c-format
+msgid "Imported on %s"
+msgstr ""
+
+#: ui/internal/signature/text.go:570
+msgid "The key could not be confirmed."
+msgstr ""
+
+#: ui/internal/signature/text.go:572
+msgid "The confirmation could not be removed."
+msgstr ""
+
+#: ui/internal/signature/text.go:577
+msgid "The key could not be removed."
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21
@@ -7250,92 +9612,84 @@ msgstr ""
 msgid "Cc/Bcc"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:138
-msgid "Bcc"
-msgstr ""
-
-#: ui/data/ui/compose_pane.ui:172
-msgid "Subject"
-msgstr ""
-
-#: ui/data/ui/compose_pane.ui:264
+#: ui/data/ui/compose_pane.ui:281
 msgid "Bold (Ctrl+B)"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:271
+#: ui/data/ui/compose_pane.ui:288
 msgid "Italic (Ctrl+I)"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:278
+#: ui/data/ui/compose_pane.ui:295
 msgid "Underline (Ctrl+U)"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:291
+#: ui/data/ui/compose_pane.ui:308
 msgid "Paragraph Style"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:299
+#: ui/data/ui/compose_pane.ui:316
 msgid "Alignment"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:311
+#: ui/data/ui/compose_pane.ui:328
 msgid "Bulleted List"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:318
+#: ui/data/ui/compose_pane.ui:335
 msgid "Numbered List"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:325
+#: ui/data/ui/compose_pane.ui:342
 msgid "Quote"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:337
+#: ui/data/ui/compose_pane.ui:354
 msgid "Insert Link"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:356
+#: ui/data/ui/compose_pane.ui:373
 msgid "Insert"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:370
+#: ui/data/ui/compose_pane.ui:387
 msgid "Text Colour"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:390
+#: ui/data/ui/compose_pane.ui:407
 msgid "Clear Formatting"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:398
+#: ui/data/ui/compose_pane.ui:415
 msgid "This message will be sent as plain text."
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:450
+#: ui/data/ui/compose_pane.ui:455
 msgid "Heading 1"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:455
+#: ui/data/ui/compose_pane.ui:460
 msgid "Heading 2"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:460
+#: ui/data/ui/compose_pane.ui:465
 msgid "Heading 3"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:467
+#: ui/data/ui/compose_pane.ui:472
 msgid "Left"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:472
+#: ui/data/ui/compose_pane.ui:477
 msgid "Center"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:477
+#: ui/data/ui/compose_pane.ui:482
 msgid "Right"
 msgstr ""
 
 #: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:1024
+#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:960
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
@@ -7344,11 +9698,7 @@ msgstr ""
 msgid "Attached Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:464
-msgid "Message"
-msgstr ""
-
-#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1178
+#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1262
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -7368,644 +9718,703 @@ msgstr ""
 msgid "Use the + button to add one"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:64
+#: ui/data/ui/preferences.ui:85
 msgid "General"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:68
+#: ui/data/ui/preferences.ui:89
 msgid "Startup"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:71
+#: ui/data/ui/preferences.ui:92
 msgid "Launch at Login"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:72
+#: ui/data/ui/preferences.ui:93
 msgid "Start hidden in the background when you log in"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:77
+#: ui/data/ui/preferences.ui:98
 msgid "Run in Background"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:78
+#: ui/data/ui/preferences.ui:99
 msgid "Closing the window keeps Malachi Mail running for notifications"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:165
+#: ui/data/ui/preferences.ui:205
 msgid "Reading"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:168
+#: ui/data/ui/preferences.ui:208
 msgid "Mark as Read After"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:169
+#: ui/data/ui/preferences.ui:209
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 marks it "
 "immediately"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:184
+#: ui/data/ui/preferences.ui:224
 msgid "Deleting"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:187
+#: ui/data/ui/preferences.ui:227
 msgid "Confirm Before Deleting"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:188 data/io.github.schotek.Malachi.gschema.xml:125
+#: ui/data/ui/preferences.ui:228 data/io.github.schotek.Malachi.gschema.xml:141
 msgid "Ask before moving a message to Trash"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:196
+#: ui/data/ui/preferences.ui:236
 msgid "Notifications"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:199
+#: ui/data/ui/preferences.ui:239
 msgid "Show Desktop Notifications"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:205
+#: ui/data/ui/preferences.ui:245
 msgid "Play Sound"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:206 data/io.github.schotek.Malachi.gschema.xml:133
+#: ui/data/ui/preferences.ui:246 data/io.github.schotek.Malachi.gschema.xml:149
 msgid "Play the system new-mail sound"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:214
+#: ui/data/ui/preferences.ui:254
 msgid "Stored by the mail daemon."
 msgstr ""
 
-#: ui/data/ui/preferences.ui:222
+#: ui/data/ui/preferences.ui:262
 msgid "Manually"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:223
+#: ui/data/ui/preferences.ui:263
 msgid "Every 5 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:224
+#: ui/data/ui/preferences.ui:264
 msgid "Every 15 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:225
+#: ui/data/ui/preferences.ui:265
 msgid "Every 30 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:233
+#: ui/data/ui/preferences.ui:273
 msgid "Load Remote Images"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:238
+#: ui/data/ui/preferences.ui:278
 msgid "From Known Senders"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:239
+#: ui/data/ui/preferences.ui:279
 msgid "Always"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:247
+#: ui/data/ui/preferences.ui:287
 msgid "Keep Mail Offline For"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:248
+#: ui/data/ui/preferences.ui:288
 msgid "Older messages stay on the server and are not shown"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:256 ui/data/ui/preferences.ui:275
+#: ui/data/ui/preferences.ui:296 ui/data/ui/preferences.ui:315
 msgid "Everything"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:264
+#: ui/data/ui/preferences.ui:304
 msgid "Keep Attachments Offline For"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:265
+#: ui/data/ui/preferences.ui:305
 msgid ""
 "Large attachments of older messages stay on the server and are downloaded "
 "when you open them"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:271
+#: ui/data/ui/preferences.ui:311
 msgid "Small Attachments Only"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:283
+#: ui/data/ui/preferences.ui:323
 msgid "Never Store Attachments"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:284
+#: ui/data/ui/preferences.ui:324
 msgid ""
 "Attachments are downloaded whenever you open them and are gone when you quit"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:290
+#: ui/data/ui/preferences.ui:330
 msgid "Compress Stored Mail"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:291
+#: ui/data/ui/preferences.ui:331
 msgid "Uses less disk space; stored mail is converted in the background"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:297
+#: ui/data/ui/preferences.ui:337
 msgid "Disk Space Used"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:393
+#: ui/data/ui/preferences.ui:455
 msgid "Appearance"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:397
+#: ui/data/ui/preferences.ui:459
 msgid "Theme"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:400
+#: ui/data/ui/preferences.ui:462
 msgid "Color Scheme"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:404
+#: ui/data/ui/preferences.ui:466
 msgid "Follow System"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:405
+#: ui/data/ui/preferences.ui:467
 msgid "Light"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:406
+#: ui/data/ui/preferences.ui:468
 msgid "Dark"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:416
-msgid "Message List"
-msgstr ""
-
-#: ui/data/ui/preferences.ui:419
+#: ui/data/ui/preferences.ui:481
 msgid "Density"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:423
+#: ui/data/ui/preferences.ui:485
 msgid "Comfortable"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:424
+#: ui/data/ui/preferences.ui:486
 msgid "Compact"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:432
+#: ui/data/ui/preferences.ui:494
 msgid "Show Preview Line"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:438
+#: ui/data/ui/preferences.ui:500
 msgid "Show Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:444
+#: ui/data/ui/preferences.ui:506
 msgid "Monochrome Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:445
+#: ui/data/ui/preferences.ui:507
 msgid "Neutral grey instead of a colour per sender"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:455
+#: ui/data/ui/preferences.ui:524
 msgid "Group by Conversation"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:456
+#: ui/data/ui/preferences.ui:525
 msgid "One row per conversation; expand it to see its messages"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:481
+#: ui/data/ui/preferences.ui:550
 msgid "Message View"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:484
+#: ui/data/ui/preferences.ui:553
 msgid "Use Monospace Font for Plain Text"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:489
+#: ui/data/ui/preferences.ui:558
 msgid "Text Zoom"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:490
+#: ui/data/ui/preferences.ui:559
 msgid "Percent"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:508
+#: ui/data/ui/preferences.ui:577
 msgid "AI"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:520
+#: ui/data/ui/preferences.ui:589
 msgid "MCP"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:521
+#: ui/data/ui/preferences.ui:590
 msgid ""
 "Lets AI assistants read your mail and prepare drafts through the Model "
 "Context Protocol."
 msgstr ""
 
-#: ui/data/ui/preferences.ui:524
+#: ui/data/ui/preferences.ui:593
 msgid "Register with Claude"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:525
+#: ui/data/ui/preferences.ui:594
 msgid ""
 "Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
 "computer"
 msgstr ""
 
-#: ui/data/ui/window.ui:90
+#: ui/data/ui/window.ui:98
 msgid "New Message (Ctrl+N)"
 msgstr ""
 
-#: ui/data/ui/window.ui:136
-msgid "Sync Status"
-msgstr ""
-
-#: ui/data/ui/window.ui:232 ui/data/ui/window.ui:240
+#: ui/data/ui/window.ui:157 ui/data/ui/window.ui:165
 msgid "Inbox"
 msgstr ""
 
-#: ui/data/ui/window.ui:292
+#: ui/data/ui/window.ui:217
 msgctxt "search scope"
 msgid "Folder"
 msgstr ""
 
-#: ui/data/ui/window.ui:298
+#: ui/data/ui/window.ui:223
 msgctxt "search scope"
 msgid "Account"
 msgstr ""
 
-#: ui/data/ui/window.ui:304
+#: ui/data/ui/window.ui:229
 msgctxt "search scope"
 msgid "All Accounts"
 msgstr ""
 
-#: ui/data/ui/window.ui:322
+#: ui/data/ui/window.ui:247
 msgid "The mail backend (malachid) is not running."
 msgstr ""
 
-#: ui/data/ui/window.ui:348
+#: ui/data/ui/window.ui:273
 msgid "All"
 msgstr ""
 
-#: ui/data/ui/window.ui:354
+#: ui/data/ui/window.ui:279
 msgid "Unread"
 msgstr ""
 
-#: ui/data/ui/window.ui:403
+#: ui/data/ui/window.ui:328
 msgid "Load More"
 msgstr ""
 
-#: ui/data/ui/window.ui:587
+#: ui/data/ui/window.ui:511
 msgid "This message is a draft"
 msgstr ""
 
-#: ui/data/ui/window.ui:768
+#: ui/data/ui/window.ui:692
 msgid "No Message Selected"
 msgstr ""
 
-#: ui/data/ui/window.ui:769
+#: ui/data/ui/window.ui:693
 msgid "Select a message to read it here."
 msgstr ""
 
-#: ui/data/ui/window.ui:781
+#: ui/data/ui/window.ui:705
 msgid "Add a mail account to start reading and sending mail."
 msgstr ""
 
-#: ui/data/ui/window.ui:789
+#: ui/data/ui/window.ui:713
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:1142
+#: ui/data/ui/window.ui:1080
+msgid "Sync Status"
+msgstr ""
+
+#: ui/data/ui/window.ui:1195
+msgid "Report an Issue"
+msgstr ""
+
+#: ui/data/ui/window.ui:1218
+msgid "_Contacts"
+msgstr ""
+
+#: ui/data/ui/window.ui:1224
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:1146
-msgid "_Keyboard Shortcuts"
-msgstr ""
-
-#: ui/data/ui/window.ui:1150
+#: ui/data/ui/window.ui:1228
 msgid "_About Malachi Mail"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:72
+#: ui/data/ui/window.ui:1234
+msgid "_Quit"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:83
 msgid "Window width"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:76
+#: data/io.github.schotek.Malachi.gschema.xml:87
 msgid "Window height"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:80
+#: data/io.github.schotek.Malachi.gschema.xml:91
 msgid "Window maximized state"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:84
+#: data/io.github.schotek.Malachi.gschema.xml:95
 msgid "Width of the folder sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:88
+#: data/io.github.schotek.Malachi.gschema.xml:99
 msgid "Width of the message list pane"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:97
+#: data/io.github.schotek.Malachi.gschema.xml:108
 msgid "Folders whose subfolders are hidden in the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:101
+#: data/io.github.schotek.Malachi.gschema.xml:112
 msgid "Accounts whose folders are hidden in the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:105
+#: data/io.github.schotek.Malachi.gschema.xml:116
 msgid "Folders pinned to the Favourites section of the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:112
+#: data/io.github.schotek.Malachi.gschema.xml:120
+msgid "Show All Inboxes in the sidebar"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:121
+msgid ""
+"With two or more mail accounts, an item at the top of the sidebar lists the "
+"inboxes of all of them together."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:128
 msgid ""
 "Start hidden in the background at login (mirrors the Background portal's "
 "autostart decision)"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:116
+#: data/io.github.schotek.Malachi.gschema.xml:132
 msgid "Closing the main window keeps the application running"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:121
+#: data/io.github.schotek.Malachi.gschema.xml:137
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 = immediately"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:129
+#: data/io.github.schotek.Malachi.gschema.xml:145
 msgid "Show a desktop notification for new mail"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:139
+#: data/io.github.schotek.Malachi.gschema.xml:155
 msgid "Color scheme"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:140
+#: data/io.github.schotek.Malachi.gschema.xml:156
 msgid "Follow the system preference, or force a light or dark appearance."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:144
+#: data/io.github.schotek.Malachi.gschema.xml:160
 msgid "Message list density"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:148
+#: data/io.github.schotek.Malachi.gschema.xml:164
 msgid "Show a one-line preview under each message in the list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:152
+#: data/io.github.schotek.Malachi.gschema.xml:168
 msgid "Group the message list by conversation"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:153
+#: data/io.github.schotek.Malachi.gschema.xml:169
 msgid ""
 "Show one row per conversation in the selected folder; expanding it lists the "
 "messages the folder holds."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:157
+#: data/io.github.schotek.Malachi.gschema.xml:173
 msgid "Show conversations as a chat"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:158
+#: data/io.github.schotek.Malachi.gschema.xml:174
 msgid ""
 "Others' messages on the left, yours on the right, oldest first; off shows "
 "the timeline."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:162
+#: data/io.github.schotek.Malachi.gschema.xml:178
 msgid "Render HTML in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:163
+#: data/io.github.schotek.Malachi.gschema.xml:179
 msgid ""
 "In the chat layout of a conversation, show a message's HTML in a locked web "
 "view instead of its plain text; off shows the text."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:167
+#: data/io.github.schotek.Malachi.gschema.xml:183
 msgid "Shorten my messages in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:168
+#: data/io.github.schotek.Malachi.gschema.xml:184
 msgid ""
 "In the chat layout of a conversation, show about three lines of each of the "
 "user's own messages in its bubble; a click shows the whole message."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:172
+#: data/io.github.schotek.Malachi.gschema.xml:188
 msgid "Shorten others' messages in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:173
+#: data/io.github.schotek.Malachi.gschema.xml:189
 msgid ""
 "In the chat layout of a conversation, show about three lines of each message "
 "of the other party in its bubble; a click shows the whole message."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:177
+#: data/io.github.schotek.Malachi.gschema.xml:193
 msgid "Where a search looks"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:178
+#: data/io.github.schotek.Malachi.gschema.xml:194
 msgid ""
 "The selected folder, every folder of its account, or every account; the last "
 "choice made in the search bar."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:182
+#: data/io.github.schotek.Malachi.gschema.xml:198
 msgid "Show sender avatars in the message list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:186
+#: data/io.github.schotek.Malachi.gschema.xml:202
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:190
+#: data/io.github.schotek.Malachi.gschema.xml:206
 msgid "Use a monospace font for plain-text message bodies"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:195
+#: data/io.github.schotek.Malachi.gschema.xml:211
 msgid "Message body text zoom in percent"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:201
+#: data/io.github.schotek.Malachi.gschema.xml:217
 msgid "Show the Assistant menu that hands mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:202
+#: data/io.github.schotek.Malachi.gschema.xml:218
 msgid ""
 "The menu opens Claude Desktop or Claude Code on this computer with a "
 "prepared question about the selected mail."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:206
+#: data/io.github.schotek.Malachi.gschema.xml:222
 msgid "Where the Assistant menu opens Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:207
+#: data/io.github.schotek.Malachi.gschema.xml:223
 msgid ""
 "Claude Desktop, Claude Code in a terminal, or the panel in the app; the last "
 "choice made in the Assistant menu or in the settings."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:211
+#: data/io.github.schotek.Malachi.gschema.xml:227
 msgid "The model the assistant panel uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:212
+#: data/io.github.schotek.Malachi.gschema.xml:228
 msgid "Sonnet, Haiku or Opus, passed to Claude Code."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:216
+#: data/io.github.schotek.Malachi.gschema.xml:232
 msgid "Where Claude Code is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:217
+#: data/io.github.schotek.Malachi.gschema.xml:233
 msgid ""
 "The claude executable the assistant panel runs; empty looks in the usual "
 "places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:221
+#: data/io.github.schotek.Malachi.gschema.xml:237
 msgid "The assistant panel may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:222
+#: data/io.github.schotek.Malachi.gschema.xml:238
 msgid "Set when the user allowed it the first time."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:227
+#: data/io.github.schotek.Malachi.gschema.xml:243
 msgid "The provider of the assistant in the app"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:228
+#: data/io.github.schotek.Malachi.gschema.xml:244
 msgid "The in-app provider; external Claude hand-off is independent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:232
+#: data/io.github.schotek.Malachi.gschema.xml:248
 msgid "Where Codex is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:233
+#: data/io.github.schotek.Malachi.gschema.xml:249
 msgid "The native Codex executable; empty looks in the usual places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:237
+#: data/io.github.schotek.Malachi.gschema.xml:253
 msgid "The model the ChatGPT provider uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:238
-#: data/io.github.schotek.Malachi.gschema.xml:249
+#: data/io.github.schotek.Malachi.gschema.xml:254
+#: data/io.github.schotek.Malachi.gschema.xml:265
 msgid "Empty uses the provider's model default."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:243
+#: data/io.github.schotek.Malachi.gschema.xml:259
 msgid "The accepted ChatGPT mail consent version"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:244
+#: data/io.github.schotek.Malachi.gschema.xml:260
 msgid "Zero means no permission to send mail to OpenAI."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:248
+#: data/io.github.schotek.Malachi.gschema.xml:264
 msgid "The model ChatGPT uses for the board"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:254
+#: data/io.github.schotek.Malachi.gschema.xml:270
 msgid "The accepted OpenAI board consent version"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:255
+#: data/io.github.schotek.Malachi.gschema.xml:271
 msgid "Zero means no permission to send board mail to OpenAI."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:262
+#: data/io.github.schotek.Malachi.gschema.xml:278
 msgid "The style the Board opens in"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:263
+#: data/io.github.schotek.Malachi.gschema.xml:279
 msgid ""
 "Last Used (the style in board-last-style), List, Columns or Today; a changed "
 "choice applies the next time the Board is shown, unless a style was already "
 "picked in this run, which then stays until the app quits."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:267
+#: data/io.github.schotek.Malachi.gschema.xml:283
 msgid "The style the Board was shown in last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:268
+#: data/io.github.schotek.Malachi.gschema.xml:284
 msgid ""
 "Written whenever the user changes the Board's style; read when board-default-"
 "style is Last Used."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:272
+#: data/io.github.schotek.Malachi.gschema.xml:288
 msgid "What the main window shows at launch"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:273
+#: data/io.github.schotek.Malachi.gschema.xml:289
 msgid ""
 "Mail, the Board, the Calendar, or the mode shown last (board-last-mode). The "
 "Board is replaced by Mail while it is turned off."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:277
+#: data/io.github.schotek.Malachi.gschema.xml:293
 msgid "The mode the main window showed last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:278
+#: data/io.github.schotek.Malachi.gschema.xml:294
 msgid ""
 "\"mail\", \"board\" or \"calendar\", written whenever the mode switches; "
 "read when board-start-mode is Last."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:282
+#: data/io.github.schotek.Malachi.gschema.xml:298
 msgid "The account the Board is filtered to"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:283
+#: data/io.github.schotek.Malachi.gschema.xml:299
 msgid ""
 "The daemon's account id, written whenever the Board's account filter "
 "changes; empty means every account. Applied when the Board shows while that "
 "account still exists."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:287
+#: data/io.github.schotek.Malachi.gschema.xml:303
 msgid "The Board's triage may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:288
+#: data/io.github.schotek.Malachi.gschema.xml:304
 msgid ""
 "Set when the user allowed it the first time, apart from the assistant "
 "panel's consent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:292
+#: data/io.github.schotek.Malachi.gschema.xml:308
 msgid "The model the Board's triage uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:293
+#: data/io.github.schotek.Malachi.gschema.xml:309
 msgid ""
 "Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant "
 "panel's model."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:297
+#: data/io.github.schotek.Malachi.gschema.xml:313
 msgid "The view the Calendar was shown in last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:298
+#: data/io.github.schotek.Malachi.gschema.xml:314
 msgid ""
 "Day, Week, Month or Agenda, written whenever the user changes the Calendar's "
 "view; applied when the Calendar shows."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:318
+msgid "Which address books complete recipients"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:319
+msgid ""
+"The address books of the account the message is written from (with the "
+"recently used addresses), or every address book; the scope of contact.search."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:327
+msgid "The items of the Mail toolbar"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:328
+#: data/io.github.schotek.Malachi.gschema.xml:333
+#: data/io.github.schotek.Malachi.gschema.xml:338
+#: data/io.github.schotek.Malachi.gschema.xml:343
+msgid ""
+"The toolbar's items in order, as the user arranged them; empty for the "
+"default toolbar."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:332
+msgid "The items of the Board's toolbar in the List style"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:337
+msgid "The items of the Board's toolbar in the Columns and Today styles"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:342
+msgid "The items of the Calendar's toolbar"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:347
+msgid "What the toolbars' items show"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:348
+msgid ""
+"Icons only, icons with their labels or labels only, for every toolbar of the "
+"main window."
 msgstr ""
 
 #: data/io.github.schotek.Malachi.desktop.in:3
@@ -8032,16 +10441,27 @@ msgstr ""
 msgid ""
 "Malachi Mail is a desktop email client for Linux, built with GTK 4 and "
 "libadwaita. It keeps mail available offline, renders HTML messages only "
-"after sanitising them, and separates the user interface from the mail engine "
-"so that the engine can be reused."
+"after sanitising them, and separates the user interface from the mail "
+"engine, which also drives the native Malachi Mail apps for macOS and Windows."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.metainfo.xml.in:17
+#: data/io.github.schotek.Malachi.metainfo.xml.in:18
 msgid ""
-"This is an early version. Mail can be read, written, sent and searched, but "
-"keep a second mail program for anything that matters."
+"Mail is read, written, sent and searched, grouped into conversations and "
+"shown as cards on a timeline or as a chat. Jira issues are followed as "
+"conversations, a calendar keeps Microsoft 365 and CalDAV calendars and "
+"answers invitations from the message, and the Board sorts what waits for "
+"you, what waits for others and what is just for your information. An "
+"optional bridge lets AI agents read the mail and write drafts, and nothing "
+"more without your permission."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.metainfo.xml.in:30
+#: data/io.github.schotek.Malachi.metainfo.xml.in:27
+msgid ""
+"This is an early version: keep a second mail program for anything that "
+"matters."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.metainfo.xml.in:40
 msgid "Malachi Mail contributors"
 msgstr ""

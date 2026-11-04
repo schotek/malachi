@@ -172,6 +172,8 @@ func (w *Window) toggleDateGroup(group maildate.Group) {
 // A hidden window stays alive in background mode. Update when the local
 // day/time zone changes and stop the timer when the window is destroyed.
 func (w *Window) initDateGroups() {
+	// The list's sender photos follow it from here (contact_photos.go).
+	w.watchListPhotos()
 	w.dateWeekStart = time.Monday
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

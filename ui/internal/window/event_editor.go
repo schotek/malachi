@@ -29,6 +29,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/recipients"
 	"github.com/schotek/malachi/ui/internal/style"
+	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // The New Event / Edit Event window (docs/calendar.md §5.6, §6.5 G14;
@@ -834,7 +835,8 @@ func (ed *eventEditor) fillAlerts() {
 	ed.alert.SetModel(gtk.NewStringList(titles))
 }
 
-// renderChips shows the attachments as chips with ×.
+// renderChips shows the attachments as inert tiles with × (the event
+// editor offers no preview, as on macOS).
 func (ed *eventEditor) renderChips() {
 	atts := ed.ctl.Attachments()
 	ids := make([]string, 0, len(atts))
@@ -850,23 +852,15 @@ func (ed *eventEditor) renderChips() {
 	}
 	for _, a := range atts {
 		id := a.ID
-		box := gtk.NewBox(gtk.OrientationHorizontal, 4)
-		box.AddCSSClass("event-editor-chip")
-		icon := gtk.NewImageFromIconName("mail-attachment-symbolic")
-		l := gtk.NewLabel(editorClip(a.Filename, 200))
-		l.SetUseMarkup(false)
-		l.SetEllipsize(pango.EllipsizeMiddle)
-		l.SetMaxWidthChars(28)
-		l.SetTooltipText(editorClip(a.Filename, 1000))
 		x := gtk.NewButtonFromIconName("window-close-symbolic")
 		x.AddCSSClass("flat")
-		x.AddCSSClass("circular")
 		x.SetTooltipText(editorRemoveText())
 		x.ConnectClicked(func() { ed.ctl.RemoveAttachment(id) })
-		box.Append(icon)
-		box.Append(l)
-		box.Append(x)
-		ed.chips.Append(box)
+		tile := widget.NewAttachmentTile(widget.FileContentType(a.Filename, a.ContentType),
+			editorClip(a.Filename, 200), widget.FormatSize(a.Size), x)
+		tile.Main.SetTooltipText(editorClip(a.Filename, 1000))
+		tile.SetInert()
+		ed.chips.Append(tile.Root)
 	}
 	ed.chips.SetVisible(len(atts) > 0)
 }

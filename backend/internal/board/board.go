@@ -45,8 +45,10 @@ import (
 // archived already. 8: the store hands the rules no calendar mail (a
 // message with a cal_invitations row: an invitation, its update,
 // cancellation or reply, the user's own copies of them); a thread of
-// nothing else makes no case.
-const RulesVersion = "8"
+// nothing else makes no case. 9: the MIME parser unwraps opaque S/MIME
+// signed data (docs/plans/signatures.md S14), so the own text of such a
+// message is the wrapped content's, no longer empty.
+const RulesVersion = "9"
 
 // Bulk classification values of messages.bulk the rules distinguish; any
 // other non-empty value is bulk mail (api.BulkKind).

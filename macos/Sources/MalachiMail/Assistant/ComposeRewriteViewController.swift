@@ -197,9 +197,11 @@ final class ComposeRewriteViewController: NSViewController, NSTextFieldDelegate 
         if resultView.string != text {
             resultView.string = text
             resultView.scrollToEndOfDocument(nil)
-            if answer {
-                resultView.scrollToBeginningOfDocument(nil)
-            }
+        }
+        // The answer reads from its start (the streamed text, scrolled to
+        // its end as it arrived, is usually the whole answer already).
+        if answer {
+            resultView.scrollToBeginningOfDocument(nil)
         }
         errorLabel.isHidden = errorLabel.stringValue.isEmpty
         insertButton.isEnabled = answer

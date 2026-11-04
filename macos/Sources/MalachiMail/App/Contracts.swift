@@ -67,6 +67,14 @@ protocol Alerts: AnyObject {
     func confirmTrustCertificate(
         on window: NSWindow?, heading: String, body: String, details: [CertificateDetail], confirmLabel: String
     ) async -> Bool
+
+    /// "Confirm This Key?" (signature.ConfirmKeyQuestion): a question
+    /// whose two answers are both safe, with the key's formatted
+    /// `fingerprint` under the text as selectable, monospaced plain text.
+    /// True for `confirmLabel`.
+    func confirmKey(
+        on window: NSWindow?, heading: String, body: String, fingerprint: String, confirmLabel: String, declineLabel: String
+    ) async -> Bool
 }
 
 /// The per-message actions of the main window, acting on the current
@@ -97,6 +105,12 @@ protocol MessageActions: AnyObject {
     /// Moves what the selection stands for to another folder of its
     /// account (Move To).
     func moveSelected(to folder: FolderID)
+    /// Prints the selection: one message, a conversation row's folder
+    /// members as a conversation, several rows each on its own page
+    /// (`PrintController`, P5).
+    func printSelected()
+    /// Prints the Calendar's selected event, else its day (P8).
+    func printCalendar(_ calendar: CalendarController)
 
     /// The Assistant menu (ui/internal/assistant): a message action on the
     /// selection, a conversation row's folder members newest first or the
@@ -154,6 +168,8 @@ protocol MessageActionDelegate: AnyObject {
     /// through the message cache's `onLoaded`.
     func loadImages(_ id: MessageID)
     func trustSender(_ id: MessageID)
+    /// Prints the message (its window's File ▸ Print…).
+    func printMessage(_ summary: MessageSummary, from window: NSWindow?)
     /// remote.go `downloadPictures`: the pictures bar's Download Pictures;
     /// a failure toasts in `window` (the one the click came from).
     func downloadPictures(_ id: MessageID, from window: NSWindow?)
@@ -182,6 +198,14 @@ protocol MessageActionDelegate: AnyObject {
     /// sender's page in the browser for a web-page offer, otherwise
     /// `message.unsubscribe`.
     func unsubscribe(_ id: MessageID, from window: NSWindow?)
+    /// The badge of a signed message (`SignatureBadgeView`): the details
+    /// popover (ui/internal/signature `DetailsFor`) of message `s` under
+    /// `anchor`, which shows what message.get carried meanwhile.
+    func showSignature(of s: MessageSummary, relativeTo anchor: NSView)
+    /// The same with the verdict the caller holds (`summary`: a board
+    /// card's, which the message cache does not have) shown until the
+    /// daemon's details arrive.
+    func showSignature(of s: MessageSummary, summary: SignatureSummary?, relativeTo anchor: NSView)
     /// remote.go `openLink`: allow-list, mailto → compose, masked-link
     /// alert on `window`, then the browser.
     func openLink(_ href: String, links: [Link], from window: NSWindow?)

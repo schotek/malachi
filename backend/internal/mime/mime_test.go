@@ -1118,6 +1118,10 @@ func TestSnippet(t *testing.T) {
 		{"", 10, ""},
 		{"> only quotes\n>", 10, ""},
 		{"x\x01y\x7fz", 10, "xyz"},
+		{"________________\n\nSchůzka v Microsoft Teams\n____", 200, "Schůzka v Microsoft Teams"},
+		{"- - -\n=====\n──────\n—\nText -- here", 200, "Text -- here"},
+		{"-- \nPodpis", 200, "Podpis"},
+		{"____ a ____", 200, "____ a ____"},
 	}
 	for _, c := range cases {
 		if got := Snippet(c.in, c.max); got != c.want {

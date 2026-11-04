@@ -6,7 +6,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 Port of macos/Sources/MalachiMail/AccountWizard/CalDAV/CalDAVSheetController.swift
 (buildContent) and CalDAVBannerView.swift; GTK: none yet (Swift-first, the
 rules and texts are ui/internal/calendar/caldav.go, Core's Cal.CalDAVWizard).
-The Add CalDAV Calendar sheet (docs/calendar.md §5.8, artboard 7) as an
+The Add Calendar and Contacts (CalDAV/CardDAV) sheet (docs/calendar.md §5.8,
+artboard 7; docs/plans/address-book.md W3 ⑤) as an
 owned modal window of 560×560 like the Jira account assistant
 (JiraWizardWindow.xaml): the title bar with the sheet's title; one
 scrolling column clamped to 512 px: the header (the calendar's icon, the
@@ -207,6 +208,20 @@ from the server is plain text.
                         <!-- A named group for UI Automation (a panel has no automation peer). -->
                         <compose:ChipGroup x:Name="CalendarsBox" AutomationProperties.AutomationId="CalDAVCalendars">
                             <StackPanel x:Name="CalendarsList" Spacing="{StaticResource SettingsCardSpacing}" />
+                        </compose:ChipGroup>
+                    </StackPanel>
+
+                    <!-- The address books the server has (W3 ⑤): plain rows, which are shown is chosen in Preferences → Contacts. -->
+                    <StackPanel
+                        x:Name="BooksGroup"
+                        Spacing="{StaticResource SettingsCardSpacing}"
+                        Visibility="Collapsed">
+                        <TextBlock
+                            x:Name="BooksHeading"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}" />
+                        <compose:ChipGroup x:Name="BooksBox" AutomationProperties.AutomationId="CalDAVAddressBooks">
+                            <StackPanel x:Name="BooksList" Spacing="{StaticResource SettingsCardSpacing}" />
                         </compose:ChipGroup>
                     </StackPanel>
 

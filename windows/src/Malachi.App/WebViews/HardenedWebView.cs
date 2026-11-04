@@ -142,6 +142,13 @@ public abstract partial class HardenedWebView : UserControl
     public bool IsReady => core is not null && !closed;
 
     /// <summary>
+    /// A document is on its way: waiting for the control to initialise,
+    /// handed to it, or navigating; false once it is shown, failed or
+    /// dropped (the development aid's <c>shot=</c> waits for it).
+    /// </summary>
+    public bool IsLoading => !closed && (waiting is not null || pendingUri is not null || documentNavigation is not null);
+
+    /// <summary>
     /// The WebView2 inside (for focus and automation only; replaced after a
     /// browser process crash). Callers never navigate it.
     /// </summary>

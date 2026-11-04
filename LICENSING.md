@@ -13,8 +13,8 @@ Malachi Mail is made of two independently licensed parts.
 Every source file carries an `SPDX-License-Identifier` header saying which
 of the two applies to it. The built macOS app and Windows app folder carry
 `malachid` and `malachi-mcp` beside the client, each under its own licence
-(the Windows folder has `LICENSE.txt`, `LICENSE-backend.txt`, this file
-and `THIRD-PARTY-NOTICES.md`).
+(the Windows folder has `LICENSE.txt`, `LICENSE-backend.txt`, this file,
+`THIRD-PARTY-NOTICES.md` and the notices of Microsoft's components).
 
 ## The core is dual-licensed
 
@@ -63,13 +63,51 @@ GPLv3's exception for System Libraries covers components that travel with
 the application rather than with Windows is not something this document
 settles.
 
-Binary distribution of the Windows client therefore waits for a licence
-decision, which the owner makes after a legal check: an explicit
-additional permission under GPLv3 §7 that allows the client to be combined
-with and distributed together with these Microsoft platform components,
-added here, with the notices of those components in the app folder.
-Until then there is no published Windows binary, and the client is built
-from source (`windows/README.md`).
+The binaries of the Windows client are therefore distributed under the
+following additional permission (decided by the owner on 2026-10-28;
+the first release that carries it is 0.1.2).
+
+### Additional permission under GPLv3 §7
+
+As an additional permission under section 7 of the GNU General Public
+License, version 3, the copyright holders of the Windows client give you
+permission to combine the Windows client with the Microsoft platform
+components listed below (or modified versions of them), and to convey the
+resulting work, in object code form, together with those components, even
+though their licence terms are not the GPL. The Corresponding Source of the
+combined work does not need to include the source code of these
+components, but you must comply with the GPL for all other code of the
+combined work, and with each component's own licence terms when you
+convey it.
+
+The Microsoft platform components are:
+
+- the Windows App SDK, including WinUI 3, its runtime libraries and the
+  bootstrapper and deployment components it brings into the app folder
+  (NuGet packages `Microsoft.WindowsAppSDK` and its component packages);
+- the WebView2 SDK's assemblies and loader (`Microsoft.Web.WebView2`, as
+  a dependency of the Windows App SDK); the WebView2 runtime itself is
+  installed with Windows and is not conveyed with the client;
+- the Microsoft Visual C++ runtime libraries that the .NET toolchain links
+  into or places beside the client's executables, including the NativeAOT
+  keyring helper `malachi-credentials.exe`.
+
+"The Windows client" means the files under `windows/` and the files of
+this repository under GPL-3.0-or-later that its build places in the app
+folder, such as the translation catalogs from `po/`. The permission does
+not cover `malachid` and `malachi-mcp`. They are separate programs under
+AGPL-3.0-only that the client talks to over a socket and that link none of
+these components.
+
+If you modify the Windows client, you may extend this permission to your
+version, but you are not obliged to. If you do not, delete this permission
+from your version.
+
+The app folder and the installers carry these components' licence notices
+(the `Microsoft-notices\` folder) next to `LICENSE.txt`,
+`LICENSE-backend.txt`, this file and `THIRD-PARTY-NOTICES.md`. The .NET
+runtime, CsWin32 and the Windows Community Toolkit are under the MIT
+licence and need no permission.
 
 ## Third-party components
 

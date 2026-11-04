@@ -188,7 +188,25 @@ import Testing
         #expect(r.messages[0].trimmed == true && r.messages[0].from.name == "Ann")
         #expect(r.messages[1].trimmed == nil && r.messages[1].mine)
         #expect(try decode(BoardGetResult.self, #"{"case":\#(minimalCase),"messages":null}"#).messages.isEmpty)
+        #expect(r.messages.allSatisfy { $0.signature == nil }, "absent without a signed member")
         #expect(try encodeObject(BoardGetParams(caseId: "c_1"))["caseId"] as? String == "c_1")
+    }
+
+    @Test func getResultCarriesTheSignatureVerdictOfAMember() throws {
+        let r = try decode(BoardGetResult.self, #"""
+        {"case":\#(minimalCase),"messages":[
+          {"id":"m_1","folderId":"f_inbox","from":{"address":"ann@example.org"},"date":"2026-09-30T07:00:00Z","mine":false,"text":"Hi",
+           "signature":{"kind":"smime","status":"valid","signer":{"name":"Ann","email":"ann@example.org"},"notes":["opaque"],"partId":"2"}},
+          {"id":"m_2","folderId":"f_inbox","from":{"address":"bob@example.org"},"date":"2026-09-30T08:00:00Z","mine":false,"text":"Re"}]}
+        """#)
+        #expect(r.messages[0].signature == SignatureSummary(
+            kind: .smime, status: .valid, signer: SignatureSigner(name: "Ann", email: "ann@example.org"),
+            notes: [.opaque], partId: "2"))
+        #expect(r.messages[1].signature == nil)
+        let again = try JSONCoding.decoder().decode(
+            BoardMessage.self, from: JSONCoding.encoder().encode(r.messages[0]))
+        #expect(again == r.messages[0])
+        #expect(try encodeObject(r.messages[1])["signature"] == nil, "a member without a verdict leaves the key out")
     }
 
     // MARK: The user's decisions

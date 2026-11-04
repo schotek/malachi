@@ -9,6 +9,7 @@ import (
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/capabilities"
@@ -39,6 +40,11 @@ type Manager struct {
 	// Assistant is the assistant's state for the windows' rewrite
 	// (rewrite.go); nil leaves it off.
 	Assistant Assistant
+	// PreviewAttachment shows an attachment of a window from its bytes,
+	// as a tile under the headers of a message shows a part
+	// (window.PreviewDraftAttachment). Called on the main loop; say puts a
+	// toast in the pane. Nil leaves the tiles without a click.
+	PreviewAttachment func(parent *gtk.Window, name, contentType string, data []byte, say func(string))
 
 	inline   []*Pane
 	windows  []*Window
@@ -49,6 +55,16 @@ type Manager struct {
 // NewManager wires the shared state; it opens no window.
 func NewManager(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store) *Manager {
 	return &Manager{app: app, client: c, settings: s, log: log.With("component", "compose")}
+}
+
+// suggestScope is which address books complete the recipients
+// (Preferences → Contacts → Recipient Suggestions); "" without settings,
+// which the daemon reads as the account's books.
+func (m *Manager) suggestScope() api.ContactSearchScope {
+	if m == nil || m.settings == nil {
+		return ""
+	}
+	return api.ContactSearchScope(m.settings.ContactsSuggestScope())
 }
 
 // Open shows a new compose window prefilled from p.

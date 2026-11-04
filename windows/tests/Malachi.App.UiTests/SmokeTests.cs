@@ -3,8 +3,8 @@
 
 // The smoke tests of docs/windows-port.md §12 over the published app with
 // no account: the main window with its No Accounts page, the entry points
-// of the other windows (the sidebar's New Message, the primary menu's Add
-// Account…, Preferences and About, the No Accounts page's Add Account…),
+// of the other windows (the sidebar's New Message, the primary menu's
+// Preferences and About, the No Accounts page's Add Account…),
 // each window found by an element of its own and closed again. Elements are
 // found by AutomationId: the names follow the user's language.
 
@@ -62,13 +62,6 @@ public sealed class SmokeTests(SmokeFixture fixture) : IClassFixture<SmokeFixtur
         Assert.NotNull(Uia.Find(preferences, "GeneralPage"));
         Uia.Close(preferences);
         Uia.WaitGone(preferences, what: "the Preferences");
-    }
-
-    [Fact]
-    public void ThePrimaryMenuOpensTheWizardOnItsFirstPage()
-    {
-        App.MenuItem("MenuAddAccount");
-        AssertWizardOnItsFirstPage();
     }
 
     [Fact]

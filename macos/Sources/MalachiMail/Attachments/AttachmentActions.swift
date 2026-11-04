@@ -305,6 +305,48 @@ final class AttachmentActions {
     }
 }
 
+/// Quick Look for an attachment of a compose window: a click on its tile
+/// reads the file back from the daemon's attachment store
+/// (`attachment.get`, as far as its 16 MiB cap; past it the toast says the
+/// attachment is too big), writes it like a part of a message into the
+/// private, quarantined directory for opening and shows it in the shared
+/// panel. Quick Look renders and never runs anything.
+@MainActor
+enum DraftAttachmentPreview {
+    private static let log = Logger(subsystem: "io.github.schotek.Malachi", category: "attachments")
+
+    static func show(
+        _ a: DraftAttachment, accountID: AccountID, client: RPCClient, source: NSView?,
+        toast: @escaping @MainActor (String) -> Void
+    ) {
+        let params = AttachmentGetParams(accountId: accountID, attachmentId: a.id)
+        Task { @MainActor in
+            let res: AttachmentGetResult
+            do {
+                res = try await client.call(API.AttachmentGet.self, params)
+            } catch {
+                log.warning("attachment.get: \(String(describing: error), privacy: .private)")
+                toast(rpcErrorText(L10n.T("Opening the attachment"), error))
+                return
+            }
+            let dir = OpenDir.default
+            let name = res.filename.isEmpty ? a.filename : res.filename
+            let data = res.data
+            do {
+                let url = try await Task.detached(priority: .userInitiated) {
+                    let written = try dir.write(name: name, data: data)
+                    try quarantine(written)
+                    return written
+                }.value
+                AttachmentPreview.shared.show(url: url, source: source)
+            } catch {
+                log.warning("writing a draft attachment for preview: \(String(describing: error), privacy: .private)")
+                toast(L10n.T("The attachment could not be opened"))
+            }
+        }
+    }
+}
+
 /// Creates `data` in `folder` as `name`, or as `name` with " (2)", " (3)", …
 /// when that is taken (attachments.go `saveInto`): the create fails on an
 /// existing file, and a name that appeared between the check and the create

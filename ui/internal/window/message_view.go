@@ -215,9 +215,12 @@ type messageView struct {
 	// The From, To and Cc chips (addresses.go).
 	addresses *addressHeader
 
-	// The attachment chips (attachments.go) and what is in the box now.
+	// The attachment chips (attachments.go) and what is in the box now;
+	// the summary line over them with its Save All, nil without one.
 	attachments *adw.WrapBox
 	chips       []gtk.Widgetter
+	summary     *gtk.Box
+	saveAll     *gtk.Button
 
 	// What render was last given: the summary and the cache entry, for
 	// redrawing the chips when the cache no longer holds the message
@@ -262,6 +265,11 @@ type messageView struct {
 	// The eWay-CRM bar (crm_bar.go); nil on the view of an attached
 	// message, and on a conversation card until it needs one.
 	crmBar *crmBar
+
+	// sigBadge is the signature badge under the date (signature.go); nil
+	// on the view of an attached message and on a card's share (the card
+	// has its own in its header).
+	sigBadge *signatureBadge
 
 	// toast shows a message in the owning window, when it wired one.
 	toast func(string)
@@ -326,6 +334,7 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		box.SetVisible(false)
 		v.invitation.widget().NotifyProperty("visible", func() { box.SetVisible(v.invitation.widget().Visible()) })
 	}
+	v.bindSignatureBadge()
 	v.plain()
 	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))
 	load, trust := v.loadButton, v.trustButton
@@ -557,6 +566,7 @@ func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	v.shown, v.shownLoaded = s, lm
 	v.renderBulk(s, lm)
 	v.renderCrm(s, v.win.crmMessage(s.ID, lm))
+	v.renderSignature(s, lm)
 	if lm == nil {
 		if issue := v.renderHeaders(s, nil); issue != nil && issue.event {
 			v.renderEvent(issue.eventBody)

@@ -18,12 +18,19 @@ type messageService struct{ b *Backend }
 // List pages through a folder (docs/api.md §4.3). Only messages within
 // the offlineDays window exist locally.
 func (s *messageService) List(ctx context.Context, p api.MessageListParams) (*api.MessageListResult, error) {
-	if p.AccountID == "" || p.FolderID == "" {
+	if p.Unified != "" {
+		if err := checkUnified(p.Unified, p.AccountID, p.FolderID); err != nil {
+			return nil, err
+		}
+	} else if p.AccountID == "" || p.FolderID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and folderId are required")
 	}
-	a, err := s.b.requireAccount(ctx, string(p.AccountID))
-	if err != nil {
-		return nil, err
+	var a store.Account
+	if p.Unified == "" {
+		var err error
+		if a, err = s.b.requireAccount(ctx, string(p.AccountID)); err != nil {
+			return nil, err
+		}
 	}
 	limit := p.Page.Limit
 	if limit <= 0 {
@@ -45,6 +52,9 @@ func (s *messageService) List(ctx context.Context, p api.MessageListParams) (*ap
 	case api.FilterAll, api.FilterUnread, api.FilterFlagged:
 	default:
 		return nil, api.NewError(api.CodeInvalidArgument, "filter must be all, unread or flagged")
+	}
+	if p.Unified != "" {
+		return s.unified(ctx, p, limit, sortOrder, listFilter)
 	}
 	items, next, total, err := s.b.store.ListMessages(ctx, a.ID, string(p.FolderID), p.Page.Cursor, limit, sortOrder, listFilter)
 	switch {
@@ -466,7 +476,16 @@ func toAPISummary(m store.Message) api.MessageSummary {
 		Size:           m.Size,
 		Invitation:     m.Invitation,
 		CrmSaved:       m.CrmSaved,
+		Signature:      listSignature(m.Signature),
 	}
+}
+
+// listSignature is the list's part of a verdict (kind and status).
+func listSignature(s *api.SignatureSummary) *api.MessageSignature {
+	if s == nil {
+		return nil
+	}
+	return &api.MessageSignature{Kind: s.Kind, Status: s.Status}
 }
 
 func toAPIMessage(m store.Message) api.Message {
@@ -479,6 +498,7 @@ func toAPIMessage(m store.Message) api.Message {
 		InReplyTo:      m.InReplyTo,
 		References:     m.References,
 		Attachments:    m.Attachments,
+		Signature:      m.Signature,
 	}
 	if out.References == nil {
 		out.References = []string{}

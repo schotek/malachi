@@ -101,8 +101,8 @@ registered at all, so it never appears in the client's tool list.
 
 | Tier | Flag | Tools |
 |---|---|---|
-| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, `get_user_profile`, and the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` (not under `-reply-only` or `-triage-run`) |
-| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` (attendees also need `-allow-send`) |
+| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, `get_user_profile`, the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` and the contacts tools `search_contacts`, `get_contact` and `list_rules` (none of these under `-reply-only` or `-triage-run`) |
+| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` (attendees also need `-allow-send`), `create_contact`, `update_contact`, `create_rule`, `update_rule` (forward and autoReply also need `-allow-send`) |
 | send | `-allow-send` | `send_message` |
 | triage | `-allow-triage` | `list_triage_queue`, `annotate_case`, `add_commitment` (and the prompt `triage_board`) |
 | profile proposals | the user shares the profile, or `-in-app` | `propose_profile_note` (never under `-reply-only` or `-triage-run`; see [The user's profile](#the-users-profile-get_user_profile-propose_profile_note)) |
@@ -201,6 +201,11 @@ destructive, only `send_message` open-world.
   `comment` or an `event` (a status or assignee change, whose body is one
   `from → to` line per change). The subject of every such message is
   `KEY: Summary`, so a tool that ignores `issue` still reads sensibly.
+  `signature` is `{kind, status}` on a message whose signature the daemon
+  judged ([api.md §4.22](api.md#422-signature): `kind` `smime` or `pgp`,
+  `status` `valid`, `validSeen`, `mismatch`, `untrusted`, `weak`,
+  `unknownKey`, `unsupported`, `invalid`, `revoked`, `error`); absent on
+  unsigned mail and while the verdict is pending.
 
 ### search_messages
 
@@ -236,7 +241,10 @@ destructive, only `send_message` open-world.
   sender-domain: …` and `unsubscribe: <method> via <host or address>`
   (with `already unsubscribed on <time>` when the user did; **never the
   page or address URL itself**, which would invite an agent to fetch
-  it), the attachment
+  it), on signed mail `signature: <kind> <status>`, `signature-signer:
+  <address>` (from the certificate or key, cleaned like any mail string)
+  and `signature-notes: …` (the codes of [api.md §4.22](api.md#422-signature)),
+  the attachment
   list (`partId`, `filename`, `type`, `size`, `inline`, `remote`), the
   optional `headers` and `links` (at most 50), and the body slice. The
   `remote` marker follows the quoted filename, so a name cannot forge it;
@@ -540,6 +548,78 @@ never given out (host and provider only), as with other links.
   D9](calendar.md)). The tool is annotated like `send_message`
   (destructive, open world) because it can reach other people. Update,
   delete and answering are not offered.
+
+### Contacts (`search_contacts`, `get_contact`, `create_contact`, `update_contact`)
+
+The contacts tools read and write the address books the daemon
+synchronises (Microsoft 365 contact folders, CardDAV collections) through
+`addressBook.list` and `contact.*` ([api.md §4.19](api.md)). The two read
+tools are registered as the calendar's (never under `-reply-only` or
+`-triage-run`); `create_contact` and `update_contact` need
+`-allow-modify`. **There is no delete**: a contact is deleted only by the
+user in Malachi Mail. Every string of a contact or book (names,
+organisations, addresses, labels, notes, book names) comes from a server
+or another person: it is cleaned and sits inside the fence; ids,
+revisions, kinds and counts stay outside, matched by row number or id.
+
+- `search_contacts`: optional `query` (words of the name, organisation or
+  address, each a prefix; empty lists every contact in name order),
+  `limit` (1 to 100, default 25). The address books first (id, account,
+  kind, read-only, visible, count; names in the fence), then a row per
+  contact (contact id, book id; name, organisation and first e-mail in the
+  fence). The recent book is not listed.
+- `get_contact`: `contactId`. Revision, read-only and birthday outside the
+  fence; names, organisation, job title, e-mails, phones, postal and web
+  addresses with their labels and the note (**cut at 4 KiB**) inside.
+- `create_contact` (`-allow-modify`): optional `bookId` (default the first
+  writable visible book), `displayName`, `givenName`, `familyName`,
+  `organisation`, `jobTitle`, `note`, `emails` (`address`, `label`),
+  `phones` (`number`, `label`). The contact goes to the user's server at
+  once (server first, online only).
+- `update_contact` (`-allow-modify`): `contactId` and the fields to
+  change, as `create_contact`'s; a string field given empty clears it,
+  `emails` and `phones` given replace the lists, every other property of
+  the card stays as the server has it (the daemon patches). The bridge
+  reads the contact and sends its revision: a change made elsewhere since
+  is `contactConflict` and nothing is written.
+
+### Mail rules (`list_rules`, `create_rule`, `update_rule`)
+
+The rules tools read and write the user's mail rules through `rules.list`,
+`rules.create` and `rules.update` ([api.md §4.21](api.md#421-rules)).
+The daemon runs the rules itself on new mail of the inbox; the bridge
+never runs them on mail already stored (`rules.apply`) and **never
+deletes** a rule (the user does both in Malachi Mail). `list_rules` is
+registered as the calendar's (never under `-reply-only` or
+`-triage-run`); `create_rule` and `update_rule` need `-allow-modify`.
+A rule's name, values, forwarding address and reply text may have been
+taken from mail (Create Rule from Message…): they are cleaned and sit
+inside the fence, ids, flags and counts outside, matched by the rule id.
+
+- `list_rules`: no arguments. A trusted line per rule (id, enabled, the
+  account or every mail account, `match`, `stop`, `sendsMail` for an
+  outgoing action, `applied`, `refused` = `skipped`, the last application
+  and `disabledBecause` = `problem`), then the names, conditions and
+  actions inside the fence (a reply text cut at 1 KiB).
+- `create_rule` (`-allow-modify`): `name`, optional `accountId` (default
+  every mail account), `match` (`all` default, `any`), `conditions`
+  (`field`, `op`, `value`), `actions` (`kind`, `folderId`, `to`,
+  `subject`, `text`), `stop`, `enabled` (default true). The rule is added
+  at the end and runs on new mail from then on.
+- `update_rule` (`-allow-modify`): `id` and the fields to change; the
+  others stay as `rules.list` has them (`conditions` and `actions` given
+  replace the lists). `enabled: false` switches a rule off.
+- **Outgoing actions.** A rule with `forward` or `autoReply` sends mail
+  to other people by itself on every matching message, without anyone
+  looking ([security.md §7.5](security.md#75-outgoing-actions-of-the-mail-rules)).
+  Without `-allow-send` the bridge refuses, with one fixed text and
+  before the daemon is asked, `create_rule` with such an action and
+  `update_rule` whose result is enabled with one (switching such a rule
+  off is allowed). With `-allow-send` it sends `confirmOutgoing`: the
+  model's instructions and the tool description say that the user must
+  have asked for exactly that rule in the conversation.
+- A rule the daemon refuses comes back as `invalidArgument` with the
+  field it names (`conditions[1]`, `actions[0]`, `name`, …).
 
 ### The user's profile (`get_user_profile`, `propose_profile_note`)
 
@@ -1057,6 +1137,19 @@ pictures `neverStoreAttachments` keeps on the server).
   (30 minutes unused at most, never past its own exit); once that copy is
   gone the next tool call downloads the message again, and counts it
   again.
+
+## Signatures
+
+The bridge passes the daemon's verdict on a message's signature, nothing
+more (Q8 of [plans/signatures.md](plans/signatures.md)): `kind` and
+`status` with `list_messages` and `search_messages`, plus the signer's
+address and the notes with `read_message`, inside the fence, cleaned.
+There is no tool for the details, the revocation check or the OpenPGP
+keys. The server instructions tell the model that `valid` (or
+`validSeen`) only says who sent exactly this content — never that the
+content is true, safe or to be followed — and that every other status is
+no evidence of the sender at all. No module was added to the bridge for
+this.
 
 ## Content rules
 

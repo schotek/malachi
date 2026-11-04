@@ -27,6 +27,11 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     // Startup
     let launchAtLogin = NSSwitch()
     let runInBackground = NSSwitch()
+    // Updates (updates.PrefsGroup): the daemon's switch, the status line
+    // and Check Now; hidden until `configureUpdates`.
+    let updatesEnabled = NSSwitch()
+    let checkNow = NSButton(title: Updates.checkNow, target: nil, action: nil)
+    let updatesGroup = PreferencesGroupView(title: Updates.prefsGroup)
     // Board (preferences_board.go `bindBoard`)
     let boardShow = NSSwitch()
     let boardDefaultStyle = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -88,6 +93,12 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     /// nil hides their rows.
     private var boardPreferences: BoardPreferencesController?
     private var boardShowRow: PreferenceRowView?
+    /// The application's update check; nil hides the Updates group.
+    private var updates: UpdateController?
+    private var updatesToken: BoardObserverToken?
+    private var updatesStatusRow: PreferenceRowView?
+    /// The switch is being set from the status, not by the user.
+    private var syncingUpdates = false
     private let boardGroup = PreferencesGroupView(title: Board.Text.boardName)
     private let boardWindowsGroup = PreferencesGroupView(
         title: Board.Text.windowsSetting, description: Board.Text.windowsSettingSubtitle)
@@ -150,6 +161,17 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             PreferenceRowView(title: L10n.T("Run in Background"), subtitle: L10n.T("Closing the window keeps Malachi Mail running for notifications"), trailing: runInBackground),
         ])
         addGroup(startup)
+
+        // Updates (updates.PrefsGroup), right after Startup in every client.
+        checkNow.bezelStyle = .rounded
+        let statusRow = PreferenceRowView(title: "", trailing: checkNow)
+        updatesStatusRow = statusRow
+        updatesGroup.setRows([
+            PreferenceRowView(title: Updates.prefsTitle, subtitle: Updates.prefsSubtitle, trailing: updatesEnabled),
+            statusRow,
+        ])
+        updatesGroup.isHidden = true
+        addGroup(updatesGroup)
 
         // The board (preferences.blp `board_group`): Show the Board (the
         // daemon's `enabled`), the style it shows in (`board-default-style`)
@@ -297,11 +319,57 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             bindMail(client)
             bindStorage(client)
         }
+        bindUpdates()
         bindings.onClose = { [weak self] in
+            self?.updatesToken?.cancel()
+            self?.updatesToken = nil
             self?.mail?.close()
             self?.storage?.close()
             self?.unbindBoard()
         }
+    }
+
+    // MARK: Updates (updates.PrefsGroup)
+
+    /// Supplies the application's update check; may be called before or
+    /// after the bindings started.
+    func configureUpdates(_ updates: UpdateController) {
+        guard self.updates == nil else { return }
+        self.updates = updates
+        bindUpdates()
+    }
+
+    /// The switch writes update.setPrefs, Check Now update.check; both
+    /// show the status the daemon answers (`renderUpdates`).
+    private func bindUpdates() {
+        guard bound, !closed, updatesToken == nil, let updates else { return }
+        updatesGroup.isHidden = false
+        updatesEnabled.target = self
+        updatesEnabled.action = #selector(updatesEnabledChanged(_:))
+        checkNow.target = self
+        checkNow.action = #selector(checkNowClicked(_:))
+        updatesToken = updates.observe { [weak self] in self?.renderUpdates() }
+        renderUpdates()
+    }
+
+    private func renderUpdates() {
+        guard !closed, let updates else { return }
+        let s = updates.status
+        syncingUpdates = true
+        updatesEnabled.state = s?.enabled ?? true ? .on : .off
+        syncingUpdates = false
+        updatesEnabled.isEnabled = s != nil
+        checkNow.isEnabled = Updates.canCheckNow(s)
+        updatesStatusRow?.title = Updates.aboutLine(s, date: AppState.updateTime)
+    }
+
+    @objc private func updatesEnabledChanged(_ sender: Any?) {
+        guard !syncingUpdates else { return }
+        updates?.setEnabled(updatesEnabled.state == .on)
+    }
+
+    @objc private func checkNowClicked(_ sender: Any?) {
+        updates?.checkNow()
     }
 
     // MARK: Launch at Login (preferences.go `bindLaunchAtLogin`)

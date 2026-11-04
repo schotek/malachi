@@ -727,7 +727,7 @@ internal sealed partial class ConversationTimelineView : UserControl
                 default:
                     continue;
             }
-            row.Show(rail, it.Sender, monochrome);
+            row.Show(rail, it.Sender, monochrome, ConversationRow.PhotoSenderOf(it));
             if (row.Card is { } rowCard)
             {
                 rowCard.SetFold(Core.Model.Conversation.Foldable(it), foldState.GetValueOrDefault(rowCard.Id));

@@ -82,6 +82,8 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
     // of them, the least recently used first.
     private readonly Dictionary<BoardCaseId, (long Version, IReadOnlyList<Board.CaseMessage> List)> messages = [];
     private readonly List<BoardCaseId> messageOrder = [];
+    // The case LoadMessages was asked for last: the detail's.
+    private BoardCaseId? lastOpened;
 
     // The version of a case whose conversation is being loaded, or whose
     // load failed.
@@ -213,6 +215,56 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
         });
     }
 
+    /// <summary>
+    /// notify.signaturesChanged: trust changed (a key imported, confirmed or
+    /// removed, a revocation check), which may change the verdict of a
+    /// member in any account without changing its case (board.get is cached
+    /// by the case's version): <see cref="ReloadConversations"/> of all.
+    /// </summary>
+    public void SignaturesChanged() => ReloadConversations(default);
+
+    /// <summary>
+    /// notify.messagesChanged of <paramref name="n"/>'s account: a signature
+    /// verdict the daemon's worker computed after board.get answered. It does
+    /// not bump the case's version either (<see cref="ReloadConversations"/>).
+    /// </summary>
+    public void MessagesChanged(MessagesChangedNotification n) => ReloadConversations(n.AccountId);
+
+    /// <summary>
+    /// A change the case's version does not show. Every conversation held of
+    /// <paramref name="account"/> (empty = any) is marked stale, so the next
+    /// <see cref="LoadMessages"/> asks board.get again, and the one asked for
+    /// last (the detail's) is asked for now. Until the answer the old list
+    /// stays in the snapshot; an unchanged answer publishes nothing.
+    /// </summary>
+    public void ReloadConversations(AccountId account)
+    {
+        scope.VerifyAccess();
+        if (!started || stopped)
+        {
+            return;
+        }
+        var reload = false;
+        foreach (var id in messageOrder)
+        {
+            if (!messages.TryGetValue(id, out var m) || data.Cases.FirstOrDefault(c => c.Id == id) is not { } c
+                || (!string.IsNullOrEmpty(account.Value) && c.Account != account))
+            {
+                continue;
+            }
+            // A version no case has: the load asks, and the old list stays until the answer.
+            messages[id] = (StaleConversation, m.List);
+            reload |= id == lastOpened;
+        }
+        if (reload && lastOpened is { } shown)
+        {
+            LoadMessages(shown);
+        }
+    }
+
+    // The version of a conversation that must be asked for again although the case's did not change: no case has it.
+    private const long StaleConversation = -1;
+
     /// <summary>notify.accountsChanged: the accounts' names and the board again.</summary>
     public void AccountsChanged()
     {
@@ -277,6 +329,7 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
         {
             return;
         }
+        lastOpened = id;
         if (messages.TryGetValue(id, out var m) && m.Version == c.Version)
         {
             Touch(id);
@@ -669,10 +722,12 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
             Id = m.Id,
             Folder = m.FolderId,
             From = Format.DisplayName(m.From),
+            Address = m.From.Email,
             Date = m.Date.ToUniversalTime(),
             Text = m.Text,
             Mine = m.Mine,
             Trimmed = m.Trimmed ?? false,
+            Signature = m.Signature,
         };
     }
 

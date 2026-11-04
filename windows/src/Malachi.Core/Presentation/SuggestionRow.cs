@@ -32,8 +32,11 @@ namespace Malachi.Core.Presentation;
 /// <param name="Tooltip">Where it comes from (<see cref="Suggest.SuggestionTooltip"/>).</param>
 public sealed record SuggestionRow(string Primary, string Secondary, string Icon, string Tooltip)
 {
-    /// <summary>suggestionRow: the row of <paramref name="contact"/>.</summary>
-    public static SuggestionRow For(Contact contact)
+    /// <summary>
+    /// suggestionRow: the row of <paramref name="contact"/>; <paramref name="account"/>
+    /// names the account of a synchronised book in the tooltip ("" none, as GTK).
+    /// </summary>
+    public static SuggestionRow For(Contact contact, string account = "")
     {
         ArgumentNullException.ThrowIfNull(contact);
         var name = DisplayText.Clean(contact.Name);
@@ -43,6 +46,6 @@ public sealed record SuggestionRow(string Primary, string Secondary, string Icon
             named ? name : address,
             named ? address : "",
             Suggest.SuggestionIcon(contact.Source),
-            Suggest.SuggestionTooltip(contact));
+            Suggest.SuggestionTooltip(contact, account));
     }
 }

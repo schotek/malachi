@@ -34,6 +34,14 @@ extension Integration {
         let windows = windows
         mainWindow.boardActions.mailBodies = BoardMailBodies(
             cache: cache, settings: state.settings, track: { windows.track(display: $0) })
+        // Archive and Delete go on the window's Undo stack with their toast;
+        // its button and ⌘Z take them back through the board.
+        mainWindow.board.onArchived = { [weak self] o in
+            self?.actions.recordBoardUndo(o)
+        }
+        actions.undoBoard = { [weak mainWindow] o in
+            mainWindow?.board.undoArchive(o)
+        }
         // Open at Launch and Show the Board, now that the board can act.
         mainWindow.setupModeMemory()
     }

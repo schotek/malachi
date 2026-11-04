@@ -75,11 +75,6 @@ type boardPage struct {
 	// entries do not change (renderHeader).
 	accountFilterLabels []string
 
-	statusButton *gtk.MenuButton
-	syncSpinner  *adw.Spinner
-	connIcon     *gtk.Image
-	syncLabel    *gtk.Label
-
 	listSplit     *adw.NavigationSplitView
 	listStack     *gtk.Stack
 	listEmptyPage *adw.StatusPage
@@ -163,6 +158,8 @@ type boardPage struct {
 	gate *boardMessagesGate
 
 	menuButton *gtk.MenuButton
+	// toolbar is the page's customizable header bars (toolbar_board.go).
+	toolbar *boardToolbar
 }
 
 // boardAPIState is api.BoardState's value on the wire: board_actions.go
@@ -263,8 +260,8 @@ func modeTitle(m board.Mode) string {
 }
 
 // setMode switches between Mail, Board and Calendar (board.Mode): gates
-// the mail-only actions and shortcuts (applyMessageAccels), moves the
-// status strip's popover (status.go moveStatusStripTo), tells
+// the mail-only actions and shortcuts (applyMessageAccels), brings the
+// status bar's text to the mode (status.go statusTexts), tells
 // the board controller it is about to show or has left
 // (BoardWillShow/BoardShown; board.StyleOnShow) and the calendar page it
 // shows or has left (enterCalendar, leaveCalendar: calendar.go).
@@ -279,6 +276,7 @@ func (w *Window) setMode(m board.Mode) {
 	w.mode = m
 	w.syncModeSwitches(m)
 	w.applyMessageAccels()
+	w.refreshPrint()
 	if leaving == board.ModeCalendar {
 		w.leaveCalendar()
 	}
@@ -291,7 +289,7 @@ func (w *Window) setMode(m board.Mode) {
 		w.ensureBoard()
 		// The conversation the board held back while in Mail.
 		w.boardPage.gate.flush()
-		w.moveStatusStripTo(board.ModeBoard)
+		w.refreshSyncLabel()
 		w.ResumeBoardReplies()
 		w.boardPage.ctl.BoardWillShow()
 		w.modeStack.SetVisibleChildName(board.ModeBoard.Nick())
@@ -309,7 +307,7 @@ func (w *Window) setMode(m board.Mode) {
 	if m == board.ModeCalendar {
 		w.enterCalendar()
 	}
-	w.moveStatusStripTo(m)
+	w.refreshSyncLabel()
 	w.modeStack.SetVisibleChildName(m.Nick())
 	if w.boardPage != nil {
 		// win.board-* act on a selection only Board shows.
@@ -330,7 +328,7 @@ func (w *Window) setMode(m board.Mode) {
 // stands; called by setMode and by setTypingAccels (search.go) wherever
 // typingAllowsAccels changes.
 func (w *Window) applyMessageAccels() {
-	w.installMessageAccels(messageAccelsAllowed(w.mode, w.typingAllowsAccels))
+	w.installMessageAccels(messageAccelsAllowed(w.mode, w.typingAllowsAccels), undoAccelAllowed(w.mode, w.typingAllowsAccels))
 }
 
 // messageAccelsAllowed is applyMessageAccels' decision, pure and tested
@@ -375,6 +373,7 @@ func (w *Window) ensureBoard() {
 	p.wireKeys()
 	p.wirePanel()
 	p.wireTriage()
+	p.wireToolbar(pb)
 	if w.assist != nil {
 		if bt := w.assist.BoardTriage(); bt != nil {
 			bt.SetOnRefresh(func() { p.src.Refresh() })
@@ -414,6 +413,17 @@ func (w *Window) boardChanged(n api.BoardChangedNotification) {
 	}
 }
 
+// boardVerdictsChanged is a change of messages' signature verdicts the
+// case's version does not show (notify.signaturesChanged with account "",
+// notify.messagesChanged of account): the source asks board.get again for
+// the shown case's conversation, so its cards' badges follow
+// (board_conversation.go).
+func (w *Window) boardVerdictsChanged(account api.AccountID) {
+	if w.boardPage != nil && w.boardPage.daemon != nil {
+		w.boardPage.daemon.ReloadConversations(account)
+	}
+}
+
 // boardAccountsChanged is notify.accountsChanged's effect on the board: the
 // source re-lists the accounts (account names, kind badges).
 func (w *Window) boardAccountsChanged() {
@@ -432,37 +442,18 @@ func (w *Window) boardConnectionChanged(connected bool) {
 	w.refreshBoardStatusLabel()
 }
 
-// refreshBoardStatusLabel is the board's half of refreshSyncLabel
-// (sync.go): the same status line (currentStatusLine, status.go),
-// replaced by a non-empty boardtriage.StripText while there is one to
-// show (the triage's note takes the strip over, as it does on macOS and
-// in the GTK panel). Called whenever something that moves the line
-// changes: refreshSyncLabel itself (sync.go), the board's own notify hooks
-// above, the triage's Observe (board_triage_button.go) and
-// moveStatusStripTo. Only while the board shows: switching to Board
-// refreshes it (moveStatusStripTo), so a hidden board costs nothing.
+// refreshBoardStatusLabel brings the window's status bar up to date
+// while the board shows, when the triage's note may have changed (the
+// board's own notify hooks above, the triage's Observe in
+// board_triage_button.go): the triage's note takes the line over
+// (status.go statusTexts). A hidden board costs nothing: switching to
+// Board refreshes the bar (setMode).
 func (w *Window) refreshBoardStatusLabel() {
 	p := w.boardPage
 	if p == nil || p.replyClosed || w.mode != board.ModeBoard {
 		return
 	}
-	line := w.currentStatusLine()
-	text := line.Text
-	if v, ok := p.cachedTriageView(); ok {
-		triageText := boardtriage.StripText(v, true, p.ctl.Source().Snapshot().Phase, i18n.Tr)
-		text = boardStatusText(line.Text, triageText)
-	}
-	p.syncLabel.SetUseMarkup(false)
-	p.syncLabel.SetLabel(text)
-	p.syncSpinner.SetVisible(line.Spinning)
-	if line.Icon != "" {
-		p.connIcon.SetFromIconName(line.Icon)
-	}
-	p.connIcon.SetVisible(line.Icon != "")
-	if !line.Active {
-		p.statusButton.Popdown()
-	}
-	p.statusButton.SetSensitive(line.Active)
+	w.refreshSyncLabel()
 }
 
 // cachedTriageView is the board triage's View as last observed
@@ -482,20 +473,12 @@ func (p *boardPage) cachedTriageView() (boardtriage.View, bool) {
 	return p.triageView, true
 }
 
-// boardArchived is the controller's OnArchived: what Archive did, as a
-// toast with Undo (ArchiveOutcome.UndoLabel), which moves the messages back
-// and puts the case back on the board (Controller.UndoArchive).
+// boardArchived is the controller's OnArchived: what Archive or Delete
+// did, pushed on the window's Undo stack with a toast whose button (and
+// Ctrl+Z) moves the messages back and puts the case back on the board
+// (undo.go recordBoardUndo, runUndo; Controller.UndoArchive).
 func (w *Window) boardArchived(o board.ArchiveOutcome) {
-	t := widget.PlainToast(o.Text)
-	if o.UndoLabel != "" {
-		t.SetButtonLabel(o.UndoLabel)
-		t.ConnectButtonClicked(func() {
-			if p := w.boardPage; p != nil && !p.replyClosed {
-				p.ctl.UndoArchive(o)
-			}
-		})
-	}
-	w.toasts.AddToast(t)
+	w.recordBoardUndo(o)
 }
 
 // boardMessagesGate is the board's source with LoadMessages held back while

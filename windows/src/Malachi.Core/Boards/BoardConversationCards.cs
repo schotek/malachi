@@ -56,6 +56,9 @@ public static partial class Board
         public const int MaxLiveWebViews = 4;
 
         private readonly List<bool> folds = [];
+
+        // The members' verdicts (VerdictOf), same indices as Members.
+        private IReadOnlyList<string> verdicts = [];
         private readonly Dictionary<Member, Body> bodies = [];
 
         // The members in the order they were opened, the latest last.
@@ -116,7 +119,33 @@ public static partial class Board
         public static Key KeyOf(Detail d)
         {
             ArgumentNullException.ThrowIfNull(d);
-            return new Key(d.Id, [.. d.Messages.Select(m => new Member(m.Id, m.Text))]);
+            return new Key(d.Id, [.. d.Messages.Select(m => new Member(m.Id, m.Text))], [.. d.Messages.Select(m => VerdictOf(m.Signature))]);
+        }
+
+        /// <summary>
+        /// A verdict as a string, "" without one: its kind, status, signer,
+        /// part and notes, compared by value in a <see cref="Key"/>.
+        /// </summary>
+        public static string VerdictOf(SignatureSummary? s) =>
+            s is null
+                ? ""
+                : string.Join(
+                    '\u001f',
+                    s.Kind.ToString(), s.Status.ToString(), s.Signer?.Name, s.Signer?.Email, s.Signer?.Fingerprint, s.PartId,
+                    string.Join(',', s.Notes.Select(n => n.ToString())));
+
+        private static bool SameVerdicts(IReadOnlyList<string>? a, int aCount, IReadOnlyList<string>? b, int bCount)
+        {
+            for (var i = 0; i < Math.Max(aCount, bCount); i++)
+            {
+                var x = a is not null && i < a.Count ? a[i] : "";
+                var y = b is not null && i < b.Count ? b[i] : "";
+                if (!string.Equals(x, y, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /// <summary>
@@ -154,6 +183,7 @@ public static partial class Board
             {
                 CaseId = key.CaseId;
                 Members = [.. key.Members];
+                verdicts = VerdictsOf(key);
                 folds.Clear();
                 folds.AddRange(Enumerable.Range(0, Members.Count).Select(i => i != Newest));
                 bodies.Clear();
@@ -166,7 +196,17 @@ public static partial class Board
             }
             if (key.Members.SequenceEqual(Members))
             {
-                return new Change.None();
+                // The same cards with another verdict on one: every card
+                // stays as it is (fold, body, web view) and learns the new
+                // verdict; nothing is asked for again.
+                var next = VerdictsOf(key);
+                if (verdicts.SequenceEqual(next))
+                {
+                    return new Change.None();
+                }
+                verdicts = next;
+                return new Change.Members(
+                    Enumerable.Range(0, Members.Count).ToDictionary(i => i, i => i), []);
             }
             var free = new Dictionary<Member, Queue<int>>();
             for (var i = 0; i < Members.Count; i++)
@@ -265,6 +305,7 @@ public static partial class Board
             var present = key.Members.ToHashSet();
             opened.RemoveAll(m => !present.Contains(m));
             Members = [.. key.Members];
+            verdicts = VerdictsOf(key);
             folds.Clear();
             folds.AddRange(newFolds);
             foreach (var gone in bodies.Keys.Where(m => !present.Contains(m)).ToList())
@@ -283,6 +324,9 @@ public static partial class Board
             }
             return new Change.Members(kept, reload);
         }
+
+        private static string[] VerdictsOf(Key key) =>
+            [.. Enumerable.Range(0, key.Members.Count).Select(i => key.Verdicts is not null && i < key.Verdicts.Count ? key.Verdicts[i] : "")];
 
         // Reading
 
@@ -394,7 +438,7 @@ public static partial class Board
         /// <summary>A copy to compare with later (Swift's value semantics).</summary>
         public ConversationCards Clone()
         {
-            var c = new ConversationCards(MaxLive) { CaseId = CaseId, Members = Members };
+            var c = new ConversationCards(MaxLive) { CaseId = CaseId, Members = Members, verdicts = verdicts };
             c.folds.AddRange(folds);
             foreach (var (m, b) in bodies)
             {
@@ -407,7 +451,7 @@ public static partial class Board
         /// <inheritdoc/>
         public bool Equals(ConversationCards? other) =>
             other is not null && MaxLive == other.MaxLive && CaseId == other.CaseId && Members.SequenceEqual(other.Members)
-            && folds.SequenceEqual(other.folds) && opened.SequenceEqual(other.opened) && bodies.Count == other.bodies.Count
+            && folds.SequenceEqual(other.folds) && verdicts.SequenceEqual(other.verdicts) && opened.SequenceEqual(other.opened) && bodies.Count == other.bodies.Count
             && bodies.All(kv => other.bodies.TryGetValue(kv.Key, out var b) && b == kv.Value);
 
         /// <inheritdoc/>
@@ -461,13 +505,25 @@ public static partial class Board
         /// <param name="Text">The excerpt.</param>
         public sealed record Member(MessageId? Id, string Text);
 
-        /// <summary>What decides whether a refresh of the board touches the cards: the case and its members.</summary>
+        /// <summary>
+        /// What decides whether a refresh of the board touches the cards: the
+        /// case, its members and their signature verdicts. A verdict is not
+        /// part of a member's identity (its fold and its body stay), but a
+        /// change of one counts: <see cref="Apply"/> answers
+        /// <see cref="Change.Members"/> and the card learns it.
+        /// </summary>
         /// <param name="CaseId">The case.</param>
         /// <param name="Members">Its members, oldest first.</param>
-        public sealed record Key(BoardCaseId CaseId, IReadOnlyList<Member> Members)
+        /// <param name="Verdicts">
+        /// Each member's verdict as a string (<see cref="VerdictOf"/>), same
+        /// indices as <paramref name="Members"/>; null: none has one.
+        /// </param>
+        public sealed record Key(BoardCaseId CaseId, IReadOnlyList<Member> Members, IReadOnlyList<string>? Verdicts = null)
         {
             /// <inheritdoc/>
-            public bool Equals(Key? other) => other is not null && CaseId == other.CaseId && Members.SequenceEqual(other.Members);
+            public bool Equals(Key? other) =>
+                other is not null && CaseId == other.CaseId && Members.SequenceEqual(other.Members)
+                && SameVerdicts(Verdicts, Members.Count, other.Verdicts, other.Members.Count);
 
             /// <inheritdoc/>
             public override int GetHashCode() => HashCode.Combine(CaseId, Members.Count);

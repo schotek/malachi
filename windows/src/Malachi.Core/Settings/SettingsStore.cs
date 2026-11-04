@@ -28,9 +28,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Boards;
 using Malachi.Core.Calendars;
+using Malachi.Core.Contacts;
+using Malachi.Core.Toolbars;
 
 namespace Malachi.Core.Settings;
 
@@ -49,6 +52,9 @@ public sealed class SettingsStore : IDisposable
     /// <summary>The step of the text zoom control.</summary>
     public const int TextZoomStep = 10;
 
+    /// <summary>The gschema enum ToolbarDisplayMode's nicks (ui/internal/toolbar DisplayMode).</summary>
+    public static readonly IReadOnlyList<string> ToolbarDisplayModeNicks = ["icon", "icon-and-label", "label"];
+
     // In SettingsKey order.
     private static readonly SettingsKeyInfo[] Keys =
     [
@@ -60,6 +66,7 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.CollapsedFolders, "collapsed-folders", "as", Array.Empty<string>()),
         new(SettingsKey.CollapsedAccounts, "collapsed-accounts", "as", Array.Empty<string>()),
         new(SettingsKey.FavouriteFolders, "favourite-folders", "as", Array.Empty<string>()),
+        new(SettingsKey.UnifiedInbox, "unified-inbox", "b", true),
         new(SettingsKey.LaunchAtLogin, "launch-at-login", "b", false),
         new(SettingsKey.RunInBackground, "run-in-background", "b", false),
         new(SettingsKey.MarkReadDelay, "mark-read-delay", "i", 2, minimum: 0, maximum: MarkReadDelayMax),
@@ -98,6 +105,12 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.BoardChatGptModel, "board-triage-chatgpt-model", "s", ""),
         new(SettingsKey.BoardChatGptConsentVersion, "board-triage-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
         new(SettingsKey.CalendarView, "calendar-view", "s", "week", choices: Nicks<Cal.View>.All),
+        new(SettingsKey.ContactsSuggestScope, "contacts-suggest-scope", "s", "account", choices: ContactBook.ScopeNicks),
+        new(SettingsKey.ToolbarMail, "toolbar-mail", "as", Array.Empty<string>()),
+        new(SettingsKey.ToolbarBoardList, "toolbar-board-list", "as", Array.Empty<string>()),
+        new(SettingsKey.ToolbarBoardFlow, "toolbar-board-flow", "as", Array.Empty<string>()),
+        new(SettingsKey.ToolbarCalendar, "toolbar-calendar", "as", Array.Empty<string>()),
+        new(SettingsKey.ToolbarDisplayMode, Toolbar.DisplayModeKey, "s", "icon", choices: ToolbarDisplayModeNicks),
         new(SettingsKey.CtrlR, "ctrl-r", "s", "reply", choices: Nicks<CtrlR>.All, windowsOnly: true),
     ];
 
@@ -254,6 +267,19 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetBoolean(SettingsKey.ShowPreviewLine);
         set => SetBoolean(SettingsKey.ShowPreviewLine, value);
+    }
+
+    /// <summary>
+    /// <c>unified-inbox</c> (Go <c>UnifiedInbox</c>): shows the All Inboxes
+    /// item, the first row of the Favourites section, while there are at
+    /// least two mail accounts (<see cref="Model.Unified.Shown"/>). Never
+    /// part of the favourite or collapsed lists (the section's own fold is a
+    /// sentinel among the collapsed accounts).
+    /// </summary>
+    public bool UnifiedInbox
+    {
+        get => GetBoolean(SettingsKey.UnifiedInbox);
+        set => SetBoolean(SettingsKey.UnifiedInbox, value);
     }
 
     /// <summary>Whether the list shows one row per conversation (thread.list).</summary>
@@ -490,6 +516,76 @@ public sealed class SettingsStore : IDisposable
         get => GetEnum<Cal.View>(SettingsKey.CalendarView);
         set => SetEnum(SettingsKey.CalendarView, value);
     }
+
+    // Contacts
+
+    /// <summary>
+    /// Which address books complete the recipients of a new message
+    /// (Preferences → Contacts → Recipient Suggestions), passed as
+    /// <c>contact.search</c>'s scope (settings.Store.ContactsSuggestScope).
+    /// An unknown or empty stored value reads as
+    /// <see cref="ContactSearchScope.Account"/>, the default; a value outside
+    /// <see cref="ContactBook.Scopes"/> is not written.
+    /// </summary>
+    public ContactSearchScope ContactsSuggestScope
+    {
+        get
+        {
+            var v = GetString(SettingsKey.ContactsSuggestScope);
+            return ContactBook.ScopeNicks.Contains(v, StringComparer.Ordinal) ? new ContactSearchScope(v) : ContactBook.Scopes[0];
+        }
+        set
+        {
+            if (ContactBook.ScopeNicks.Contains(value.Value ?? "", StringComparer.Ordinal))
+            {
+                SetString(SettingsKey.ContactsSuggestScope, value.Value);
+            }
+        }
+    }
+
+    // Toolbars (ui/internal/toolbar, docs/plans/toolbar-customization.md §17)
+
+    /// <summary>
+    /// What the toolbars' buttons show (<c>toolbar-display-mode</c>, one for
+    /// every toolbar, O4); an unknown nick reads as icons only
+    /// (<see cref="Toolbar.ParseDisplayMode"/>).
+    /// </summary>
+    public Toolbar.DisplayMode ToolbarDisplayMode
+    {
+        get => Toolbar.ParseDisplayMode(GetString(SettingsKey.ToolbarDisplayMode));
+        set => SetString(SettingsKey.ToolbarDisplayMode, Toolbar.Nick(value));
+    }
+
+    /// <summary>The key that stores <paramref name="bar"/>'s arrangement (<see cref="Toolbar.Key"/>).</summary>
+    public static SettingsKey ToolbarKey(Toolbar.Bar bar) => bar switch
+    {
+        Toolbar.Bar.BoardList => SettingsKey.ToolbarBoardList,
+        Toolbar.Bar.BoardFlow => SettingsKey.ToolbarBoardFlow,
+        Toolbar.Bar.Calendar => SettingsKey.ToolbarCalendar,
+        _ => SettingsKey.ToolbarMail,
+    };
+
+    /// <summary>The tokens <paramref name="bar"/>'s key holds, as stored (empty for the default; the editor's input).</summary>
+    public IReadOnlyList<string> ToolbarTokens(Toolbar.Bar bar) => GetStringList(ToolbarKey(bar));
+
+    /// <summary>Writes <paramref name="tokens"/> to <paramref name="bar"/>'s key as they are (the editor's Tokens, Restore Defaults' empty list).</summary>
+    public void SetToolbarTokens(Toolbar.Bar bar, IReadOnlyList<string> tokens) => SetStringList(ToolbarKey(bar), tokens);
+
+    /// <summary>
+    /// <paramref name="bar"/>'s arrangement for the Windows client
+    /// (<see cref="Toolbar.NormalizeFor"/> with <see cref="ToolbarVariant.Windows"/>):
+    /// an empty key is the Windows default.
+    /// </summary>
+    public IReadOnlyList<string> ToolbarLayout(Toolbar.Bar bar) => Toolbar.NormalizeFor(ToolbarVariant.Windows, bar, ToolbarTokens(bar));
+
+    /// <summary>
+    /// Stores <paramref name="layout"/> as the Windows client's arrangement of
+    /// <paramref name="bar"/>, merged with what the key holds so that the
+    /// items another client has survive (<see cref="Toolbar.StoredFor"/>,
+    /// T12); the Windows default over such a key writes the empty list.
+    /// </summary>
+    public void SetToolbarLayout(Toolbar.Bar bar, IReadOnlyList<string> layout) =>
+        SetToolbarTokens(bar, Toolbar.StoredFor(ToolbarVariant.Windows, bar, ToolbarTokens(bar), layout));
 
     // Sidebar state
 

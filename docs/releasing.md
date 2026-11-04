@@ -37,6 +37,24 @@ Windows client also gets a numeric file version,
 `MAJOR.MINOR.PATCH.<commits since the tag>`, with the full string as its
 product version.
 
+Every file of a release is named alike (owner's decision of 2026-11-01),
+`Malachi-Mail-<version>-<os>-<arch>[-<detail>].<extension>`, with the
+architectures `x64`, `arm64` or `universal` whatever the format calls them
+inside:
+
+| File | Built by |
+|---|---|
+| `Malachi-Mail-<version>-macos-universal.dmg` | `macos/Makefile` (§8) |
+| `Malachi-Mail-<version>-windows-x64-setup.exe`, `…-windows-arm64-setup.exe` | `windows/installer/MalachiMail.iss` (§7) |
+| `Malachi-Mail-<version>-linux-x64.flatpak`, `…-linux-arm64.flatpak` | `flatpak.yml` (§5) |
+| `Malachi-Mail-<version>-linux-x64.deb`, `…-linux-arm64.deb` | `scripts/build-deb.sh` (§6) |
+| `Malachi-Mail-<version>-linux-x64-fedora42.rpm`, `…-linux-arm64-fedora42.rpm` | `scripts/build-rpm.sh` |
+
+`<version>` is the `git describe` string above, never a format's own
+(dpkg's `0.1.0+3+gabc1234-1`, rpm's `0.1.0^3^gabc1234-1.fc42`); those stay
+inside the packages, whose name stays `malachi`. A thinner build (`ARCHS=`
+on a Mac) names its one architecture instead of `universal`.
+
 ## 2. Release notes
 
 `NEWS` in the repository root is the only place release notes are written.
@@ -78,6 +96,37 @@ make clean && make build && ./build/malachid --version   # 0.1.0, no -dirty
 git push && git push --tags
 ```
 
+Once the release's packages are uploaded, the copies already installed are
+told about it through the signed update manifest
+(`docs/plans/update-check.md`, `docs/services.md` §2):
+
+```bash
+# 7. In the administration (https://admin.malachimail.app) prepare the
+#    manifest from the GitHub release, download its payload, sign it on
+#    this machine with the owner's tool (private repository) and upload
+#    the envelope. Then attach the same bytes to the release, the
+#    fallback of daemons that cannot reach the API:
+gh release upload v0.1.0 updates.json
+```
+
+A package that comes later (the Windows installers of a tag whose CI ran
+again) needs the same step once more, with a new `issuedAt`. Only builds
+of the package recipes check for updates: `make macos-dmg`, `build.ps1
+installer`, `scripts/build-deb.sh`, `scripts/build-rpm.sh` and the
+Flatpak manifest pass `-X main.updateChannel=<channel>` to the daemon;
+`make macos` and every development build have none.
+
+A tag's CI only builds, signs and uploads: it runs no tests and no lint
+(the owner's decision of 2026-11-01, as flaky timing tests on the shared
+runners failed releases), only the checks of the packages themselves
+(installing the `.deb` and `.rpm`, Gatekeeper on the DMG). Pull requests
+run no CI either, the CLA check aside (the owner's decision of
+2026-11-02): the owner pulls every pull request and tests it on the
+native platforms, automatically and by hand, before merging it. So what
+is tagged is tested before: step 1 on a Mac covers the daemon and the
+macOS client, the GTK container (`scripts/gtk-container/gtk.sh`) the GTK
+client, and the owner's Windows agent runs `build.ps1 test` and `lint`.
+
 `appstreamcli validate` reports one pedantic complaint,
 `cid-contains-uppercase-letter`, about the `M` in the application ID. The
 ID is fixed (`CLAUDE.md`); ignore it.
@@ -110,13 +159,16 @@ falls back to the `.version` file that `make flatpak` writes.
 ## 5. Builds from CI
 
 `.github/workflows/flatpak.yml` builds the Flatpak for **x86_64** and
-**aarch64** on version tags (`vX.Y.Z`; pushes to `main` build nothing), on a manual
-`workflow_dispatch`, and on pull requests that touch the packaging. Each job
-attaches a `malachi-<version>-<arch>.flatpak` bundle as a workflow artifact
-(kept 30 days); installable with
+**aarch64** on version tags (`vX.Y.Z`; pushes to `main` and pull requests
+build nothing) and on a manual `workflow_dispatch`. On a
+tag each job keeps a `Malachi-Mail-<version>-linux-<arch>.flatpak` bundle as a workflow
+artifact (30 days) for the release; other runs only build and check it,
+because any signed-in GitHub user can download the artifacts of a public
+repository, and so do the Debian, RPM, Windows and macOS workflows (the
+macOS one also, for a day, on a run by hand). A bundle is installable with
 
 ```bash
-flatpak install --user ./malachi-0.1.0-x86_64.flatpak
+flatpak install --user ./Malachi-Mail-0.1.0-linux-x64.flatpak
 ```
 
 The aarch64 job runs on GitHub's native arm64 runner (`ubuntu-24.04-arm`),
@@ -134,7 +186,7 @@ the same triggers, and attaches it to a tag's release beside the bundles.
 `scripts/build-deb.sh` does the work and runs anywhere dpkg-dev does:
 
 ```bash
-make deb          # → build/malachi_<version>_<arch>.deb
+make deb          # → build/Malachi-Mail-<version>-linux-<arch>.deb
 ```
 
 It stages `scripts/build.sh install` with `PREFIX=/usr` and a `DESTDIR`,
@@ -171,58 +223,46 @@ ccache) is cached.
 ## 7. Windows
 
 `windows/build.ps1` builds the Windows client (the root Makefile's
-`make windows` runs its `app` target), and its `package` target makes the
-artefact a release would carry:
+`make windows` runs its `app` target), and its `installer` target makes
+the one artefact a release carries for each architecture, an Inno Setup
+installer (owner's decision of 2026-11-01: no portable zip any more):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 package            # this machine's architecture
-powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 package -Arch arm64
-# -> build\windows\Malachi-Mail-<version>-<arch>.zip
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 installer            # this machine's architecture
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 installer -Arch arm64
+# -> build\windows\Malachi-Mail-<version>-windows-<arch>-setup.exe
 ```
 
-`package` runs `app` first: `malachid.exe` and `malachi-mcp.exe` for the
+`installer` runs `app` first: `malachid.exe` and `malachi-mcp.exe` for the
 architecture with `-X main.version`, the app published self-contained in
 Release, `malachi-credentials.exe` with NativeAOT, the translations and the
-licences, checked for completeness, then zipped as one `Malachi Mail\`
-folder with `/` separators, so that every unzip tool reads it. The tree
-must be clean, or the version says `-dirty`, as for the other builds. An
-ARM64 package needs the MSVC ARM64 build tools for the keyring helper;
-nothing ARM64 has run on real hardware yet.
+licences, checked for completeness; then `installer\build-installer.ps1`
+checks the licences of the staged folder and runs Inno Setup (what the
+installer does is in [windows/README.md](../windows/README.md#installer)).
+The tree must be clean, or the version says `-dirty`, which the script
+refuses. An ARM64 installer needs the MSVC ARM64 build tools for the
+keyring helper.
 
 `.github/workflows/windows.yml` does the same in CI: it tests the daemon
-on Windows, builds, tests and lints the Windows client, and zips its app
-folder for **x64** and **arm64**, on version tags (`vX.Y.Z`), by
-hand and on pull requests that touch what the client is built from; what
+on Windows, builds, tests and lints the Windows client, and builds the
+installer for **x64** and **arm64**, on version tags (`vX.Y.Z`) and by
+hand (a tag only builds, see §3); what
 each job does is in [windows-port.md §13](windows-port.md#13-build-and-ci).
-A tag build keeps both zips as the run's artifacts (30 days) and attaches
-them to the tag's release, like the packages above and to a draft when the
-tag has none yet, **only when the repository variable
-`WINDOWS_RELEASE_ZIPS` is `true`**; without it the workflow's `release`
-job is skipped and the release gets no Windows zips.
-
-Those zips are **not** release artefacts yet, which is why the variable is
-not set. Before a Windows build is published with a release
+**Only a tag** keeps both installers as the run's artifacts (30 days) and
+attaches them to its release, like the packages above and to a draft when
+the tag has none yet; a release's Windows installers are built there and
+nowhere else, never by hand (owner's decision of 2026-11-01). The ARM64
+one is cross-built on the x64 runner and does not run there. The licence
+permission for Microsoft's components is in [LICENSING.md](../LICENSING.md)
+(2026-10-28). Still open
 ([windows-port.md §17](windows-port.md#17-before-a-public-release)):
 
-- **The licence.** The folder carries Microsoft's Windows App SDK and
-  WebView2 components, which are not under the GPL; distributing it
-  needs the additional permission [LICENSING.md](../LICENSING.md)
-  describes, which the owner decides after a legal check.
-- **Code signing** of the four executables (and of an installer):
+- **Code signing** of the four executables and of the installer:
   unsigned, SmartScreen warns on every machine that downloads them. The
   owner decides how (SignPath Foundation, an OV certificate, signing as an
-  organisation).
-- **An installer and updates**: Velopack (per user, updates from GitHub
-  Releases) and a winget manifest, the update stopping the daemon
-  gracefully first, the uninstall removing what the app registered in
-  HKCU.
-
-Once the licence permission is in `LICENSING.md` and the workflow signs
-the executables, the owner sets the variable, in the repository's *Settings →
-Secrets and variables → Actions → Variables* or with
-`gh variable set WINDOWS_RELEASE_ZIPS --body true`, and the next tag's
-release carries the zips (`gh variable delete WINDOWS_RELEASE_ZIPS` stops
-it again). The arm64 zip is cross-built and has not run anywhere.
+  organisation); the workflow would then sign in the jobs, as macOS does.
+- **Updates** (Velopack or a check against GitHub Releases, the update
+  stopping the daemon gracefully first) and a winget manifest.
 
 Release notes stay in `NEWS` for every platform; the AppStream metainfo
 it feeds is Linux's.
@@ -275,14 +315,20 @@ codesign --force --sign - --options runtime \
 
 `.github/workflows/macos.yml` does the same in CI on the `macos-26` runner
 (Xcode 26, whose SDK gives the app its macOS 26 design), on version
-tags (`vX.Y.Z`), by hand and on pull requests that touch what the
-client is built from: `make test-macos`, then `make macos-dmg`, signed and
-notarised when the repository has the five secrets below and the run is
-not a pull request, otherwise ad hoc. The DMG is the run's artifact; a tag
-attaches it to its release (a draft when the tag has none yet) **only when
-it was notarised**, so an ad-hoc image never reaches a release.
+tags (`vX.Y.Z`) and by hand: `make test-macos` (not on a tag), then
+`make macos-dmg`, signed and notarised when the repository has the five
+secrets below, otherwise ad hoc. A tag keeps the DMG as the run's
+artifact (30 days) and attaches it to its release (a draft when the tag
+has none yet) **only when it was notarised**, so an ad-hoc image never
+reaches a release; a run by hand keeps it for a day, to check the
+signing. macOS releases are signed and
+notarised by CI only, never by hand from a Mac (the owner's decision of
+2026-11-01).
 
-Setting it up, once, by the owner:
+Set up on 2026-11-01 (individual membership, team `PG9F7XU6X8`; the first
+signed and notarised run was
+[41324040230](https://github.com/schotek/malachi/actions/runs/41324040230)).
+Setting it up again, by the owner:
 
 1. **Apple Developer Program** membership (99 USD a year); an individual
    membership signs with the owner's name.
@@ -290,13 +336,17 @@ Setting it up, once, by the owner:
    holder can create: in Xcode, *Settings → Accounts → Manage
    Certificates → + → Developer ID Application*, or on
    developer.apple.com under *Certificates*. Export it with its private
-   key from Keychain Access as a `.p12` with a password.
+   key from Keychain Access as a `.p12` with a password: select it under
+   *My Certificates*, where it unfolds to its key; under *Certificates*
+   the export offers `.cer`, `.pem` and `.p7b` alone.
 3. **An App Store Connect API key** for notarytool: App Store Connect →
    *Users and Access → Integrations → App Store Connect API → Team Keys*,
-   access *Developer*. The `.p8` downloads once; note its Key ID and the
-   Issuer ID above the list.
+   access *Developer*. The first time, *Request Access* asks to agree to
+   Apple's terms (granted at once for the individual membership). The
+   `.p8` downloads once; note its Key ID and the Issuer ID above the list.
 4. **The secrets**, in *Settings → Secrets and variables → Actions →
-   Secrets* or with gh (without `--body` it asks for the value):
+   Secrets* or with gh (without `--body` it asks for the value; type that
+   one in a terminal, where it can ask):
 
    ```bash
    base64 -i DeveloperID.p12 | gh secret set MACOS_CERTIFICATE
@@ -306,7 +356,10 @@ Setting it up, once, by the owner:
    gh secret set MACOS_NOTARY_ISSUER --body ISSUER-UUID
    ```
 
-5. For notarising by hand, the same key stored once in the login keychain:
+5. Afterwards delete the exported `.p12` and `.p8` (a backup belongs in
+   a password manager); the certificate stays in the login keychain.
+6. Only to try notarisation out on a Mac, never for a release, the same
+   key stored once in the login keychain:
    `xcrun notarytool store-credentials malachi --key AuthKey_KEYID.p8
    --key-id KEYID --issuer ISSUER-UUID`, then `NOTARY_PROFILE=malachi`.
 
@@ -330,7 +383,7 @@ root carries the copyright notices and licence texts of the third-party
 code in `malachi-mcp` and of what the calendar added to `malachid`, which
 the permissive licences of that code require in a binary distribution. Every package ships it beside `LICENSE`, the
 daemon's licence and `LICENSING.md`: `Contents/Resources` of the macOS
-app (and so the DMG), the Windows app folder (and so its zip, checked by
+app (and so the DMG), the Windows app folder (and so its installer, checked by
 `build.ps1`'s `Test-AppFolder`), and through `scripts/build.sh install`
 `/usr/share/licenses/malachi` in the rpm, `/usr/share/doc/malachi` in
 the deb and `/app/share/licenses/io.github.schotek.Malachi` in the
@@ -391,7 +444,9 @@ also asks for notices in a binary distribution: the other Go modules of
 `emersion` mail libraries, `klauspost/compress`, `godbus/dbus`,
 `BurntSushi/toml`) and of the GTK interface (gotk4 and its bindings,
 `KarpelesLab/weak`, `go4.org/unsafe/assume-no-moving-gc`), both also
-built on the Go standard library, and the .NET runtime, Windows Community
-Toolkit and the other NuGet packages in the Windows app folder (which
-also waits for the decision in [LICENSING.md](../LICENSING.md)). The
+built on the Go standard library. The NuGet packages of the Windows app
+folder (the .NET runtime, the Windows App SDK, WebView2, the Windows
+Community Toolkit and the rest) are covered apart: `build.ps1 app`
+copies their licence and notice files into the folder's
+`Microsoft-notices\` (`windows/scripts/copy-notices.ps1`). The
 macOS client itself links only Apple's system frameworks.

@@ -73,6 +73,26 @@ Adw.PreferencesDialog preferences_dialog {
     Adw.PreferencesGroup integrations_available_group {}
   }
 
+  // Preferences → Rules (docs/plans/rules.md R14, window/preferences_rules.go
+  // bindRules over rulesctl.Controller): the mail rules in the order they
+  // run. Every text is ui/internal/rules', set in Go, so this page has no
+  // translatable strings; the rows are built there.
+  Adw.PreferencesPage rules_page {
+    name: "rules";
+    icon-name: "funnel-symbolic";
+
+    Adw.PreferencesGroup rules_group {
+      header-suffix: Button rules_add_button {
+        valign: center;
+      };
+
+      Adw.ActionRow rules_empty_row {
+        use-markup: false;
+        sensitive: false;
+      }
+    }
+  }
+
   Adw.PreferencesPage general_page {
     name: "general";
     title: _("General");
@@ -89,6 +109,25 @@ Adw.PreferencesDialog preferences_dialog {
       Adw.SwitchRow run_in_background {
         title: _("Run in Background");
         subtitle: _("Closing the window keeps Malachi Mail running for notifications");
+      }
+    }
+
+    // The update check (window/preferences_updates.go bindUpdates): every
+    // text is ui/internal/updates', set in Go. The switch is the daemon's
+    // update.setPrefs; the row under it shows the status line with Check
+    // Now.
+    Adw.PreferencesGroup update_group {
+      Adw.SwitchRow update_enabled {
+        use-markup: false;
+      }
+
+      Adw.ActionRow update_status {
+        use-markup: false;
+
+        [suffix]
+        Button update_check_now {
+          valign: center;
+        }
       }
     }
 
@@ -374,6 +413,32 @@ Adw.PreferencesDialog preferences_dialog {
     }
   }
 
+  // Preferences → Contacts (docs/plans/address-book.md W3,
+  // window/preferences_contacts.go bindContacts over
+  // contactsctl.PreferencesController): every text is ui/internal/contacts',
+  // set in Go. One group per account with the contacts capability is added
+  // from Go before the empty state and Recipient Suggestions.
+  Adw.PreferencesPage contacts_page {
+    name: "contacts";
+    icon-name: "x-office-address-book-symbolic";
+
+    // contacts.NoContactAccounts without such an account.
+    Adw.PreferencesGroup contacts_empty_group {
+      visible: false;
+
+      Adw.ActionRow contacts_empty_row {
+        use-markup: false;
+
+        styles [
+          "dim-label",
+        ]
+      }
+    }
+
+    // contacts-suggest-scope: one check row per contacts.Scopes.
+    Adw.PreferencesGroup contacts_suggest_group {}
+  }
+
   Adw.PreferencesPage appearance_page {
     name: "appearance";
     title: _("Appearance");
@@ -423,6 +488,11 @@ Adw.PreferencesDialog preferences_dialog {
         title: _("Monochrome Avatars");
         subtitle: _("Neutral grey instead of a colour per sender");
       }
+    }
+
+    Adw.PreferencesGroup {
+      // Title and subtitle are set from Go (unified.PreferenceTitle).
+      Adw.SwitchRow unified_inbox {}
     }
 
     Adw.PreferencesGroup {

@@ -28,7 +28,8 @@ public sealed class FolderTreeTests
     /// <summary>
     /// Renders entries compactly (folders_test.go <c>ids</c>): "#acc" for an
     /// account heading, "#favourites" for the Favourites heading, "id@depth"
-    /// for a tree row and "*id@depth" for a row of the Favourites section.
+    /// for a tree row and "*id@depth" for a row of the Favourites section
+    /// (the All Inboxes item by its key, "*@unified:inbox@0").
     /// </summary>
     internal static string[] Ids(IEnumerable<FolderEntry> entries) =>
     [
@@ -42,7 +43,8 @@ public sealed class FolderTreeTests
             {
                 return "#" + (e.Account?.Id.Value ?? "");
             }
-            var id = e.Folder?.Id.Value ?? "";
+            // The All Inboxes item by its key ("*@unified:inbox@0").
+            var id = e.Key?.Folder.Value ?? "";
             return e.Favourite ? $"*{id}@{e.Depth}" : $"{id}@{e.Depth}";
         }),
     ];

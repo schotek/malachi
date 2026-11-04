@@ -1,0 +1,196 @@
+# The website
+
+Static HTML for the project's website: a presentation of the app, a
+download page, the release notes, in English with a Czech mirror under
+`cs/`. No build step, no external fonts or trackers, and a few small
+scripts; the pages share `assets/style.css` and work from a plain file
+server or `file://`.
+
+`assets/platform.js`, loaded in the head of the presentation and download
+pages, reads the browser's platform (macOS, Linux or Windows; phones get
+nothing) and puts the visitor's own desktop first: `data-platform` on
+`<html>` picks the hero picture through CSS before the first paint, and
+once the document is parsed the gallery's platform is checked, the
+download buttons get " · macOS" and a `#macos`-style fragment, and the
+matching download card moves first with a badge (`.yours`,
+`data-yours`). Nothing leaves the browser. Without the script the pages
+show macOS first.
+
+`assets/lightbox.js` (deferred, the presentation pages) opens a
+screenshot in the page's `<dialog class="lightbox">`: the picture with
+its caption, the previous and next one of the strip it came from, Escape,
+the arrow keys and a click beside it to close. Every screenshot is a link
+to the picture itself (`a.shot`), which is what a browser without the
+script gets.
+
+`assets/report.js` (deferred, every page) turns two links of the footer
+into the page's forms, each a `<dialog class="report" data-form="…">`
+over the page:
+
+- "Report a problem with the app" (`[data-report]`, `data-form="report"`;
+  on `404.html` a line under the buttons): name, e-mail, the description,
+  an optional screenshot and a honeypot field `website`, to
+  `https://admin.malachimail.app/api/v1/reports`;
+- "Suggest a feature" (`[data-idea]`, `data-form="idea"`; not on
+  `404.html`): the same fields without the screenshot, to
+  `https://admin.malachimail.app/api/v1/ideas`.
+
+Both go as `multipart/form-data` to the admin's public endpoints (which
+allow only the origin `https://malachimail.app`), with the page's language
+and path; on `localhost` and `127.0.0.1` they go to
+`http://localhost:8789/api/v1/…` with Turnstile's test site key.
+Cloudflare Turnstile (`challenges.cloudflare.com`) is loaded only when a
+form is opened for the first time, so a page that is only read talks to
+no one but this site; each form renders its own widget with its own
+action (`report`, `idea`), which the admin checks. The screenshot is
+scaled in a canvas to at most 2560 px on its longest side and re-encoded
+as WebP (JPEG where the browser cannot), which drops its EXIF; at most
+5 MiB. The site key in the script is the one of the Turnstile widget
+"Malachi report" (hostname `malachimail.app`) in the Cloudflare
+dashboard, shared by both forms; its secret key is the admin's
+`TURNSTILE_SECRET`. An address ending in `#report` or `#idea` opens that
+form when the page loads. The links themselves are `#report` and `#idea`
+(a hover shows only the page's own address); without the script they do
+nothing.
+
+| Page | English | Czech |
+|---|---|---|
+| Presentation | `index.html` | `cs/index.html` |
+| Features | `features.html` | `cs/features.html` |
+| The Assistant | `assistant.html` | `cs/assistant.html` |
+| Under the hood | `under-the-hood.html` | `cs/under-the-hood.html` |
+| Download | `download.html` | `cs/download.html` |
+| What's new | `news.html` | `cs/news.html` |
+| Not found | `404.html` (served for any missing path, so its own links are root-absolute) | |
+
+The pages link each other relatively, so they work from a file server
+and from `file://` as well as at the root of a domain; only `404.html`
+uses root-absolute links, since it is served at whatever path was
+missing.
+
+## Publishing
+
+The site is <https://malachimail.app>, a Cloudflare Worker with static
+assets (`wrangler.jsonc`): the files of this directory, except what
+`.assetsignore` names. `_headers` sets the security headers (a content
+security policy that allows only the site's own files, and for the
+forms Turnstile's script and frame from `challenges.cloudflare.com`,
+the POSTs to `admin.malachimail.app` and `blob:` pictures for the
+screenshot's preview) and a day's
+caching for `assets/`; `_redirects` serves `/` and `/cs/` as their
+`index.html`, because `html_handling` is `none` so that the `.html`
+links are served as named, without a redirect to an extensionless
+address.
+
+The Worker has four custom domains, `malachimail.app`,
+`www.malachimail.app`, `malachimail.org` and `www.malachimail.org`, and
+a script of a few lines, `worker/index.js`, that runs before the assets
+(`run_worker_first`): a request for one of the other three names gets a
+301 to the same path on `https://malachimail.app`, everything else is
+served from the assets. Plain http on `malachimail.app` is redirected by
+the zone's *Always Use HTTPS*. There is no workers.dev address and no
+preview URL. `wrangler deploy` replaces the Worker's custom domains with
+the list in `wrangler.jsonc`, so a domain is added there, not in the
+dashboard; routes added in the dashboard stay, with a warning.
+
+It is deployed by hand, never by CI. Once, the domain's zone has to be
+active in the Cloudflare account (a domain bought through Cloudflare
+Registrar is; one from another registrar needs Cloudflare's nameservers),
+and wrangler signs in in the browser:
+
+```sh
+cd web
+npx wrangler@4.150.0 login
+```
+
+Then every deploy, from `web/` with the tree as it should go out:
+
+```sh
+npx wrangler@4.150.0 deploy
+```
+
+A deploy attaches the custom domains it does not have yet (Cloudflare
+makes their DNS records and certificates; both zones have to be in the
+account). `npx wrangler@4.150.0 deploy --dry-run` checks the
+configuration without uploading, and `npx wrangler@4.150.0 dev` serves
+the site locally the way the Worker does, headers and 404 included; it
+presents every request as `malachimail.app`, so the redirects of the
+other names are not seen there. wrangler keeps its state in
+`.wrangler/`, which git ignores.
+
+## Packages
+
+`/dl/<tag>/<file>`, for example
+`https://malachimail.app/dl/v0.1.4/Malachi-Mail-0.1.4-macos-universal.dmg`,
+serves a release package from the R2 bucket `malachi-downloads` (binding
+`DOWNLOADS` in `wrangler.jsonc`): the place for the packages when they
+are not on GitHub. The installers are too large for the static assets (a
+file there may have at most 25 MiB). The update manifest may point at
+`malachimail.app` as well as `github.com` (`docs/services.md` §2.3), so
+the daemon needs no change for it.
+
+The path is a tag and a plain file name, and the object key is the same
+`<tag>/<file>`; anything else under `/dl/` is the site's 404. GET and
+HEAD only, with the object's ETag (`If-None-Match` gives 304), one byte
+range (a broken download resumes; several ranges are ignored, a range
+past the end is 416), `Content-Disposition: attachment` and a year's
+`immutable` caching, so a file under a tag is never replaced: a fixed
+package is a new version. Never a redirect.
+
+Once, before the first deploy with the binding:
+
+```sh
+npx wrangler@4.150.0 r2 bucket create malachi-downloads
+```
+
+Every release, for each package:
+
+```sh
+npx wrangler@4.150.0 r2 object put malachi-downloads/v0.1.4/Malachi-Mail-0.1.4-macos-universal.dmg --file Malachi-Mail-0.1.4-macos-universal.dmg --remote
+```
+
+A file too large for `wrangler r2 object put` goes through the
+dashboard or an S3 client instead. The URL, SHA-256
+(`shasum -a 256`) and size (`stat -f %z`) then go into the release in
+the admin (`admin.malachimail.app`, the package form of the release).
+Locally, `npx wrangler@4.150.0 dev` serves `/dl/` from a local bucket
+that `r2 object put … --local` fills.
+
+## Preview
+
+```sh
+python3 -m http.server -d web 8765
+```
+
+and open <http://localhost:8765/>.
+
+## Keeping it current
+
+- A new version: update the version, date and asset names on both
+  download pages and add the release to both news pages from `NEWS`.
+  The links point at `https://github.com/schotek/malachi/releases/download/<tag>/<asset>`,
+  so the release has to be published, not a draft, for them to work
+  (or at `https://malachimail.app/dl/<tag>/<asset>`, "Packages").
+- Screenshots: `assets/screenshots/<platform>/<language>/<scene>.webp`
+  are the PNGs taken over the sample world as `docs/screenshots.md`
+  describes (one set per platform and language), the main window scaled
+  to 1600 px wide (`sips -Z 1600`, so 1600×1000) and the compose window
+  left as it was taken (1520×1280 on macOS and Linux, 1494×1267 on
+  Windows, its client area), encoded with `cwebp -q 82 -sharp_yuv`. The
+  gallery on the presentation page is one strip per platform behind
+  radio buttons (`.gallery`, `.platforms`, `.set`: macOS, Linux,
+  Windows), each with the same eleven figures; the hero's `.frame` has
+  one `<img>` per platform, shown by two lines of the stylesheet per
+  platform. The hero shows the inbox of the visitor's platform, macOS
+  by default.
+- `assets/` is cached for a day, so a changed `style.css` or script
+  gets a new `?v=` on every page that links it (`style.css?v=5`,
+  `report.js?v=4`); otherwise a returning visitor sees the new pages with
+  the old stylesheet.
+- Icons: `assets/icon-*.png` and `icon-512.webp` are rasterised from
+  `docs/malachi_icon.svg`; `favicon.ico` wraps the 32 and 64 px PNGs.
+- The small illustrations (the three windows, the chat, the board, the
+  MCP switchboard) are plain HTML and CSS, marked `aria-hidden`; the line
+  icons are one inline SVG sprite at the top of each page that uses them.
+- The English page is the reference; the Czech page mirrors it section
+  for section.

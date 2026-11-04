@@ -40,4 +40,15 @@ public sealed class ChipTextTests
         var combining = "éééé";
         Assert.Equal("éé…", ChipText.TailEllipsis(combining, 3));
     }
+
+    // A tile's name: as many characters as fit, measured by a font of 7
+    // units a character; the end kept whole.
+    [Theory]
+    [InlineData("report.pdf", 70, "report.pdf")]
+    [InlineData("faktura-2026-0917.pdf", 98, "faktura…17.pdf")]
+    [InlineData("faktura-2026-0917.pdf", 97, "faktur…17.pdf")]
+    [InlineData("abcdef", 1, "a…f")]
+    [InlineData("", 0, "")]
+    public void MiddleEllipsisToFitKeepsTheEnd(string name, double width, string expected) =>
+        Assert.Equal(expected, ChipText.MiddleEllipsisToFit(name, width, s => 7 * new System.Globalization.StringInfo(s).LengthInTextElements));
 }

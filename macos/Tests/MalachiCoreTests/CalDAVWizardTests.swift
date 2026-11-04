@@ -83,6 +83,57 @@ private func err(_ code: ErrorCode) -> RPCError { RPCError(code: code, message: 
         #expect(w.phase == .added && w.accountId == "acc_new" && w.password == "")
     }
 
+    /// caldav_test.go TestWizardAddsAServerWithOnlyAddressBooks: a server
+    /// with only address books is added for its contacts: Add is on without
+    /// a calendar and the calendar is not synchronised; without a book and
+    /// a calendar Add stays off.
+    @Test func addsAServerWithOnlyAddressBooks() {
+        var w = W(mailAccount: nil)
+        w.edit(name: "Cloud", server: "dav.example.net", username: "jana", password: "secret")
+        let began = w.beginDiscover()
+        #expect(began)
+        w.discoverDone(found("https://dav.example.net/", .url), error: nil)
+        w.listDone(AccountListCalDAVCalendarsResult(
+            principalUrl: "https://dav.example.net/p/", homeSetUrl: "", scheduling: .server,
+            addressBookHomeSetUrl: "https://dav.example.net/ab/",
+            addressBooks: [CardDAVAddressBook(href: "/ab/family/", name: "Family")]), error: nil)
+        #expect(w.phase == .listed && w.canAdd)
+        #expect(w.foundLine.hasSuffix("· 1 address book"))
+        let ap = w.addParams
+        #expect(ap.config.calendar?.sync == false && ap.config.caldav?.contacts == true)
+        #expect(ap.config.caldav?.addressBookHomeSetUrl == "https://dav.example.net/ab/")
+    }
+
+    /// caldav_test.go TestWizardFlow's address books: no contacts without
+    /// books, on with their home set when the listing found some.
+    @Test func addressBooksComeWithTheAccount() {
+        var w = W(mailAccount: nil)
+        w.edit(name: "", server: "cloud.example.org", username: "jana", password: "pw")
+        w.beginDiscover()
+        w.discoverDone(found("https://dav.example.net", .wellKnown), error: nil)
+        w.listDone(listed(), error: nil)
+        var c = w.addParams.config.caldav
+        #expect(c?.contacts == false && c?.addressBookHomeSetUrl == nil && w.addParams.config.calendar?.sync == true)
+        var l = listed()
+        l.addressBookHomeSetUrl = "https://dav.example.net/ab/"
+        l.addressBooks = [CardDAVAddressBook(href: "/ab/family/", name: "Family")]
+        var v = W(mailAccount: nil)
+        v.edit(name: "", server: "cloud.example.org", username: "jana", password: "pw")
+        v.beginDiscover()
+        v.discoverDone(found("https://dav.example.net", .wellKnown), error: nil)
+        v.listDone(l, error: nil)
+        c = v.addParams.config.caldav
+        #expect(c?.contacts == true && c?.addressBookHomeSetUrl == "https://dav.example.net/ab/")
+        #expect(v.addressBooks.count == 1)
+        // Without a calendar and a book Add stays off.
+        var e = W(mailAccount: nil)
+        e.edit(name: "", server: "cloud.example.org", username: "jana", password: "pw")
+        e.beginDiscover()
+        e.discoverDone(found("https://dav.example.net", .wellKnown), error: nil)
+        e.listDone(AccountListCalDAVCalendarsResult(principalUrl: "p", homeSetUrl: "h", scheduling: .server), error: nil)
+        #expect(!e.canAdd)
+    }
+
     @Test func editsAndErrors() {
         var w = W(mailAccount: nil)
         w.edit(name: "Home", server: "cloud.example.org", username: "jana", password: "pw")

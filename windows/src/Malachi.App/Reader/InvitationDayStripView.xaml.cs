@@ -3,12 +3,14 @@
 
 // Port of macos/Sources/MalachiMail/MessageView/InvitationDayStripView.swift
 // (show, draw); GTK: none yet (docs/calendar.md §5.7, Cal.DayStripOf). The
-// strip is drawn on its canvas again at every change of the strip, the
-// width or the theme: the axis in the faintest fill, a hairline and a label
+// strip is drawn on its canvas again at every change of the strip or the
+// width: the axis in the faintest fill, a hairline and a label
 // under it for every whole hour (a label that would touch the one before is
 // left out), the busy spans in grey, the invitation's slot dashed in blue
 // with its time above it. Windows: the theme's brushes stand for AppKit's
-// system colours, and a label's width is measured by the TextBlock itself.
+// system colours, set by the styles of the view's resources so that they
+// follow the window's theme, and a label's width is measured by the
+// TextBlock itself.
 
 using Malachi.Core.Calendars;
 using Microsoft.UI;
@@ -36,7 +38,6 @@ public sealed partial class InvitationDayStripView : UserControl
     {
         InitializeComponent();
         Height = 2 * LabelHeight + BarHeight + 4;
-        ActualThemeChanged += (_, _) => Draw();
     }
 
     /// <summary>Shows <paramref name="next"/>, or hides the view for none.</summary>
@@ -76,7 +77,7 @@ public sealed partial class InvitationDayStripView : UserControl
             Height = BarHeight,
             RadiusX = 3,
             RadiusY = 3,
-            Fill = Brush("SubtleFillColorSecondaryBrush"),
+            Style = Look("DayStripAxisStyle"),
         }, Inset, barTop);
 
         // The hours: a hairline across the bar and the label under it.
@@ -84,8 +85,8 @@ public sealed partial class InvitationDayStripView : UserControl
         foreach (var t in s.Ticks)
         {
             var px = X(t.At);
-            Add(new Rectangle { Width = 1, Height = BarHeight, Fill = Brush("DividerStrokeColorDefaultBrush") }, px - 0.5, barTop);
-            var label = Label(t.Label, Brush("TextFillColorTertiaryBrush"));
+            Add(new Rectangle { Width = 1, Height = BarHeight, Style = Look("DayStripTickStyle") }, px - 0.5, barTop);
+            var label = Label(t.Label, Look("DayStripLabelStyle"));
             var w = label.DesiredSize.Width;
             var lx = System.Math.Min(System.Math.Max(px - w / 2, 0), total - w);
             if (lx <= lastEnd + 4)
@@ -115,7 +116,6 @@ public sealed partial class InvitationDayStripView : UserControl
         {
             return;
         }
-        var blue = Brush("SystemFillColorAttentionBrush");
         var slotWidth = System.Math.Max(3, X(p.To) - X(p.From));
         Add(new Rectangle
         {
@@ -123,8 +123,15 @@ public sealed partial class InvitationDayStripView : UserControl
             Height = BarHeight - 1,
             RadiusX = 3,
             RadiusY = 3,
-            Fill = new SolidColorBrush((blue as SolidColorBrush)?.Color ?? Colors.DodgerBlue) { Opacity = 0.15 },
-            Stroke = blue,
+            Style = Look("DayStripSlotFillStyle"),
+        }, X(p.From), barTop + 0.5);
+        Add(new Rectangle
+        {
+            Width = slotWidth,
+            Height = BarHeight - 1,
+            RadiusX = 3,
+            RadiusY = 3,
+            Style = Look("DayStripSlotStyle"),
             StrokeThickness = 1.5,
             // In units of the thickness: 4 and 2 pixels.
             StrokeDashArray = new DoubleCollection { 4 / 1.5, 2 / 1.5 },
@@ -133,7 +140,7 @@ public sealed partial class InvitationDayStripView : UserControl
         {
             return;
         }
-        var slotLabel = Label(s.ProposedLabel, blue);
+        var slotLabel = Label(s.ProposedLabel, Look("DayStripSlotLabelStyle"));
         var sw = slotLabel.DesiredSize.Width;
         var mid = X(p.From) + slotWidth / 2;
         Add(slotLabel, System.Math.Min(System.Math.Max(mid - sw / 2, 0), total - sw), 0);
@@ -147,13 +154,13 @@ public sealed partial class InvitationDayStripView : UserControl
     }
 
     // A label of the application's own time text, measured for placing.
-    private static TextBlock Label(string text, Brush brush)
+    private static TextBlock Label(string text, Style look)
     {
         var label = new TextBlock
         {
             Text = text,
             FontSize = LabelSize,
-            Foreground = brush,
+            Style = look,
             TextWrapping = TextWrapping.NoWrap,
             IsTextScaleFactorEnabled = false,
         };
@@ -161,8 +168,6 @@ public sealed partial class InvitationDayStripView : UserControl
         return label;
     }
 
-    private Brush Brush(string key) =>
-        Resources.TryGetValue(key, out var own) && own is Brush mine ? mine
-        : Application.Current.Resources.TryGetValue(key, out var value) && value is Brush brush ? brush
-        : new SolidColorBrush(Colors.Gray);
+    // A style of the view's resources (InvitationDayStripView.xaml).
+    private Style Look(string key) => (Style)Resources[key];
 }

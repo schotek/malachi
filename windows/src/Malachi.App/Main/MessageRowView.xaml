@@ -9,7 +9,7 @@ of the message list, element by element: content_box (spacing 12, margins
 6/6 and 8 or 3 by density, the start by applyLead), lead_box (spacing 4:
 the fold arrow, its spinner, the avatar of 40 or 28), and the column
 (spacing 2) of line 1 (spacing 6: the sender, the member count pill, the
-attachment and star icons, the origin of a search result, the date, the
+attachment icon, the signature's (a signed message's verdict, docs/plans/signatures.md), the star icon, the origin of a search result, the date, the
 unread dot), the subject line (with the neutral tag of a bulk message
 after the subject, bulk_pill; the red Draft badge of a conversation with
 the user's unsent reply at its end, draft_pill; the pill of a message with a
@@ -88,6 +88,7 @@ result as bold runs built in code (never markup).
                 <main:Avatar
                     x:Name="AvatarView"
                     Monochrome="{x:Bind Row.Monochrome, Mode=OneWay}"
+                    PhotoSender="{x:Bind Row.AvatarAddress, Mode=OneWay}"
                     Size="{x:Bind Row.AvatarSize, Mode=OneWay}"
                     Text="{x:Bind Row.AvatarText, Mode=OneWay}"
                     Visibility="{x:Bind res:Bind.Visible(Row.AvatarVisible), Mode=OneWay}" />
@@ -97,6 +98,7 @@ result as bold runs built in code (never markup).
                 <Grid ColumnSpacing="6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -169,9 +171,20 @@ result as bold runs built in code (never markup).
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Glyph="{x:Bind res:Icons.Glyph('mail-attachment-symbolic')}"
                         Visibility="{x:Bind res:Bind.Visible(Row.HasAttachments), Mode=OneWay}" />
+                    <!-- signature icon (message_row.blp, ui/internal/signature
+                         ListIconFor): the verdict of a signed message, next to the
+                         paper clip; only a valid, key-only-seen, invalid, revoked or
+                         mismatching signature has one. Named by the row's name. -->
+                    <controls:SignatureGlyph
+                        x:Name="SignatureIconView"
+                        Grid.Column="3"
+                        AutomationProperties.AccessibilityView="Raw"
+                        IconName="{x:Bind Row.SignatureIcon, Mode=OneWay}"
+                        Tone="{x:Bind Row.SignatureStyle, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.SignatureTooltip), Mode=OneWay}" />
                     <FontIcon
                         x:Name="StarIcon"
-                        Grid.Column="3"
+                        Grid.Column="4"
                         VerticalAlignment="Center"
                         AutomationProperties.AccessibilityView="Raw"
                         FontSize="14"
@@ -181,7 +194,7 @@ result as bold runs built in code (never markup).
                     <!-- Where a search result lies; hidden outside search. -->
                     <TextBlock
                         x:Name="OriginLabel"
-                        Grid.Column="4"
+                        Grid.Column="5"
                         MaxWidth="120"
                         VerticalAlignment="Center"
                         MaxLines="1"
@@ -193,7 +206,7 @@ result as bold runs built in code (never markup).
                         Visibility="{x:Bind res:Bind.VisibleIfText(Row.Origin), Mode=OneWay}" />
                     <TextBlock
                         x:Name="DateLabel"
-                        Grid.Column="5"
+                        Grid.Column="6"
                         VerticalAlignment="Center"
                         Style="{StaticResource DimCaptionLabelStyle}"
                         Text="{x:Bind Row.DateText, Mode=OneWay}"
@@ -201,7 +214,7 @@ result as bold runs built in code (never markup).
                     <!-- unread-dot (ui/internal/style): 8 px in the accent colour. -->
                     <Ellipse
                         x:Name="UnreadDot"
-                        Grid.Column="6"
+                        Grid.Column="7"
                         Width="8"
                         Height="8"
                         VerticalAlignment="Center"

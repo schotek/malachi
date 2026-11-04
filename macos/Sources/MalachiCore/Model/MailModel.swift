@@ -52,7 +52,7 @@ public struct RowMessage: Sendable, Equatable {
 public func summaryMessage(_ s: MessageSummary) -> RowMessage {
     let issue = Jira.rowIssue(s)
     return RowMessage(
-        from: s.from, subject: s.subject, snippet: s.snippet, date: s.date,
+        from: s.from, subject: s.subject, snippet: invitationPreview(s, snippet: s.snippet), date: s.date,
         unread: issue?.unread ?? !hasFlag(s.flags, .seen), flagged: hasFlag(s.flags, .flagged),
         hasAttachments: s.hasAttachments, issue: issue, tag: Bulk.tag(s.bulk)
     )
@@ -81,6 +81,9 @@ public struct MailModel: Sendable {
     /// are pinned to the top (`FavouriteState`).
     public var collapsed: CollapseState
     public var favourites: FavouriteState
+    /// The `unified-inbox` preference (`Unified.shown`): whether the
+    /// sidebar has the All Inboxes item once there are two mail accounts.
+    public var unifiedSetting: Bool
 
     /// The folder messages belong to (or are being loaded for); it lags
     /// `selected` between selectFolder and loadMessages.
@@ -119,7 +122,7 @@ public struct MailModel: Sendable {
     public init(
         accounts: [Account] = [], folders: [AccountID: [Folder]] = [:], grouped: Bool = false,
         listFilter: MessageFilter = .all, collapsed: CollapseState = CollapseState(),
-        favourites: FavouriteState = FavouriteState()
+        favourites: FavouriteState = FavouriteState(), unifiedSetting: Bool = true
     ) {
         self.accounts = accounts
         self.folders = folders
@@ -129,6 +132,7 @@ public struct MailModel: Sendable {
         self.selectedFav = false
         self.collapsed = collapsed
         self.favourites = favourites
+        self.unifiedSetting = unifiedSetting
         self.listFolder = nil
         self.listFilter = listFilter
         self.messages = []
@@ -300,7 +304,41 @@ public struct MailModel: Sendable {
 
     /// Recomputes the sidebar rows from accounts and folders.
     public mutating func rebuildEntries() {
-        entries = sortFolders(accounts, folders, collapsed, favourites)
+        entries = sortFolders(accounts, folders, collapsed, favourites, unified: unifiedShown)
+    }
+
+    // MARK: All Inboxes (Unified.swift)
+
+    /// Whether the sidebar has the All Inboxes item (`Unified.shown`).
+    public var unifiedShown: Bool {
+        Unified.shown(accounts, setting: unifiedSetting)
+    }
+
+    /// The folders the All Inboxes item lists (`Unified.inboxes`).
+    public var unifiedInboxes: [Folder] {
+        Unified.inboxes(accounts, folders)
+    }
+
+    /// Whether the folder the list shows is the All Inboxes item.
+    public var listIsUnified: Bool {
+        listFolder?.isUnified ?? false
+    }
+
+    /// Whether a change of folder `k` belongs to the list shown: it is the
+    /// listed folder, or the list is All Inboxes and `k` is one of the
+    /// inboxes it covers (the plan's `listCovers`).
+    public func listCovers(_ k: FolderKey) -> Bool {
+        if k == listFolder { return true }
+        return Unified.covers(listIsUnified: listIsUnified, k.account, k.folder, unifiedInboxes)
+    }
+
+    /// `listCovers` for a notification naming several folders of one
+    /// account (notify.messagesChanged), none meaning any folder of it.
+    public func listCoversAny(_ account: AccountID, _ folderIDs: [FolderID]) -> Bool {
+        if let listFolder, listFolder.account == account {
+            if folderIDs.isEmpty || folderIDs.contains(listFolder.folder) { return true }
+        }
+        return Unified.coversAny(listIsUnified: listIsUnified, account, folderIDs, unifiedInboxes)
     }
 
     /// Recomputes the number every visible row shows, after an unread count
@@ -310,6 +348,10 @@ public struct MailModel: Sendable {
     public mutating func refreshBadges() {
         for i in entries.indices {
             let e = entries[i]
+            if e.unified {
+                entries[i].badge = Unified.unread(unifiedInboxes)
+                continue
+            }
             guard !e.header, let account = e.account, let folder = e.folder else {
                 continue
             }
@@ -327,6 +369,12 @@ public struct MailModel: Sendable {
     /// parent must not move it, but an account switched off, a folder gone
     /// from the server or an outbox that has just drained must.
     public func folderListed(_ k: FolderKey?) -> Bool {
+        if k?.isUnified == true {
+            // The item is listed while `Unified.shown`; hidden (the setting
+            // off, an account gone), a selection of it falls back to the
+            // initial folder.
+            return unifiedShown
+        }
         guard let k, let a = account(k.account), a.enabled else {
             return false
         }

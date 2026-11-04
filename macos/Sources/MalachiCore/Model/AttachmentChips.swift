@@ -26,9 +26,18 @@ public let chipNameChars = 14
 /// the sanitiser kept, `inlineParts`). A text-only message, withheld HTML
 /// or an unreferenced Content-ID leaves the part listed like any other
 /// file.
-public func chipAttachments(_ atts: [Attachment], _ b: MessageBodyResult?) -> [Attachment] {
+///
+/// The calendar part of an invitation `card` the message shows
+/// (`invitationReading`) gets no chip either: the card is what it says
+/// (Swift-first; the GTK and Windows clients follow).
+public func chipAttachments(
+    _ atts: [Attachment], _ b: MessageBodyResult?, card: InvitationCard? = nil
+) -> [Attachment] {
     let html = showsHTML(b)
     return atts.filter { a in
+        if let card, !card.partId.isEmpty, a.partId == card.partId {
+            return false
+        }
         if html, let cid = a.contentId, !cid.isEmpty, !a.partId.isEmpty, b?.inlineParts?[cid] == a.partId {
             return false
         }

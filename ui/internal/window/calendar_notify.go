@@ -26,6 +26,9 @@ func (w *Window) otherNotification(method string, params json.RawMessage) {
 		w.calendarNotification(method, params)
 		return
 	}
+	if w.updatesNotification(method) {
+		return
+	}
 	w.log.Info("notification", "method", method)
 }
 
@@ -51,6 +54,11 @@ func (w *Window) modeAccountsChanged() {
 func (w *Window) modeConnectionChanged(connected bool) {
 	w.boardConnectionChanged(connected)
 	w.calendarConnectionChanged(connected)
+	w.updatesConnectionChanged(connected)
+	if connected {
+		// The contact photos are asked again of the daemon.
+		w.photoHub().connected()
+	}
 }
 
 // calendarAccountsChanged: the daemon's calendar source lists the accounts

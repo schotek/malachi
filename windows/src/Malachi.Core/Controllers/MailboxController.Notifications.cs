@@ -88,6 +88,12 @@ public sealed partial class MailboxController
         {
             return;
         }
+        if (sel.IsUnified)
+        {
+            // The All Inboxes list shows every covered inbox.
+            WithdrawDelivered([.. Model.UnifiedInboxes.SelectMany(f => notified.RemoveFolder(new FolderKey(f.AccountId, f.Id)))]);
+            return;
+        }
         WithdrawDelivered(notified.RemoveFolder(sel));
     }
 

@@ -27,6 +27,9 @@ ui/internal/compose/write.go
 ui/internal/compose/suggest.go
 ui/internal/contextmenu/text.go
 ui/internal/selection/text.go
+ui/internal/unified/text.go
+ui/internal/printing/printing.go
+ui/internal/toolbar/text.go
 ui/internal/jira/compose.go
 ui/internal/jira/jira.go
 ui/internal/jira/wizard.go
@@ -38,6 +41,7 @@ ui/internal/conversation/chat.go
 ui/internal/conversation/conversation.go
 ui/internal/conversation/drafts.go
 ui/internal/conversation/fold.go
+ui/internal/conversation/invitation.go
 ui/internal/conversation/quoted.go
 ui/internal/conversation/reply.go
 ui/internal/board/text.go
@@ -62,6 +66,10 @@ ui/internal/calendar/preferences.go
 ui/internal/calendar/caldav.go
 ui/internal/calendar/keys.go
 ui/internal/calendarctl/account.go
+ui/internal/contacts/text.go
+ui/internal/contacts/detail.go
+ui/internal/contacts/model.go
+ui/internal/contacts/form.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/consent.go
 ui/internal/widget/format.go
@@ -107,3 +115,11 @@ ui/internal/window/date_groups.go
 ui/internal/window/calendar_detail.go
 ui/internal/window/event_editor_popovers.go
 ui/internal/window/preferences_calendar.go
+ui/internal/window/contacts_consent.go
+ui/internal/window/contacts_detail.go
+ui/internal/undo/text.go
+ui/internal/updates/updates.go
+ui/internal/rules/text.go
+ui/internal/window/rules_editor.go
+ui/internal/window/preferences_rules.go
+ui/internal/signature/text.go

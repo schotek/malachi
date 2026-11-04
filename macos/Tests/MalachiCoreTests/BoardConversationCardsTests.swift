@@ -54,6 +54,58 @@ import Testing
         #expect(Cards.Member(id: a.id, text: a.text) == Cards.Member(id: b.id, text: b.text))
     }
 
+    static let valid = SignatureSummary(kind: .smime, status: .valid, signer: SignatureSigner(email: "ann@example.org"))
+
+    static func signed(_ ns: [Int], _ verdicts: [Int: SignatureSummary]) -> Cards.Key {
+        Cards.Key(caseID: caseA, members: ns.map { member($0) }, signatures: ns.map { verdicts[$0] })
+    }
+
+    @Test func keyCarriesTheVerdictOfEachMember() throws {
+        let messages = [
+            Board.CaseMessage(id: MessageID("m1"), from: "Ann", date: BoardFixture.now, text: "Hi", signature: Self.valid),
+            Board.CaseMessage(id: MessageID("m2"), from: "Bob", date: BoardFixture.now, text: "Re"),
+        ]
+        let d = try #require(BoardFixture.view([BoardFixture.mk("c1", count: 2, messages: messages)]).detail)
+        #expect(d.messages.map(\.signature) == [Self.valid, nil])
+        let key = Cards.key(d)
+        #expect(key.signatures == [Self.valid, nil])
+        #expect(key.members == [Member(id: MessageID("m1"), text: "Hi"), Member(id: MessageID("m2"), text: "Re")])
+        #expect(Cards.Key(caseID: Self.caseA, members: [Self.member(1)]).signatures == [nil])
+    }
+
+    @Test func aChangedVerdictTouchesTheCardsAndNothingElse() {
+        var cards = Cards()
+        _ = cards.apply(Self.signed([1, 2], [2: Self.valid]))
+        cards.asked(1)
+        _ = cards.answered(1, html: true)
+        _ = cards.setFolded(0, false)
+        // The same verdict: nothing.
+        #expect(cards.apply(Self.signed([1, 2], [2: Self.valid])) == .none)
+        // Another one on the same members: every card stays, nothing is
+        // asked for again.
+        let bad = SignatureSummary(kind: .smime, status: .invalid)
+        #expect(cards.apply(Self.signed([1, 2], [2: bad])) == .members(kept: [0: 0, 1: 1], reload: []))
+        #expect(cards.signatures == [nil, bad])
+        #expect(!cards.isFolded(0) && !cards.isFolded(1))
+        #expect(cards.body(1) == .html)
+        #expect(!cards.needsBody(1))
+        // A verdict that appears, and one that goes.
+        #expect(cards.apply(Self.signed([1, 2], [1: Self.valid, 2: bad])) == .members(kept: [0: 0, 1: 1], reload: []))
+        #expect(cards.apply(Self.signed([1, 2], [:])) == .members(kept: [0: 0, 1: 1], reload: []))
+        #expect(cards.apply(Self.signed([1, 2], [:])) == .none)
+    }
+
+    @Test func aNewMemberAndAVerdictTogetherKeepTheVerdictsOfTheCards() {
+        var cards = Cards()
+        _ = cards.apply(Self.signed([1, 2], [1: Self.valid]))
+        let change = cards.apply(Self.signed([1, 2, 3], [1: Self.valid, 3: Self.valid]))
+        #expect(change == .members(kept: [0: 0, 1: 1], reload: []))
+        #expect(cards.signatures == [Self.valid, nil, Self.valid])
+        // Another case starts over with its own.
+        #expect(cards.apply(Self.signed([1], [:]).with(case: Self.caseB)) == .reset)
+        #expect(cards.signatures == [nil])
+    }
+
     @Test func otherCaseResets() {
         var cards = Cards()
         _ = cards.apply(Self.key([1, 2]))
@@ -311,5 +363,13 @@ import Testing
         // Clamped to the document.
         #expect(Cards.compensatedTop(viewportTop: 500, cardMaxY: 300, delta: 800, documentHeight: 1000, viewportHeight: 600) == 400)
         #expect(Cards.compensatedTop(viewportTop: 50, cardMaxY: 20, delta: -300, documentHeight: 1000, viewportHeight: 600) == 0)
+    }
+}
+
+private extension Board.ConversationCards.Key {
+    func with(case id: Board.CaseID) -> Self {
+        var k = self
+        k.caseID = id
+        return k
     }
 }

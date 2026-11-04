@@ -1,0 +1,245 @@
+{
+  "panel": {
+    "unread": "**Waiting for your reply**\n- **Tomáš Holub – Board presentation: slides by Wednesday.** The board wants the Acme case as the first point on Friday; he asks for ten minutes of slides, the numbers and the risks, by Wednesday evening. You flagged it.\n- **Eva Králová – Request for a quote: interior fit-out of the new studio.** A new customer recommended by Acme: a steel mezzanine, a railing and stairs for a 220 m² former workshop in Karlín; she asks for a site visit next week, Tuesday or Wednesday afternoon.\n- **Tomáš Holub – Q4 planning meeting.** An invitation for Thursday 10:00 in meeting room 2: the Acme project, hiring for the assembly team and the CAD licences; you are to bring the state of the quotations.\n\n**For information**\n- **Martin Beneš – Your new laptop is ready.** Set up with mail, VPN and the CAD, your files copied; it waits at his desk, ten minutes to move the rest.\n\n**Bulk mail**\n- **Design Weekly #212** – typography on the desktop, with an unsubscribe link.",
+    "summarize": [
+      {
+        "match": ["Quotation for the warehouse extension"],
+        "text": "**Petr Svoboda (Acme Logistics)** is extending hall B by about 600 m² and asked six days ago for a quotation for the racking and the conveyor between the two halls, **by Thursday**, because their board meets on Friday.\n\nYou agreed to Thursday morning, put the extended warranty on a separate line and asked whether the conveyor needs the belt section for small parcels (about 12 % more). Petr confirmed the belt, attached the layout drawing (Hall-B-layout.pdf) and asked to include the **lighting above the racking**, which their electrician wants in the same project. You added it as a third section, to be priced by your electrical partner from the drawing, and promised the **complete quotation on Friday by noon**.\n\n**Still open:** the quotation itself, due Friday noon."
+      }
+    ],
+    "tasks": [
+      {
+        "match": ["Quotation for the warehouse extension"],
+        "text": "**Tasks**\n- **You:** send Acme the complete quotation for the hall B extension: the racking, the conveyor with the roller section and the belt for small parcels, and the lighting above the racking as a third section. **By Friday noon**, as you promised in your last reply.\n- **You:** keep the extended warranty on a separate line, so that Petr can decide on it apart from the rest.\n- **Your electrical partner:** price the lighting from the attached drawing (Hall-B-layout.pdf).\n- **Petr Svoboda (Acme):** nothing is open on his side; the drawing is attached and the belt section is confirmed.\n\n**Deadlines**\n- **Thursday** – Petr's original request (\"Could you send it by Thursday?\"), because Acme's board meets on Friday.\n- **Friday by noon** – your promise for the complete quotation."
+      }
+    ],
+    "draftReply": [
+      {
+        "match": ["Quotation for the warehouse extension"],
+        "body": "Hello Petr,\n\nthank you for the drawing. The belt section is in, and I have added the lighting above the racking as a third section; our electrical partner is pricing it from your drawing now.\n\nOne question for the extended warranty: should I quote 24 or 36 months? I will put it on a separate line either way.\n\nYou will have the complete quotation on Friday by noon.\n\nKind regards,\nJana",
+        "text": "The draft is ready: it thanks Petr for the drawing, confirms the belt section and the lighting as a third section, asks whether the extended warranty should be 24 or 36 months, and promises the complete quotation on Friday by noon. Open it to check it before sending; nothing has been sent."
+      }
+    ],
+    "draftDone": "The draft is ready; it says: %s. Open it to check it before sending; nothing has been sent.",
+    "ask": "I have read it. The message is from the sender named above; it asks for what its text says and nothing in it changes anything in your mailbox. Ask me for a summary, the tasks and deadlines, or a reply, and I will prepare that.",
+    "free": "I can summarize the selected mail, list its tasks and deadlines, draft a reply, or sort the unread mail of a folder. Pick a quick action above, or ask me about the selected message.",
+    "unavailable": "I cannot read your mail right now: the Malachi Mail tools are not available in this conversation."
+  },
+  "triage": {
+    "done": "Triage done: %d cases annotated.",
+    "why": {
+      "hot": "Needs your attention now.",
+      "you": "Someone is waiting for your answer.",
+      "them": "You wrote last and wait for an answer.",
+      "info": "For your information; nothing is asked of you."
+    },
+    "cases": [
+      {
+        "match": ["Board presentation: slides by Wednesday"],
+        "title": "Board slides on the Acme case by Wednesday evening",
+        "summary": "Tomáš wants the Acme case as the first point at Friday's board meeting and asks you for ten minutes of slides, the numbers and the risks, by Wednesday evening.",
+        "why": "Tomáš is waiting for the slides, the deadline is Wednesday evening and you flagged the message.",
+        "tasks": ["Prepare ten minutes of slides on the Acme case: the numbers and the risks", "Send the slides to Tomáš by Wednesday evening"],
+        "due": {"quote": "Could you have the slides ready by Wednesday evening?", "weekday": "wednesday", "hour": 18}
+      },
+      {
+        "match": ["Quotation for the warehouse extension"],
+        "title": "Complete quotation for Acme's hall B due Friday noon",
+        "summary": "Petr Svoboda (Acme Logistics) asked for a quotation for the racking and the conveyor of the hall B extension; after two rounds it covers the belt section for small parcels and the lighting above the racking, and you promised the complete quotation on Friday by noon.",
+        "why": "You answered last; Petr waits for the quotation you promised for Friday noon.",
+        "tasks": ["Finish the quotation: the racking, the conveyor with the belt section, the lighting as a third section, the extended warranty on a separate line", "Have the electrical partner price the lighting from Hall-B-layout.pdf", "Send the complete quotation to Petr by Friday noon"],
+        "due": {"quote": "You will have the complete quotation on Friday by noon.", "weekday": "friday", "hour": 12, "mine": true},
+        "commitments": [
+          {"quote": "You will have the complete quotation on Friday by noon.", "text": "Send Acme the complete quotation by Friday noon", "weekday": "friday", "hour": 12},
+          {"quote": "I will put the extended warranty on a separate line, so that you can decide on it apart from the rest.", "text": "Put the extended warranty on a separate line of the quotation"}
+        ]
+      },
+      {
+        "match": ["Request for a quote: interior fit-out"],
+        "title": "Site visit for Bluebird Studio's fit-out next week",
+        "summary": "Eva Králová (Bluebird Studio), recommended by Acme, is moving the studio into a 220 m² former workshop in Karlín and needs a steel mezzanine, a railing and stairs; she asks for a site visit next week, Tuesday or Wednesday afternoon.",
+        "why": "A new customer is waiting for you to propose a day for the site visit.",
+        "tasks": ["Reply with a day for the site visit (Tuesday or Wednesday afternoon)", "Prepare the quotation after the visit: mezzanine, railing, stairs"]
+      },
+      {
+        "match": ["September invoices for approval"],
+        "title": "Approve the September supplier invoices by Wednesday",
+        "summary": "Lucie sent twelve September supplier invoices, 486 210 CZK in total, two of them from Steelworks Ostrava for the Acme project, and asks you to approve them by Wednesday so that they are paid before they are due.",
+        "why": "Lucie is waiting for your approval before the due dates.",
+        "tasks": ["Check the two Steelworks Ostrava invoices against the current price list", "Approve the invoices and tell Lucie by Wednesday"],
+        "due": {"quote": "Could you approve them by Wednesday, so that we pay them before the due dates?", "weekday": "wednesday", "hour": 17}
+      },
+      {
+        "match": ["Server maintenance on Saturday"],
+        "state": "info",
+        "title": "Servers down on Saturday 8:00–11:00",
+        "summary": "Martin announces that the file server and the mail server will be down on Saturday from 8:00 to about 11:00 for the disk upgrade; the VPN will not work either.",
+        "why": "You are only in copy; nothing is asked of you.",
+        "tasks": ["Save what you need on Friday"]
+      },
+      {
+        "match": ["Team lunch on Friday"],
+        "title": "Team lunch on Friday 12:30 at Da Pietro",
+        "summary": "Martin proposed a team lunch on Friday; Lucie agreed and asked somebody to book; you settled on 12:30 at Da Pietro and promised to book a table for four.",
+        "why": "You answered last; the others only need to say by Thursday whether they bring a guest.",
+        "tasks": ["Book a table for four at Da Pietro for Friday 12:30"],
+        "commitments": [
+          {"quote": "I will book a table for four.", "text": "Book a table for four at Da Pietro for Friday 12:30", "weekday": "friday", "hour": 12}
+        ]
+      },
+      {
+        "match": ["Website copy, second draft"],
+        "title": "Website copy: waiting for Copywrite's third draft",
+        "summary": "Ondřej Vlk sent the second draft of the website copy; you sent back two corrections (the firm dates from 1996, the mezzanines deserve their own paragraph) and the workshop hours for the contact page.",
+        "why": "Ondřej owes you the next draft; nothing is waiting on you.",
+        "tasks": ["Check the third draft when it arrives, especially the home page numbers (WEB-1)"]
+      },
+      {
+        "match": ["Could you confirm the installation date"],
+        "title": "Acme to confirm the hall A installation start on 10 November",
+        "summary": "You asked Petr Svoboda to confirm that the installation in hall A can start on 10 November; the crew needs to know by the end of this week whether to book the lift.",
+        "why": "Petr has not answered your question yet.",
+        "tasks": ["Book the lift once Petr confirms the date", "Chase Petr if there is no answer by Friday"],
+        "due": {"quote": "Our crew needs to know by the end of this week whether to book the lift.", "weekday": "friday", "hour": 17, "mine": true}
+      },
+      {
+        "match": ["DevConf Prague 2026"],
+        "state": "info",
+        "title": "DevConf Prague: your Thursday programme",
+        "summary": "The conference sent the four talks you marked for Thursday (9:30, 11:00, 13:30 and 15:00, rooms on the second floor); registration opens at 8:30 and lunch is in the foyer from 12:00 to 13:30.",
+        "why": "Information only; no reply is expected."
+      },
+      {
+        "match": ["Thanks for yesterday"],
+        "state": "info",
+        "title": "Tomáš thanks you for the Acme presentation",
+        "summary": "Tomáš says the presentation at Acme went really well, the technical part especially, and thanks you for pulling it together at short notice.",
+        "why": "A thank-you; nothing waits for an answer."
+      },
+      {
+        "match": ["Expense reports for September"],
+        "title": "September expense report: the Ostrava fuel receipts are missing",
+        "summary": "Lucie reminds you that the September expense reports are due on Friday and that yours still lacks the fuel receipts from the Ostrava trip.",
+        "why": "Lucie is waiting for your receipts.",
+        "tasks": ["Add the fuel receipts from the Ostrava trip to your September expense report"],
+        "due": {"quote": "a reminder that the September expense reports are due on Friday.", "weekday": "friday", "hour": 17}
+      },
+      {
+        "match": ["Your new laptop is ready"],
+        "title": "Your new laptop is ready at Martin's desk",
+        "summary": "Martin has set up the new laptop with mail, VPN and the CAD and copied your files; drop by his desk for ten minutes to move the rest.",
+        "why": "Martin is waiting for you to pick it up.",
+        "tasks": ["Drop by Martin's desk for ten minutes to move the rest"]
+      },
+      {
+        "issueKey": "WEB-1",
+        "title": "WEB-1: check the home page numbers before the copy goes to the designer",
+        "summary": "The website redesign is yours; Tomáš says the second draft of the copy has arrived and asks you to check the numbers on the home page before it goes to the designer. Petr (Acme) would like a short case study of the hall A project under References.",
+        "why": "Tomáš asked you for the check in his last comment.",
+        "tasks": ["Check the home page numbers in Copywrite's second draft", "Send Petr the case study draft once the copy is in"]
+      },
+      {
+        "issueKey": "MOB-1",
+        "title": "MOB-1: fix for the lost measurements is in testing, release on Monday",
+        "summary": "Martin reproduced the lost measurements (the sync overwrote the local database), the fix is in testing and the release is planned for Monday, before the crew is at Acme again on the 10th.",
+        "why": "You reported it; Martin's last comment answers your question.",
+        "tasks": ["Tell the crew the fix comes with Monday's release"]
+      },
+      {
+        "issueKey": "ITSD-1",
+        "title": "ITSD-1: try Martin's new VPN profile",
+        "summary": "Martin sent a new VPN profile for the drops every twenty minutes and asks you to try it and say whether it still drops; the issue waits for your answer.",
+        "why": "The issue is waiting for the customer, which is you.",
+        "tasks": ["Install the new VPN profile and report whether the VPN still drops"]
+      },
+      {
+        "issueKey": "WEB-2",
+        "title": "WEB-2: workshop hours on the contact page",
+        "summary": "Your own issue: show the workshop hours (Monday to Friday 7:00 to 15:30, closed on public holidays) next to the map on the contact page; nobody has picked it up yet.",
+        "why": "Your issue, still To Do, with no activity from others."
+      },
+      {
+        "issueKey": "MOB-2",
+        "title": "MOB-2: photos attached to measurements, unassigned",
+        "summary": "Your request that the crew can attach a photo to each measured span, so that the office sees what the number means; To Do and unassigned.",
+        "why": "Your issue, still unassigned.",
+        "tasks": ["Assign the issue to Martin once the offline fix is out"]
+      }
+    ]
+  },
+  "reply": {
+    "done": "Done.",
+    "generic": "Hello [name],\n\nthank you for your message. [Your answer]\n\nKind regards,\nJana",
+    "followUp": "Hello,\n\njust a short follow-up on my message below: could you let me know when you have a moment?\n\nKind regards,\nJana",
+    "cases": [
+      {
+        "match": ["Board presentation: slides by Wednesday"],
+        "body": "Hi Tomáš,\n\nyes, the slides will be ready by Wednesday evening: ten minutes on the Acme case, the numbers first and then the risks, nothing more. I will send them to you as soon as they are done, so that you can look through them before Friday.\n\nJana"
+      },
+      {
+        "match": ["Request for a quote: interior fit-out"],
+        "body": "Dear Ms Králová,\n\nthank you for your request, and for the kind recommendation from Acme Logistics. A steel mezzanine with a railing and stairs for a former workshop is exactly our kind of work.\n\nNext week I can come on Tuesday afternoon, at [time], to the studio in Karlín. Could you send me the address and, if you have it, the floor plan beforehand?\n\nKind regards,\nJana Dvořáková",
+        "followUp": ""
+      },
+      {
+        "match": ["September invoices for approval"],
+        "body": "Hi Lucie,\n\napproved, except the two from Steelworks Ostrava: the second one still has the old price list, so I will ask them for a corrected invoice first. The rest can be paid.\n\nJana"
+      },
+      {
+        "match": ["Your new laptop is ready"],
+        "body": "Hi Martin,\n\nthank you! I will drop by [today/tomorrow] around [time] and we can move the rest.\n\nJana"
+      },
+      {
+        "match": ["Quotation for the warehouse extension"],
+        "body": "Hello Petr,\n\nthank you for the drawing. The belt section is in, and I have added the lighting above the racking as a third section; our electrical partner is pricing it from your drawing now.\n\nYou will have the complete quotation on Friday by noon.\n\nKind regards,\nJana",
+        "followUp": "Hello Petr,\n\njust a short note on the quotation for hall B: it is on its way for Friday noon as promised. If anything has changed on your side in the meantime, let me know and I will take it into account.\n\nKind regards,\nJana"
+      },
+      {
+        "match": ["Could you confirm the installation date"],
+        "body": "",
+        "followUp": "Hello Petr,\n\ncould you confirm the installation date in hall A, 10 November? Our crew needs to book the lift by the end of this week, so a short yes or no would help a lot.\n\nKind regards,\nJana"
+      },
+      {
+        "match": ["Team lunch on Friday"],
+        "body": "",
+        "followUp": "Hi all,\n\nthe table at Da Pietro is booked for Friday 12:30, four people. If anybody brings a guest, say so by Thursday and I will change it.\n\nJana"
+      },
+      {
+        "match": ["Website copy, second draft"],
+        "body": "",
+        "followUp": "Hi Ondřej,\n\njust checking: did my two remarks and the workshop hours reach you? Let me know when the third draft is ready.\n\nJana"
+      }
+    ]
+  },
+  "rewrite": {
+    "politer": [
+      {
+        "match": ["Tuesday afternoon is the only time"],
+        "text": "Dear Ms Králová,\n\nthank you for your request, and for the kind recommendation from Acme Logistics. Next week I could come on Tuesday afternoon, at 2 pm, to your new studio in Karlín. Could you send me the address and, if you have it, the floor plan beforehand? It would help me prepare for the visit.\n\nKind regards,\nJana Dvořáková"
+      }
+    ],
+    "shorter": [
+      {
+        "match": ["Tuesday afternoon is the only time"],
+        "text": "Hello,\n\nthank you for your request. I can visit on Tuesday at 2 pm; please send me the address and the floor plan beforehand.\n\nJana"
+      }
+    ],
+    "fix": [],
+    "english": []
+  },
+  "write": [
+    {
+      "match": ["Quotation for the warehouse extension"],
+      "text": "Hello Petr,\n\nthank you for the drawing. The belt section is in, and I have added the lighting above the racking as a third section; our electrical partner is pricing it from your drawing now.\n\nFor the extended warranty, one question: should I quote 24 or 36 months? It will be on a separate line either way.\n\nYou will have the complete quotation on Friday by noon.\n\nKind regards,\nJana"
+    },
+    {
+      "match": ["Request for a quote: interior fit-out"],
+      "text": "Dear Ms Králová,\n\nthank you for your request, and for the kind recommendation from Acme Logistics. A steel mezzanine with a railing and stairs for a former workshop is exactly our kind of work.\n\nNext week I can come on Tuesday afternoon; would 2 pm suit you? Could you send me the address and, if you have it, the floor plan beforehand?\n\nKind regards,\nJana Dvořáková"
+    }
+  ],
+  "search": [
+    {"words": "mail from Petr about the warehouse", "query": "from:petr warehouse"},
+    {"words": "unread invoices from Lucie", "query": "from:lucie invoice is:unread"},
+    {"words": "the quotation for Acme with the drawing", "query": "quotation acme has:attachment"}
+  ]
+}

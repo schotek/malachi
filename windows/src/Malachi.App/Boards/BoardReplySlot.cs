@@ -71,10 +71,10 @@ public sealed partial class BoardReplySlot : UserControl, IBoardDetailPart
         AutomationProperties.SetAutomationId(retry, "BoardReplyRetry");
         retry.Click += (_, _) => host.Retry();
         noteText.Text = Board.Text.DraftNote;
+        noteText.Style = (Style)Application.Current.Resources["DimCaptionLabelStyle"];
         noteText.FontSize = 12;
-        noteText.Foreground = Brush("TextFillColorSecondaryBrush");
         unsavedText.Text = Board.Text.ReplyNotSaved;
-        unsavedText.Foreground = Brush("SystemFillColorCautionBrush");
+        unsavedText.Style = (Style)Application.Current.Resources["CautionCaptionLabelStyle"];
         AutomationProperties.SetAutomationId(paneHost, "BoardReplyEditor");
         var column = new StackPanel { Spacing = 6 };
         column.Children.Add(heading);
@@ -239,6 +239,4 @@ public sealed partial class BoardReplySlot : UserControl, IBoardDetailPart
     }
 
     private static Visibility Vis(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
-
-    private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
 }

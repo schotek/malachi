@@ -209,8 +209,9 @@ const (
 	// assignee changes are its messages. JiraConfig says where and how;
 	// the token is Credentials.Password.
 	AccountJira AccountKind = "jira"
-	// AccountCalDAV is a calendar-only account on a CalDAV server
-	// (CalDAVConfig; the password is Credentials.Password). It has no
+	// AccountCalDAV is a calendar (and address book, CalDAVConfig.Contacts)
+	// account on a CalDAV/CardDAV server (CalDAVConfig; the password is
+	// Credentials.Password). It has no
 	// mail: folder.list answers no folders, message methods
 	// invalidArgument, and clients never show it in Mail.
 	AccountCalDAV AccountKind = "caldav"
@@ -241,6 +242,9 @@ const (
 type GraphConfig struct {
 	Source       GraphSource `json:"source"`
 	GOAAccountID string      `json:"goaAccountId,omitempty"`
+	// Contacts is the contacts part of the account (docs/api.md §4.19);
+	// nil = contacts sync off.
+	Contacts *ContactsConfig `json:"contacts,omitempty"`
 }
 
 // JiraDeployment says which kind of Jira site a JiraConfig names.
@@ -421,7 +425,7 @@ const (
 	CapabilityTransition AccountCapability = "transition"
 	// CapabilityCalendar: the account can have calendars (graph, caldav);
 	// it does not change with consent or sync state. A caldav account has
-	// exactly this one.
+	// this one, and CapabilityContacts when it has address books.
 	CapabilityCalendar AccountCapability = "calendar"
 	// CapabilityCrm: messages of mail accounts can be saved to this
 	// account (crm.*, docs/api.md §4.17). An eway account has exactly this
@@ -598,6 +602,9 @@ type AccountOAuthStartParams struct {
 	// Calendars.ReadWrite and Calendars.Read.Shared); only a sign-in made
 	// for the calendar sets it.
 	Calendar bool `json:"calendar,omitempty"`
+	// Contacts also asks for the contacts scope (Microsoft
+	// Contacts.ReadWrite); only a sign-in made for the contacts sets it.
+	Contacts bool `json:"contacts,omitempty"`
 }
 
 // AccountOAuthStartResult: the UI opens AuthURL in the user's browser; the
@@ -764,6 +771,12 @@ const (
 	RoleOutbox  FolderRole = "outbox" // local-only queue of messages to send
 )
 
+// UnifiedRoles are the folder roles message.list and thread.list accept
+// as `unified` (docs/api.md §4.3, "Unified listing"): the inboxes of
+// every mail account. Other roles may join later without a change of the
+// contract.
+var UnifiedRoles = []FolderRole{RoleInbox}
+
 type Folder struct {
 	ID         FolderID   `json:"id"`
 	AccountID  AccountID  `json:"accountId"`
@@ -890,6 +903,11 @@ type MessageSummary struct {
 	// same Message-ID) is saved in an enabled CRM account (§4.17); a
 	// display cache, the CRM is the truth. Absent otherwise.
 	CrmSaved bool `json:"crmSaved,omitempty"`
+	// Signature is the verdict of the message's signature (§4.22): kind
+	// and status, for the list's icon. Absent for a message without a
+	// signature of the whole message and while the verdict is pending.
+	// Message.Signature shadows it with the summary in message.get.
+	Signature *MessageSignature `json:"signature,omitempty"`
 }
 
 // BulkKind is what kind of bulk mail a message is.
@@ -995,6 +1013,10 @@ type Message struct {
 	// Crm is the message's record in each CRM account where it is saved
 	// (message.get, §4.17); absent when it is saved nowhere.
 	Crm []CrmRecord `json:"crm,omitempty"`
+	// Signature is the summary of the signature's verdict (message.get,
+	// message.download, §4.22); it takes the place of
+	// MessageSummary.Signature on the wire.
+	Signature *SignatureSummary `json:"signature,omitempty"`
 }
 
 // UnsubscribeMethod is how message.unsubscribe would act.
@@ -1049,6 +1071,11 @@ type MessageListParams struct {
 	Page      Page          `json:"page"`
 	Sort      SortOrder     `json:"sort,omitempty"`
 	Filter    MessageFilter `json:"filter,omitempty"`
+	// Unified, instead of AccountID and FolderID (both empty), lists the
+	// folders of this role of every enabled mail account (kind imap or
+	// graph) in one page: the unified listing, docs/api.md §4.3. Only a
+	// role of UnifiedRoles is accepted.
+	Unified FolderRole `json:"unified,omitempty"`
 	// UnreadOnly restricts the list to messages without the "seen" flag.
 	//
 	// Deprecated: use Filter. Honoured only while Filter is empty, so that
@@ -1402,6 +1429,12 @@ type ThreadListParams struct {
 	// Filter narrows the listing like message.list's: a thread is unread
 	// or flagged when any member in the folder is. Empty = all.
 	Filter MessageFilter `json:"filter,omitempty"`
+	// Unified, instead of AccountID and FolderID (both empty), lists the
+	// conversations of the folders of this role of every enabled mail
+	// account, each row aggregated over its one folder as thread.list of
+	// that folder would: the unified listing, docs/api.md §4.4. Only a
+	// role of UnifiedRoles is accepted.
+	Unified FolderRole `json:"unified,omitempty"`
 }
 
 type ThreadListResult struct {
@@ -1909,6 +1942,15 @@ type SearchQueryParams struct {
 	FolderID  FolderID  `json:"folderId,omitempty"`
 	Query     string    `json:"query"`
 	Page      Page      `json:"page"`
+	// WithSent, with FolderID, also returns the matching rows of the
+	// account's folders of role sent whose thread has a visible member in
+	// the folder (the user's replies, as thread.get withSent): not a row
+	// whose Message-ID a visible member of the folder has, and of the sent
+	// rows sharing a Message-ID only the one with the lowest id. Nothing
+	// is added in a sent folder, the outbox or a virtual folder, or when
+	// the query has in: filters. Ignored without FolderID. A compatible
+	// extension of protocol 2: an older daemon ignores it.
+	WithSent bool `json:"withSent,omitempty"`
 }
 
 type SearchResult struct {
@@ -2117,6 +2159,8 @@ type Contact struct {
 	// Book is the display name of the address book the contact came from;
 	// empty for a collected address.
 	Book string `json:"book,omitempty"`
+	// ContactID names the contact of a "contacts" suggestion (contact.get).
+	ContactID ContactID `json:"contactId,omitempty"`
 }
 
 const (
@@ -2131,6 +2175,9 @@ type ContactSearchParams struct {
 	// Limit caps the result; 0 means DefaultContactLimit, more than
 	// MaxContactLimit is clamped.
 	Limit int `json:"limit,omitempty"`
+	// Scope says which synchronised address books are read; "" =
+	// ContactScopeAccount.
+	Scope ContactSearchScope `json:"scope,omitempty"`
 }
 
 type ContactSearchResult struct {

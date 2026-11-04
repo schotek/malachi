@@ -28,6 +28,18 @@ namespace Malachi.Core.Model;
 /// </summary>
 public sealed class CollapseState
 {
+    /// <summary>
+    /// The entry of collapsed-accounts that stands for the Favourites
+    /// section (collapse.go <c>collapseFavourites</c>, Swift
+    /// <c>favouritesEntry</c>): the section folds like an account heading
+    /// (the All Inboxes item and the pinned folders go out of sight, the
+    /// heading stays), and its fold is stored among the account folds under
+    /// this sentinel. An account id is "acc_" plus hex, so the sentinel
+    /// cannot be one, and <see cref="Save"/> never prunes it as an account
+    /// that is gone.
+    /// </summary>
+    public static readonly AccountId FavouritesEntry = "@favourites";
+
     /// <summary>An empty state: everything expanded (collapse.go <c>newCollapseState</c>).</summary>
     public CollapseState()
     {
@@ -53,6 +65,15 @@ public sealed class CollapseState
 
     /// <summary>Whether the account hides its folders.</summary>
     public bool AccountCollapsed(AccountId id) => Accounts.Contains(id);
+
+    /// <summary>Whether the Favourites section hides its rows (<see cref="FavouritesEntry"/>).</summary>
+    public bool FavouritesCollapsed() => Accounts.Contains(FavouritesEntry);
+
+    /// <summary>Folds the Favourites section away or unfolds it.</summary>
+    public void SetFavourites(bool collapsed) => SetAccount(FavouritesEntry, collapsed);
+
+    /// <summary>The state change of the window's <c>toggleFavourites</c>.</summary>
+    public void ToggleFavourites() => SetFavourites(!FavouritesCollapsed());
 
     /// <summary>Folds <paramref name="k"/> away or unfolds it.</summary>
     public void SetFolder(FolderKey k, bool collapsed)
@@ -146,7 +167,7 @@ public sealed class CollapseState
         string[] accountEntries =
         [
             .. Accounts
-                .Where(id => !prune || known.Contains(id))
+                .Where(id => !prune || known.Contains(id) || id == FavouritesEntry)
                 .Select(id => id.ToString())
                 .Order(CodePoints.Comparer),
         ];

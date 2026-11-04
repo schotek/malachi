@@ -69,7 +69,11 @@ extension Board {
                             + "initials on each page. A scan is enough for now; the original can follow by post.\n\n"
                             + "If the copy is not back today, the old terms run on for another year and the new service levels "
                             + "would only start in 2028. I am at my desk until six if anything is unclear.\n\n"
-                            + "Thank you, and best regards,\nAda"),
+                            + "Thank you, and best regards,\nAda",
+                        // An invented verdict, so the card shows the badge.
+                        signature: SignatureSummary(
+                            kind: .smime, status: .valid,
+                            signer: SignatureSigner(name: "Ada Example", email: "ada@example.invalid"))),
                 ]))
         cases.append(
             Case(
