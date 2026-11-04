@@ -5422,9 +5422,17 @@ cross-built, attaches them, and there is no zip (§13).
   folder, so an unpackaged copy's registration stays), and Preferences →
   General asks whether the default is the package's ProgID
   (`IsPackagedDefault`: an `AppX…` ProgID whose application the shell
-  names Malachi Mail). Unverified on Windows: the link's Protocol
-  activation, the package in Default Apps and the text in Preferences.
-  The start at sign-in stays the app's own Run value.
+  names Malachi Mail). Checked by the Windows agent on the owner's x64
+  machine with 0.3.0.40 (2026-11-04): on its first start the package
+  removed the keys the earlier package wrote; Windows registered the
+  package's own `AppX…` ProgID in Default Apps, the owner chose it there
+  (Windows 11 keeps the choice in `UserChoiceLatest`, `UserChoice` kept
+  the old one), Preferences → General then says Malachi Mail is the
+  default, and a `mailto:` link opens the compose window with its address
+  and subject both as a Protocol activation redirected to the running app
+  and as a cold start; `build.ps1 lint`, `MailtoRegistrationTests` and
+  `PathsTests` passed. Not seen: the Preferences text while another app
+  is the default. The start at sign-in stays the app's own Run value.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs
