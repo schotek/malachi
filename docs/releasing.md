@@ -264,9 +264,20 @@ permission for Microsoft's components is in [LICENSING.md](../LICENSING.md)
 - **Updates** (Velopack or a check against GitHub Releases, the update
   stopping the daemon gracefully first) and a winget manifest.
 
-`.github/workflows/windows-msix.yml` builds an MSIX **test** package by
-hand only (never on a tag, kept one day), a trial of the Microsoft Store
-route; see [windows-port.md §17](windows-port.md#17-before-a-public-release).
+`.github/workflows/windows-msix.yml` builds the MSIX package for the
+Microsoft Store. On a release tag it builds unsigned packages for x64 and
+ARM64 (version `X.Y.Z.0`) and keeps them as the run's artifacts for 30
+days; the owner uploads them to Partner Center by hand, and they are never
+attached to the release (owner's decision 2026-11-04: an unsigned package
+does not install, and the Store re-signs what it publishes). The Store
+checks the identity, so the package takes it from the repository variables
+`MSIX_IDENTITY_NAME`, `MSIX_PUBLISHER` and `MSIX_PUBLISHER_DISPLAY_NAME`,
+set once to the values Partner Center shows under *Product identity*;
+until `MSIX_PUBLISHER` is set, a tag skips the job. By hand it builds one
+architecture as a test package (self-signed or unsigned, kept one day);
+see [windows-port.md §17](windows-port.md#17-before-a-public-release).
+Once the Store has approved the app, the Inno Setup installer will no
+longer be offered (owner's decision).
 
 Release notes stay in `NEWS` for every platform; the AppStream metainfo
 it feeds is Linux's.

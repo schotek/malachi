@@ -3,10 +3,11 @@
 SPDX-FileCopyrightText: 2026 Vladislav Janeček
 SPDX-License-Identifier: GPL-3.0-or-later
 
-The manifest of the MSIX test package (build-msix.ps1, the workflow
+The manifest of the MSIX package (build-msix.ps1, the workflow
 windows-msix.yml): the unpackaged app folder of build.ps1 app, unchanged,
-given a package identity. A trial of the Microsoft Store route
-(docs/windows-port.md section 17), not a release artefact.
+given a package identity, for the Microsoft Store (a release tag builds it
+unsigned for Partner Center) or as a test package (docs/windows-port.md
+section 17, docs/releasing.md section 7).
 
 The tokens in double braces are filled in by build-msix.ps1.
 

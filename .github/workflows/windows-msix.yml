@@ -1,19 +1,28 @@
-# An MSIX test package of the Windows client, by hand only.
+# The MSIX package of the Windows client for the Microsoft Store.
 #
-# A trial of the Microsoft Store route (docs/windows-port.md §17,
-# docs/releasing.md §7): the app folder of build.ps1 app, given a package
-# identity by windows/msix/build-msix.ps1. Never on a tag and never part of
-# a release; no tests or lint here (windows.yml does those). The package is
-# signed with a self-signed certificate made for the run, whose .cer comes
-# with it in the artifact, or left unsigned for an upload to Partner Center
-# (the Store re-signs it; the identity name and publisher must then be the
-# ones Partner Center reserved).
+# The app folder of build.ps1 app, given a package identity by
+# windows/msix/build-msix.ps1 (docs/windows-port.md §17, docs/releasing.md
+# §7); no tests or lint here (windows.yml does those).
 #
-# The artifact is kept one day: any signed-in GitHub user can download the
-# artifacts of a public repository (docs/releasing.md §5).
-name: Windows MSIX (test)
+# On a release tag (vX.Y.Z): unsigned packages for x64 and ARM64, kept as
+# the run's artifacts (30 days) for the owner to upload to Partner Center,
+# never attached to the release (an unsigned package does not install, and
+# the Store re-signs what it publishes; owner's decision 2026-11-04). The
+# Store checks the identity, so it comes from the repository variables
+# MSIX_IDENTITY_NAME, MSIX_PUBLISHER and MSIX_PUBLISHER_DISPLAY_NAME, the
+# values Partner Center shows under Product identity; until they are set a
+# tag skips the job. The tag gives the version Major.Minor.Patch.0 the Store
+# wants.
+#
+# By hand: one architecture, signed with a self-signed certificate made for
+# the run (its .cer in the artifact) or unsigned, with the identity given;
+# kept one day, since any signed-in GitHub user can download the artifacts
+# of a public repository (docs/releasing.md §5).
+name: Windows MSIX
 
 on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
     inputs:
       arch:
@@ -39,13 +48,21 @@ permissions:
 
 concurrency:
   group: windows-msix-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   msix:
-    name: MSIX (${{ inputs.arch }})
+    name: MSIX (${{ matrix.arch }})
+    # A tag builds for the Store only once Partner Center's identity is set.
+    if: ${{ !startsWith(github.ref, 'refs/tags/') || vars.MSIX_PUBLISHER != '' }}
     runs-on: windows-2025
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(startsWith(github.ref, 'refs/tags/') && '["x64","arm64"]' || format('["{0}"]', inputs.arch)) }}
+    env:
+      STORE: ${{ startsWith(github.ref, 'refs/tags/') && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,9 +91,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ inputs.arch }}-${{ hashFiles('windows/**/packages.lock.json', 'windows/Directory.Packages.props') }}
+          key: nuget-${{ matrix.arch }}-${{ hashFiles('windows/**/packages.lock.json', 'windows/Directory.Packages.props') }}
           restore-keys: |
-            nuget-${{ inputs.arch }}-
+            nuget-${{ matrix.arch }}-
 
       - name: Record the version
         id: version
@@ -89,34 +106,42 @@ jobs:
 
       - name: Restore, locked to the lock files
         working-directory: windows
-        run: dotnet restore Malachi.slnx -p:Platform=${{ inputs.arch == 'arm64' && 'ARM64' || 'x64' }} --locked-mode
+        run: dotnet restore Malachi.slnx -p:Platform=${{ matrix.arch == 'arm64' && 'ARM64' || 'x64' }} --locked-mode
 
       - name: App folder
         # Release, with the daemon, the MCP bridge and the NativeAOT keyring
         # helper inside (ARM64 cross-built, as in windows.yml).
         working-directory: windows
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 app -Arch ${{ inputs.arch }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 app -Arch ${{ matrix.arch }}
 
       - name: MSIX
         working-directory: windows
+        # On a tag: unsigned, with Partner Center's identity; by hand: the
+        # inputs.
         env:
-          MSIX_IDENTITY: ${{ inputs.identity }}
-          MSIX_PUBLISHER: ${{ inputs.publisher }}
+          MSIX_IDENTITY: ${{ env.STORE && vars.MSIX_IDENTITY_NAME || inputs.identity }}
+          MSIX_PUBLISHER: ${{ env.STORE && vars.MSIX_PUBLISHER || inputs.publisher }}
+          MSIX_PUBLISHER_NAME: ${{ env.STORE && vars.MSIX_PUBLISHER_DISPLAY_NAME || '' }}
           MSIX_VERSION: ${{ steps.version.outputs.version }}
-          MSIX_SIGN: ${{ inputs.sign && '1' || '' }}
+          MSIX_SIGN: ${{ !env.STORE && inputs.sign && '1' || '' }}
         run: |
+          if ($env:STORE -and (-not $env:MSIX_IDENTITY -or -not $env:MSIX_PUBLISHER_NAME)) {
+            throw 'set the repository variables MSIX_IDENTITY_NAME and MSIX_PUBLISHER_DISPLAY_NAME as Partner Center shows them'
+          }
           $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'msix\build-msix.ps1',
-            '-AppDir', "..\build\windows\${{ inputs.arch }}\Malachi Mail", '-Version', $env:MSIX_VERSION,
-            '-Arch', '${{ inputs.arch }}', '-OutDir', '..\build\windows\msix',
+            '-AppDir', "..\build\windows\${{ matrix.arch }}\Malachi Mail", '-Version', $env:MSIX_VERSION,
+            '-Arch', '${{ matrix.arch }}', '-OutDir', '..\build\windows\msix',
             '-IdentityName', $env:MSIX_IDENTITY, '-Publisher', $env:MSIX_PUBLISHER)
+          if ($env:MSIX_PUBLISHER_NAME) { $arguments += @('-PublisherDisplayName', $env:MSIX_PUBLISHER_NAME) }
           if ($env:MSIX_SIGN) { $arguments += '-Sign' }
           powershell @arguments
 
       - uses: actions/upload-artifact@v4
         with:
-          name: malachi-windows-${{ inputs.arch }}-msix-test
+          name: malachi-windows-${{ matrix.arch }}-msix-${{ env.STORE && 'store' || 'test' }}
           path: |
             build/windows/msix/*.msix
             build/windows/msix/*.cer
+          # A tag's package has no .cer.
           if-no-files-found: error
-          retention-days: 1
+          retention-days: ${{ env.STORE && 30 || 1 }}

@@ -5374,7 +5374,10 @@ cross-built, attaches them, and there is no zip (§13).
   (*More info → Run anyway*).
 - **MSIX (trial).** The Microsoft Store re-signs an MSIX package for free
   (an EXE or MSI it does not), so the owner asked for a test package
-  (2026-11-04): `.github/workflows/windows-msix.yml`, by hand only, packs
+  (2026-11-04): `.github/workflows/windows-msix.yml`, by hand and since
+  then also on a release tag (unsigned, x64 and ARM64, the identity from
+  repository variables, artifacts for Partner Center; `docs/releasing.md`
+  §7), packs
   the app folder of `build.ps1 app` with `windows\msix\build-msix.ps1` and
   `windows\msix\AppxManifest.xml` (write virtualisation of AppData and
   HKCU disabled through the restricted capability `unvirtualizedResources`,

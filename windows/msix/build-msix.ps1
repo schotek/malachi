@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Vladislav Janeček
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Packs an app folder that build.ps1 app assembled into an MSIX test
-# package: Malachi-Mail-<version>-windows-<arch>-test.msix. A trial of the
-# Microsoft Store route (docs/windows-port.md section 17), run by hand
-# through .github/workflows/windows-msix.yml or on a desktop:
+# Packs an app folder that build.ps1 app assembled into an MSIX package:
+# Malachi-Mail-<version>-windows-<arch>.msix, unsigned, for the Microsoft
+# Store (Partner Center; a release tag builds it), or with -Sign
+# Malachi-Mail-<version>-windows-<arch>-test.msix, a test package
+# (docs/windows-port.md section 17, docs/releasing.md section 7). Run by
+# .github/workflows/windows-msix.yml or on a desktop:
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 app -Arch x64
 #   powershell -NoProfile -ExecutionPolicy Bypass -File windows\msix\build-msix.ps1 `
@@ -177,7 +179,10 @@ if ($manifest -match '\{\{') {
 }
 [System.IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'), $manifest, $Utf8)
 
-$name = 'Malachi-Mail-{0}-windows-{1}-test' -f $Version, $Arch
+$name = 'Malachi-Mail-{0}-windows-{1}' -f $Version, $Arch
+if ($Sign) {
+    $name += '-test'
+}
 $msix = Join-Path $OutDir "$name.msix"
 Invoke-Tool (Get-SdkTool 'makeappx.exe') @('pack', '/d', $stage, '/p', $msix, '/o')
 
