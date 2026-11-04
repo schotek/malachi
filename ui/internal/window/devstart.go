@@ -45,7 +45,8 @@ import (
 // else of a new one; with MALACHI_RULES_SAMPLES=1 over invented rules and
 // accounts, no daemon), crm-dialog (the Save to eWay-CRM dialog over invented
 // suggestions, no daemon), eway-wizard (the eWay-CRM account assistant;
-// Next asks the daemon), size=WxH, quit.
+// Next asks the daemon), print (win.print; with MALACHI_PRINT_PDF=<path>
+// saved there as PDF, no dialog), size=WxH, quit.
 //
 // The scene steps of docs/screenshots.md §3, with the macOS names and
 // meaning: group=on|off and chat=on|off (the two settings), folder=<text>
@@ -97,6 +98,7 @@ const (
 	devComposeOpen
 	devCrmSave
 	devShot
+	devPrint
 )
 
 // devBusy counts the steps still at work after they returned (the
@@ -182,6 +184,8 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind, st.Width, st.Height = devSize, w, h
 		case name == "quit":
 			st.Kind = devQuit
+		case name == "print":
+			st.Kind = devPrint
 		case strings.HasPrefix(name, "group="), strings.HasPrefix(name, "chat="):
 			key, val, _ := strings.Cut(name, "=")
 			if val != "on" && val != "off" {
@@ -380,6 +384,14 @@ func (w *Window) runDevStep(n int, st devStep) {
 	case devComposeOpen:
 		if app := w.Application(); app != nil {
 			app.ActivateAction("compose", nil)
+		}
+	case devPrint:
+		// win.print (print.go); with MALACHI_PRINT_PDF the print is saved
+		// there without the dialog.
+		if a := w.actions["print"]; a != nil && a.Enabled() {
+			a.Activate(nil)
+		} else {
+			developmentPrint("MALACHI_GTK_START print: the action is off")
 		}
 	case devCrmSave:
 		if a := w.LookupAction(crmActionSave); a != nil && a.Enabled() {

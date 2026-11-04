@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 11:07+0000\n"
+"POT-Creation-Date: 2026-11-04 12:49+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -7768,15 +7768,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1055
+#: ui/internal/window/window.go:1059
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1128 ui/data/ui/window.ui:178
+#: ui/internal/window/window.go:1132 ui/data/ui/window.ui:178
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:1134 ui/data/ui/window.ui:148
+#: ui/internal/window/window.go:1138 ui/data/ui/window.ui:148
 msgid "Messages"
 msgstr ""
 

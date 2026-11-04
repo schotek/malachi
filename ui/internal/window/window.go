@@ -274,6 +274,8 @@ type Window struct {
 	modeStack         *gtk.Stack
 	modeSwitchMail    *adw.ToggleGroup
 	settingModeSwitch bool
+	// printRows is how many rows win.print would print in Mail (print.go).
+	printRows int
 	// modeSwitchBoardOn is Show the Board as the mode switches show it
 	// (setModeSwitchBoardEnabled): a switch built later, the board page's,
 	// takes it over.
@@ -442,6 +444,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.pane.toast = w.Toast
 	w.pane.onQuoted = w.setPaneQuoted
 	w.registerActions()
+	w.setupPrint(b)
 	w.crmState = newCrmState()
 	w.crmMain = newCrmControls(w, "win", &w.ApplicationWindow.Window, b, func(a *gio.SimpleAction) {
 		w.AddAction(a)
@@ -903,6 +906,7 @@ var MessageAccels = map[string]string{
 	"win.refresh":     "<Control>r",
 	"win.search":      "<Control>f",
 	"win.undo":        "<Control>z",
+	"win.print":       PrintAccel,
 }
 
 // registerActions adds the win.* actions. All but refresh start disabled;

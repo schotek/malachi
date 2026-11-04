@@ -638,6 +638,11 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 			a.SetEnabled(e)
 		}
 	}
+	w.printRows = 0
+	if st.on {
+		w.printRows = st.count
+	}
+	w.refreshPrint()
 	// eWay-CRM follows the selection explicitly (crm.go refreshCRM).
 	w.refreshCRM()
 }

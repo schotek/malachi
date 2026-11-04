@@ -14,6 +14,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/conversation"
+	"github.com/schotek/malachi/ui/internal/printing"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -58,6 +59,7 @@ var messageShortcuts = []struct{ trigger, action string }{
 	{"j", "msg.junk"},
 	{"u", "msg.mark-unread"},
 	{"s", "msg.toggle-flag"},
+	{PrintAccel, "msg.print"},
 }
 
 // newMessageWindow creates the window for message s of the main window w
@@ -132,6 +134,11 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	mw.crm = newCrmControls(w, "msg", &mw.Window.Window, b, func(a *gio.SimpleAction) { g.AddAction(a) },
 		func() []crmSubject { return []crmSubject{{s: mw.s}} },
 		func(text string) { mw.toasts.AddToast(widget.PlainToast(text)) })
+	// Print… prints this message (print.go), from More Actions and Ctrl+P.
+	add("print", true, func() { w.printMessages([]api.MessageSummary{mw.s}, printing.Single, &mw.Window.Window) })
+	if m, ok := b.GetObject("message_menu_model").Cast().(*gio.Menu); ok {
+		m.AppendSection("", printMenuSection("msg.print"))
+	}
 	mw.InsertActionGroup("msg", g)
 	unbind := w.assist.bindAssistantButton(b.GetObject("assistant_button").Cast().(*gtk.MenuButton), "msg", false, func() {
 		_, ok := w.assist.pick(true)

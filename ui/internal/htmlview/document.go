@@ -72,6 +72,21 @@ func CompactDocument(body string) string {
 	return document(body, compactCSS)
 }
 
+// printCSS is baseCSS for the print (Print): the column fills the page's
+// printable width, without the reader's padding and without its shift by
+// half a scrollbar (`left` counts 100vw, which in print is the host
+// view's width, not the paper's, and cut the text's left edge off); the
+// page's margins are the print dialog's.
+var printCSS = columnCSS("0") + `
+#malachi-column { width: auto !important; left: 0 !important; margin: 0 !important; }`
+
+// PrintDocument is Document for the print: the same policy, the column
+// cut to the page (printCSS). The fragment is a printing.Fragment: the
+// application's escaped HTML around the sanitiser's output, nothing else.
+func PrintDocument(body string) string {
+	return document(body, printCSS)
+}
+
 func document(body, css string) string {
 	return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="` +
 		CSP + `"><style>` + css + `</style></head><body><div id="malachi-column">` + body + `</div></body></html>`
