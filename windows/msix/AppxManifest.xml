@@ -21,6 +21,11 @@ What the package changes for the app, and what the test is for:
   takes its COM class from this manifest (ToastActivatorCLSID and the
   ExeServer below; the arguments are the ones the unpackaged registration
   uses). The GUID is this package's own, never reused elsewhere.
+- The bridge's app execution alias (uap3, malachi-mcp.exe in
+  %LOCALAPPDATA%\Microsoft\WindowsApps): Windows lets no process outside
+  the package start an executable in its folder (Claude Code and Claude
+  Desktop got EPERM), but anyone may start the alias, which keeps its path
+  across updates. The app hands it out in a package (Paths.InPackage).
 - Not declared yet: mailto: (windows.protocol), the start at sign-in
   (windows.startupTask). The app still writes its own HKCU registrations;
   whether Windows honours them from a package is part of the test.
@@ -28,11 +33,12 @@ What the package changes for the app, and what the test is for:
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
-  IgnorableNamespaces="uap rescap desktop desktop6 com">
+  IgnorableNamespaces="uap uap3 rescap desktop desktop6 com">
 
   <Identity
     Name="{{IdentityName}}"
@@ -72,6 +78,11 @@ What the package changes for the app, and what the test is for:
         <desktop:Extension Category="windows.toastNotificationActivation">
           <desktop:ToastNotificationActivation ToastActivatorCLSID="6F1B2C4A-8E37-4D5B-9A21-3C7E5F0D8B64" />
         </desktop:Extension>
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="malachi-mcp.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="malachi-mcp.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:ExeServer Executable="MalachiMail.exe" DisplayName="Malachi Mail" Arguments="----AppNotificationActivated:">

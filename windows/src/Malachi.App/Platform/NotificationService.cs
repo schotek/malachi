@@ -16,7 +16,9 @@
 // NotificationInvoked (on a worker thread); a click after the app exited
 // starts it through COM with "----AppNotificationActivated: -Embedding",
 // and the activation arrives through AppInstance.GetActivatedEventArgs as
-// kind AppNotification (FromActivation), not through the event. Unregister()
+// kind AppNotification (FromActivation), not through the event. In an MSIX
+// package (windows/msix) the name, icon and activator come from its
+// manifest and Register() takes no arguments. Unregister()
 // on exit only revokes the live class object: a later click still starts
 // the app. AppNotificationManager.IsSupported() is false in an elevated
 // process: no notifications then, as macOS has none unbundled. With the
@@ -64,6 +66,7 @@ using Malachi.Core.Api;
 using Malachi.Core.Calendars;
 using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
+using Malachi.Platform.Windows;
 using Malachi.Platform.Windows.Notifications;
 using Microsoft.Extensions.Logging;
 using Microsoft.Windows.AppLifecycle;
@@ -309,7 +312,14 @@ internal sealed partial class NotificationService : IDesktopNotifier
             // Before Register(): a handler makes COM register the class for
             // many activations, so a click reaches this process.
             manager.NotificationInvoked += OnNotificationInvoked;
-            if (File.Exists(IconPath))
+            if (PackageIdentity.IsPackaged)
+            {
+                // In an MSIX package the manifest gives the name, the icon
+                // and the activator; Register(name, icon) is for unpackaged
+                // apps only (0x8000000E there).
+                manager.Register();
+            }
+            else if (File.Exists(IconPath))
             {
                 manager.Register(AppIdentity.DisplayName, new Uri(IconPath));
             }

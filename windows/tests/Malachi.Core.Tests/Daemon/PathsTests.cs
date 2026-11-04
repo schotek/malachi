@@ -10,7 +10,8 @@
 // directory, the directories made before the daemon starts; and the MCP
 // bridge beside the app, the cases of ui/internal/mcpsetup/mcpsetup_test.go
 // (TestLocate) that apply: the Windows app, as the macOS one, looks for the
-// bridge beside itself only, never on PATH.
+// bridge beside itself only, never on PATH. In an MSIX package the bridge
+// is the package's app execution alias when it is there (InPackage).
 
 using System;
 using System.Collections.Generic;
@@ -162,6 +163,36 @@ public sealed class PathsTests
         var p = Paths.Resolve(Env(("MALACHI_SETTINGS_KEY", name)), null);
         Assert.Equal(Paths.DefaultSettingsKey, p.SettingsKey);
         Assert.Equal(name, p.IgnoredSettingsKey);
+    }
+
+    [Fact]
+    public void TheBridgesAliasIsInLocalAppData()
+    {
+        var local = Path.Combine(Home, "AppData", "Local");
+        Assert.Equal(Path.Combine(local, "Microsoft", "WindowsApps", Paths.McpBridgeName),
+            Paths.BridgeAlias(Env(("LOCALAPPDATA", local))));
+    }
+
+    [Fact]
+    public async Task InAPackageTheBridgeIsItsAliasWhenThere()
+    {
+        await using var f = new DaemonFixture();
+        var bridge = f.Program("app", Paths.McpBridgeName);
+        var app = Path.GetDirectoryName(bridge)!;
+        var p = Paths.Resolve(Env(), app);
+
+        // the alias is there: it replaces the bridge in the package's folder
+        var alias = f.Program("alias", Paths.McpBridgeName);
+        Assert.Equal(alias, p.InPackage(alias).McpBridge);
+        Assert.Equal(p.Socket, p.InPackage(alias).Socket);
+
+        // no alias, or none known: the bridge beside the app stays
+        Assert.Equal(bridge, p.InPackage(Path.Combine(f.Path, "none", Paths.McpBridgeName)).McpBridge);
+        Assert.Equal(bridge, p.InPackage(null).McpBridge);
+
+        // without a bridge beside the app the package has none either
+        Directory.CreateDirectory(Path.Combine(f.Path, "empty"));
+        Assert.Null(Paths.Resolve(Env(), Path.Combine(f.Path, "empty")).InPackage(alias).McpBridge);
     }
 
     [Fact]

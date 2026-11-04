@@ -5382,11 +5382,22 @@ cross-built, attaches them, and there is no zip (§13).
   still the app's own), signed with a self-signed certificate made for the
   run (its `.cer` in the artifact: import it into *Local Machine → Trusted
   People*, then open the `.msix`) or unsigned for Partner Center. Not a
-  release artefact. Unverified, to be tried on a Windows machine: that the
-  app starts packaged (MRT Core and `MalachiMail.pri`, WebView2), the data
-  and settings land where the unpackaged app keeps them, notifications and
-  their clicks, `mailto:`, Run, the Claude registration of `malachi-mcp`,
-  and whether the Store accepts `unvirtualizedResources`.
+  release artefact. Tried by the owner on x64 (2026-11-04): it installs
+  and starts, and the data and settings are the unpackaged app's. Found
+  there: Windows lets no process outside the package start an executable
+  in its folder under `C:\Program Files\WindowsApps`, so Claude Code (the
+  panel, `--mcp-config`) and Claude Desktop and Claude Code through the
+  registration got EPERM starting `malachi-mcp.exe`, while ChatGPT worked
+  (the app itself starts the bridge for Codex); and
+  `AppNotificationManager.Register(name, icon)` fails in a package
+  (0x8000000E). Fixed: the manifest declares an app execution alias of
+  the bridge (`%LOCALAPPDATA%\Microsoft\WindowsApps\malachi-mcp.exe`,
+  startable by anyone, the same path across updates), and in a package
+  (`PackageIdentity.IsPackaged`) the app hands out that alias
+  (`Paths.InPackage`, for the panel, Codex and `install --command`) and
+  registers the notifications without arguments. Still to try: the fix,
+  notification clicks, `mailto:`, Run, uninstalling, and whether the Store
+  accepts `unvirtualizedResources`.
 - **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
   Velopack, for now: Velopack needs its SDK called first in `Main`
   (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs
