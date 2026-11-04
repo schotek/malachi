@@ -1,3 +1,28 @@
+Version 0.4.0
+~~~~~~~~~~~~~
+Released: 2026-11-04
+
+Features:
+ * Print (Ctrl+P, on macOS ⌘P): the selected message, a whole
+   conversation or several messages, each on its own page, and in the
+   Calendar the selected event or the day.
+ * The toolbars of Mail, the Board and the Calendar can be customized: on
+   macOS with the system's palette, on Linux and Windows in Preferences →
+   General → Toolbar or from a right click on a bar.
+ * Report an Issue at the end of the status bar opens the problem report
+   on the website; on Linux the status bar now runs along the whole bottom
+   of the window in every mode, as on macOS and Windows.
+ * All Inboxes is the first row of a Favourites section at the top of the
+   sidebar, which folds like an account.
+ * On Windows, Malachi Mail is being prepared for the Microsoft Store. The
+   Store edition is updated by the Store.
+
+Bugfixes:
+ * The main menu has the same items in every mode, and the mode switch
+   stays in place when the mode changes.
+ * On Windows, an HTML bubble of the chat layout no longer flashes and
+   matches its message.
+
 Version 0.3.0
 ~~~~~~~~~~~~~
 Released: 2026-11-03
