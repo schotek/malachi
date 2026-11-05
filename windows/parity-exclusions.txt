@@ -110,4 +110,16 @@ The items of the Calendar's toolbar	gschema: a key's summary or description, for
 The toolbar's items in order, as the user arranged them; empty for the default toolbar.	gschema: a key's summary or description, for dconf editors, not the UI
 What the toolbars' items show	gschema: a key's summary or description, for dconf editors, not the UI
 Icons only, icons with their labels or labels only, for every toolbar of the main window.	gschema: a key's summary or description, for dconf editors, not the UI
-The In App assistant, the board's triage and Suggest Reply are only in Malachi Mail from malachimail.app.	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+More Assistant Features	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+Malachi Mail from malachimail.app also has the assistant right in the app with Claude or ChatGPT, the board's triage and suggested replies. This version from the App Store can't run them because it runs in a sandbox.	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+More…	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+More AI Features	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+Features of the Version from malachimail.app	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+This version from the Mac App Store runs in the macOS sandbox. Because of it, it can't start Claude Code or Codex installed on your Mac, so it lacks:	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+The assistant in the app's panel with Claude Code or ChatGPT (Codex)	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+Rewriting and writing a message with the assistant, and searching in your own words	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+The board's triage, by hand and automatically, and Suggest Reply	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+Handing an attachment to Claude as a file	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+Both versions are free. The version from the website updates itself, this one through the App Store.	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+Accounts and settings don't move between the two versions yet: after switching, add your accounts again.	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build
+Open malachimail.app	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build

@@ -63,6 +63,8 @@ final class StatusBarViewController: NSViewController {
     private let noteLabel = NSTextField(labelWithString: "")
     /// Report an Issue at the trailing end.
     private let reportButton = NSButton(title: "", target: nil, action: nil)
+    /// More AI Features: only in the App Store build.
+    private let websiteButton = NSButton(title: "", target: nil, action: nil)
     private let content = StatusPopoverViewController()
     /// The popover's window: the Windows client's flyout, without an arrow
     /// (`StatusFlyout`).
@@ -148,7 +150,22 @@ final class StatusBarViewController: NSViewController {
         reportButton.setContentHuggingPriority(.required, for: .horizontal)
         reportButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
-        let row = NSStackView(views: [spinner, connectionIcon, statusButton, noteLabel, reportButton])
+        // The App Store build's pointer at the version from the website,
+        // styled like Report an Issue.
+        websiteButton.isBordered = false
+        websiteButton.title = Assistant.websiteFeaturesTexts().statusLink
+        websiteButton.image = Icon.image("malachi-assistant-symbolic", size: .small)
+        websiteButton.imagePosition = .imageLeading
+        websiteButton.imageHugsTitle = true
+        websiteButton.font = Typo.caption
+        websiteButton.contentTintColor = .secondaryLabelColor
+        websiteButton.target = self
+        websiteButton.action = #selector(showWebsiteFeatures(_:))
+        websiteButton.setContentHuggingPriority(.required, for: .horizontal)
+        websiteButton.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        websiteButton.isHidden = !WebsiteFeaturesDialog.shown
+
+        let row = NSStackView(views: [spinner, connectionIcon, statusButton, noteLabel, websiteButton, reportButton])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.distribution = .fill
@@ -263,6 +280,10 @@ final class StatusBarViewController: NSViewController {
     }
 
     // MARK: Report an Issue
+
+    @objc private func showWebsiteFeatures(_ sender: Any?) {
+        WebsiteFeaturesDialog.show(for: view.window)
+    }
 
     /// main.go app.report-issue: the report form in the browser.
     @objc private func reportIssue(_ sender: Any?) {

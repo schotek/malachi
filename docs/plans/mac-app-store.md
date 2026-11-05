@@ -247,6 +247,14 @@ Přechod je dobrovolný. Kdo z DMG přejde do App Store:
   (`PG9F7XU6X8.io.github.schotek.Malachi`) a jednorázově přenést staré
   položky (jedna otázka na položku), nebo nechat uživatele znovu se
   přihlásit. Zkoušet jen s povolením vlastníka (`no-keychain-experiments`).
+  **Rozhodnutí (2026-11-05, vlastník):** zůstává přihlašovací klíčenka
+  přes stávající `malachi-keychain`, bez data protection keychain a bez
+  přenosu položek. Vlastníkův test ve VM (jen App Store build, podpis
+  Apple Development): sandboxovaný helper položku účtu uložil a po
+  restartu VM ji přečetl bez dotazu. Kdo přejde mezi verzemi, založí
+  účty znovu (jiný kontejner i jiný podpis); dialog Více AI funkcí to
+  říká. Případný importní průvodce v DMG verzi je pozdější samostatná
+  práce.
 - **Most:** stávající registrace v Claude ukazují na cestu
   `/Applications/Malachi Mail.app/…/malachi-mcp` bez `MALACHI_SOCKET`;
   po přechodu je aplikace musí přepsat (podle Q2).
@@ -320,7 +328,7 @@ Přechod je dobrovolný. Kdo z DMG přejde do App Store:
 | A0 | Odpovědi Q2–Q7, App ID a skupina v Developer portálu, záznam aplikace a jméno „Malachi Mail“ v App Store Connect | vlastník |
 | A1 | Sandboxované sestavení lokálně: entitlements, socket ve skupinovém kontejneru, `container-migration.plist`, `Relaunch`, `config.toml` | debug build nad kopií dat (`MALACHI_DATA_DIR`), nikdy nad ostrými daty ani `build/Malachi Mail.app` |
 | A2 | Přepínač distribuce v `MalachiCore`, skrytí §3.3, registrace mostu podle Q2, `malachi-mcp` se sandboxem a čtení PDF | `swift test`, ruční průchod Předvoleb → AI a Claude Desktop |
-| A3 | Klíčenka (data protection keychain, přenos položek) | jen s povolením vlastníka |
+| A3 | Klíčenka: zrušeno (2026-11-05, rozhodnutí vlastníka), viz §6 Klíčenka | test vlastníka ve VM |
 | A4 | `make macos-mas`, privacy manifest, validace `.pkg`, pak `macos-mas.yml` | `altool --validate-app` lokálně, pak jeden běh CI |
 | A5 | TestFlight pro Mac, poznámka pro review, odeslání | vlastník |
 | A6 | Po schválení: `releasing.md` §8 s oběma variantami, README, web, řádek v `macos/README.md`; DMG beze změny | vlastník |
@@ -547,3 +555,24 @@ Další body A2 (2026-11-05):
   „Zeptat se asistenta…“ u přílohy není (`Distribution.handsFilesToClaude`,
   `AttachmentChipView.offerAssistant`); Claude čte text PDF, DOCX a XLSX
   přes `get_attachment`.
+
+Okno O aplikaci (2026-11-05, vlastník, všechny tři klienty): pod řádkem
+aktualizací řádek odkud kopie je, `updates.EditionLine`
+(`ui/internal/updates/edition.go`, msgidy „Version from malachimail.app“,
+„… the Mac App Store“, „… the Microsoft Store“ s češtinou). GTK vždy
+web, macOS podle `Distribution` (`Updates.Edition.of`), Windows podle
+identity balíčku MSIX (`PackageIdentity.IsPackaged` → Microsoft Store;
+i testovací balíček). Windows napsaný bez `dotnet`
+(`UpdateCheck.Edition.cs`, `UpdateEditionTests`, `AlertService.About`).
+
+Odkaz na verzi z webu (2026-11-05, vlastník; jen macOS, App Store build):
+Předvolby → AI začínají skupinou *Další funkce asistenta* s tlačítkem
+*Více…* a stavový pruh má před *Nahlásit problém* odkaz *Více AI
+funkcí*; obojí otevře týž dialog (`WebsiteFeaturesDialog`, texty
+`assistant.WebsiteFeaturesTexts`): proč v sandboxu chybí asistent
+v aplikaci s Claude Code či ChatGPT, psaní a úpravy s asistentem,
+hledání vlastními slovy, třídění nástěnky, Navrhnout odpověď a předání
+přílohy jako souboru; že obě verze jsou zdarma a účty se mezi nimi zatím
+nepřenášejí. Tlačítko jen otevře https://malachimail.app, nic nestahuje
+(Guidelines 2.4.5); do poznámek pro App Review patří, že jde o odkaz na
+vlastní bezplatnou verzi (3.2.1(i)) a proč je kód agentů vypnutý (2.5.19).

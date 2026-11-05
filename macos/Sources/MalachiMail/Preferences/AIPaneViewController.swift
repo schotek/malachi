@@ -234,6 +234,14 @@ final class AIPaneViewController: PreferencesPaneViewController {
 
     override func loadView() {
         super.loadView()
+        // The App Store build says first where the rest of the assistant is.
+        if WebsiteFeaturesDialog.shown {
+            let t = Assistant.websiteFeaturesTexts()
+            let more = NSButton(title: t.more, target: self, action: #selector(showWebsiteFeatures(_:)))
+            let group = PreferencesGroupView(title: t.groupTitle, description: t.groupBody, headerSuffix: more)
+            group.setRows([])
+            addGroup(group)
+        }
         let row = PreferenceRowView(
             title: L10n.T("Register with Claude"),
             subtitle: L10n.T("Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer"),
@@ -447,6 +455,10 @@ final class AIPaneViewController: PreferencesPaneViewController {
         assistant?.status != nil || registration?.status != nil
     }
 
+    @objc private func showWebsiteFeatures(_ sender: Any?) {
+        WebsiteFeaturesDialog.show(for: view.window)
+    }
+
     /// The group for the bridge's state (`Assistant.shown`): registered,
     /// the switch shows the preference and "Open In" why the chosen app
     /// cannot run the message actions, nothing when it can; known not to
@@ -460,10 +472,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
         let inAppChatGPT = settings.assistantProvider == .chatgpt && settings.assistantTarget == .app
         assistantGroup.descriptionText = inAppChatGPT
             ? L10n.T("Connect ChatGPT to use your plan with the in-app assistant.")
-            : settings.distribution.allowsLocalAgents
-                ? Assistant.texts().description
-                // The App Store build says where the rest of the assistant is.
-                : Assistant.texts().description + "\n\n" + Assistant.websiteOnlyText()
+            : Assistant.texts().description
         let registered = bridgeRegistered || inAppChatGPT
         let unknown = !registered && !bridgeKnown
         menuRow?.isEnabled = registered

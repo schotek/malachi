@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-05 11:29+0000\n"
+"POT-Creation-Date: 2026-11-05 15:28+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 
-#: ui/main.go:298
+#: ui/main.go:299
 msgid "A native mail client for the GNOME desktop."
 msgstr "Nativní poštovní klient pro prostředí GNOME."
 
@@ -1142,14 +1142,89 @@ msgstr "Napsat odpověď"
 msgid "Assistant · %s"
 msgstr "Asistent · %s"
 
-#. TRANSLATORS: Settings → AI of Malachi Mail from the Mac App Store. "In App" is the third choice of "Open In" in the other builds; malachimail.app is the website and stays as it is.
-#: ui/internal/assistant/distribution.go:14
+#. TRANSLATORS: Group title in Settings → AI of Malachi Mail from the Mac App Store.
+#: ui/internal/assistant/distribution.go:35
+msgid "More Assistant Features"
+msgstr "Další funkce asistenta"
+
+#. TRANSLATORS: Settings → AI of Malachi Mail from the Mac App Store; malachimail.app is the website and stays as it is.
+#: ui/internal/assistant/distribution.go:37
 msgid ""
-"The In App assistant, the board's triage and Suggest Reply are only in "
-"Malachi Mail from malachimail.app."
+"Malachi Mail from malachimail.app also has the assistant right in the app "
+"with Claude or ChatGPT, the board's triage and suggested replies. This "
+"version from the App Store can't run them because it runs in a sandbox."
 msgstr ""
-"Asistent v aplikaci, třídění nástěnky a Navrhnout odpověď jsou jen "
-"v Malachi Mail z malachimail.app."
+"Verze Malachi Mail z malachimail.app navíc umí asistenta přímo v aplikaci s "
+"Claude nebo ChatGPT, třídění nástěnky a návrhy odpovědí. V této verzi z App "
+"Store je nejde spustit, protože běží v sandboxu."
+
+#. TRANSLATORS: Button opening the list of what the version from the website adds.
+#: ui/internal/assistant/distribution.go:39
+msgid "More…"
+msgstr "Více…"
+
+#. TRANSLATORS: Link in the status bar of Malachi Mail from the Mac App Store, before Report an Issue.
+#: ui/internal/assistant/distribution.go:41
+msgid "More AI Features"
+msgstr "Více AI funkcí"
+
+#. TRANSLATORS: Dialog title; malachimail.app is the website and stays as it is.
+#: ui/internal/assistant/distribution.go:43
+msgid "Features of the Version from malachimail.app"
+msgstr "Funkce verze z malachimail.app"
+
+#: ui/internal/assistant/distribution.go:44
+msgid ""
+"This version from the Mac App Store runs in the macOS sandbox. Because of "
+"it, it can't start Claude Code or Codex installed on your Mac, so it lacks:"
+msgstr ""
+"Tahle verze z Mac App Store běží v sandboxu macOS. Kvůli němu nemůže "
+"spouštět Claude Code ani Codex nainstalované na vašem Macu, a proto v ní "
+"chybí:"
+
+#: ui/internal/assistant/distribution.go:46
+msgid "The assistant in the app's panel with Claude Code or ChatGPT (Codex)"
+msgstr "asistent v panelu aplikace s Claude Code nebo ChatGPT (Codex)"
+
+#: ui/internal/assistant/distribution.go:47
+msgid ""
+"Rewriting and writing a message with the assistant, and searching in your "
+"own words"
+msgstr "úpravy a psaní zprávy s asistentem a hledání vlastními slovy"
+
+#: ui/internal/assistant/distribution.go:48
+msgid "The board's triage, by hand and automatically, and Suggest Reply"
+msgstr "třídění nástěnky (ručně i automaticky) a Navrhnout odpověď"
+
+#: ui/internal/assistant/distribution.go:49
+msgid "Handing an attachment to Claude as a file"
+msgstr "předání přílohy do Claude jako souboru"
+
+#: ui/internal/assistant/distribution.go:51
+msgid ""
+"Both versions are free. The version from the website updates itself, this "
+"one through the App Store."
+msgstr ""
+"Obě verze jsou zdarma. Verze z webu se aktualizuje sama, tahle přes App "
+"Store."
+
+#: ui/internal/assistant/distribution.go:52
+msgid ""
+"Accounts and settings don't move between the two versions yet: after "
+"switching, add your accounts again."
+msgstr ""
+"Účty a nastavení se mezi oběma verzemi zatím nepřenášejí: po přechodu účty "
+"přidáte znovu."
+
+#. TRANSLATORS: Button opening the website in the browser; malachimail.app stays as it is.
+#: ui/internal/assistant/distribution.go:54
+msgid "Open malachimail.app"
+msgstr "Otevřít malachimail.app"
+
+#: ui/internal/assistant/distribution.go:55 ui/internal/updates/updates.go:157
+#: ui/internal/updates/updates.go:231 ui/internal/signature/text.go:377
+msgid "Close"
+msgstr "Zavřít"
 
 #. TRANSLATORS: A group of Preferences → AI: what the user tells the assistant about themselves.
 #: ui/internal/assistant/profile.go:200
@@ -8362,11 +8437,6 @@ msgstr "Přeskočit tuto verzi"
 msgid "More Information"
 msgstr "Další informace"
 
-#: ui/internal/updates/updates.go:157 ui/internal/updates/updates.go:231
-#: ui/internal/signature/text.go:377
-msgid "Close"
-msgstr "Zavřít"
-
 #: ui/internal/updates/updates.go:190
 msgid "Security Update Available"
 msgstr "K dispozici je bezpečnostní aktualizace"
@@ -8455,6 +8525,21 @@ msgid ""
 msgstr ""
 "Malachi Mail jednou denně zkontroluje, jestli existuje nová verze, a posílá "
 "přitom jen číslo své verze. Vypnout to můžete v Předvolbách."
+
+#. TRANSLATORS: In the About window: this copy came from Apple's Mac App Store.
+#: ui/internal/updates/edition.go:25
+msgid "Version from the Mac App Store"
+msgstr "Verze z Mac App Store"
+
+#. TRANSLATORS: In the About window: this copy came from the Microsoft Store.
+#: ui/internal/updates/edition.go:28
+msgid "Version from the Microsoft Store"
+msgstr "Verze z Microsoft Store"
+
+#. TRANSLATORS: In the About window: this copy came from the website; malachimail.app stays as it is.
+#: ui/internal/updates/edition.go:31
+msgid "Version from malachimail.app"
+msgstr "Verze z malachimail.app"
 
 #. TRANSLATORS: the Preferences page of the mail rules (filters that
 #. move, mark, forward or answer new mail).
@@ -10917,6 +11002,13 @@ msgstr ""
 #: data/io.github.schotek.Malachi.metainfo.xml.in:40
 msgid "Malachi Mail contributors"
 msgstr "Přispěvatelé Malachi Mail"
+
+#~ msgid ""
+#~ "The In App assistant, the board's triage and Suggest Reply are only in "
+#~ "Malachi Mail from malachimail.app."
+#~ msgstr ""
+#~ "Asistent v aplikaci, třídění nástěnky a Navrhnout odpověď jsou jen v "
+#~ "Malachi Mail z malachimail.app."
 
 #~ msgid "_Keyboard Shortcuts"
 #~ msgstr "_Klávesové zkratky"

@@ -331,6 +331,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !line.isEmpty {
             paragraph(line, before: 10, [.foregroundColor: NSColor.secondaryLabelColor])
         }
+        // Where this copy came from (updates.EditionLine): the DMG from the
+        // website or the Mac App Store build.
+        paragraph(
+            Updates.editionLine(.of(Distribution.current)), before: line.isEmpty ? 10 : 2,
+            [.foregroundColor: NSColor.secondaryLabelColor])
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: MainMenu.appName,
             .applicationVersion: Version.full,

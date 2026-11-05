@@ -16,6 +16,25 @@ import Testing
         #expect(Distribution.from("AppStore") == .direct)
     }
 
+    /// The About window's line (updates.EditionLine, TestEditionLine).
+    @Test func theAboutWindowSaysWhereTheCopyCameFrom() {
+        #expect(Updates.Edition.of(.direct) == .website)
+        #expect(Updates.Edition.of(.appStore) == .macAppStore)
+        #expect(Updates.editionLine(.website) == "Version from malachimail.app")
+        #expect(Updates.editionLine(.macAppStore) == "Version from the Mac App Store")
+        #expect(Updates.editionLine(.microsoftStore) == "Version from the Microsoft Store")
+    }
+
+    /// assistant.WebsiteFeaturesTexts (TestWebsiteFeaturesNameTheWebsite).
+    @Test func theWebsiteFeaturesNameTheWebsite() {
+        let w = Assistant.websiteFeaturesTexts()
+        for s in [w.groupBody, w.dialogTitle, w.open] {
+            #expect(s.contains("malachimail.app"))
+        }
+        #expect(w.features.count == 4)
+        #expect(w.close == "Close" && w.more == "More…")
+    }
+
     @Test func onlyTheAppStoreBuildHasAGroupContainer() {
         #expect(Distribution.direct.groupContainer == nil)
     }

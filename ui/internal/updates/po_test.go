@@ -53,6 +53,9 @@ func exercise(tr Translator) {
 	PrefsTitle(tr)
 	PrefsSubtitle(tr)
 	WizardNote(tr)
+	for _, e := range []Edition{EditionWebsite, EditionMacAppStore, EditionMicrosoftStore} {
+		EditionLine(e, tr)
+	}
 }
 
 // template reads po/malachi.pot: every entry, and whether it names a file
