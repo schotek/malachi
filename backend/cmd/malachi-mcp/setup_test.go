@@ -728,10 +728,10 @@ func TestSetupCommandLine(t *testing.T) {
 		t.Errorf("status --nope: %v, stderr %q", err, errOut)
 	}
 	out, errOut, err := runCmd("install", "-h")
-	if err != nil || out != "" || !strings.Contains(errOut, "Usage: malachi-mcp install [--json] [--claude-desktop-config PATH] [--command PATH]") {
+	if err != nil || out != "" || !strings.Contains(errOut, "Usage: malachi-mcp install [--json] [--claude-desktop-config PATH] [--claude-code-config PATH] [--command PATH] [--socket PATH] [--output PATH]") {
 		t.Errorf("install -h: %v, stdout %q, stderr %q", err, out, errOut)
 	}
-	mustContain(t, errOut, "-claude-desktop-config PATH", "-command PATH", "-json")
+	mustContain(t, errOut, "-claude-desktop-config PATH", "-claude-code-config PATH", "-command PATH", "-socket PATH", "-output PATH", "-json")
 	// A leading flag is the server's, not a subcommand's.
 	if _, _, err := runCmd("--json", "status"); err == nil || !strings.Contains(err.Error(), "-json") {
 		t.Errorf("--json status: %v", err)
@@ -745,6 +745,9 @@ func TestSetupCommandLine(t *testing.T) {
 		{"install", "--command", ""},
 		{"install", "--command", `\bin\malachi-mcp`}, // rooted without a drive: not absolute on Windows either
 		{"install", "--claude-desktop-config", filepath.Join("Claude", "claude_desktop_config.json")},
+		{"install", "--claude-code-config", ".claude.json"},
+		{"install", "--socket", "rpc.sock"},
+		{"install", "--output", "report.json"},
 	} {
 		out, errOut, err := runCmd(args...)
 		if err == nil || !strings.Contains(err.Error(), "not an absolute path") || out != "" {
@@ -787,5 +790,178 @@ func TestRealSetupEnv(t *testing.T) {
 	}
 	if _, err := os.Stat(env.command); err != nil {
 		t.Errorf("command %s: %v", env.command, err)
+	}
+}
+
+// TestSetupSocketFlag: --socket puts MALACHI_SOCKET into the entry and is
+// part of what status compares; an entry with another socket is rewritten.
+func TestSetupSocketFlag(t *testing.T) {
+	fx := newSetupFixture(t)
+	mkdir(t, fx.desktopDir())
+	sock := filepath.Join(fx.root, "group", "rpc.sock")
+	st := statusJSON(t, "install", "--socket", sock)
+	if d := client(t, st, "claude-desktop"); !d.Registered || d.Other != "" {
+		t.Errorf("after install: %+v", d)
+	}
+	entry, _ := serverEntry(t, fx.desktopFile(), "malachi")
+	want := map[string]any{"type": "stdio", "command": fx.command, "args": []any{},
+		"env": map[string]any{"MALACHI_SOCKET": sock}}
+	if !reflect.DeepEqual(entry, want) {
+		t.Errorf("entry %#v, want %#v", entry, want)
+	}
+	// Without the flag, or with another socket, the same command is not
+	// this registration, and nothing names another command.
+	for _, flags := range [][]string{nil, {"--socket", filepath.Join(fx.root, "other.sock")}} {
+		if d := client(t, statusJSON(t, "status", flags...), "claude-desktop"); d.Registered || d.Other != "" {
+			t.Errorf("status %q: %+v, want not registered and no other", flags, d)
+		}
+	}
+	// install without the flag drops the socket again.
+	statusJSON(t, "install")
+	entry, _ = serverEntry(t, fx.desktopFile(), "malachi")
+	if _, ok := entry["env"]; ok {
+		t.Errorf("entry %#v still has an env", entry)
+	}
+}
+
+// TestSetupCodeConfigFlag: --claude-code-config names Claude Code's file
+// when $HOME is not the user's home; its .claude directory is looked for
+// beside it, and the home directory is never looked up.
+func TestSetupCodeConfigFlag(t *testing.T) {
+	fx := newSetupFixture(t)
+	setupLookups.homeDir = func() (string, error) { return "", errors.New("lookup failed") }
+	realHome := filepath.Join(fx.root, "real-home")
+	file := filepath.Join(realHome, ".claude.json")
+	flags := []string{"--claude-code-config", file}
+	if c := client(t, statusJSON(t, "status", flags...), "claude-code"); c.Present || c.Path != file {
+		t.Errorf("nothing there: %+v", c)
+	}
+	mkdir(t, filepath.Join(realHome, ".claude"))
+	st := statusJSON(t, "install", flags...)
+	if c := client(t, st, "claude-code"); !c.Present || !c.Registered || c.Path != file {
+		t.Errorf("after install: %+v", c)
+	}
+	if _, ok := serverEntry(t, file, "malachi"); !ok {
+		t.Errorf("%s has no entry", file)
+	}
+	if entries, err := os.ReadDir(fx.home); err != nil || len(entries) != 0 {
+		t.Errorf("the fixture's home was written: %v, %v", entries, err)
+	}
+}
+
+// TestSetupOutputFlag: --output gets the report as JSON, or the failure as
+// {"error": …}, and stdout stays empty; no temporary file is left.
+func TestSetupOutputFlag(t *testing.T) {
+	fx := newSetupFixture(t)
+	mkdir(t, fx.desktopDir())
+	report := filepath.Join(fx.root, "report.json")
+	out, errOut, err := runCmd("install", "--output", report)
+	if err != nil || out != "" || errOut != "" {
+		t.Fatalf("install --output: %v, stdout %q, stderr %q", err, out, errOut)
+	}
+	var st setupStatus
+	if err := json.Unmarshal([]byte(readFile(t, report)), &st); err != nil {
+		t.Fatal(err)
+	}
+	if d := client(t, st, "claude-desktop"); !d.Registered {
+		t.Errorf("report %+v", d)
+	}
+	writeFile(t, fx.desktopFile(), "not json", 0o600)
+	if _, _, err := runCmd("status", "--output", report); err == nil {
+		t.Errorf("status of an unparsable file did not fail")
+	}
+	var failure setupFailure
+	if err := json.Unmarshal([]byte(readFile(t, report)), &failure); err != nil || !strings.Contains(failure.Error, "cannot parse") {
+		t.Errorf("failure report %q: %v", readFile(t, report), err)
+	}
+	if _, err := os.Stat(report + ".tmp"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a temporary report is left: %v", err)
+	}
+}
+
+// TestSetupFixedTempName: the configuration is written through the fixed
+// temporary name beside it, and one left behind by a crash does not stop
+// the next install.
+func TestSetupFixedTempName(t *testing.T) {
+	fx := newSetupFixture(t)
+	mkdir(t, fx.codeDir())
+	stale := filepath.Join(fx.home, "..claude.json.malachi-mcp.tmp")
+	if tempName(fx.codeFile()) != stale {
+		t.Fatalf("tempName %q, want %q", tempName(fx.codeFile()), stale)
+	}
+	writeFile(t, stale, "left over", 0o600)
+	if c := client(t, statusJSON(t, "install"), "claude-code"); !c.Registered {
+		t.Errorf("install over a stale temporary file: %+v", c)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the temporary file is left: %v", err)
+	}
+}
+
+// TestSetupRequestFile: started with no arguments and MALACHI_MCP_SETUP_REQUEST,
+// the bridge runs the command line in that file once (removing it), and
+// only with --output; "~/" in the variable is the account's home.
+func TestSetupRequestFile(t *testing.T) {
+	fx := newSetupFixture(t)
+	mkdir(t, fx.desktopDir())
+	req := filepath.Join(fx.root, "request.json")
+	report := filepath.Join(fx.root, "report.json")
+	write := func(args ...string) {
+		data, err := json.Marshal(setupRequest{Args: args})
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, req, string(data), 0o600)
+	}
+	t.Setenv(setupRequestEnv, req)
+
+	write("install", "--output", report)
+	if out, errOut, err := runCmd(); err != nil || out != "" || errOut != "" {
+		t.Fatalf("request: %v, stdout %q, stderr %q", err, out, errOut)
+	}
+	var st setupStatus
+	if err := json.Unmarshal([]byte(readFile(t, report)), &st); err != nil {
+		t.Fatal(err)
+	}
+	if d := client(t, st, "claude-desktop"); !d.Registered {
+		t.Errorf("report after the request: %+v", d)
+	}
+	if _, err := os.Stat(req); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the request is left: %v", err)
+	}
+	// Ran once: without the file there is nothing to do.
+	if _, _, err := runCmd(); err == nil || !strings.Contains(err.Error(), "setup request") {
+		t.Errorf("a second start: %v", err)
+	}
+	// No --output, or nothing at all: refused, and the request is gone.
+	for _, args := range [][]string{{"install"}, {}} {
+		write(args...)
+		if _, _, err := runCmd(); err == nil || !strings.Contains(err.Error(), "--output is required") {
+			t.Errorf("request %q: %v", args, err)
+		}
+		if _, err := os.Stat(req); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("request %q is left: %v", args, err)
+		}
+	}
+	// Arguments win over the variable: the server or a subcommand as usual.
+	write("install", "--output", report)
+	if _, _, err := runCmd("status", "--json"); err != nil {
+		t.Errorf("status with the variable set: %v", err)
+	}
+	if _, err := os.Stat(req); err != nil {
+		t.Errorf("a command line with arguments consumed the request: %v", err)
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	if got, err := expandHome("/abs/x"); err != nil || got != "/abs/x" {
+		t.Errorf("absolute: %q, %v", got, err)
+	}
+	got, err := expandHome("~/Library/x.json")
+	if err != nil {
+		t.Skipf("no account database here: %v", err)
+	}
+	if !filepath.IsAbs(got) || !strings.HasSuffix(got, filepath.Join("Library", "x.json")) {
+		t.Errorf("~/: %q", got)
 	}
 }
