@@ -184,9 +184,9 @@ status. All are `proposed`; the owner answers them (or §5) before T1.
   gives one (`Email1Address` of `GetUsersByItemGuids`, T0 2), else the
   user name when it is an address, else **empty**: an eway account is the
   only kind that needs no address (`validateAccountConfig`; found at Gate
-  B 2026-10-17 — the owner's user name `vjanecek` is not an address and
+  B 2026-10-17 — the owner's user name `jnovak` is not an address and
   his CRM user has no e-mail, so the add failed with "empty address").
-  `Name` defaults to the instance's path segment ("satomar") and is
+  `Name` defaults to the instance's path segment ("firma") and is
   editable.
 - **ServiceURL normalisation** (`eway.NormaliseServiceURL`): https only
   (http only on a loopback host, for a development instance);
@@ -194,7 +194,7 @@ status. All are `proposed`; the owner answers them (or §5) before T1.
   `/InsecureAPI.svc` the user pasted is cut; no trailing slash. `http://`
   is refused with `invalidArgument` and a reason the wizard shows (D3).
 - **Alternatives.** Realm = host only: two instances on
-  `hosting.eway-crm.com` (`/satomar`, `/other`) would collide.
+  `hosting.eway-crm.com` (`/firma`, `/other`) would collide.
 
 ### D3 · Credentials and sign-in — proposed
 
@@ -417,7 +417,7 @@ methods in `pkg/api/methods.go`, a `CrmService` in `service.go`, types and
 limits in `pkg/api/crm.go`.
 
 ```jsonc
-EwayConfig { "serviceUrl": "https://hosting.eway-crm.com/satomar",
+EwayConfig { "serviceUrl": "https://hosting.eway-crm.com/firma",
              "username": "jan", "userGuid": "…" (opt, set by the daemon) }
 
 CrmItemKind "contact" | "company" | "deal" | "project"
@@ -1362,7 +1362,7 @@ word (CLAUDE.md).
   refused, conflict, dedup paths, notifications, stale re-check.
   **Gate A (owner):** a native daemon over a copy of his data
   (`MALACHI_DATA_DIR` + own `MALACHI_SOCKET`) and a throw-away script or
-  `malachi-rpc` against his instance `hosting.eway-crm.com/satomar`: he
+  `malachi-rpc` against his instance `hosting.eway-crm.com/firma`: he
   adds the account with his own credentials (the daemon holds them,
   never the agent), saves one message of his choice, sees it in eWay,
   removes it.
