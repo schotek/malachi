@@ -611,3 +611,11 @@ nic nevytkly. Validuje nový týmový klíč App Store Connect API „Malachi
 App Store“ (role Developer, vedle „Malachi CI notarization“), u vlastníka
 v `~/.appstoreconnect/private_keys/`. Zbývá `macos-mas.yml` a jeho
 secrets (certifikáty z MacBooku Air jako `.p12`, oba profily, klíč).
+- `.github/workflows/macos-mas.yml` (2026-11-05): ručně postaví
+  a zvaliduje `.pkg`, u tagu `v*` ho navíc nahraje (`altool --upload-app`)
+  do App Store Connect; `CFBundleVersion` = číslo běhu. Secrets
+  `MACOS_MAS_CERTIFICATES` (+ `_PASSWORD`), `MACOS_MAS_PROFILE`,
+  `MACOS_MAS_MCP_PROFILE`, `MACOS_MAS_API_KEY`, `MACOS_MAS_API_KEY_ID`,
+  issuer sdílený `MACOS_NOTARY_ISSUER`; bez nich se job zastaví
+  s varováním. Lokálně ověřené jsou stavba, podpis a validace; nahrání
+  ne (poprvé u tagu nebo ručně po souhlasu vlastníka).
