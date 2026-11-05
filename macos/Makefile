@@ -39,6 +39,27 @@ ENTITLEMENTS  := Resources/MalachiMail.entitlements
 # malachi-keychain. Signed into every build, with or without the hardened
 # runtime, so that an ad-hoc build carries what a release does.
 MCP_ENTITLEMENTS := Resources/malachi-mcp.entitlements
+# No entitlements for malachid and malachi-keychain in the DMG.
+HELPER_ENTITLEMENTS :=
+
+# DISTRIBUTION=appstore builds the Mac App Store variant from the same code
+# (docs/plans/mac-app-store.md): Info.plist says so to MalachiCore's
+# Distribution, every binary is signed with the App Sandbox from
+# Resources/mas (malachid and malachi-keychain inheriting the app's), and
+# the provisioning profile PROFILE, which the app's application identifier
+# and app group need, goes into the bundle. SIGN is then an Apple
+# Development identity for a local test or Apple Distribution for the
+# store; neither gets the hardened runtime, which the App Store does not
+# ask for.
+DISTRIBUTION  ?= direct
+PROFILE       ?=
+ifeq ($(DISTRIBUTION),appstore)
+ENTITLEMENTS        := Resources/mas/MalachiMail.entitlements
+MCP_ENTITLEMENTS    := Resources/mas/malachi-mcp.entitlements
+HELPER_ENTITLEMENTS := Resources/mas/inherit.entitlements
+else ifneq ($(DISTRIBUTION),direct)
+$(error DISTRIBUTION must be direct or appstore, not $(DISTRIBUTION))
+endif
 
 # The architectures of the Swift binaries: empty is this Mac's own, the
 # quick build for development. The root Makefile's macos-dmg builds arm64
@@ -139,6 +160,8 @@ icon:
 app: build locale icon
 	@test -x "$(GO_DIR)/malachid" -a -x "$(GO_DIR)/malachi-mcp" || { \
 		echo "macos: $(GO_DIR)/malachid or malachi-mcp is missing; run 'make backend mcp' in $(ROOT) first" >&2; exit 1; }
+	$(if $(filter appstore,$(DISTRIBUTION)),@test -f "$(PROFILE)" || { \
+		echo "macos: DISTRIBUTION=appstore needs PROFILE=<the .provisionprofile of io.github.schotek.Malachi>" >&2; exit 1; })
 	@set -e; bin="$$($(SWIFT_BUILD) --show-bin-path)"; \
 	rm -rf "$(APP)"; \
 	mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources"; \
@@ -159,14 +182,15 @@ app: build locale icon
 	cp "$(ROOT)/THIRD-PARTY-NOTICES.md" "$(CONTENTS)/Resources/THIRD-PARTY-NOTICES.md"; \
 	sed -e 's/@VERSION@/$(SHORT_VERSION)/g' -e 's/@FULL_VERSION@/$(VERSION)/g' \
 	    -e 's/@BUNDLE_ID@/$(APP_ID)/g' -e 's/@EXECUTABLE@/$(EXE)/g' \
-	    -e 's|@LOCALIZATIONS@|$(LOCALIZATIONS)|g' \
+	    -e 's|@LOCALIZATIONS@|$(LOCALIZATIONS)|g' -e 's/@DISTRIBUTION@/$(DISTRIBUTION)/g' \
 	    Resources/Info.plist.in > "$(CONTENTS)/Info.plist"; \
 	plutil -lint "$(CONTENTS)/Info.plist" >/dev/null; \
 	plutil -lint "$(ENTITLEMENTS)" >/dev/null; \
 	plutil -lint "$(MCP_ENTITLEMENTS)" >/dev/null; \
+	$(if $(PROFILE),cp "$(PROFILE)" "$(CONTENTS)/embedded.provisionprofile";) \
 	printf 'APPL????' > "$(CONTENTS)/PkgInfo"; \
 	for f in malachid $(HELPER); do \
-		$(CODESIGN) --identifier "$(APP_ID).$$f" "$(CONTENTS)/MacOS/$$f"; \
+		$(CODESIGN) --identifier "$(APP_ID).$$f" $(if $(HELPER_ENTITLEMENTS),--entitlements "$(HELPER_ENTITLEMENTS)") "$(CONTENTS)/MacOS/$$f"; \
 	done; \
 	$(CODESIGN) --identifier "$(APP_ID).malachi-mcp" --entitlements "$(MCP_ENTITLEMENTS)" "$(CONTENTS)/MacOS/malachi-mcp"; \
 	$(CODESIGN) --entitlements "$(ENTITLEMENTS)" "$(APP)"; \

@@ -324,3 +324,84 @@ Přechod je dobrovolný. Kdo z DMG přejde do App Store:
 | A4 | `make macos-mas`, privacy manifest, validace `.pkg`, pak `macos-mas.yml` | `altool --validate-app` lokálně, pak jeden běh CI |
 | A5 | TestFlight pro Mac, poznámka pro review, odeslání | vlastník |
 | A6 | Po schválení: `releasing.md` §8 s oběma variantami, README, web, řádek v `macos/README.md`; DMG beze změny | vlastník |
+
+### 8.1 Stav A0 (2026-11-05)
+
+Hotovo (agent v prohlížeči, vlastník přihlášený):
+
+- App ID `io.github.schotek.Malachi` („Malachi Mail“, explicitní) se
+  schopností App Groups. Skupina z §3.2 má prefix týmu
+  (`PG9F7XU6X8.io.github.schotek.Malachi`), takže se v portálu
+  neregistruje (portál bere jen `group.…`). Vývojový profil ji povoluje
+  sám: nese `com.apple.security.application-groups` `PG9F7XU6X8.*`
+  a `keychain-access-groups` `PG9F7XU6X8.*` (distribuční ověří A4). Jestli na novějším macOS
+  stačí bez dotazu systému, ověří A1.
+- Vývojový Mac je zařízení v portálu (kvůli vývojovému profilu pro A1).
+- Profil „Malachi Mail Mac App Store“ (Mac App Store Connect, certifikát
+  Distribution, platí do 2027-10-28). Zatím nestažený, do CI půjde jako
+  secret v A4.
+- Záznam v App Store Connect: macOS, „Malachi Mail“, primární jazyk
+  English (U.S.), SKU `malachi-mail-macos`, Full Access, kategorie
+  Productivity, cena 0 (základ USD).
+- Certifikát Apple Development pro vývojový Mac (vlastník v Xcode)
+  a profil „Malachi Mail Mac Development“ (macOS App Development, oba
+  vývojové certifikáty, vývojový Mac, platí do 2027-11-05) pro A1.
+
+Zbývá na vlastníkovi:
+
+- Soukromé klíče certifikátů Distribution a Mac Installer Distribution
+  vyexportovat jako `.p12` pro secrets CI (A4).
+- Dostupnost podle zemí, exportní dotazník (Q5) a trader status pro EU
+  (DSA) v App Store Connect.
+
+### 8.2 Stav A1 (2026-11-05)
+
+Napsáno:
+
+- `MalachiCore/Daemon/Distribution.swift`: `direct` / `appstore` z
+  `Info.plist` `MalachiDistribution` (čte se za běhu, `Info.plist.in`
+  `@DISTRIBUTION@`), skupina `PG9F7XU6X8.io.github.schotek.Malachi`
+  a její kontejner. `Paths.resolve` dává v App Store verzi socket do
+  kořene skupiny jako `rpc.sock` (s klíčem `rpc.sock.key` vedle), aby se
+  cesta vešla do 103 B pro uživatelská jména do 25 bajtů;
+  `MALACHI_SOCKET` má přednost dál. Data netřeba přesouvat: v sandboxu
+  je `~/Library/Application Support` už kontejner aplikace. Testy
+  `DistributionTests`.
+- `macos/Resources/mas/`: `MalachiMail.entitlements` (sandbox, síť
+  klient i server, soubory vybrané uživatelem, tisk, skupina,
+  application a team identifier), `inherit.entitlements` (`malachid`,
+  `malachi-keychain`), `malachi-mcp.entitlements` (vlastní sandbox se
+  skupinou, zatím bez `allow-unsigned-executable-memory`, ověří A2)
+  a `container-migration.plist`, který zatím nejde do žádného bundlu
+  (data DMG by přesunul, ne zkopíroval; §6).
+- `macos/Makefile`: `DISTRIBUTION=appstore PROFILE=…` vybere entitlements
+  z `Resources/mas`, vloží `embedded.provisionprofile` a zapíše distribuci
+  do `Info.plist`. DMG (`direct`) se liší jen klíčem
+  `MalachiDistribution = direct`.
+
+Ověřeno na vývojovém Macu (release build arm64, podpis Apple
+Development, vývojový profil, bundle mimo `build/`, prázdná data
+v kontejneru přes `MALACHI_DATA_DIR`, vzorová nástěnka, `MALACHI_START`
+`mail;board:list;mail;quit`):
+
+- Podpisy nesou přesně entitlements z `Resources/mas`.
+- Aplikace i démon v sandboxu naběhly, démon zmigroval nový store
+  v kontejneru aplikace, poslouchal na socketu ve skupinovém kontejneru,
+  aplikace se připojila a při konci démona zastavila.
+- Přístup ke skupině macOS povolil bez dotazu
+  (`containermanagerd`: „Requestor's signature allows it to access
+  a TCC-protected group container“); skupinu `group.…` tedy netřeba.
+- V systémovém logu žádné zamítnutí sandboxu.
+
+Neověřeno (zůstává):
+
+- Restart z Předvoleb (`Relaunch`, `/bin/sh` + `/usr/bin/open`) pod
+  sandboxem; žádný krok `MALACHI_START` ho nespouští.
+- Účet se sítí, přihlášení v prohlížeči, helper klíčenky, Uložit jako,
+  přílohy, tisk: potřebují skutečný účet nebo kliknutí (A2, A3).
+- Most MCP v sandboxu a registrace v Claude (A2).
+- Testový bundle nechal kontejnery
+  `~/Library/Containers/io.github.schotek.Malachi` a
+  `~/Library/Group Containers/PG9F7XU6X8.io.github.schotek.Malachi`;
+  z LaunchServices je odregistrovaný. macOS je cizímu procesu smazat
+  nedovolí; uklidí je vlastník ve Finderu až po posledním testu (A5).

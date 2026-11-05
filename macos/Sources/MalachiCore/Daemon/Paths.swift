@@ -50,15 +50,27 @@ public struct Paths: Sendable {
         return false
     }
 
+    /// - Parameter groupContainer: the app group's container of the App
+    ///   Store build (`Distribution.groupContainer`), nil for the DMG. The
+    ///   socket then lies at its top as `rpc.sock`: the App Sandbox keeps
+    ///   the daemon out of `~/.cache`, and malachi-mcp, sandboxed on its
+    ///   own, reaches only the group. The short name keeps the path under
+    ///   `UnixSocketProbe.maxPathBytes` for user names of up to 25 bytes
+    ///   (the app checks it at launch). Its data directory needs no such
+    ///   case: in the sandbox `~/Library/Application Support` already is
+    ///   the app's container.
     public static func resolve(
         environment env: [String: String] = ProcessInfo.processInfo.environment,
-        executable: URL? = Bundle.main.executableURL
+        executable: URL? = Bundle.main.executableURL,
+        groupContainer: URL? = Distribution.current.groupContainer
     ) -> Paths {
         // Go's os.UserHomeDir reads $HOME; do the same so both sides agree.
         let home = env["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? FileManager.default.homeDirectoryForCurrentUser.path
         let socket: String
         if let s = env["MALACHI_SOCKET"], !s.isEmpty {
             socket = s
+        } else if let group = groupContainer {
+            socket = group.appendingPathComponent("rpc.sock").path
         } else if let rt = env["XDG_RUNTIME_DIR"], !rt.isEmpty {
             socket = rt + "/malachi/rpc.sock"
         } else {

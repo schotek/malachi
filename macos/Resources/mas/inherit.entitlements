@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+The entitlements of malachid and malachi-keychain in the Mac App Store
+build: both run only as children of the app and take its sandbox, its
+network access and its app group as they are. Exactly these two keys;
+Apple refuses an inheriting executable that asks for anything more.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.inherit</key>
+	<true/>
+</dict>
+</plist>

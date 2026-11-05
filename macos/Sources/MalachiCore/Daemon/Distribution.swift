@@ -1,0 +1,37 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import Foundation
+
+/// How this copy of the app was distributed, baked into Info.plist by
+/// macos/Makefile (`MalachiDistribution`, `DISTRIBUTION=`). The website's
+/// DMG (Developer ID) and the Mac App Store build come from the same code;
+/// what the App Sandbox of the second does not allow is decided here at
+/// run time, never by a build flag (docs/plans/mac-app-store.md).
+public enum Distribution: String, Sendable {
+    /// The DMG from the website, and every development build.
+    case direct
+    /// The Mac App Store build: App Sandbox, the socket in the app group.
+    case appStore = "appstore"
+
+    /// The app group the App Store build shares with malachi-mcp: its
+    /// container holds the daemon's socket and key, which the bridge,
+    /// started by Claude in a sandbox of its own, can reach only there.
+    /// Team-prefixed, so it needs no registration in the developer portal.
+    public static let appGroup = "PG9F7XU6X8.io.github.schotek.Malachi"
+
+    /// Info.plist `MalachiDistribution`; anything else, or no bundle, is
+    /// `direct`.
+    public static let current: Distribution = from(
+        Bundle.main.object(forInfoDictionaryKey: "MalachiDistribution") as? String)
+
+    static func from(_ value: String?) -> Distribution {
+        value.flatMap(Distribution.init(rawValue:)) ?? .direct
+    }
+
+    /// The app group's container for the App Store build, nil for `direct`.
+    public var groupContainer: URL? {
+        guard self == .appStore else { return nil }
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroup)
+    }
+}
