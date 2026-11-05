@@ -100,7 +100,7 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos macos-dmg macos-notarize macos-go run-macos test-macos run-gtk run-gtk-live windows run-windows test-windows help FORCE
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos macos-dmg macos-notarize macos-mas macos-go run-macos test-macos run-gtk run-gtk-live windows run-windows test-windows help FORCE
 
 all: build
 
@@ -296,6 +296,7 @@ endif
 ## macos: build the macOS app bundle build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside (macOS only)
 ## macos-dmg: build the universal app into build/Malachi-Mail-<version>-macos-universal.dmg; SIGN= a Developer ID for a release (macOS only)
 ## macos-notarize: have Apple notarise that DMG and staple the ticket to it (macOS only; docs/releasing.md §8)
+## macos-mas: build the universal App Store variant into build/Malachi-Mail-<version>-macos-universal.pkg; SIGN, INSTALLER_SIGN, PROFILE, MCP_PROFILE (macOS only)
 ## run-macos: build the macOS app and run it from the terminal so the daemon log stays visible (macOS only)
 ## test-macos: run the Swift tests of the macOS client (macOS only)
 ## run-gtk: build the GTK client in the Fedora container and run it in an XQuartz window with its own daemon and gnome-keyring there, data in ~/.cache/malachi-gtk/data (macOS only)
@@ -321,6 +322,14 @@ macos-dmg: macos-go
 macos-notarize: ARCHS ?= arm64 x86_64
 macos-notarize:
 	$(MAKE) -C macos notarize $(MACOS_VARS)
+
+# The Mac App Store build (docs/plans/mac-app-store.md §5): the same code
+# with DISTRIBUTION=appstore, signed for the store and packaged as .pkg;
+# no update channel, the store updates it. Needs SIGN, INSTALLER_SIGN,
+# PROFILE and MCP_PROFILE (macos/Makefile pkg) and in CI BUILD_NUMBER.
+macos-mas: ARCHS ?= arm64 x86_64
+macos-mas: macos-go
+	$(MAKE) -C macos pkg $(MACOS_VARS) DISTRIBUTION=appstore
 
 # GOARCH calls x86_64 amd64. cgo stays on for every slice, as in the build
 # for this Mac alone.

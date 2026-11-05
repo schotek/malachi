@@ -576,3 +576,38 @@ přílohy jako souboru; že obě verze jsou zdarma a účty se mezi nimi zatím
 nepřenášejí. Tlačítko jen otevře https://malachimail.app, nic nestahuje
 (Guidelines 2.4.5); do poznámek pro App Review patří, že jde o odkaz na
 vlastní bezplatnou verzi (3.2.1(i)) a proč je kód agentů vypnutý (2.5.19).
+
+### 8.4 Stav A4, první část (2026-11-05): `.pkg` a privacy manifest
+
+Napsáno:
+
+- `macos/Resources/mas/PrivacyInfo.xcprivacy`: bez sběru dat a sledování,
+  důvody pro `UserDefaults` (CA92.1), časy souborů (C617.1) a čas od
+  startu systému (35F9.1, Go runtime a hodiny Swiftu); volné místo na
+  disku kód nečte. Jde do `Contents/Resources` aplikace i pomocníka mostu.
+- `BUILD_NUMBER` (výchozí `SHORT_VERSION`) dává `CFBundleVersion` obou
+  bundlů (`@BUILD@`); App Store chce číslo rostoucí s každým nahráním,
+  workflow předá číslo běhu.
+- `make -C macos pkg` (`productbuild --component … /Applications --sign
+  "$(INSTALLER_SIGN)"`, kontrola `pkgutil --check-signature`)
+  a `validate-pkg` (`xcrun altool --validate-app` s klíčem App Store
+  Connect API přes `NOTARY_KEY`, `NOTARY_KEY_ID`, `NOTARY_ISSUER`);
+  kořenový `make macos-mas` (universal, `DISTRIBUTION=appstore`, bez
+  kanálu aktualizací).
+
+Ověřeno: `make app DISTRIBUTION=appstore BUILD_NUMBER=17` s vývojovým
+podpisem (arm64): oba bundly mají `0.4.0` / `17`, oba privacy manifesty
+jsou na místě, podpis prochází.
+
+Podpis (2026-11-05): nové certifikáty Apple Distribution a Mac Installer
+Distribution vytvořené v Xcode na MacBooku Air (původní z 2026-10-28
+zůstaly na MacBooku Pro), oba profily Mac App Store („Malachi Mail Mac
+App Store“, „Malachi Mail MCP Mac App Store“) přegenerované na nový
+certifikát Distribution, platí do 2027-11-05. Universal `.pkg`
+(`BUILD_NUMBER=1`) se postaví a podepíše; `pkgutil --check-signature`
+prochází. `xcrun altool --validate-app` (2026-11-05) skončil „VERIFY
+SUCCEEDED with no errors“, takže kontrola SDK (S7) ani privacy manifest
+nic nevytkly. Validuje nový týmový klíč App Store Connect API „Malachi
+App Store“ (role Developer, vedle „Malachi CI notarization“), u vlastníka
+v `~/.appstoreconnect/private_keys/`. Zbývá `macos-mas.yml` a jeho
+secrets (certifikáty z MacBooku Air jako `.p12`, oba profily, klíč).

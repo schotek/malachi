@@ -28,7 +28,7 @@ Template for the bundle's Info.plist; macos/Makefile substitutes the
 	<key>CFBundleShortVersionString</key>
 	<string>@VERSION@</string>
 	<key>CFBundleVersion</key>
-	<string>@VERSION@</string>
+	<string>@BUILD@</string>
 	<key>MalachiVersion</key>
 	<string>@FULL_VERSION@</string>
 	<!-- direct (the DMG, every development build) or appstore; MalachiCore's
