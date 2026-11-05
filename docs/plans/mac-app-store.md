@@ -644,8 +644,16 @@ vlastníka: první build do TestFlight přijde z tagu `v0.4.1`).
 `privacy.html` (i česky) jmenuje edici z Mac App Store vedle
 Microsoft Store, obě aktualizace nekontrolují.
 
+Vyplněno a uložené dál: Content Rights „Yes … I have the necessary
+rights“ (pošta, kalendáře a Jira z vlastních účtů uživatele; volba
+vlastníka), věkové hodnocení 4+ (jediné ano: Messaging and Chat, obsah
+všude None), App Privacy zveřejněné. Šifrování (Q5): vlastník aplikaci
+prohlásil za vyjmutou (jen TLS spojení a ověřování podpisů standardními
+algoritmy, žádná data aplikace sama nešifruje), proto
+`Resources/Info.plist.in` nese `ITSAppUsesNonExemptEncryption` `false`
+a App Store Connect se u buildů na export neptá; mimo App Store klíč nic
+nečte.
+
 Zbývá na vlastníkovi: kontaktní údaje a testovací účet pro review,
-publikovat App Privacy, věkové hodnocení, Content Rights, šifrování
-(Q5: standardní algoritmy → App Store Connect chce dokumentaci, nebo
-`ITSAppUsesNonExemptEncryption` podle odpovědi), DSA (trader status)
-a odeslání do review.
+DSA (trader status), tag `v0.4.1` (první nahrání, krok Upload ještě
+neběžel), TestFlight a odeslání do review.
