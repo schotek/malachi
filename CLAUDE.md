@@ -83,6 +83,17 @@ platformě nedávají smysl (třeba Claude Desktop na Linuxu). Příklad:
 kolečko čekání v panelu asistenta (2026-09-30) přišlo do všech tří
 klientů naráz (`Controller.Waiting` → `waiting` → `IsWaiting`).
 
+### 7. Repozitář je veřejný
+Všechno, co se zapíše do repozitáře, je veřejné: kód, `docs/`, plány,
+tento soubor, zprávy commitů, popisy PR i komentáře. Nikdy tam nepatří
+obsah secrets a klíčů (certifikáty, `.p12`, `.p8`, hesla, tokeny,
+Issuer ID a Key ID klíče App Store Connect), skutečné adresy, jména
+a data z pošty, kalendáře a kontaktů vlastníka ani jeho zákazníků,
+interní hostitelé a cesty k firemním systémům ani údaje o účtech třetích
+stran. Testovací data jsou vymyšlená (`example.com`, `*.invalid`).
+Veřejné identifikátory jsou v pořádku: Team ID, bundle ID, App ID,
+client ID veřejného OAuth klienta. Při pochybnosti se nejdřív zeptej.
+
 ## Konvence
 
 - Go: standardní formátování, `golangci-lint`, errors wrapované s kontextem
