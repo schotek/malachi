@@ -61,7 +61,7 @@ nothing.
 | Under the hood | `under-the-hood.html` | `cs/under-the-hood.html` |
 | Download | `download.html` | `cs/download.html` |
 | What's new | `news.html` | `cs/news.html` |
-| Privacy policy (also the Microsoft Store listing's privacy URL) | `privacy.html` | `cs/privacy.html` |
+| Privacy policy (also the privacy URL of the Mac App Store and Microsoft Store listings) | `privacy.html` | `cs/privacy.html` |
 | Not found | `404.html` (served for any missing path, so its own links are root-absolute) | |
 
 The pages link each other relatively, so they work from a file server
