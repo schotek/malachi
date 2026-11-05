@@ -1,0 +1,326 @@
+# Malachi Mail v Mac App Store — analýza
+
+Stav: analýza (2026-11-05), nic se neimplementovalo. Rozhodnutí vlastníka:
+nejdřív analýza; **obě varianty vedle sebe** (Q1, 2026-11-05, po této
+analýze; původní záměr „jen App Store“ padl kvůli §3.3): DMG s Developer ID
+zůstává plná verze, App Store je druhý kanál s funkcemi, které sandbox
+nedovolí, vypnutými. Otevřené otázky jsou v §7.
+
+Podklady: `macos/Makefile` (cíl `app`), `macos/Resources/*.entitlements`,
+`docs/macos-port.md` §12 („Not done: App Sandbox…“), `docs/releasing.md`
+§8, `docs/plans/update-check.md` U6, `LICENSING.md`, `CLA.md`.
+
+## 1. Shrnutí
+
+Technicky to jde a démon se skoro nemění (pravidlo 4 drží: všechno, co se
+liší, je parametr, který mu předá macOS klient). Cena je ve třech věcech:
+
+1. **App Sandbox na každé binárce v bundlu.** `malachid`,
+   `malachi-keychain` a `malachi-mcp` dnes běží bez sandboxu, data jsou
+   v `~/Library/Application Support/Malachi Mail/` a socket
+   v `~/.cache/malachi/run/`. V sandboxu se obojí přestěhuje do kontejneru
+   aplikace a vše mimo něj je zavřené.
+2. **Asistent nad uživatelovým Claude Code a Codexem nejde.** Panel „V
+   aplikaci“, přepis a psaní v okně Nová zpráva, hledání vlastními slovy,
+   triage nástěnky, Navrhnout odpověď a poskytovatel ChatGPT spouštějí
+   `claude` / `codex` z domovského adresáře uživatele. Proces spuštěný ze
+   sandboxu sandbox dědí: binárku v `~/.local/bin` nepřečte, a i kdyby,
+   nedostane se k vlastnímu přihlášení (`~/.claude`, jeho položky
+   klíčenky). Ve verzi z App Store zůstane jen úroveň A (předání do Claude
+   Desktop / Claude Code odkazem `claude://`) — a i ta potřebuje registraci
+   mostu MCP, viz bod 3. DMG si všechno nechává.
+3. **Most MCP a jeho registrace.** Claude Desktop a Claude Code spouštějí
+   `…/Malachi Mail.app/Contents/MacOS/malachi-mcp` samy, ne naše aplikace.
+   Binárka v bundlu z App Store musí mít sandbox; s pouhým
+   `com.apple.security.inherit` by spuštěná cizím procesem spadla. Musí
+   mít vlastní sandbox a socket démona musí ležet ve **sdíleném kontejneru
+   skupiny** (`application-groups`), ne v kontejneru aplikace. Zápis
+   registrace do `~/Library/Application Support/Claude/claude_desktop_config.json`
+   a `~/.claude.json` (`malachi-mcp install`) sandbox nedovolí bez
+   výjimky nebo bez výběru souboru uživatelem (§3.2).
+
+Ostatní je práce bez rizika: entitlements, migrace dat z DMG verze,
+privacy manifest, podpis Apple Distribution, balíček `.pkg`, nový workflow
+a metadata v App Store Connect.
+
+## 2. Co App Store vyžaduje
+
+| # | Požadavek | Stav dnes | Co udělat |
+|---|---|---|---|
+| S1 | App Sandbox (`com.apple.security.app-sandbox`) na aplikaci i každé vnořené binárce | žádný | Entitlements v §4 |
+| S2 | Podpis certifikátem **Apple Distribution**, `.pkg` podepsaný **Mac Installer Distribution**, vložený provisioning profile (`embedded.provisionprofile`), entitlements `com.apple.application-identifier` a `com.apple.developer.team-identifier` (tým `PG9F7XU6X8`) | Developer ID + notarizace v CI | Nový cíl a workflow (§5) |
+| S3 | Žádný vlastní mechanismus aktualizací | kontrola verzí fáze 1 | Sestavení pro App Store **bez kanálu** (`UPDATE_CHANNEL` prázdný): démon nekontroluje, UI pruh nemá — přesně U6 plánu `update-check.md`, jen ověřit, že pruh, řádek v O aplikaci a Předvolby → Aktualizace se bez kanálu skryjí |
+| S4 | Privacy manifest `PrivacyInfo.xcprivacy` s „required reason“ API | žádný | Projít: `UserDefaults` (CA92.1), časy souborů (C617.1), volné místo na disku (`system.storage`, E174.1), čas od startu systému (Go runtime volá `mach_absolute_time`, 35F9.1); manifest v `Contents/Resources` |
+| S5 | Vyplněný štítek soukromí v App Store Connect | — | Vývojář nesbírá nic; pošta jde jen na servery uživatele, Microsoft 365 přes Graph. Odkaz na zásady soukromí (stránka z `10c96d9e`) |
+| S6 | Export šifrování (`ITSAppUsesNonExemptEncryption`) | — | Šifrování je vlastní (Go TLS, Ed25519, ověřování S/MIME a OpenPGP), ne jen systémové; standardní algoritmy pro hromadný trh obvykle stačí odpovědět „výjimka“, ale odpověď dává vlastník (Q5) |
+| S7 | Binárky postavené s aktuálním SDK | `set_sdk` jen na hlavní binárce (paměť: SwiftPM zapisuje sdk 14.0) | Ověřit validací `.pkg` (`xcrun altool --validate-app` / Transporter), jestli kontrola SDK platí i pro `malachid`, `malachi-mcp`, `malachi-keychain`; případně `set_sdk` na všechny |
+| S8 | Pravidla review: 2.5.2 (žádný stažený spustitelný kód), 4.2, 5.1.1, 5.1.2(i) (sdílení dat s AI třetí strany jen se souhlasem) | PDFium wasm je v bundlu, ne stahovaný; souhlasy asistenta existují | Popsat v poznámce pro review, co dělá démon a most a že AI je volitelná |
+
+## 3. Co sandbox rozbije
+
+### 3.1 Bez větších potíží (jen entitlement nebo malá změna)
+
+| Funkce | Kde | Řešení |
+|---|---|---|
+| Spuštění `malachid` z bundlu, helper klíčenky z démona | `DaemonSupervisor.swift`, `MALACHI_KEYRING_HELPER` | `app-sandbox` + `inherit` na obou; dědí síť i kontejner |
+| IMAP, SMTP, Graph, Jira, CalDAV, eWay, obrázky, kontrola podpisů | démon | `network.client` |
+| Přihlášení v prohlížeči (listener na `127.0.0.1`) | `oauth2flow` | `network.server` (dědí démon) |
+| Data a socket | `Daemon/Paths.swift` | `HOME` sandboxu je kontejner, cesty se přestěhují samy; socket viz §3.2 |
+| Otevření a náhled příloh, Quick Look | dočasný adresář pro otevírání | uvnitř kontejneru funguje; quarantine přidá sandbox sám |
+| Uložit jako, Uložit vše, přiložit soubor | `NSSavePanel` / `NSOpenPanel` | `files.user-selected.read-write` |
+| Tisk | `Printing/` | `com.apple.security.print` |
+| Spuštění po přihlášení | `LoginItemService` (`SMAppService.mainApp`) | funguje beze změny |
+| Notifikace, odkazy `claude://`, `mailto:` | `NSWorkspace` | funguje |
+| Restart aplikace | `App/Relaunch.swift` (`/bin/sh` + `/usr/bin/open`) | ze sandboxu nespolehlivé; nahradit `NSWorkspace.openApplication(at:configuration:)` s `createsNewApplicationInstance` až po ukončení, nebo restart nabízet jen jako „Ukončit“ |
+| `config.toml` s vlastním klientem Gmailu | `~/Library/Application Support/Malachi Mail/config.toml` | přesune se do `~/Library/Containers/io.github.schotek.Malachi/Data/…`; README a Předvolby musí říct novou cestu (nebo tlačítko „Zobrazit ve Finderu“) |
+
+### 3.2 Most MCP (rozhoduje Q2)
+
+- **Socket do skupinového kontejneru.** Entitlement
+  `com.apple.security.application-groups` = `PG9F7XU6X8.io.github.schotek.Malachi`
+  na aplikaci (dědí démon) i na `malachi-mcp`; socket v
+  `~/Library/Group Containers/PG9F7XU6X8.io.github.schotek.Malachi/run/rpc.sock`.
+  Délka cesty: s uživatelem `schotek` asi 95 bajtů, limit macOS je 103
+  (CLAUDE.md, poznámka o AF_UNIX na Windows). Pro dlouhá jména
+  uživatelů je to málo — kratší podadresář (`r/s`) a kontrola při startu
+  jako na Windows. Démon dostane cestu přes `--socket`, most přes
+  `MALACHI_SOCKET` zapsané v registraci; démon se nemění.
+- **`malachi-mcp` s vlastním sandboxem** (ne `inherit`): `app-sandbox`,
+  `application-groups`, `network.client` (stahování příloh přes démona je
+  socket, síť ani nepotřebuje — ověřit), a dnešní
+  `cs.allow-unsigned-executable-memory` kvůli wazero. **Neověřené:** zda
+  App Review entitlement `allow-unsigned-executable-memory` u App Store
+  binárky přijme (u App Store se hardened runtime nevyžaduje, takže
+  v sandboxu bez hardened runtime může být zbytečný — změřit, jestli
+  wazero pod sandboxem bez něj PDF přečte).
+- **Příloha jako soubor pro Cowork / pracovní adresář Claude Code** (most
+  ukládá přílohu do adresáře klienta): ze sandboxu mostu do cizího
+  adresáře nezapíše. Buď zůstane jen text přílohy (`get_attachment`),
+  nebo soubor ve skupinovém kontejneru a cesta k němu.
+- **Registrace v Claude Desktop a Claude Code** — tři možnosti:
+  - (a) *Dočasná výjimka* `temporary-exception.files.home-relative-path.read-write`
+    na `/Library/Application Support/Claude/` a `/.claude.json`.
+    Nejméně práce, Předvolby → AI zůstanou, jak jsou. Riziko zamítnutí
+    v review; Apple výjimky schvaluje jen s odůvodněním.
+  - (b) *Výběr souboru uživatelem*: přepínač Registrovat v Claude otevře
+    `NSOpenPanel` na konfiguraci Claude, aplikace si uloží
+    security-scoped bookmark a `install` dostane deskriptor/cestu.
+    Review-bezpečné, o krok víc pro uživatele, a `~/.claude.json` je
+    skrytý soubor (panel s `showsHiddenFiles`).
+  - (c) *Jen návod*: Předvolby ukážou JSON k vložení a příkaz
+    `claude mcp add …`. Nejjednodušší, nejhorší pro uživatele.
+
+  **Rozhodnutí (Q2, 2026-11-05): (a)**, při zamítnutí v review přechod
+  na (b). Pozor na zápis: `malachi-mcp install` zapisuje atomicky přes
+  `os.CreateTemp` vedle cíle a `os.Rename` (`cmd/malachi-mcp/setup.go`).
+  V `~/Library/Application Support/Claude/` to s výjimkou na adresář
+  projde; u `~/.claude.json` by dočasný soubor vznikal v domovském
+  adresáři, kam výjimka na jeden soubor nepustí. Návrh k ověření v A2:
+  pevné jméno dočasného souboru (`~/.claude.json.malachi.tmp`) jako druhá
+  cesta ve výjimce a přejmenování mezi dvěma povolenými cestami; změna
+  v mostu je platformně neutrální (parametr nebo deterministické jméno
+  pro všechny platformy). Když přejmenování sandbox nedovolí, zůstane pro
+  Claude Code (c) a nikdy přepis na místě (Claude Code ten soubor sám
+  často přepisuje). Pro (b) platí: Claude Desktop výběrem adresáře, ne
+  souboru (Claude ho za běhu nahrazuje novým souborem).
+- **Restart Claude Desktop** (`ClaudeDesktopService`, Apple events,
+  `NSRunningApplication.terminate`): v sandboxu jen s výjimkou
+  `temporary-exception.apple-events` na bundle Claude. Doporučení:
+  vypustit a říct uživateli „Restartujte Claude Desktop“.
+
+### 3.3 V App Store verzi nejde (DMG zůstává beze změny)
+
+Všechno, co spouští uživatelův `claude` nebo `codex`
+(`ClaudeCodeLocator`, `ClaudeCodeProcess`, `CodexProvider`,
+`AssistantPanelController`, `AssistantRequest`, `BoardTriageController`,
+`BoardAutoTriageScheduler`, `BoardReplyController`, přihlášení
+`claude auth login`):
+
+- cíl asistenta „V aplikaci (experimentální)“ a jeho panel (B1),
+- přepis v okně Nová zpráva, pruh psaní a hledání vlastními slovy (B2),
+- triage nástěnky (ruční i automatická) a Navrhnout odpověď/připomenutí,
+- poskytovatel ChatGPT/Codex,
+- přihlášení Claude Code z aplikace.
+
+Proč ne výběr binárky uživatelem: spuštěný `claude` by zdědil sandbox,
+neviděl by `~/.claude` ani svou položku klíčenky a nepřihlásil by se;
+navíc by spouštění uživatelem zvoleného programu v review neprošlo
+(2.5.2). Nástěnka sama (pravidla démona, ruční stavy, remindy, archivace)
+funguje dál, jen bez triage.
+
+Sestavení pro App Store tyto části nesmí nabízet (DMG je nabízí dál):
+přepínač v Swiftu
+(klíč v `Info.plist`, třeba `MalachiDistribution = appstore`, čtený
+v `MalachiCore`) skryje cíl „V aplikaci“, poskytovatele ChatGPT,
+tlačítko ✦ Triage, Navrhnout odpověď a skupinu Board v Předvolbách → AI.
+Ošetření v kódu (fáze A2), ne jen skryté ovládací prvky:
+
+- Pravidlo dostupnosti v `MalachiCore` (třeba `Distribution.current`
+  z `Info.plist` a `Distribution.allowsLocalAgents`), testované
+  `swift test` pro obě hodnoty; pohledy se ptají jen jeho.
+- Kontrolery se samy odmítnou rozběhnout, ne až UI:
+  `ClaudeCodeLocator`, `AssistantPanelController`, `AssistantRequest`,
+  `CodexProvider`, `BoardTriageController`,
+  `BoardAutoTriageScheduler`, `BoardReplyController`.
+- Uložené hodnoty z DMG (přenesené migrací kontejneru) se čtou bezpečně:
+  `assistant-target = inapp` jako Claude Code / Claude Desktop, poskytovatel
+  ChatGPT jako Claude, automatická triage jako vypnutá. Klíče se
+  nepřepisují, aby návrat k DMG nic neztratil.
+- Předvolby → AI místo skupiny Board a řádků Claude Code, Model
+  a ChatGPT ukážou jednu větu, že asistent v aplikaci a triage nástěnky
+  jsou jen ve verzi z webu, s odkazem na web. Text je msgid v `po/`
+  s češtinou (Q8); protože ho GTK nepoužívá, nese ho Go reference (třeba
+  `ui/internal/assistant`, soubor v `po/POTFILES`) a Windows ho má
+  s důvodem ve `windows/parity-exclusions.txt`.
+
+Je to platformní kód jen v `macos/`, ne větvení démona ani GTK (pravidlo
+4); GTK a Windows se nemění (pravidlo 6 se netýká, jde o odchylku
+distribuce — patří do tabulky v `macos/README.md`).
+
+## 4. Entitlements
+
+| Binárka | Entitlements |
+|---|---|
+| `MalachiMail` (aplikace) | `app-sandbox`, `network.client`, `network.server`, `files.user-selected.read-write`, `print`, `application-groups`, `application-identifier`, `team-identifier`, `keychain-access-groups` (viz §6), + podle Q2 výjimky |
+| `malachid` | `app-sandbox`, `inherit` |
+| `malachi-keychain` | `app-sandbox`, `inherit` |
+| `malachi-mcp` | `app-sandbox`, `application-groups`, (`network.client`?), (`cs.allow-unsigned-executable-memory`?) — spouští ho Claude, ne aplikace, takže ne `inherit`; jeho podřízený proces `__extract` je táž binárka a sandbox mostu zdědí |
+
+Dnešní `com.apple.security.automation.apple-events` z
+`MalachiMail.entitlements` odpadá (Q2).
+
+## 5. Sestavení, podpis a CI
+
+- `make macos-mas` vedle `macos-dmg` (jen na Darwinu): universal bundle
+  jako dnes, entitlements z `Resources/mas/*.entitlements`,
+  `embedded.provisionprofile`, `PrivacyInfo.xcprivacy`, podpis Apple
+  Distribution zevnitř ven (helpery, pak aplikace), `productbuild
+  --component … /Applications --sign "3rd Party Mac Developer Installer…"`
+  → `Malachi-Mail-<verze>-macos-universal.pkg` (pojmenování podle
+  `releasing.md` §1). Bez `UPDATE_CHANNEL`.
+- Verze: App Store chce `CFBundleShortVersionString` jako `MAJOR.MINOR.PATCH`
+  a rostoucí `CFBundleVersion` — `Info.plist.in` dnes dostává
+  `@FULL_VERSION@` z `git describe`; pro App Store číslo buildu z běhu CI.
+- Workflow `macos-mas.yml` (jen u tagu a ručně, `ci-only-essentials`):
+  nové secrets — certifikát Apple Distribution, Mac Installer
+  Distribution (p12 + heslo) a provisioning profile; klíč App Store
+  Connect API z `MACOS_*` lze použít i pro nahrání (role Developer
+  nahrávat smí). Varianta jako MSIX: artefakt `.pkg` na 30 dní a ruční
+  nahrání přes Transporter, nebo rovnou `xcrun altool --upload-package`
+  do TestFlight (Q4). Kroky se musí nejdřív ověřit ručně na Macu, ne
+  pokusy v CI (`no-ci-trial-and-error`).
+- `macos.yml` (DMG, Developer ID, notarizace, kanál aktualizací) zůstává
+  beze změny; `releasing.md` §8 dostane druhou podsekci, README a web
+  nabídnou obě cesty s vysvětlením rozdílu (App Store: aktualizace
+  obchodem, sandbox, bez asistenta v aplikaci; DMG: vše).
+
+## 6. Dvě varianty vedle sebe a přechod mezi nimi
+
+Varianty mají stejné bundle ID (`io.github.schotek.Malachi`, Q7
+rozhodnuta), takže
+na Macu má být nainstalovaná jen jedna; data mají oddělená (DMG
+`~/Library/Application Support/Malachi Mail`, App Store kontejner).
+
+- **Registrace mostu:** obě by v Claude zapsaly server téhož jména
+  s jinou cestou a jiným `MALACHI_SOCKET`; platí ta zapsaná naposled.
+  `malachi-mcp status` musí poznat cizí cestu a Předvolby → AI ji ukázat
+  jako „registrováno jinou instalací“, ne jako své.
+- **Kanál aktualizací:** DMG ho má dál; App Store žádný (S3).
+- **Odchylky:** řádek „Mac App Store“ v tabulce `macos/README.md`
+  s výčtem §3.3; Předvolby → AI ve verzi z App Store krátce řeknou, že
+  asistent v aplikaci je jen ve verzi z webu.
+
+Přechod je dobrovolný. Kdo z DMG přejde do App Store:
+
+- **Data:** sandboxovaná aplikace starý adresář nevidí. Apple na to má
+  `container-migration.plist` v `Contents/Resources`: při prvním startu
+  přesune `~/Library/Application Support/Malachi Mail` do kontejneru.
+  Starý socket a klíč v `~/.cache/malachi/run` se nepřenáší (vzniknou
+  nové). Předvolby `UserDefaults` domény `io.github.schotek.Malachi`
+  migrace přenese také (stejné bundle ID). Ověřit nad kopií dat.
+- **Klíčenka:** helper ukládá přes `SecItem*` bez data protection
+  keychain, tedy do přihlašovací klíčenky s ACL podle podpisu binárky.
+  Binárka podepsaná pro App Store má jiný podpis → při prvním čtení se
+  macOS zeptá na každou položku (jako po ad-hoc rebuildu), a v sandboxu
+  možná nepůjde vůbec. Čistší je přejít v App Store verzi na data
+  protection keychain se skupinou `keychain-access-groups`
+  (`PG9F7XU6X8.io.github.schotek.Malachi`) a jednorázově přenést staré
+  položky (jedna otázka na položku), nebo nechat uživatele znovu se
+  přihlásit. Zkoušet jen s povolením vlastníka (`no-keychain-experiments`).
+- **Most:** stávající registrace v Claude ukazují na cestu
+  `/Applications/Malachi Mail.app/…/malachi-mcp` bez `MALACHI_SOCKET`;
+  po přechodu je aplikace musí přepsat (podle Q2).
+- Migrace kontejneru proběhne jen jednou a starý adresář přesune; kdo by
+  se pak vrátil k DMG, data tam nenajde. Ověřit, jestli
+  `container-migration.plist` umí kopii místo přesunu, jinak to říct
+  v poznámkách k vydání.
+
+## 7. Otázky na vlastníka
+
+- **Q1 — odpovězeno 2026-11-05: obě varianty.** DMG plná, App Store
+  bez §3.3.
+- **Q2 — odpovězeno 2026-11-05: (a) dočasná výjimka**, při zamítnutí
+  (b); podrobnosti v §3.2.
+- **Q3 — odpovězeno 2026-11-05: zdarma, kategorie Productivity.**
+- **Q4 — odpovězeno 2026-11-05: CI rovnou do TestFlight** (u tagu
+  `xcrun altool --upload-package` s klíčem App Store Connect API;
+  odeslání do review dělá vlastník ručně). Ruční spuštění workflow
+  jen sestaví a zvaliduje `.pkg`, nic nenahrává.
+- **Q5 — odpovězeno 2026-11-05: bod 2, standardní algoritmy místo
+  šifrování systému Apple / vedle něj** (Go `crypto/tls`, S/MIME
+  a OpenPGP přes Go a `ProtonMail/go-crypto`, Ed25519; nic
+  nestandardního). Vlastník projde dotazník při zakládání záznamu (A0);
+  když nebude chtít žádný dokument, `Info.plist` App Store verze dostane
+  `ITSAppUsesNonExemptEncryption` podle té odpovědi, aby se Apple
+  neptal u každého buildu. Kdyby chtěl dokument (třeba kvůli Francii),
+  vyřešit dřív, než se Francie zařadí mezi země prodeje.
+- **Q6 — odpovězeno 2026-11-05: ano, oddíl v `LICENSING.md`.** Přijde
+  s prvním buildem v TestFlight (A5), jako u Windows „první vydání, které
+  ho nese“; místo: za „Microsoft components in the Windows client“, před
+  „Third-party components“. Návrh textu (vlastník ho před zápisem
+  schválí; není to právní posudek):
+
+  > ## The Mac App Store build
+  >
+  > The copyright holder also distributes the macOS app through the Mac
+  > App Store (from release X.Y.Z). That copy is built from the same
+  > tagged source as the other packages, with the App Store's sandbox and
+  > signature and without the features listed in `macos/README.md`. Its
+  > use is governed by Apple's Licensed Application End User License
+  > Agreement, which applies only to the copy obtained from the App Store;
+  > the copyright holder grants it under the rights the Contributor
+  > License Agreement gives them (`CLA.md` §2).
+  >
+  > This does not limit the licences of the source: everyone keeps the
+  > rights of the AGPL-3.0-only (`backend/`) and the GPL-3.0-or-later
+  > (everything else) to the source of every release in this repository
+  > and to builds made from it. The Corresponding Source of the App Store
+  > build is the tagged release named in its About window.
+
+  Původní otázka: vlastník má díky CLA (§2: „under any other licence“)
+  právo vydat binárky pod licenčními podmínkami Apple; zdroj zůstává
+  GPL/AGPL. Přidat do `LICENSING.md` oddíl o App Store verzi (jako
+  doplňkové svolení pro Windows), aby bylo jasné, že App Store EULA
+  se vztahuje jen na binárky z obchodu? Závislosti mostu a démona
+  (`THIRD-PARTY-NOTICES.md`) jsou permisivní (BSD, MIT, Apache, MPL),
+  žádná GPL třetí strany v bundlu.
+- **Q7 — odpovězeno 2026-11-05: stejné jako DMG**
+  (`io.github.schotek.Malachi`). Původní otázka: stejné pro obě
+  varianty (jedna instalace naráz, předvolby a jméno v Launch Services
+  sdílené), nebo App Store s vlastním (`io.github.schotek.Malachi.mas`,
+  obě naráz, ale CLAUDE.md zakazuje App ID měnit bez zadání)?
+  Doporučení: stejné.
+- **Q8 — odpovězeno 2026-11-05: msgid** v `po/` s češtinou a výjimkou
+  pro Windows.
+
+## 8. Fáze
+
+| Fáze | Obsah | Ověření |
+|---|---|---|
+| A0 | Odpovědi Q2–Q7, App ID a skupina v Developer portálu, záznam aplikace a jméno „Malachi Mail“ v App Store Connect | vlastník |
+| A1 | Sandboxované sestavení lokálně: entitlements, socket ve skupinovém kontejneru, `container-migration.plist`, `Relaunch`, `config.toml` | debug build nad kopií dat (`MALACHI_DATA_DIR`), nikdy nad ostrými daty ani `build/Malachi Mail.app` |
+| A2 | Přepínač distribuce v `MalachiCore`, skrytí §3.3, registrace mostu podle Q2, `malachi-mcp` se sandboxem a čtení PDF | `swift test`, ruční průchod Předvoleb → AI a Claude Desktop |
+| A3 | Klíčenka (data protection keychain, přenos položek) | jen s povolením vlastníka |
+| A4 | `make macos-mas`, privacy manifest, validace `.pkg`, pak `macos-mas.yml` | `altool --validate-app` lokálně, pak jeden běh CI |
+| A5 | TestFlight pro Mac, poznámka pro review, odeslání | vlastník |
+| A6 | Po schválení: `releasing.md` §8 s oběma variantami, README, web, řádek v `macos/README.md`; DMG beze změny | vlastník |
