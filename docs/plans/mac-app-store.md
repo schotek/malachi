@@ -639,11 +639,13 @@ a kontrola aktualizací). Screenshoty 1440×900 z
 calendar-week, invitation, jira, crm-saved, newsletter) připravené
 mimo repozitář; nahrává je vlastník (prohlížeč agenta soubory nenahraje).
 
-Zbývá na vlastníkovi: screenshoty, kontaktní údaje a testovací účet pro
-review, publikovat App Privacy, věkové hodnocení, Content Rights,
-šifrování (Q5: standardní algoritmy → App Store Connect chce
-dokumentaci, nebo `ITSAppUsesNonExemptEncryption` podle odpovědi),
-DSA (trader status), verze záznamu podle tagu (dnes „1.0“, build bude
-mít verzi z tagu) a odeslání do review. Web: `privacy.html` zmiňuje
-jen edici z Microsoft Store, která aktualizace nekontroluje; verze
-z Mac App Store je na tom stejně a patří tam taky.
+Screenshoty nahrál vlastník. Verze záznamu je 0.4.1 (rozhodnutí
+vlastníka: první build do TestFlight přijde z tagu `v0.4.1`).
+`privacy.html` (i česky) jmenuje edici z Mac App Store vedle
+Microsoft Store, obě aktualizace nekontrolují.
+
+Zbývá na vlastníkovi: kontaktní údaje a testovací účet pro review,
+publikovat App Privacy, věkové hodnocení, Content Rights, šifrování
+(Q5: standardní algoritmy → App Store Connect chce dokumentaci, nebo
+`ITSAppUsesNonExemptEncryption` podle odpovědi), DSA (trader status)
+a odeslání do review.
