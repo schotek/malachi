@@ -619,3 +619,31 @@ secrets (certifikáty z MacBooku Air jako `.p12`, oba profily, klíč).
   issuer sdílený `MACOS_NOTARY_ISSUER`; bez nich se job zastaví
   s varováním. Lokálně ověřené jsou stavba, podpis a validace; nahrání
   ne (poprvé u tagu nebo ručně po souhlasu vlastníka).
+
+### 8.5 Stav A5, první část (2026-11-05): záznam v App Store Connect
+
+Windows řádek O aplikaci ověřil vlastník (2026-11-05). První build do
+TestFlightu nahraje CI s příštím tagem (rozhodnutí vlastníka; ruční běh
+`macos-mas.yml` na `main` prošel: podpis, stavba, validace).
+
+Vyplněno (agent v prohlížeči, vlastník přihlášený; nic neodesláno):
+podtitul „Mail, calendar and a board“, URL zásad ochrany soukromí
+`https://malachimail.app/privacy.html`, údaje o soukromí „Data Not
+Collected“ (uložené, nepublikované), propagační text, popis, klíčová
+slova (bez cizích ochranných známek, 2.3.7), URL podpory
+`https://malachimail.app/#report` a marketingu, copyright a poznámky
+pro App Review (sandbox a pomocníci, vypnutý kód agentů podle 2.5.19,
+odkaz na vlastní bezplatnou verzi podle 3.2.1(i), žádný sběr dat
+a kontrola aktualizací). Screenshoty 1440×900 z
+`web/assets/screenshots/macos/en` (inbox, chat, board-list,
+calendar-week, invitation, jira, crm-saved, newsletter) připravené
+mimo repozitář; nahrává je vlastník (prohlížeč agenta soubory nenahraje).
+
+Zbývá na vlastníkovi: screenshoty, kontaktní údaje a testovací účet pro
+review, publikovat App Privacy, věkové hodnocení, Content Rights,
+šifrování (Q5: standardní algoritmy → App Store Connect chce
+dokumentaci, nebo `ITSAppUsesNonExemptEncryption` podle odpovědi),
+DSA (trader status), verze záznamu podle tagu (dnes „1.0“, build bude
+mít verzi z tagu) a odeslání do review. Web: `privacy.html` zmiňuje
+jen edici z Microsoft Store, která aktualizace nekontroluje; verze
+z Mac App Store je na tom stejně a patří tam taky.
