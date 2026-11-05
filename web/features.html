@@ -63,7 +63,7 @@
   <div class="wrap">
     <div class="eyebrow">Features</div>
     <h1>What works today</h1>
-    <p class="lead">Version 0.3.0, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
+    <p class="lead">Version 0.4.0, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
   </div>
 </div>
 
@@ -101,7 +101,7 @@
     <p>Passwords and tokens live in the system keyring: Secret Service on Linux, the login keychain on macOS, Credential Manager on Windows. A server with a certificate of its own can be trusted explicitly, by its fingerprint, after you have seen it; there is no general <em>ignore certificate</em>.</p>
 
     <h2 id="reading"><svg class="icon"><use href="#i-cloud-off"/></svg>Reading, offline</h2>
-    <p>Folders and messages are synchronised into a local store within a configurable retention window, and new mail arrives as the server announces it (IMAP IDLE, Graph polling). Flags, moves and deletions are queued locally and pushed back, so the client works on a train. With two or more mail accounts, <em>All Inboxes</em> at the top of the sidebar shows the inbox of every one of them in one list, grouped by conversation too; it can be hidden in Preferences.</p>
+    <p>Folders and messages are synchronised into a local store within a configurable retention window, and new mail arrives as the server announces it (IMAP IDLE, Graph polling). Flags, moves and deletions are queued locally and pushed back, so the client works on a train. With two or more mail accounts, <em>All Inboxes</em>, the first row of the Favourites section at the top of the sidebar, shows the inbox of every one of them in one list, grouped by conversation too; it can be hidden in Preferences.</p>
     <p>To save disk space the stored mail is kept compressed, and the large attachments of older messages can stay on the server until you open them. With <em>Never Store Attachments</em> none is stored but the pictures a message shows: an attachment you open is downloaded into memory and is gone when you quit. Drafts and signed or encrypted mail always stay whole.</p>
 
     <h2 id="html"><svg class="icon"><use href="#i-shield"/></svg>HTML mail, safely</h2>
@@ -148,7 +148,7 @@
     <p><code>malachi-mcp</code> is a Model Context Protocol server over stdio that gives an agent (Claude Code, Claude Desktop, Zed, Cursor or any other MCP client) a gated view of the mail, the calendar and the board, in tiers you choose when it starts: reading and drafts always, modifying, sending and triage only when granted. A draft goes out only when you send it, and everything that comes from mail is fenced as data before the model sees it. <a href="assistant.html#agents">The tiers and the rules.</a></p>
 
     <h2 id="desktop"><svg class="icon"><use href="#i-window"/></svg>Desktop integration</h2>
-    <p><code>mailto:</code> links, new-mail notifications with the system's sound, launch at login, running in the background (with a tray icon on Windows), light and dark styles, a foldable sidebar with favourite folders, and the platform's conventions for shortcuts, menus and dialogs. Czech translation, and the machinery to add more languages.</p>
+    <p><code>mailto:</code> links, new-mail notifications with the system's sound, launch at login, running in the background (with a tray icon on Windows), light and dark styles, a foldable sidebar with favourite folders, toolbars you can arrange yourself (on macOS with the system's palette, elsewhere in Preferences or from a right click on a bar), printing of a message, a conversation, several messages or a calendar day with <kbd>Ctrl</kbd>+<kbd>P</kbd> (<kbd>⌘P</kbd>), <em>Report an Issue</em> at the end of the status bar, and the platform's conventions for shortcuts, menus and dialogs. Czech translation, and the machinery to add more languages.</p>
 
     <h2 id="security"><svg class="icon"><use href="#i-lock"/></svg>Security and privacy</h2>
     <ul>
