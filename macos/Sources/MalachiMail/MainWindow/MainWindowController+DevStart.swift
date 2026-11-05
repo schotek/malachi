@@ -358,6 +358,9 @@ extension MainWindowController {
         if DevelopmentRules.step(step, in: self) {
             return
         }
+        if DevelopmentMCP.step(step, in: self) {
+            return
+        }
         if DevelopmentSignature.step(step, in: self) {
             return
         }

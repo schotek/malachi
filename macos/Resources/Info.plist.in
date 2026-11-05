@@ -28,9 +28,13 @@ Template for the bundle's Info.plist; macos/Makefile substitutes the
 	<key>CFBundleShortVersionString</key>
 	<string>@VERSION@</string>
 	<key>CFBundleVersion</key>
-	<string>@VERSION@</string>
+	<string>@BUILD@</string>
 	<key>MalachiVersion</key>
 	<string>@FULL_VERSION@</string>
+	<!-- direct (the DMG, every development build) or appstore; MalachiCore's
+	     Distribution reads it at run time. -->
+	<key>MalachiDistribution</key>
+	<string>@DISTRIBUTION@</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSApplicationCategoryType</key>

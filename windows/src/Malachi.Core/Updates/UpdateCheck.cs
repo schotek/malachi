@@ -41,7 +41,7 @@ using Malachi.Core.I18n;
 namespace Malachi.Core.Updates;
 
 /// <summary>ui/internal/updates: a namespace of functions, so that the Go names map 1:1.</summary>
-public static class UpdateCheck
+public static partial class UpdateCheck
 {
     /// <summary>The longest URL a browser is given (updates.OpenableURL).</summary>
     public const int MaxUrlBytes = 2048;

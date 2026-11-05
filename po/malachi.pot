@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 12:54+0000\n"
+"POT-Creation-Date: 2026-11-05 15:28+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:298
+#: ui/main.go:299
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -1056,6 +1056,80 @@ msgstr ""
 #: ui/internal/assistant/compose_write.go:149
 #, c-format
 msgid "Assistant · %s"
+msgstr ""
+
+#. TRANSLATORS: Group title in Settings → AI of Malachi Mail from the Mac App Store.
+#: ui/internal/assistant/distribution.go:35
+msgid "More Assistant Features"
+msgstr ""
+
+#. TRANSLATORS: Settings → AI of Malachi Mail from the Mac App Store; malachimail.app is the website and stays as it is.
+#: ui/internal/assistant/distribution.go:37
+msgid ""
+"Malachi Mail from malachimail.app also has the assistant right in the app "
+"with Claude or ChatGPT, the board's triage and suggested replies. This "
+"version from the App Store can't run them because it runs in a sandbox."
+msgstr ""
+
+#. TRANSLATORS: Button opening the list of what the version from the website adds.
+#: ui/internal/assistant/distribution.go:39
+msgid "More…"
+msgstr ""
+
+#. TRANSLATORS: Link in the status bar of Malachi Mail from the Mac App Store, before Report an Issue.
+#: ui/internal/assistant/distribution.go:41
+msgid "More AI Features"
+msgstr ""
+
+#. TRANSLATORS: Dialog title; malachimail.app is the website and stays as it is.
+#: ui/internal/assistant/distribution.go:43
+msgid "Features of the Version from malachimail.app"
+msgstr ""
+
+#: ui/internal/assistant/distribution.go:44
+msgid ""
+"This version from the Mac App Store runs in the macOS sandbox. Because of "
+"it, it can't start Claude Code or Codex installed on your Mac, so it lacks:"
+msgstr ""
+
+#: ui/internal/assistant/distribution.go:46
+msgid "The assistant in the app's panel with Claude Code or ChatGPT (Codex)"
+msgstr ""
+
+#: ui/internal/assistant/distribution.go:47
+msgid ""
+"Rewriting and writing a message with the assistant, and searching in your "
+"own words"
+msgstr ""
+
+#: ui/internal/assistant/distribution.go:48
+msgid "The board's triage, by hand and automatically, and Suggest Reply"
+msgstr ""
+
+#: ui/internal/assistant/distribution.go:49
+msgid "Handing an attachment to Claude as a file"
+msgstr ""
+
+#: ui/internal/assistant/distribution.go:51
+msgid ""
+"Both versions are free. The version from the website updates itself, this "
+"one through the App Store."
+msgstr ""
+
+#: ui/internal/assistant/distribution.go:52
+msgid ""
+"Accounts and settings don't move between the two versions yet: after "
+"switching, add your accounts again."
+msgstr ""
+
+#. TRANSLATORS: Button opening the website in the browser; malachimail.app stays as it is.
+#: ui/internal/assistant/distribution.go:54
+msgid "Open malachimail.app"
+msgstr ""
+
+#: ui/internal/assistant/distribution.go:55 ui/internal/updates/updates.go:157
+#: ui/internal/updates/updates.go:231 ui/internal/signature/text.go:377
+msgid "Close"
 msgstr ""
 
 #. TRANSLATORS: A group of Preferences → AI: what the user tells the assistant about themselves.
@@ -8040,11 +8114,6 @@ msgstr ""
 msgid "More Information"
 msgstr ""
 
-#: ui/internal/updates/updates.go:157 ui/internal/updates/updates.go:231
-#: ui/internal/signature/text.go:377
-msgid "Close"
-msgstr ""
-
 #: ui/internal/updates/updates.go:190
 msgid "Security Update Available"
 msgstr ""
@@ -8125,6 +8194,21 @@ msgstr ""
 msgid ""
 "Malachi Mail checks once a day whether a new version exists and sends only "
 "its version number. You can turn this off in Preferences."
+msgstr ""
+
+#. TRANSLATORS: In the About window: this copy came from Apple's Mac App Store.
+#: ui/internal/updates/edition.go:25
+msgid "Version from the Mac App Store"
+msgstr ""
+
+#. TRANSLATORS: In the About window: this copy came from the Microsoft Store.
+#: ui/internal/updates/edition.go:28
+msgid "Version from the Microsoft Store"
+msgstr ""
+
+#. TRANSLATORS: In the About window: this copy came from the website; malachimail.app stays as it is.
+#: ui/internal/updates/edition.go:31
+msgid "Version from malachimail.app"
 msgstr ""
 
 #. TRANSLATORS: the Preferences page of the mail rules (filters that

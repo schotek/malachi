@@ -45,8 +45,13 @@ import Foundation
 
 extension Assistant {
     /// assistant.Targets: the targets, in the order of the menu and the
-    /// settings (`AssistantController.targets` is the same list).
-    public static let targets: [Target] = [.desktop, .code, .app]
+    /// settings (`AssistantController.targets` is the same list). The App
+    /// Store build has no In App (`Distribution.allowsLocalAgents`).
+    public static let targets: [Target] = targets(for: .current)
+
+    static func targets(for d: Distribution) -> [Target] {
+        d.allowsLocalAgents ? [.desktop, .code, .app] : [.desktop, .code]
+    }
 
     // MARK: Models
 

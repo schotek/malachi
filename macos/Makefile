@@ -17,6 +17,10 @@ SHORT_VERSION := $(shell printf '%s' '$(VERSION)' | sed -nE 's/^([0-9]+(\.[0-9]+
 ifeq ($(SHORT_VERSION),)
 SHORT_VERSION := 0.0.0
 endif
+# CFBundleVersion. The Mac App Store wants it to grow with every upload, so
+# its workflow passes the run's number (BUILD_NUMBER=0.4.0.17 is not valid:
+# one to three integers); everything else keeps SHORT_VERSION.
+BUILD_NUMBER  ?= $(SHORT_VERSION)
 
 # Code-signing identity. "-" is ad hoc: enough for the machine the bundle was
 # built on, but every rebuild is a new identity, so the Keychain asks again
@@ -39,6 +43,36 @@ ENTITLEMENTS  := Resources/MalachiMail.entitlements
 # malachi-keychain. Signed into every build, with or without the hardened
 # runtime, so that an ad-hoc build carries what a release does.
 MCP_ENTITLEMENTS := Resources/malachi-mcp.entitlements
+# No entitlements for malachid and malachi-keychain in the DMG.
+HELPER_ENTITLEMENTS :=
+
+# DISTRIBUTION=appstore builds the Mac App Store variant from the same code
+# (docs/plans/mac-app-store.md): Info.plist says so to MalachiCore's
+# Distribution, every binary is signed with the App Sandbox from
+# Resources/mas (malachid and malachi-keychain inheriting the app's), and
+# the provisioning profile PROFILE, which the app's application identifier
+# and app group need, goes into the bundle. SIGN is then an Apple
+# Development identity for a local test or Apple Distribution for the
+# store; neither gets the hardened runtime, which the App Store does not
+# ask for.
+DISTRIBUTION  ?= direct
+PROFILE       ?=
+# The App Store build carries malachi-mcp in a bundle of its own
+# (MCP_APP), with the profile MCP_PROFILE of io.github.schotek.Malachi.malachi-mcp:
+# Claude starts it, so it has a sandbox of its own, and a sandboxed
+# executable outside a bundle gets neither the app group nor a container.
+# Beside it malachi-mcp-worker, the same binary signed to inherit its
+# sandbox: the bridge's document worker is a child, and a child that asks
+# for a sandbox of its own is ended at start (extract_runner.go).
+MCP_PROFILE   ?=
+MCP_APP       = $(CONTENTS)/Helpers/Malachi Mail MCP.app
+ifeq ($(DISTRIBUTION),appstore)
+ENTITLEMENTS        := Resources/mas/MalachiMail.entitlements
+MCP_ENTITLEMENTS    := Resources/mas/malachi-mcp.entitlements
+HELPER_ENTITLEMENTS := Resources/mas/inherit.entitlements
+else ifneq ($(DISTRIBUTION),direct)
+$(error DISTRIBUTION must be direct or appstore, not $(DISTRIBUTION))
+endif
 
 # The architectures of the Swift binaries: empty is this Mac's own, the
 # quick build for development. The root Makefile's macos-dmg builds arm64
@@ -104,7 +138,7 @@ CONTENTS      := $(APP)/Contents
 # executable $(1) and check that each of its architectures records it.
 set_sdk = vtool -set-build-version macos $(MACOS_MIN) $(SDK_VERSION) -replace -output "$(1).sdk" "$(1)"; mv "$(1).sdk" "$(1)"; for arch in $$(lipo -archs "$(1)"); do vtool -arch "$$arch" -show-build "$(1)" | grep -Eq '^ *sdk $(SDK_VERSION)$$' || { echo "macos: $(1) does not record SDK $(SDK_VERSION) for $$arch" >&2; exit 1; }; done;
 
-.PHONY: build locale icon app dmg notarize test run clean
+.PHONY: build locale icon app dmg notarize test run clean pkg validate-pkg
 
 ## build: compile the Swift package (release) for ARCHS; a warning fails the build
 build:
@@ -139,36 +173,48 @@ icon:
 app: build locale icon
 	@test -x "$(GO_DIR)/malachid" -a -x "$(GO_DIR)/malachi-mcp" || { \
 		echo "macos: $(GO_DIR)/malachid or malachi-mcp is missing; run 'make backend mcp' in $(ROOT) first" >&2; exit 1; }
+	$(if $(filter appstore,$(DISTRIBUTION)),@test -f "$(PROFILE)" -a -f "$(MCP_PROFILE)" || { \
+		echo "macos: DISTRIBUTION=appstore needs PROFILE=<the .provisionprofile of io.github.schotek.Malachi> and MCP_PROFILE=<that of io.github.schotek.Malachi.malachi-mcp>" >&2; exit 1; })
 	@set -e; bin="$$($(SWIFT_BUILD) --show-bin-path)"; \
 	rm -rf "$(APP)"; \
 	mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources"; \
 	cp "$$bin/$(EXE)" "$(CONTENTS)/MacOS/$(EXE)"; \
 	cp "$$bin/$(HELPER)" "$(CONTENTS)/MacOS/$(HELPER)"; \
-	cp "$(GO_DIR)/malachid" "$(GO_DIR)/malachi-mcp" "$(CONTENTS)/MacOS/"; \
+	cp "$(GO_DIR)/malachid" "$(CONTENTS)/MacOS/"; \
+	$(if $(filter appstore,$(DISTRIBUTION)),mkdir -p "$(MCP_APP)/Contents/MacOS"; \
+	cp "$(GO_DIR)/malachi-mcp" "$(MCP_APP)/Contents/MacOS/"; \
+	cp "$(GO_DIR)/malachi-mcp" "$(MCP_APP)/Contents/MacOS/malachi-mcp-worker"; \
+	cp "$(MCP_PROFILE)" "$(MCP_APP)/Contents/embedded.provisionprofile"; \
+	mkdir -p "$(MCP_APP)/Contents/Resources"; \
+	cp Resources/mas/PrivacyInfo.xcprivacy "$(MCP_APP)/Contents/Resources/"; \
+	sed -e 's/@VERSION@/$(SHORT_VERSION)/g' -e 's/@BUILD@/$(BUILD_NUMBER)/g' -e 's/@BUNDLE_ID@/$(APP_ID)/g' Resources/mas/mcp-Info.plist.in > "$(MCP_APP)/Contents/Info.plist"; \
+	plutil -lint "$(MCP_APP)/Contents/Info.plist" >/dev/null;,cp "$(GO_DIR)/malachi-mcp" "$(CONTENTS)/MacOS/";) \
 	$(if $(SDK_VERSION),$(call set_sdk,$(CONTENTS)/MacOS/$(EXE))) \
 	for arch in $(ARCHS); do \
-		for f in "$(CONTENTS)"/MacOS/*; do \
+		for f in "$(CONTENTS)"/MacOS/* $(if $(filter appstore,$(DISTRIBUTION)),"$(MCP_APP)/Contents/MacOS/malachi-mcp" "$(MCP_APP)/Contents/MacOS/malachi-mcp-worker"); do \
 			lipo "$$f" -verify_arch "$$arch" || { echo "macos: $$f has no $$arch code" >&2; exit 1; }; \
 		done; \
 	done; \
 	cp -R "$(LOCALE_DIR)"/*.lproj "$(CONTENTS)/Resources/"; \
 	cp "$(ICNS)" "$(CONTENTS)/Resources/Malachi.icns"; \
+	$(if $(filter appstore,$(DISTRIBUTION)),plutil -lint Resources/mas/PrivacyInfo.xcprivacy >/dev/null; cp Resources/mas/PrivacyInfo.xcprivacy "$(CONTENTS)/Resources/";) \
 	cp "$(ROOT)/LICENSE" "$(CONTENTS)/Resources/LICENSE.txt"; \
 	cp "$(ROOT)/backend/LICENSE" "$(CONTENTS)/Resources/LICENSE-backend.txt"; \
 	cp "$(ROOT)/LICENSING.md" "$(CONTENTS)/Resources/LICENSING.md"; \
 	cp "$(ROOT)/THIRD-PARTY-NOTICES.md" "$(CONTENTS)/Resources/THIRD-PARTY-NOTICES.md"; \
-	sed -e 's/@VERSION@/$(SHORT_VERSION)/g' -e 's/@FULL_VERSION@/$(VERSION)/g' \
+	sed -e 's/@VERSION@/$(SHORT_VERSION)/g' -e 's/@BUILD@/$(BUILD_NUMBER)/g' -e 's/@FULL_VERSION@/$(VERSION)/g' \
 	    -e 's/@BUNDLE_ID@/$(APP_ID)/g' -e 's/@EXECUTABLE@/$(EXE)/g' \
-	    -e 's|@LOCALIZATIONS@|$(LOCALIZATIONS)|g' \
+	    -e 's|@LOCALIZATIONS@|$(LOCALIZATIONS)|g' -e 's/@DISTRIBUTION@/$(DISTRIBUTION)/g' \
 	    Resources/Info.plist.in > "$(CONTENTS)/Info.plist"; \
 	plutil -lint "$(CONTENTS)/Info.plist" >/dev/null; \
 	plutil -lint "$(ENTITLEMENTS)" >/dev/null; \
 	plutil -lint "$(MCP_ENTITLEMENTS)" >/dev/null; \
+	$(if $(PROFILE),cp "$(PROFILE)" "$(CONTENTS)/embedded.provisionprofile";) \
 	printf 'APPL????' > "$(CONTENTS)/PkgInfo"; \
 	for f in malachid $(HELPER); do \
-		$(CODESIGN) --identifier "$(APP_ID).$$f" "$(CONTENTS)/MacOS/$$f"; \
+		$(CODESIGN) --identifier "$(APP_ID).$$f" $(if $(HELPER_ENTITLEMENTS),--entitlements "$(HELPER_ENTITLEMENTS)") "$(CONTENTS)/MacOS/$$f"; \
 	done; \
-	$(CODESIGN) --identifier "$(APP_ID).malachi-mcp" --entitlements "$(MCP_ENTITLEMENTS)" "$(CONTENTS)/MacOS/malachi-mcp"; \
+	$(if $(filter appstore,$(DISTRIBUTION)),$(CODESIGN) --identifier "$(APP_ID).malachi-mcp-worker" --entitlements "$(HELPER_ENTITLEMENTS)" "$(MCP_APP)/Contents/MacOS/malachi-mcp-worker"; $(CODESIGN) --entitlements "$(MCP_ENTITLEMENTS)" "$(MCP_APP)",$(CODESIGN) --identifier "$(APP_ID).malachi-mcp" --entitlements "$(MCP_ENTITLEMENTS)" "$(CONTENTS)/MacOS/malachi-mcp"); \
 	$(CODESIGN) --entitlements "$(ENTITLEMENTS)" "$(APP)"; \
 	codesign --verify --strict --deep "$(APP)"; \
 	echo "built $(APP) ($(VERSION), $(or $(ARCHS),$(shell uname -m)), languages: $(LANGS))"
@@ -188,6 +234,26 @@ dmg: app
 	$(if $(RELEASE_SIGN),codesign --force --sign "$(SIGN)" --timestamp "$(DMG)";) \
 	hdiutil verify -quiet "$(DMG)"; \
 	echo "built $(DMG)"
+
+## pkg: put the App Store bundle into build/Malachi-Mail-<version>-macos-<arch>.pkg for App Store Connect (DISTRIBUTION=appstore)
+# SIGN is an Apple Distribution identity, INSTALLER_SIGN a Mac Installer
+# Distribution one ("3rd Party Mac Developer Installer: …"); PROFILE and
+# MCP_PROFILE are Mac App Store provisioning profiles. The package installs
+# into /Applications; App Store Connect takes it as it is.
+INSTALLER_SIGN ?=
+PKG           := $(BUILD_DIR)/Malachi-Mail-$(VERSION)-macos-$(DMG_ARCH).pkg
+pkg: app
+	@test "$(DISTRIBUTION)" = appstore || { echo "macos: pkg needs DISTRIBUTION=appstore" >&2; exit 1; }
+	@test -n "$(INSTALLER_SIGN)" || { echo "macos: pkg needs INSTALLER_SIGN='3rd Party Mac Developer Installer: …'" >&2; exit 1; }
+	@set -e; rm -f "$(PKG)"; \
+	productbuild --component "$(APP)" /Applications --sign "$(INSTALLER_SIGN)" "$(PKG)"; \
+	pkgutil --check-signature "$(PKG)" >/dev/null; \
+	echo "built $(PKG)"
+
+## validate-pkg: have App Store Connect check the package without uploading it (NOTARY_KEY, NOTARY_KEY_ID, NOTARY_ISSUER)
+validate-pkg:
+	@test -f "$(PKG)" || { echo "macos: $(PKG) is missing; run make pkg with the same VERSION and ARCHS first" >&2; exit 1; }
+	xcrun altool --validate-app -f "$(PKG)" -t macos --api-key "$(NOTARY_KEY_ID)" --api-issuer "$(NOTARY_ISSUER)" --p8-file-path "$(NOTARY_KEY)"
 
 ## notarize: have Apple notarise the DMG, staple the ticket to it and check what Gatekeeper says (Developer ID only)
 # notarytool exits non-zero for a rejected submission too; the verdict is

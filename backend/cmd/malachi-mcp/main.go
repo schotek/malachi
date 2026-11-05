@@ -118,6 +118,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		return runSetup(args[0], args[1:], stdout, stderr)
 	}
+	// Started with no arguments but a setup request named in the
+	// environment: a caller that cannot pass arguments (setup.go).
+	if len(args) == 0 {
+		if path := os.Getenv(setupRequestEnv); path != "" {
+			return runSetupRequest(path)
+		}
+	}
 	cfg, showVersion, err := parseServerFlags(args, stderr)
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {

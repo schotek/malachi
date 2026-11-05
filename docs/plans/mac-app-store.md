@@ -247,6 +247,14 @@ Přechod je dobrovolný. Kdo z DMG přejde do App Store:
   (`PG9F7XU6X8.io.github.schotek.Malachi`) a jednorázově přenést staré
   položky (jedna otázka na položku), nebo nechat uživatele znovu se
   přihlásit. Zkoušet jen s povolením vlastníka (`no-keychain-experiments`).
+  **Rozhodnutí (2026-11-05, vlastník):** zůstává přihlašovací klíčenka
+  přes stávající `malachi-keychain`, bez data protection keychain a bez
+  přenosu položek. Vlastníkův test ve VM (jen App Store build, podpis
+  Apple Development): sandboxovaný helper položku účtu uložil a po
+  restartu VM ji přečetl bez dotazu. Kdo přejde mezi verzemi, založí
+  účty znovu (jiný kontejner i jiný podpis); dialog Více AI funkcí to
+  říká. Případný importní průvodce v DMG verzi je pozdější samostatná
+  práce.
 - **Most:** stávající registrace v Claude ukazují na cestu
   `/Applications/Malachi Mail.app/…/malachi-mcp` bez `MALACHI_SOCKET`;
   po přechodu je aplikace musí přepsat (podle Q2).
@@ -320,7 +328,294 @@ Přechod je dobrovolný. Kdo z DMG přejde do App Store:
 | A0 | Odpovědi Q2–Q7, App ID a skupina v Developer portálu, záznam aplikace a jméno „Malachi Mail“ v App Store Connect | vlastník |
 | A1 | Sandboxované sestavení lokálně: entitlements, socket ve skupinovém kontejneru, `container-migration.plist`, `Relaunch`, `config.toml` | debug build nad kopií dat (`MALACHI_DATA_DIR`), nikdy nad ostrými daty ani `build/Malachi Mail.app` |
 | A2 | Přepínač distribuce v `MalachiCore`, skrytí §3.3, registrace mostu podle Q2, `malachi-mcp` se sandboxem a čtení PDF | `swift test`, ruční průchod Předvoleb → AI a Claude Desktop |
-| A3 | Klíčenka (data protection keychain, přenos položek) | jen s povolením vlastníka |
+| A3 | Klíčenka: zrušeno (2026-11-05, rozhodnutí vlastníka), viz §6 Klíčenka | test vlastníka ve VM |
 | A4 | `make macos-mas`, privacy manifest, validace `.pkg`, pak `macos-mas.yml` | `altool --validate-app` lokálně, pak jeden běh CI |
 | A5 | TestFlight pro Mac, poznámka pro review, odeslání | vlastník |
 | A6 | Po schválení: `releasing.md` §8 s oběma variantami, README, web, řádek v `macos/README.md`; DMG beze změny | vlastník |
+
+### 8.1 Stav A0 (2026-11-05)
+
+Hotovo (agent v prohlížeči, vlastník přihlášený):
+
+- App ID `io.github.schotek.Malachi` („Malachi Mail“, explicitní) se
+  schopností App Groups. Skupina z §3.2 má prefix týmu
+  (`PG9F7XU6X8.io.github.schotek.Malachi`), takže se v portálu
+  neregistruje (portál bere jen `group.…`). Vývojový profil ji povoluje
+  sám: nese `com.apple.security.application-groups` `PG9F7XU6X8.*`
+  a `keychain-access-groups` `PG9F7XU6X8.*` (distribuční ověří A4). Jestli na novějším macOS
+  stačí bez dotazu systému, ověří A1.
+- Vývojový Mac je zařízení v portálu (kvůli vývojovému profilu pro A1).
+- Profil „Malachi Mail Mac App Store“ (Mac App Store Connect, certifikát
+  Distribution, platí do 2027-10-28). Zatím nestažený, do CI půjde jako
+  secret v A4.
+- Záznam v App Store Connect: macOS, „Malachi Mail“, primární jazyk
+  English (U.S.), SKU `malachi-mail-macos`, Full Access, kategorie
+  Productivity, cena 0 (základ USD).
+- Certifikát Apple Development pro vývojový Mac (vlastník v Xcode)
+  a profil „Malachi Mail Mac Development“ (macOS App Development, oba
+  vývojové certifikáty, vývojový Mac, platí do 2027-11-05) pro A1.
+
+Zbývá na vlastníkovi:
+
+- Soukromé klíče certifikátů Distribution a Mac Installer Distribution
+  vyexportovat jako `.p12` pro secrets CI (A4).
+- Dostupnost podle zemí, exportní dotazník (Q5) a trader status pro EU
+  (DSA) v App Store Connect.
+
+### 8.2 Stav A1 (2026-11-05)
+
+Napsáno:
+
+- `MalachiCore/Daemon/Distribution.swift`: `direct` / `appstore` z
+  `Info.plist` `MalachiDistribution` (čte se za běhu, `Info.plist.in`
+  `@DISTRIBUTION@`), skupina `PG9F7XU6X8.io.github.schotek.Malachi`
+  a její kontejner. `Paths.resolve` dává v App Store verzi socket do
+  kořene skupiny jako `rpc.sock` (s klíčem `rpc.sock.key` vedle), aby se
+  cesta vešla do 103 B pro uživatelská jména do 25 bajtů;
+  `MALACHI_SOCKET` má přednost dál. Data netřeba přesouvat: v sandboxu
+  je `~/Library/Application Support` už kontejner aplikace. Testy
+  `DistributionTests`.
+- `macos/Resources/mas/`: `MalachiMail.entitlements` (sandbox, síť
+  klient i server, soubory vybrané uživatelem, tisk, skupina,
+  application a team identifier), `inherit.entitlements` (`malachid`,
+  `malachi-keychain`), `malachi-mcp.entitlements` (vlastní sandbox se
+  skupinou, zatím bez `allow-unsigned-executable-memory`, ověří A2)
+  a `container-migration.plist`, který zatím nejde do žádného bundlu
+  (data DMG by přesunul, ne zkopíroval; §6).
+- `macos/Makefile`: `DISTRIBUTION=appstore PROFILE=…` vybere entitlements
+  z `Resources/mas`, vloží `embedded.provisionprofile` a zapíše distribuci
+  do `Info.plist`. DMG (`direct`) se liší jen klíčem
+  `MalachiDistribution = direct`.
+
+Ověřeno na vývojovém Macu (release build arm64, podpis Apple
+Development, vývojový profil, bundle mimo `build/`, prázdná data
+v kontejneru přes `MALACHI_DATA_DIR`, vzorová nástěnka, `MALACHI_START`
+`mail;board:list;mail;quit`):
+
+- Podpisy nesou přesně entitlements z `Resources/mas`.
+- Aplikace i démon v sandboxu naběhly, démon zmigroval nový store
+  v kontejneru aplikace, poslouchal na socketu ve skupinovém kontejneru,
+  aplikace se připojila a při konci démona zastavila.
+- Přístup ke skupině macOS povolil bez dotazu
+  (`containermanagerd`: „Requestor's signature allows it to access
+  a TCC-protected group container“); skupinu `group.…` tedy netřeba.
+- V systémovém logu žádné zamítnutí sandboxu.
+
+Neověřeno (zůstává):
+
+- Restart z Předvoleb (`Relaunch`, `/bin/sh` + `/usr/bin/open`) pod
+  sandboxem; žádný krok `MALACHI_START` ho nespouští.
+- Účet se sítí, přihlášení v prohlížeči, helper klíčenky, Uložit jako,
+  přílohy, tisk: potřebují skutečný účet nebo kliknutí (A2, A3).
+- Most MCP v sandboxu a registrace v Claude (A2).
+- Testový bundle nechal kontejnery
+  `~/Library/Containers/io.github.schotek.Malachi` a
+  `~/Library/Group Containers/PG9F7XU6X8.io.github.schotek.Malachi`;
+  z LaunchServices je odregistrovaný. macOS je cizímu procesu smazat
+  nedovolí; uklidí je vlastník ve Finderu až po posledním testu (A5).
+
+### 8.3 Stav A2, první část (2026-11-05): lokální agenti
+
+Napsáno:
+
+- `Distribution.allowsLocalAgents` (jen `direct`). Brány, ne jen skryté
+  ovládání: `ClaudeCodeLocator.locate()` v App Store verzi vždy nil (z něj
+  vychází každý běh Claude Code: panel, jednorázové požadavky, triage,
+  Navrhnout odpověď, `--version`, `auth status`, přihlášení),
+  `CodexProvider.executable` nil, dostupnost triage navíc podle
+  distribuce, `AppState` nečte přihlášení ChatGPT z klíčenky.
+- `Settings(defaults:distribution:)`: v App Store verzi se `assistant-target
+  = inapp` čte jako Claude Desktop a `assistant-provider = chatgpt` jako
+  Claude; zápis těchto hodnot se tam ignoruje, takže uložené hodnoty DMG
+  zůstanou pro návrat k DMG. `Assistant.targets` a
+  `AssistantController.targets` jsou bez In App.
+- Předvolby → AI: bez řádku poskytovatele a skupiny ChatGPT; skupina
+  Nástěnka, řádky Claude Code a Model zmizí samy (cíl nikdy není In App);
+  popis skupiny Asistent doplní věta `assistant.WebsiteOnlyText` (nový
+  msgid v `ui/internal/assistant/distribution.go`, česky, ve
+  `windows/parity-exclusions.txt`). Řádek v tabulce odchylek
+  `macos/README.md`.
+
+Ověřeno: `swift build -Xswiftc -warnings-as-errors`, filtrované
+`swift test` (775 testů, nové `DistributionAgentsTests`),
+`check-strings.py` beze změny proti HEAD kromě nového volání, `make po`
+v kontejneru (`cs.po` úplné), Go test reference. Neověřeno na obrazovce:
+Předvolby → AI v sandboxovaném bundlu ani v DMG.
+
+Zbývá v A2: most MCP v sandboxu (registrace s `MALACHI_SOCKET` do skupiny,
+PDF bez `allow-unsigned-executable-memory`, příloha jako soubor),
+registrace v Claude podle Q2 (a), restart Claude Desktop vypustit,
+`Relaunch` pod sandboxem.
+
+Nález z běhu A1 (log systému, 2026-11-05): `malachi-mcp` s vlastním
+sandboxem a skupinou ze sandboxované aplikace (`status` při startu)
+spadl čtyřikrát hned po startu: `taskgated-helper` „Disallowing
+io.github.schotek.Malachi.malachi-mcp because no eligible provisioning
+profiles found“ a `secinit` „Unable to get bundle identifier for
+container id io.github.schotek.Malachi.malachi-mcp“. Samostatná binárka
+bez bundlu nemůže nést provisioning profile ani mít vlastní kontejner,
+takže varianta z §4 (most s vlastním sandboxem jako holá binárka) nejde.
+Možnosti viz Q9.
+
+Pomocný bundle (2026-11-05, vlastník zvolil): App ID
+`io.github.schotek.Malachi.malachi-mcp` se skupinou, profily „Malachi Mail
+MCP Mac Development“ (do 2027-11-05) a „Malachi Mail MCP Mac App Store“
+(do 2027-10-28); `macos/Makefile` v App Store verzi dává most do
+`Contents/Helpers/Malachi Mail MCP.app` (`Resources/mas/mcp-Info.plist.in`,
+vlastní profil `MCP_PROFILE`, application identifier v entitlements),
+`Paths.bridgeExecutable` ho tam najde. Měření:
+
+- Spuštěný zvenku (jako ho spustí Claude) s `MALACHI_SOCKET` na socket ve
+  skupině: sandbox ho pustí, připojí se k démonovi aplikace (handshake,
+  protokol 2) a `list_accounts` odpoví. Tahle polovina funguje.
+- Spuštěný aplikací (`malachi-mcp status --json` z
+  `MCPRegistrationController`): padá v `_libsecinit_appsandbox`
+  (`EXC_BREAKPOINT`, rodič `MalachiMail`). Proces s vlastním sandboxem
+  nesmí být potomkem sandboxované aplikace; `inherit` by zase nefungoval
+  pod Claude. Registraci (`status`, `install`, `uninstall`) proto
+  aplikace nemůže spouštět jako podproces mostu; možnosti viz Q10.
+- `secinitd` u prvního spuštění aplikací zapsal „user consented to
+  launching … malachi-mcp with container …io.github.schotek.Malachi/Data“;
+  ověřit u vlastníka, zda viděl dialog.
+
+Registrace přes LaunchServices (2026-11-05): most dostal platformně
+neutrální parametry `--claude-code-config`, `--socket` (položka s
+`env.MALACHI_SOCKET`) a `--output` (výsledek či `{"error": …}` do
+souboru) a dočasný soubor s pevným jménem `.<jméno>.malachi-mcp.tmp`
+(`docs/mcp.md`, Go testy); pomocník má dočasné výjimky na
+`~/Library/Application Support/Claude/`, `~/.claude.json`,
+`~/..claude.json.malachi-mcp.tmp` (zápis) a `~/.claude/` (čtení).
+Ověřeno: pomocník v sandboxu oba soubory Claude přečte a výsledek do
+skupiny zapíše; spuštěný přes LaunchServices z shellu (`open -n … --args
+install`) zapsal do testovacího souboru ve složce Claude správnou položku
+se socketem ve skupině. Nefunguje: spuštěný přes LaunchServices
+z *aplikace* (`NSWorkspace.openApplication` s `arguments`) běží, sandbox
+se mu nastaví, ale příkaz neprovede a nezapíše nic ani do složky Claude.
+Nejspíš sandboxovaná aplikace argumenty spouštěné aplikaci nepředá
+(neověřeno v dokumentaci). Možnosti viz Q11. Konfigurace Claude jsou
+beze změny (otisk Claude Desktop shodný se zálohou, položka `malachi`
+v `~/.claude.json` shodná).
+
+Soubor se žádostí (2026-11-05, vlastník zvolil, Q11): aplikace zapíše
+příkazovou řádku do `mcp-setup-request.json` ve skupině, pomocníka spustí
+přes LaunchServices bez argumentů a jeho `Info.plist` (`LSEnvironment`
+`MALACHI_MCP_SETUP_REQUEST`, „~/“ = domov z databáze účtů) ho na žádost
+nasměruje; most ji přečte, smaže a provede jen s `--output`
+(`setup.go` `runSetupRequest`, test `TestSetupRequestFile`). Claude
+spouští tutéž binárku přímo, bez proměnné, jako server. Spouštěč
+(`MalachiMail/App/BridgeSetupLauncher.swift`, háček
+`MCPRegistrationController.setupLauncher`) řadí volání za sebe.
+Vývojové kroky `mcp-status`, `mcp-install`, `mcp-uninstall`
+(`MainWindowController+DevStartMCP.swift`; píšou skutečné konfigurace).
+
+Ověřeno ze sandboxované aplikace (vývojový podpis, Claude Desktop
+neběžel, obě konfigurace předem zazálohované): `status` při startu bez
+chyby; `install` zapsal do Claude Desktop i `~/.claude.json` položku
+s příkazem pomocníka a `env.MALACHI_SOCKET` do skupiny, přes pevný
+dočasný soubor bez zbytku; `status` pak `registered=true`; `uninstall`
+obě položky odebral. Po testu Claude Desktop vrácen ze zálohy bajt po
+bajtu, v `~/.claude.json` vrácena původní položka `malachi` (zbytek
+souboru mezitím přepisoval Claude Code). Spolu s dřívějším měřením
+(pomocník spuštěný zvenku s `MALACHI_SOCKET` odpoví `list_accounts`) je
+cesta Claude → most → démon App Store verze ověřená až na skutečné
+spuštění samotným Claude Desktop nebo Claude Code.
+
+Zbývá v A2: restart Claude Desktop v App Store verzi (bez Apple events
+vypustit), `Relaunch` pod sandboxem, PDF bez
+`allow-unsigned-executable-memory`, příloha jako soubor, ruční průchod
+Předvoleb → AI a spuštění mostu skutečným Claude.
+
+Další body A2 (2026-11-05):
+
+- **Restart Claude Desktop:** v App Store verzi vypnutý
+  (`ClaudeDesktopController.Platform.canRestart`, `ClaudeDesktopService`
+  podle `Distribution.current == .direct`). Změna se zapíše hned a dokud
+  Claude Desktop běží, zůstane čekat v řádku „Claude Desktop změnu načte
+  po restartu“ bez tlačítka Restart; zapíše se znovu, až se Claude Desktop
+  ukončí sám. Test `withoutARestartTheChangeWaitsForClaudeDesktopsOwnQuit`.
+- **`Relaunch`:** změřeno vývojovým krokem `relaunch` — v sandboxu se
+  `terminate:` zavolal, ale aplikace se neukončila, a čekající `sh` se po
+  minutě vzdal. V App Store verzi `Relaunch.available` je false, Předvolby →
+  Vzhled restart nenabízejí a velikost textu platí od dalšího spuštění.
+- **PDF:** pomocník v sandboxu jako worker přečetl
+  `invoice-libreoffice.pdf` bez `allow-unsigned-executable-memory`
+  (1240 bajtů textu, stejně jako bez sandboxu); entitlement se nepřidává.
+- **Worker pod mostem:** podřízený proces s vlastním sandboxem pod
+  sandboxovaným mostem by spadl jako pomocník pod aplikací, proto pomocný
+  bundle nese `malachi-mcp-worker`, kopii mostu podepsanou s `inherit`,
+  a most ji použije, když leží vedle něj (`besideWorker`, neutrální
+  pravidlo, test `TestBesideWorker`). Neměřeno: spuštění workeru mostem
+  pod Claude (chce zprávu s PDF v sandboxovaném démonovi, tj. účet
+  a klíčenku); ověřit v A5 se skutečnou přílohou.
+- **Příloha jako soubor pro Claude** (Cowork, pracovní adresář Claude
+  Code): aplikace ji zapisuje do svého adresáře pro otevírání, v App Store
+  verzi uvnitř kontejneru aplikace, který macOS ostatním aplikacím chrání
+  (viz `ls` z shellu: Operation not permitted). **Rozhodnutí (Q12,
+  vlastník 2026-11-05): jen text přes most.** V App Store verzi položka
+  „Zeptat se asistenta…“ u přílohy není (`Distribution.handsFilesToClaude`,
+  `AttachmentChipView.offerAssistant`); Claude čte text PDF, DOCX a XLSX
+  přes `get_attachment`.
+
+Okno O aplikaci (2026-11-05, vlastník, všechny tři klienty): pod řádkem
+aktualizací řádek odkud kopie je, `updates.EditionLine`
+(`ui/internal/updates/edition.go`, msgidy „Version from malachimail.app“,
+„… the Mac App Store“, „… the Microsoft Store“ s češtinou). GTK vždy
+web, macOS podle `Distribution` (`Updates.Edition.of`), Windows podle
+identity balíčku MSIX (`PackageIdentity.IsPackaged` → Microsoft Store;
+i testovací balíček). Windows napsaný bez `dotnet`
+(`UpdateCheck.Edition.cs`, `UpdateEditionTests`, `AlertService.About`).
+
+Odkaz na verzi z webu (2026-11-05, vlastník; jen macOS, App Store build):
+Předvolby → AI začínají skupinou *Další funkce asistenta* s tlačítkem
+*Více…* a stavový pruh má před *Nahlásit problém* odkaz *Více AI
+funkcí*; obojí otevře týž dialog (`WebsiteFeaturesDialog`, texty
+`assistant.WebsiteFeaturesTexts`): proč v sandboxu chybí asistent
+v aplikaci s Claude Code či ChatGPT, psaní a úpravy s asistentem,
+hledání vlastními slovy, třídění nástěnky, Navrhnout odpověď a předání
+přílohy jako souboru; že obě verze jsou zdarma a účty se mezi nimi zatím
+nepřenášejí. Tlačítko jen otevře https://malachimail.app, nic nestahuje
+(Guidelines 2.4.5); do poznámek pro App Review patří, že jde o odkaz na
+vlastní bezplatnou verzi (3.2.1(i)) a proč je kód agentů vypnutý (2.5.19).
+
+### 8.4 Stav A4, první část (2026-11-05): `.pkg` a privacy manifest
+
+Napsáno:
+
+- `macos/Resources/mas/PrivacyInfo.xcprivacy`: bez sběru dat a sledování,
+  důvody pro `UserDefaults` (CA92.1), časy souborů (C617.1) a čas od
+  startu systému (35F9.1, Go runtime a hodiny Swiftu); volné místo na
+  disku kód nečte. Jde do `Contents/Resources` aplikace i pomocníka mostu.
+- `BUILD_NUMBER` (výchozí `SHORT_VERSION`) dává `CFBundleVersion` obou
+  bundlů (`@BUILD@`); App Store chce číslo rostoucí s každým nahráním,
+  workflow předá číslo běhu.
+- `make -C macos pkg` (`productbuild --component … /Applications --sign
+  "$(INSTALLER_SIGN)"`, kontrola `pkgutil --check-signature`)
+  a `validate-pkg` (`xcrun altool --validate-app` s klíčem App Store
+  Connect API přes `NOTARY_KEY`, `NOTARY_KEY_ID`, `NOTARY_ISSUER`);
+  kořenový `make macos-mas` (universal, `DISTRIBUTION=appstore`, bez
+  kanálu aktualizací).
+
+Ověřeno: `make app DISTRIBUTION=appstore BUILD_NUMBER=17` s vývojovým
+podpisem (arm64): oba bundly mají `0.4.0` / `17`, oba privacy manifesty
+jsou na místě, podpis prochází.
+
+Podpis (2026-11-05): nové certifikáty Apple Distribution a Mac Installer
+Distribution vytvořené v Xcode na MacBooku Air (původní z 2026-10-28
+zůstaly na MacBooku Pro), oba profily Mac App Store („Malachi Mail Mac
+App Store“, „Malachi Mail MCP Mac App Store“) přegenerované na nový
+certifikát Distribution, platí do 2027-11-05. Universal `.pkg`
+(`BUILD_NUMBER=1`) se postaví a podepíše; `pkgutil --check-signature`
+prochází. `xcrun altool --validate-app` (2026-11-05) skončil „VERIFY
+SUCCEEDED with no errors“, takže kontrola SDK (S7) ani privacy manifest
+nic nevytkly. Validuje nový týmový klíč App Store Connect API „Malachi
+App Store“ (role Developer, vedle „Malachi CI notarization“), u vlastníka
+v `~/.appstoreconnect/private_keys/`. Zbývá `macos-mas.yml` a jeho
+secrets (certifikáty z MacBooku Air jako `.p12`, oba profily, klíč).
+- `.github/workflows/macos-mas.yml` (2026-11-05): ručně postaví
+  a zvaliduje `.pkg`, u tagu `v*` ho navíc nahraje (`altool --upload-app`)
+  do App Store Connect; `CFBundleVersion` = číslo běhu. Secrets
+  `MACOS_MAS_CERTIFICATES` (+ `_PASSWORD`), `MACOS_MAS_PROFILE`,
+  `MACOS_MAS_MCP_PROFILE`, `MACOS_MAS_API_KEY`, `MACOS_MAS_API_KEY_ID`,
+  issuer sdílený `MACOS_NOTARY_ISSUER`; bez nich se job zastaví
+  s varováním. Lokálně ověřené jsou stavba, podpis a validace; nahrání
+  ne (poprvé u tagu nebo ručně po souhlasu vlastníka).

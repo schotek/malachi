@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+The entitlements of the Mac App Store build of the app (macos/Makefile,
+DISTRIBUTION=appstore; docs/plans/mac-app-store.md §4). The App Sandbox
+with what the app and the daemon it starts need: mail, calendar and CRM
+servers (network.client), the one-shot 127.0.0.1 listener of the daemon's
+own browser sign-in (network.server), files the user picks in Save As,
+Save All and Attach (files.user-selected.read-write), printing, and the
+app group whose container holds the daemon's socket for malachi-mcp.
+malachid and malachi-keychain inherit this sandbox; malachi-mcp, started
+by Claude, has one of its own. The application and team identifiers must
+match the embedded provisioning profile. No Apple events: the DMG's
+restart of Claude Desktop is left out of this build.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.print</key>
+	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>PG9F7XU6X8.io.github.schotek.Malachi</string>
+	</array>
+	<key>com.apple.application-identifier</key>
+	<string>PG9F7XU6X8.io.github.schotek.Malachi</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>PG9F7XU6X8</string>
+</dict>
+</plist>

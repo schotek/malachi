@@ -375,3 +375,28 @@ func TestWithheldWording(t *testing.T) {
 		t.Errorf("busy: %v, %q", busy.cacheable(), workerFailureReason(busy))
 	}
 }
+
+// TestBesideWorker: a malachi-mcp-worker beside the bridge is the worker's
+// executable, else the bridge itself.
+func TestBesideWorker(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "malachi-mcp")
+	if got := besideWorker(exe); got != exe {
+		t.Errorf("no worker beside: %q, want %q", got, exe)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "malachi-mcp-worker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := besideWorker(exe); got != exe {
+		t.Errorf("a directory of that name: %q, want %q", got, exe)
+	}
+	other := t.TempDir()
+	exe = filepath.Join(other, "malachi-mcp")
+	w := filepath.Join(other, "malachi-mcp-worker")
+	if err := os.WriteFile(w, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := besideWorker(exe); got != w {
+		t.Errorf("worker beside: %q, want %q", got, w)
+	}
+}

@@ -60,7 +60,7 @@ cp -R "$DIR"/macos/locale/*.lproj "$CONTENTS/Resources/"
 cp "$DIR/macos/Malachi.icns" "$CONTENTS/Resources/Malachi.icns"
 VERSION=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null | sed 's/^v//')
 SHORT=$(printf '%s' "$VERSION" | sed -nE 's/^([0-9]+(\.[0-9]+){0,2}).*/\1/p')
-sed -e "s/@VERSION@/${SHORT:-0.0.0}/g" -e "s/@FULL_VERSION@/$VERSION-shots/g" \
+sed -e "s/@VERSION@/${SHORT:-0.0.0}/g" -e "s/@BUILD@/${SHORT:-0.0.0}/g" -e "s/@FULL_VERSION@/$VERSION-shots/g" \
     -e "s/@BUNDLE_ID@/$DOMAIN/g" -e 's/@EXECUTABLE@/MalachiMail/g' \
     -e 's|@LOCALIZATIONS@|<string>en</string><string>cs</string>|g' \
     "$ROOT/macos/Resources/Info.plist.in" > "$CONTENTS/Info.plist"

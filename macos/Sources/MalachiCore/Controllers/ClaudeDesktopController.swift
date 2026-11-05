@@ -49,14 +49,20 @@ public final class ClaudeDesktopController {
         public var quit: @MainActor (_ timeout: Duration) async -> Bool
         /// Starts Claude Desktop.
         public var launch: @MainActor () -> Void
+        /// Whether the application may quit Claude Desktop at all: not the
+        /// App Store build, whose sandbox sends it no quit event. Without
+        /// it a change is written at once and, while Claude Desktop runs,
+        /// stays pending without a Restart (`change`, `restartPending`).
+        public var canRestart: Bool
 
         public init(
             isRunning: @escaping @MainActor () -> Bool, quit: @escaping @MainActor (_ timeout: Duration) async -> Bool,
-            launch: @escaping @MainActor () -> Void
+            launch: @escaping @MainActor () -> Void, canRestart: Bool = true
         ) {
             self.isRunning = isRunning
             self.quit = quit
             self.launch = launch
+            self.canRestart = canRestart
         }
     }
 
@@ -94,6 +100,8 @@ public final class ClaudeDesktopController {
     public var onStatus: (@MainActor (MCPStatus) -> Void)?
 
     private let platform: Platform
+    /// Whether a Restart is offered at all (`Platform.canRestart`).
+    public var canRestart: Bool { platform.canRestart }
     private let quitTimeout: Duration
     private let own: Write
     private var ownRegistration: MCPRegistrationController?
@@ -168,6 +176,12 @@ public final class ClaudeDesktopController {
             await serialized { await writeNow(want, write, later: false) }
             return
         }
+        // Nothing to offer: the change goes in now and waits for Claude
+        // Desktop's own next start.
+        guard platform.canRestart else {
+            await serialized { await writeNow(want, write, later: true) }
+            return
+        }
         let answer = await ask()
         guard !closed else { return }
         switch answer {
@@ -182,6 +196,7 @@ public final class ClaudeDesktopController {
     /// through `write` (the page's). Nothing when nothing is pending by
     /// the time it runs.
     public func restartPending(write: Write) async {
+        guard platform.canRestart else { return }
         await serialized {
             guard let want = pending else { return }
             await restart(want, write)

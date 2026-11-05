@@ -50,15 +50,27 @@ public struct Paths: Sendable {
         return false
     }
 
+    /// - Parameter groupContainer: the app group's container of the App
+    ///   Store build (`Distribution.groupContainer`), nil for the DMG. The
+    ///   socket then lies at its top as `rpc.sock`: the App Sandbox keeps
+    ///   the daemon out of `~/.cache`, and malachi-mcp, sandboxed on its
+    ///   own, reaches only the group. The short name keeps the path under
+    ///   `UnixSocketProbe.maxPathBytes` for user names of up to 25 bytes
+    ///   (the app checks it at launch). Its data directory needs no such
+    ///   case: in the sandbox `~/Library/Application Support` already is
+    ///   the app's container.
     public static func resolve(
         environment env: [String: String] = ProcessInfo.processInfo.environment,
-        executable: URL? = Bundle.main.executableURL
+        executable: URL? = Bundle.main.executableURL,
+        groupContainer: URL? = Distribution.current.groupContainer
     ) -> Paths {
         // Go's os.UserHomeDir reads $HOME; do the same so both sides agree.
         let home = env["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? FileManager.default.homeDirectoryForCurrentUser.path
         let socket: String
         if let s = env["MALACHI_SOCKET"], !s.isEmpty {
             socket = s
+        } else if let group = groupContainer {
+            socket = group.appendingPathComponent("rpc.sock").path
         } else if let rt = env["XDG_RUNTIME_DIR"], !rt.isEmpty {
             socket = rt + "/malachi/rpc.sock"
         } else {
@@ -73,10 +85,24 @@ public struct Paths: Sendable {
                 ?? URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support", isDirectory: true)
             dataDir = support.appendingPathComponent("Malachi Mail", isDirectory: true)
         }
-        let mcp = executable?.deletingLastPathComponent().appendingPathComponent("malachi-mcp")
-        let bridge = mcp.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil }
+        let bridge = bridgeExecutable(beside: executable)
         let helper = executable?.deletingLastPathComponent().appendingPathComponent("malachi-keychain")
         return Paths(socket: socket, dataDir: dataDir, mcpBridge: bridge, keychainHelper: helper.flatMap(regularExecutable))
+    }
+
+    /// The bridge the app registers with Claude: `Contents/MacOS/malachi-mcp`
+    /// in the DMG and a checkout; in the App Store build the executable of
+    /// its own bundle, `Contents/Helpers/Malachi Mail MCP.app` (it needs a
+    /// bundle for the sandbox Claude starts it in). Nil when neither is
+    /// there.
+    static func bridgeExecutable(beside executable: URL?) -> URL? {
+        guard let dir = executable?.deletingLastPathComponent() else { return nil }
+        let candidates = [
+            dir.appendingPathComponent("malachi-mcp"),
+            dir.deletingLastPathComponent()
+                .appendingPathComponent("Helpers/Malachi Mail MCP.app/Contents/MacOS/malachi-mcp"),
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
     /// The URL when it is a regular file with an execute bit (a directory

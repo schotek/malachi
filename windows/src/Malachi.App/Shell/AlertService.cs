@@ -307,6 +307,14 @@ internal sealed partial class AlertService : IAlerts
         {
             panel.Children.Add(Centred(line, "DimCaptionLabelStyle"));
         }
+        // Where this copy came from (updates.EditionLine): the MSIX package
+        // is the Microsoft Store's, anything else the website's installer.
+        // A sideloaded test package says Microsoft Store too.
+        panel.Children.Add(Centred(
+            Malachi.Core.Updates.UpdateCheck.EditionLine(Malachi.Platform.Windows.PackageIdentity.IsPackaged
+                ? Malachi.Core.Updates.UpdateEdition.MicrosoftStore
+                : Malachi.Core.Updates.UpdateEdition.Website),
+            "DimCaptionLabelStyle"));
         // Windows-only string: GTK's comment names the GNOME desktop.
         panel.Children.Add(Centred("A native mail client.", "BodyLabelStyle"));
         // Windows-only string: Adw.AboutDialog words the licence itself.

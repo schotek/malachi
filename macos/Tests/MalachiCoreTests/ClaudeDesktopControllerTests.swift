@@ -47,6 +47,8 @@ private final class Fake {
     var failing: Set<String> = []
     /// How long each write takes.
     var writeDelay: Duration = .zero
+    /// The App Store build's platform: no quit, no Restart.
+    var canRestart = true
 
     init(running: Bool) {
         self.running = running
@@ -69,7 +71,8 @@ private final class Fake {
             launch: { [unowned self] in
                 self.log.append("launch")
                 self.running = true
-            })
+            },
+            canRestart: canRestart)
     }
 
     /// A write that logs "`name` true|false" (with "… end" after a delay)
@@ -104,8 +107,9 @@ private final class Harness {
     var toasts: [String] = []
     var changes: [(pending: Bool?, busy: Bool)] = []
 
-    init(running: Bool) {
+    init(running: Bool, canRestart: Bool = true) {
         fake = Fake(running: running)
+        fake.canRestart = canRestart
         c = ClaudeDesktopController(platform: fake.platform, write: fake.write("own"))
         c.onStatus = { [unowned self] s in
             self.statuses.append(s.clients.first { $0.id == "claude-desktop" }?.registered ?? false)
@@ -166,6 +170,24 @@ private final class Harness {
         try await waitUntil { h.c.pending == nil }
         #expect(h.fake.log == ["ask", "quit", "page true", "own true"])
         #expect(h.statuses == [true, true])
+    }
+
+    /// The App Store build: no question and no quit; the change is written
+    /// at once and waits for Claude Desktop's own next start, which writes
+    /// it once more; Restart does nothing.
+    @Test func withoutARestartTheChangeWaitsForClaudeDesktopsOwnQuit() async throws {
+        let h = Harness(running: true, canRestart: false)
+        #expect(!h.c.canRestart)
+        await h.flip(true, .restart)
+        #expect(h.fake.log == ["page true"], "never asked, never quit")
+        #expect(h.c.pending == true)
+        await h.c.restartPending(write: h.fake.write("page"))
+        #expect(h.fake.log == ["page true"])
+        #expect(h.c.pending == true)
+        h.fake.running = false
+        h.c.terminated()
+        try await waitUntil { h.c.pending == nil }
+        #expect(h.fake.log == ["page true", "own true"])
     }
 
     @Test func laterWritesNowAndTheTerminationWritesOnceMore() async throws {

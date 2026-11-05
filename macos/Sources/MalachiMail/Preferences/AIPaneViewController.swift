@@ -234,6 +234,14 @@ final class AIPaneViewController: PreferencesPaneViewController {
 
     override func loadView() {
         super.loadView()
+        // The App Store build says first where the rest of the assistant is.
+        if WebsiteFeaturesDialog.shown {
+            let t = Assistant.websiteFeaturesTexts()
+            let more = NSButton(title: t.more, target: self, action: #selector(showWebsiteFeatures(_:)))
+            let group = PreferencesGroupView(title: t.groupTitle, description: t.groupBody, headerSuffix: more)
+            group.setRows([])
+            addGroup(group)
+        }
         let row = PreferenceRowView(
             title: L10n.T("Register with Claude"),
             subtitle: L10n.T("Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer"),
@@ -368,7 +376,9 @@ final class AIPaneViewController: PreferencesPaneViewController {
             c.adopt(known)
         }
         bindClaudeDesktop()
-        if chatGPTPreferences == nil, let assistant, let settings {
+        // The App Store build has no ChatGPT provider (`Distribution
+        // .allowsLocalAgents`): no row, no group.
+        if chatGPTPreferences == nil, let assistant, let settings, settings.distribution.allowsLocalAgents {
             let preferences = ChatGPTPreferences(settings: settings, assistant: assistant) { [weak self] in self?.toast?($0) }
             chatGPTPreferences = preferences
             assistantGroup.setRows([preferences.providerRow] + [menuRow, targetRow, claudeCodeRow, modelRow].compactMap { $0 })
@@ -445,6 +455,10 @@ final class AIPaneViewController: PreferencesPaneViewController {
         assistant?.status != nil || registration?.status != nil
     }
 
+    @objc private func showWebsiteFeatures(_ sender: Any?) {
+        WebsiteFeaturesDialog.show(for: view.window)
+    }
+
     /// The group for the bridge's state (`Assistant.shown`): registered,
     /// the switch shows the preference and "Open In" why the chosen app
     /// cannot run the message actions, nothing when it can; known not to
@@ -457,7 +471,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
         chatGPTPreferences?.scheduleUpdate()
         let inAppChatGPT = settings.assistantProvider == .chatgpt && settings.assistantTarget == .app
         assistantGroup.descriptionText = inAppChatGPT
-            ? L10n.T("Connect ChatGPT to use your plan with the in-app assistant.") : Assistant.texts().description
+            ? L10n.T("Connect ChatGPT to use your plan with the in-app assistant.")
+            : Assistant.texts().description
         let registered = bridgeRegistered || inAppChatGPT
         let unknown = !registered && !bridgeKnown
         menuRow?.isEnabled = registered
@@ -682,6 +697,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
         if let pendingRow {
             mcpGroup.setRow(pendingRow, hidden: claudeDesktop?.pending == nil)
             pendingRow.isEnabled = !(claudeDesktop?.busy ?? false)
+            // The App Store build cannot quit Claude Desktop: the row only says so.
+            restartButton.isHidden = !(claudeDesktop?.canRestart ?? true)
         }
         updateRegisterRow()
     }

@@ -238,11 +238,15 @@ public final class Settings {
     }
 
     public let defaults: UserDefaults
+    /// The build's distribution: in the App Store build the keys of the
+    /// local agents read as off (`assistantTarget`, `assistantProvider`).
+    public let distribution: Distribution
     private let hub: ChangeHub
     private let observer: DefaultsObserver
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard, distribution: Distribution = .current) {
         self.defaults = defaults
+        self.distribution = distribution
         Settings.register(defaults: defaults)
         let hub = ChangeHub()
         self.hub = hub
@@ -418,9 +422,21 @@ public final class Settings {
     /// Where the Assistant menu opens Claude: the gschema enum
     /// AssistantTarget's nicks, read with `Assistant.parseTarget` (an
     /// unknown nick is Claude Desktop).
+    ///
+    /// In the App Store build In App reads as Claude Desktop and is never
+    /// written: a value the DMG stored (carried over by the container
+    /// migration) stays for a return to the DMG
+    /// (`Distribution.allowsLocalAgents`).
     public var assistantTarget: Assistant.Target {
-        get { Assistant.parseTarget(string(.assistantTarget)) }
-        set { set(.assistantTarget, Assistant.parseTarget(newValue.rawValue).rawValue) }
+        get {
+            let t = Assistant.parseTarget(string(.assistantTarget))
+            return t == .app && !distribution.allowsLocalAgents ? .desktop : t
+        }
+        set {
+            let t = Assistant.parseTarget(newValue.rawValue)
+            if t == .app && !distribution.allowsLocalAgents { return }
+            set(.assistantTarget, t.rawValue)
+        }
     }
 
     /// The model of the assistant panel: the gschema enum AssistantModel's
@@ -563,9 +579,17 @@ public final class Settings {
         Board.startMode(start: string(.boardStartMode), last: string(.boardLastMode), boardEnabled: boardEnabled)
     }
 
+    /// The In App assistant's provider; Claude in the App Store build,
+    /// whatever was stored, and never written there.
     public var assistantProvider: AssistantProviderID {
-        get { AssistantProviderID(rawValue: string(.assistantProvider)) ?? .claude }
-        set { set(.assistantProvider, newValue.rawValue) }
+        get {
+            guard distribution.allowsLocalAgents else { return .claude }
+            return AssistantProviderID(rawValue: string(.assistantProvider)) ?? .claude
+        }
+        set {
+            guard distribution.allowsLocalAgents else { return }
+            set(.assistantProvider, newValue.rawValue)
+        }
     }
     public var assistantCodexPath: String {
         get { string(.assistantCodexPath) }

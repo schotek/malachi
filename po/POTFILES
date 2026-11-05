@@ -12,6 +12,7 @@ ui/internal/assistant/assistant.go
 ui/internal/assistant/calendar_actions.go
 ui/internal/assistant/chatgpt.go
 ui/internal/assistant/compose_write.go
+ui/internal/assistant/distribution.go
 ui/internal/assistant/profile.go
 ui/internal/assistant/selection.go
 ui/internal/background/background.go
@@ -119,6 +120,7 @@ ui/internal/window/contacts_consent.go
 ui/internal/window/contacts_detail.go
 ui/internal/undo/text.go
 ui/internal/updates/updates.go
+ui/internal/updates/edition.go
 ui/internal/rules/text.go
 ui/internal/window/rules_editor.go
 ui/internal/window/preferences_rules.go

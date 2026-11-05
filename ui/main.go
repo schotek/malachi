@@ -26,6 +26,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/style"
+	"github.com/schotek/malachi/ui/internal/updates"
 	"github.com/schotek/malachi/ui/internal/widget"
 	"github.com/schotek/malachi/ui/internal/window"
 )
@@ -301,6 +302,9 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 		if line := window.UpdateAboutLine(); line != "" {
 			comments += "\n\n" + glib.MarkupEscapeText(line)
 		}
+		// Where this copy came from: on Linux always the website's
+		// packages (updates.EditionLine).
+		comments += "\n" + glib.MarkupEscapeText(updates.EditionLine(updates.EditionWebsite, i18n.Tr))
 		d.SetComments(comments)
 		d.Present(app.ActiveWindow())
 	})

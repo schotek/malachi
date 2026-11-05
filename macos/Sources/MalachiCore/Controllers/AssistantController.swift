@@ -61,8 +61,9 @@ public final class AssistantController {
         }
     }
 
-    /// The targets, in the order of the menu and the settings.
-    public nonisolated static let targets: [Assistant.Target] = [.desktop, .code, .app]
+    /// The targets, in the order of the menu and the settings; without In
+    /// App in the App Store build (`Assistant.targets`).
+    public nonisolated static let targets: [Assistant.Target] = Assistant.targets
 
     public var chatGPT: CodexProvider?
     public private(set) var providerGeneration = 0

@@ -322,7 +322,9 @@ which Go's `internal` rule keeps out of both), and never in the bridge's
 own process:
 
 - **A worker per document.** The bridge starts its own executable again
-  (`os.Executable`, not a `PATH` lookup) as `malachi-mcp __extract 1
+  (`os.Executable`, not a `PATH` lookup; `malachi-mcp-worker` beside it
+  instead when a package ships that file, as the Mac App Store build does,
+  whose copy is signed to inherit the bridge's sandbox) as `malachi-mcp __extract 1
   <pdf|docx|xlsx>`, writes the document to its stdin and reads one reply
   from its stdout; the worker inherits nothing of the MCP connection, the
   daemon connection or its key, and starts no process. It runs with a
@@ -1325,13 +1327,18 @@ All three take the same flags:
 | `--json` | print the report as one JSON object (below) |
 | `--claude-desktop-config PATH` | use `PATH` as Claude Desktop's configuration file instead of `<UserConfigDir>/Claude/claude_desktop_config.json`, for a Claude Desktop that keeps it elsewhere (the MSIX package on Windows, below); Claude Desktop is present when the file's directory exists |
 | `--command PATH` | register `PATH` and compare against it instead of this binary's own path: a launcher that has to stay put across updates, or the bridge as the calling app knows it. The path is only cleaned: symlinks are not resolved, and it need not exist yet |
+| `--claude-code-config PATH` | use `PATH` as Claude Code's configuration file instead of `~/.claude.json`, for a caller whose `$HOME` is not the user's home (a sandboxed app's container); Claude Code is present when the file exists or a `.claude` directory lies beside it, and the home directory is not looked up |
+| `--socket PATH` | register the bridge with `"env": {"MALACHI_SOCKET": "PATH"}`, for a daemon whose socket is not at the default path (the Mac App Store build's, in its app group); part of what `registered` compares |
+| `--output PATH` | write the report as JSON to `PATH` instead of stdout, and a failure as `{"error": "…"}` there too (the exit status is still 1), through `PATH.tmp` and a rename, for a caller that cannot read stdout (the Mac App Store build starts the bridge through LaunchServices) |
 
-The two path flags take absolute paths only (a relative one is refused
+The path flags take absolute paths only (a relative one is refused
 before any file is read) and are not remembered: a caller that uses them
 passes them to every call, `status` included, or the report describes the
 defaults. Without them the subcommands behave as they always have. The
-Windows app passes them ([windows-port.md §10](windows-port.md#10-platform-services));
-the GTK and macOS apps need neither. The bridge itself knows no platform's
+Windows app passes `--claude-desktop-config` and `--command`
+([windows-port.md §10](windows-port.md#10-platform-services)), the Mac
+App Store build all of them but `--json` (docs/plans/mac-app-store.md);
+the GTK app and the macOS DMG need none. The bridge itself knows no platform's
 packaging; that knowledge stays in the app that calls it.
 
 The clients, in the order the report lists them:
@@ -1339,7 +1346,7 @@ The clients, in the order the report lists them:
 | `id` | `name` | file | `present` when |
 |---|---|---|---|
 | `claude-desktop` | Claude Desktop | `--claude-desktop-config`, else `<UserConfigDir>/Claude/claude_desktop_config.json` | the file's directory exists |
-| `claude-code` | Claude Code | `~/.claude.json` (Claude Code's user scope) | that file exists or `~/.claude/` exists |
+| `claude-code` | Claude Code | `--claude-code-config`, else `~/.claude.json` (Claude Code's user scope) | that file exists or a `.claude/` directory lies beside it |
 
 Where the files are:
 
@@ -1364,18 +1371,23 @@ pass `--claude-desktop-config` yourself.
   path (`os.Executable`, symlinks resolved). It is what gets written and
   what `registered` compares against.
 - `registered` is true when the file exists, parses as a JSON object and
-  holds `mcpServers.malachi` whose `command` equals `command`. An entry
+  holds `mcpServers.malachi` whose `command` equals `command` and whose
+  `env.MALACHI_SOCKET` equals `--socket` (absent when no socket is
+  given). An entry with the same command and another socket is not
+  registered and has no `other`; `install` rewrites it. An entry
   that names another command is *not* registered; the report carries it
   (`other` in JSON, "registered elsewhere: …" in text) and `install`
   replaces it.
 - `install` sets `mcpServers.malachi` to
-  `{"type": "stdio", "command": "<command>", "args": []}` in every present
+  `{"type": "stdio", "command": "<command>", "args": []}` (with
+  `"env": {"MALACHI_SOCKET": "<socket>"}` when `--socket` is given) in every present
   client, creating the file when only the directory exists; it never
   creates `~/.claude/` or Claude Desktop's directory, so an app that is not
   installed is reported rather than configured. Every other key of the
   file is kept, numbers are written back exactly as read, the file is
-  indented with two spaces and replaced atomically (temporary file in the
-  same directory, then rename), keeping its mode (a new file is 0600). An
+  indented with two spaces and replaced atomically (a temporary file of a
+  fixed name beside it, `.<name>.malachi-mcp.tmp`, so a sandbox can name
+  it; one left by a crash is replaced; then rename), keeping its mode (a new file is 0600). An
   entry that already says exactly this leaves the file untouched.
 - The entry is the read-only + drafts tier: `args` is empty and no
   `--allow-*` flag is ever written. Anyone who wants the modify or send
