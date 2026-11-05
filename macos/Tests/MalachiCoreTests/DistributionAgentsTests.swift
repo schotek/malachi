@@ -21,6 +21,11 @@ import Testing
         #expect(!Distribution.appStore.allowsLocalAgents)
     }
 
+    @Test func onlyTheDirectBuildHandsFilesToClaude() {
+        #expect(Distribution.direct.handsFilesToClaude)
+        #expect(!Distribution.appStore.handsFilesToClaude)
+    }
+
     @Test func theAppStoreBuildHasNoInAppTarget() {
         #expect(Assistant.targets(for: .direct) == [.desktop, .code, .app])
         #expect(Assistant.targets(for: .appStore) == [.desktop, .code])

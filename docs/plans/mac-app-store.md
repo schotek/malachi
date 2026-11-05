@@ -516,3 +516,34 @@ Zbývá v A2: restart Claude Desktop v App Store verzi (bez Apple events
 vypustit), `Relaunch` pod sandboxem, PDF bez
 `allow-unsigned-executable-memory`, příloha jako soubor, ruční průchod
 Předvoleb → AI a spuštění mostu skutečným Claude.
+
+Další body A2 (2026-11-05):
+
+- **Restart Claude Desktop:** v App Store verzi vypnutý
+  (`ClaudeDesktopController.Platform.canRestart`, `ClaudeDesktopService`
+  podle `Distribution.current == .direct`). Změna se zapíše hned a dokud
+  Claude Desktop běží, zůstane čekat v řádku „Claude Desktop změnu načte
+  po restartu“ bez tlačítka Restart; zapíše se znovu, až se Claude Desktop
+  ukončí sám. Test `withoutARestartTheChangeWaitsForClaudeDesktopsOwnQuit`.
+- **`Relaunch`:** změřeno vývojovým krokem `relaunch` — v sandboxu se
+  `terminate:` zavolal, ale aplikace se neukončila, a čekající `sh` se po
+  minutě vzdal. V App Store verzi `Relaunch.available` je false, Předvolby →
+  Vzhled restart nenabízejí a velikost textu platí od dalšího spuštění.
+- **PDF:** pomocník v sandboxu jako worker přečetl
+  `invoice-libreoffice.pdf` bez `allow-unsigned-executable-memory`
+  (1240 bajtů textu, stejně jako bez sandboxu); entitlement se nepřidává.
+- **Worker pod mostem:** podřízený proces s vlastním sandboxem pod
+  sandboxovaným mostem by spadl jako pomocník pod aplikací, proto pomocný
+  bundle nese `malachi-mcp-worker`, kopii mostu podepsanou s `inherit`,
+  a most ji použije, když leží vedle něj (`besideWorker`, neutrální
+  pravidlo, test `TestBesideWorker`). Neměřeno: spuštění workeru mostem
+  pod Claude (chce zprávu s PDF v sandboxovaném démonovi, tj. účet
+  a klíčenku); ověřit v A5 se skutečnou přílohou.
+- **Příloha jako soubor pro Claude** (Cowork, pracovní adresář Claude
+  Code): aplikace ji zapisuje do svého adresáře pro otevírání, v App Store
+  verzi uvnitř kontejneru aplikace, který macOS ostatním aplikacím chrání
+  (viz `ls` z shellu: Operation not permitted). **Rozhodnutí (Q12,
+  vlastník 2026-11-05): jen text přes most.** V App Store verzi položka
+  „Zeptat se asistenta…“ u přílohy není (`Distribution.handsFilesToClaude`,
+  `AttachmentChipView.offerAssistant`); Claude čte text PDF, DOCX a XLSX
+  přes `get_attachment`.

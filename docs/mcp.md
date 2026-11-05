@@ -322,7 +322,9 @@ which Go's `internal` rule keeps out of both), and never in the bridge's
 own process:
 
 - **A worker per document.** The bridge starts its own executable again
-  (`os.Executable`, not a `PATH` lookup) as `malachi-mcp __extract 1
+  (`os.Executable`, not a `PATH` lookup; `malachi-mcp-worker` beside it
+  instead when a package ships that file, as the Mac App Store build does,
+  whose copy is signed to inherit the bridge's sandbox) as `malachi-mcp __extract 1
   <pdf|docx|xlsx>`, writes the document to its stdin and reads one reply
   from its stdout; the worker inherits nothing of the MCP connection, the
   daemon connection or its key, and starts no process. It runs with a

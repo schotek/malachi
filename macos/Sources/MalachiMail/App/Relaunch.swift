@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import MalachiCore
 
 /// Restarts the application (macOS only): a detached shell waits for this
 /// process to end and opens the bundle again, then the app quits the
@@ -11,9 +12,13 @@ import AppKit
 @MainActor
 enum Relaunch {
     /// Whether a restart is possible: only from an application bundle (a
-    /// bare executable, as under `swift run`, has nothing to open).
+    /// bare executable, as under `swift run`, has nothing to open), and
+    /// not in the App Store build: under its sandbox the app did not finish
+    /// quitting with the shell waiting beside it (measured 2026-11-05,
+    /// docs/plans/mac-app-store.md §8.3), so a text size applies at the
+    /// next launch there without the offer.
     static var available: Bool {
-        Bundle.main.bundleURL.pathExtension == "app"
+        Bundle.main.bundleURL.pathExtension == "app" && Distribution.current == .direct
     }
 
     static func now() {

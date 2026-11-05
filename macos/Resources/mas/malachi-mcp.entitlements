@@ -8,11 +8,13 @@ the bridge, not the app, so it cannot inherit the app's sandbox and gets
 one of its own, with the app group whose container holds the daemon's
 socket and key. It lives in its own bundle (Contents/Helpers/Malachi Mail
 MCP.app) with its own application identifier and provisioning profile:
-without them macOS refuses the app group and ends the process. Its document worker is the same binary started again as
-a child and runs in this sandbox too. No unsigned executable memory for
-wazero: the App Store build has no hardened runtime, which is what kills
-the process without it in the DMG; that PDFs still read under the sandbox
-is checked in A2 of docs/plans/mac-app-store.md.
+without them macOS refuses the app group and ends the process. Its document worker is a copy of the same binary beside it,
+malachi-mcp-worker, signed to inherit this sandbox (inherit.entitlements):
+a child asking for a sandbox of its own would be ended at start. No
+unsigned executable memory for wazero: the App Store build has no hardened
+runtime, which is what kills the process without it in the DMG; PDFs read
+under this sandbox without it (measured 2026-11-05, docs/plans/mac-app-store.md
+§8.3).
 
 The registration in Claude (malachi-mcp status / install / uninstall,
 started by the app through LaunchServices, since a child with its own

@@ -5,7 +5,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 The entitlements of malachid and malachi-keychain in the Mac App Store
 build: both run only as children of the app and take its sandbox, its
-network access and its app group as they are. Exactly these two keys;
+network access and its app group as they are. malachi-mcp-worker, the
+bridge's document worker in the helper bundle, takes the bridge's the
+same way. Exactly these two keys;
 Apple refuses an inheriting executable that asks for anything more.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

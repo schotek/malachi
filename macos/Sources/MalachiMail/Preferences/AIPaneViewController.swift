@@ -688,6 +688,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
         if let pendingRow {
             mcpGroup.setRow(pendingRow, hidden: claudeDesktop?.pending == nil)
             pendingRow.isEnabled = !(claudeDesktop?.busy ?? false)
+            // The App Store build cannot quit Claude Desktop: the row only says so.
+            restartButton.isHidden = !(claudeDesktop?.canRestart ?? true)
         }
         updateRegisterRow()
     }

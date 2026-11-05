@@ -40,6 +40,14 @@ public enum Distribution: String, Sendable {
     /// link stays.
     public var allowsLocalAgents: Bool { self == .direct }
 
+    /// Whether an attachment can go to Claude as a file (the attachment's
+    /// "Ask the Assistant…": a Cowork session's file, Claude Code's working
+    /// directory). Not in the App Store build: the file would lie in the
+    /// app's container, which macOS keeps from other apps; there Claude
+    /// reads an attachment's text through the bridge (`get_attachment`).
+    /// Decided by the owner 2026-11-05 (docs/plans/mac-app-store.md Q12).
+    public var handsFilesToClaude: Bool { self == .direct }
+
     /// The app group's container for the App Store build, nil for `direct`.
     public var groupContainer: URL? {
         guard self == .appStore else { return nil }

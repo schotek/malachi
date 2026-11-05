@@ -57,6 +57,9 @@ PROFILE       ?=
 # (MCP_APP), with the profile MCP_PROFILE of io.github.schotek.Malachi.malachi-mcp:
 # Claude starts it, so it has a sandbox of its own, and a sandboxed
 # executable outside a bundle gets neither the app group nor a container.
+# Beside it malachi-mcp-worker, the same binary signed to inherit its
+# sandbox: the bridge's document worker is a child, and a child that asks
+# for a sandbox of its own is ended at start (extract_runner.go).
 MCP_PROFILE   ?=
 MCP_APP       = $(CONTENTS)/Helpers/Malachi Mail MCP.app
 ifeq ($(DISTRIBUTION),appstore)
@@ -176,12 +179,13 @@ app: build locale icon
 	cp "$(GO_DIR)/malachid" "$(CONTENTS)/MacOS/"; \
 	$(if $(filter appstore,$(DISTRIBUTION)),mkdir -p "$(MCP_APP)/Contents/MacOS"; \
 	cp "$(GO_DIR)/malachi-mcp" "$(MCP_APP)/Contents/MacOS/"; \
+	cp "$(GO_DIR)/malachi-mcp" "$(MCP_APP)/Contents/MacOS/malachi-mcp-worker"; \
 	cp "$(MCP_PROFILE)" "$(MCP_APP)/Contents/embedded.provisionprofile"; \
 	sed -e 's/@VERSION@/$(SHORT_VERSION)/g' -e 's/@BUNDLE_ID@/$(APP_ID)/g' Resources/mas/mcp-Info.plist.in > "$(MCP_APP)/Contents/Info.plist"; \
 	plutil -lint "$(MCP_APP)/Contents/Info.plist" >/dev/null;,cp "$(GO_DIR)/malachi-mcp" "$(CONTENTS)/MacOS/";) \
 	$(if $(SDK_VERSION),$(call set_sdk,$(CONTENTS)/MacOS/$(EXE))) \
 	for arch in $(ARCHS); do \
-		for f in "$(CONTENTS)"/MacOS/* $(if $(filter appstore,$(DISTRIBUTION)),"$(MCP_APP)/Contents/MacOS/malachi-mcp"); do \
+		for f in "$(CONTENTS)"/MacOS/* $(if $(filter appstore,$(DISTRIBUTION)),"$(MCP_APP)/Contents/MacOS/malachi-mcp" "$(MCP_APP)/Contents/MacOS/malachi-mcp-worker"); do \
 			lipo "$$f" -verify_arch "$$arch" || { echo "macos: $$f has no $$arch code" >&2; exit 1; }; \
 		done; \
 	done; \
@@ -203,7 +207,7 @@ app: build locale icon
 	for f in malachid $(HELPER); do \
 		$(CODESIGN) --identifier "$(APP_ID).$$f" $(if $(HELPER_ENTITLEMENTS),--entitlements "$(HELPER_ENTITLEMENTS)") "$(CONTENTS)/MacOS/$$f"; \
 	done; \
-	$(if $(filter appstore,$(DISTRIBUTION)),$(CODESIGN) --entitlements "$(MCP_ENTITLEMENTS)" "$(MCP_APP)",$(CODESIGN) --identifier "$(APP_ID).malachi-mcp" --entitlements "$(MCP_ENTITLEMENTS)" "$(CONTENTS)/MacOS/malachi-mcp"); \
+	$(if $(filter appstore,$(DISTRIBUTION)),$(CODESIGN) --identifier "$(APP_ID).malachi-mcp-worker" --entitlements "$(HELPER_ENTITLEMENTS)" "$(MCP_APP)/Contents/MacOS/malachi-mcp-worker"; $(CODESIGN) --entitlements "$(MCP_ENTITLEMENTS)" "$(MCP_APP)",$(CODESIGN) --identifier "$(APP_ID).malachi-mcp" --entitlements "$(MCP_ENTITLEMENTS)" "$(CONTENTS)/MacOS/malachi-mcp"); \
 	$(CODESIGN) --entitlements "$(ENTITLEMENTS)" "$(APP)"; \
 	codesign --verify --strict --deep "$(APP)"; \
 	echo "built $(APP) ($(VERSION), $(or $(ARCHS),$(shell uname -m)), languages: $(LANGS))"

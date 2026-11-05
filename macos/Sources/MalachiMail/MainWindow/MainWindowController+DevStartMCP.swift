@@ -15,6 +15,10 @@ import MalachiCore
 //   MCPRegistrationController and print `MCP: <step> <client> present=…
 //   registered=… other=…` per client, or `MCP: <step> failed`; a toast is
 //   printed as `MCP: <step> toast …`.
+//   `relaunch` restarts the application as Settings → Appearance does
+//   (`Relaunch.now()`), to see whether it works in the sandbox; the new
+//   instance runs without the MALACHI_* environment and must be quit by
+//   hand.
 @MainActor
 enum DevelopmentMCP {
     static func step(_ step: String, in main: MainWindowController) -> Bool {
@@ -22,6 +26,9 @@ enum DevelopmentMCP {
         case "mcp-status": run(step, main, want: nil)
         case "mcp-install": run(step, main, want: true)
         case "mcp-uninstall": run(step, main, want: false)
+        case "relaunch":
+            print("MCP: relaunch available=\(Relaunch.available) pid=\(ProcessInfo.processInfo.processIdentifier)")
+            Relaunch.now()
         default: return false
         }
         return true

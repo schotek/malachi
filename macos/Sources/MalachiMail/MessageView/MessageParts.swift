@@ -46,6 +46,8 @@ extension AttachmentChipView {
     /// (In App), while it cannot run or the bridge does not read this type
     /// (`AssistantController.canAsk`). `ask` runs the item.
     func offerAssistant(_ assistant: AssistantController, ask: @escaping @MainActor () -> Void) {
+        // The App Store build hands no file to Claude: no item at all.
+        guard Distribution.current.handsFilesToClaude else { return }
         let a = attachment
         assistantItem = { [weak assistant] in
             guard let assistant, assistant.shown else { return nil }
