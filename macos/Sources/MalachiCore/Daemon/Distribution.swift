@@ -29,6 +29,17 @@ public enum Distribution: String, Sendable {
         value.flatMap(Distribution.init(rawValue:)) ?? .direct
     }
 
+    /// Whether the app may run the user's own Claude Code or Codex: the In
+    /// App assistant and its panel, the compose window's rewrite and
+    /// writing bar, the search in the user's own words, the board's triage
+    /// and Suggest Reply, the ChatGPT provider and the Claude Code sign-in.
+    /// Not in the App Store build: a process it starts inherits the App
+    /// Sandbox and reaches neither `~/.claude` nor its keychain item, and
+    /// running a program the user picked does not pass App Review (2.5.2).
+    /// The hand-off to Claude Desktop and to Claude Code in the terminal by
+    /// link stays.
+    public var allowsLocalAgents: Bool { self == .direct }
+
     /// The app group's container for the App Store build, nil for `direct`.
     public var groupContainer: URL? {
         guard self == .appStore else { return nil }

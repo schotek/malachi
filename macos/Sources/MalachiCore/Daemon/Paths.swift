@@ -85,10 +85,24 @@ public struct Paths: Sendable {
                 ?? URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support", isDirectory: true)
             dataDir = support.appendingPathComponent("Malachi Mail", isDirectory: true)
         }
-        let mcp = executable?.deletingLastPathComponent().appendingPathComponent("malachi-mcp")
-        let bridge = mcp.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil }
+        let bridge = bridgeExecutable(beside: executable)
         let helper = executable?.deletingLastPathComponent().appendingPathComponent("malachi-keychain")
         return Paths(socket: socket, dataDir: dataDir, mcpBridge: bridge, keychainHelper: helper.flatMap(regularExecutable))
+    }
+
+    /// The bridge the app registers with Claude: `Contents/MacOS/malachi-mcp`
+    /// in the DMG and a checkout; in the App Store build the executable of
+    /// its own bundle, `Contents/Helpers/Malachi Mail MCP.app` (it needs a
+    /// bundle for the sandbox Claude starts it in). Nil when neither is
+    /// there.
+    static func bridgeExecutable(beside executable: URL?) -> URL? {
+        guard let dir = executable?.deletingLastPathComponent() else { return nil }
+        let candidates = [
+            dir.appendingPathComponent("malachi-mcp"),
+            dir.deletingLastPathComponent()
+                .appendingPathComponent("Helpers/Malachi Mail MCP.app/Contents/MacOS/malachi-mcp"),
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
     /// The URL when it is a regular file with an execute bit (a directory

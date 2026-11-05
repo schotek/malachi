@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-04 12:54+0000\n"
+"POT-Creation-Date: 2026-11-05 11:29+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1141,6 +1141,15 @@ msgstr "Napsat odpověď"
 #, c-format
 msgid "Assistant · %s"
 msgstr "Asistent · %s"
+
+#. TRANSLATORS: Settings → AI of Malachi Mail from the Mac App Store. "In App" is the third choice of "Open In" in the other builds; malachimail.app is the website and stays as it is.
+#: ui/internal/assistant/distribution.go:14
+msgid ""
+"The In App assistant, the board's triage and Suggest Reply are only in "
+"Malachi Mail from malachimail.app."
+msgstr ""
+"Asistent v aplikaci, třídění nástěnky a Navrhnout odpověď jsou jen "
+"v Malachi Mail z malachimail.app."
 
 #. TRANSLATORS: A group of Preferences → AI: what the user tells the assistant about themselves.
 #: ui/internal/assistant/profile.go:200

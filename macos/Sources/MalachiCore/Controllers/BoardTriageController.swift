@@ -339,7 +339,10 @@ public final class BoardTriageController {
         self.init(
             client: client, settings: settings, locator: locator, preferences: preferences, bridge: bridge,
             socket: socket, available: { [weak assistant, settings] in
-                Self.triageAvailable(shown: assistant?.shown ?? false, target: settings.assistantTarget)
+                // Never in the App Store build, whatever the target reads
+                // as (`Distribution.allowsLocalAgents`).
+                settings.distribution.allowsLocalAgents
+                    && Self.triageAvailable(shown: assistant?.shown ?? false, target: settings.assistantTarget)
             })
         assistantToken = assistant.onChange { [weak self] in self?.availabilityChanged() }
         settingsTokens.append(settings.onChange(.assistantTarget) { [weak self] in self?.availabilityChanged() })

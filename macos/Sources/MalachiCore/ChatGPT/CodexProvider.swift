@@ -17,7 +17,10 @@ import Darwin
         self.connection = connection; self.settings = settings; self.directory = directory
         connection.onInvalidated = { [weak self] in self?.cancelAll() }
     }
+    /// The codex executable, nil in the App Store build, which never runs
+    /// it (`Distribution.allowsLocalAgents`).
     public var executable: String? {
+        guard settings.distribution.allowsLocalAgents else { return nil }
         if !settings.assistantCodexPath.isEmpty { return Self.nativeExecutable(settings.assistantCodexPath) ? settings.assistantCodexPath : nil }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [home + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex"] + (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map { String($0) + "/codex" }

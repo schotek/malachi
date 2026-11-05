@@ -173,9 +173,13 @@ public final class ClaudeCodeLocator {
         return list
     }
 
-    /// The claude executable to run, nil when there is none.
+    /// The claude executable to run, nil when there is none, and always in
+    /// the App Store build, which never runs it: every run (the panel,
+    /// one-shot requests, the triage, Suggest Reply, `--version`, `auth
+    /// status`, the sign-in) starts from here (`Distribution.allowsLocalAgents`).
     public func locate() -> String? {
-        candidates().first(where: usable)
+        guard settings.distribution.allowsLocalAgents else { return nil }
+        return candidates().first(where: usable)
     }
 
     /// Whether `path` is (or links to) a regular file this user may run.

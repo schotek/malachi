@@ -193,7 +193,11 @@ final class AppState {
             guard let self, self.settings.assistantChatGPTConsentVersion != 1 else { return }
             self.providerSettingChanged(.assistantChatGPTConsentVersion)
         })
-        Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
+        // The App Store build never runs Codex, so it never reads the
+        // ChatGPT sign-in from the keychain either.
+        if settings.distribution.allowsLocalAgents {
+            Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
+        }
         wireBoardTriage()
         wireProfile()
         wireUpdates()

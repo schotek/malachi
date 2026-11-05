@@ -40,6 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         purgeOpenDir()
 
         let paths = Paths.resolve()
+        // The App Store build runs the bridge's setup through
+        // LaunchServices, not as a child (BridgeSetupLauncher).
+        BridgeSetupLauncher.install(paths: paths)
         do {
             try paths.ensureDirectories()
         } catch {

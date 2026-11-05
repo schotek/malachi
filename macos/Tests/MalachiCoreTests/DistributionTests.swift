@@ -33,6 +33,29 @@ import Testing
         #expect(p.socket == "/s.sock")
     }
 
+    /// The DMG's bridge beside the app's executable, the App Store build's
+    /// in its helper bundle.
+    @Test func theBridgeIsBesideTheAppOrInItsHelperBundle() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("bridge-test-" + UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let macOS = root.appendingPathComponent("Contents/MacOS", isDirectory: true)
+        try fm.createDirectory(at: macOS, withIntermediateDirectories: true)
+        let exe = macOS.appendingPathComponent("MalachiMail")
+        func make(_ url: URL) throws {
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            fm.createFile(atPath: url.path, contents: Data(), attributes: [.posixPermissions: 0o755])
+        }
+        #expect(Paths.bridgeExecutable(beside: exe) == nil)
+        let helper = root.appendingPathComponent("Contents/Helpers/Malachi Mail MCP.app/Contents/MacOS/malachi-mcp")
+        try make(helper)
+        #expect(Paths.bridgeExecutable(beside: exe)?.path == helper.path)
+        let beside = macOS.appendingPathComponent("malachi-mcp")
+        try make(beside)
+        #expect(Paths.bridgeExecutable(beside: exe)?.path == beside.path)
+        #expect(Paths.bridgeExecutable(beside: nil) == nil)
+    }
+
     /// The longest user name whose socket in the group still fits: the
     /// limit `Paths.resolve` documents.
     @Test func userNamesOfUpTo25BytesFit() {

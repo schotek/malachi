@@ -405,3 +405,114 @@ Neověřeno (zůstává):
   `~/Library/Group Containers/PG9F7XU6X8.io.github.schotek.Malachi`;
   z LaunchServices je odregistrovaný. macOS je cizímu procesu smazat
   nedovolí; uklidí je vlastník ve Finderu až po posledním testu (A5).
+
+### 8.3 Stav A2, první část (2026-11-05): lokální agenti
+
+Napsáno:
+
+- `Distribution.allowsLocalAgents` (jen `direct`). Brány, ne jen skryté
+  ovládání: `ClaudeCodeLocator.locate()` v App Store verzi vždy nil (z něj
+  vychází každý běh Claude Code: panel, jednorázové požadavky, triage,
+  Navrhnout odpověď, `--version`, `auth status`, přihlášení),
+  `CodexProvider.executable` nil, dostupnost triage navíc podle
+  distribuce, `AppState` nečte přihlášení ChatGPT z klíčenky.
+- `Settings(defaults:distribution:)`: v App Store verzi se `assistant-target
+  = inapp` čte jako Claude Desktop a `assistant-provider = chatgpt` jako
+  Claude; zápis těchto hodnot se tam ignoruje, takže uložené hodnoty DMG
+  zůstanou pro návrat k DMG. `Assistant.targets` a
+  `AssistantController.targets` jsou bez In App.
+- Předvolby → AI: bez řádku poskytovatele a skupiny ChatGPT; skupina
+  Nástěnka, řádky Claude Code a Model zmizí samy (cíl nikdy není In App);
+  popis skupiny Asistent doplní věta `assistant.WebsiteOnlyText` (nový
+  msgid v `ui/internal/assistant/distribution.go`, česky, ve
+  `windows/parity-exclusions.txt`). Řádek v tabulce odchylek
+  `macos/README.md`.
+
+Ověřeno: `swift build -Xswiftc -warnings-as-errors`, filtrované
+`swift test` (775 testů, nové `DistributionAgentsTests`),
+`check-strings.py` beze změny proti HEAD kromě nového volání, `make po`
+v kontejneru (`cs.po` úplné), Go test reference. Neověřeno na obrazovce:
+Předvolby → AI v sandboxovaném bundlu ani v DMG.
+
+Zbývá v A2: most MCP v sandboxu (registrace s `MALACHI_SOCKET` do skupiny,
+PDF bez `allow-unsigned-executable-memory`, příloha jako soubor),
+registrace v Claude podle Q2 (a), restart Claude Desktop vypustit,
+`Relaunch` pod sandboxem.
+
+Nález z běhu A1 (log systému, 2026-11-05): `malachi-mcp` s vlastním
+sandboxem a skupinou ze sandboxované aplikace (`status` při startu)
+spadl čtyřikrát hned po startu: `taskgated-helper` „Disallowing
+io.github.schotek.Malachi.malachi-mcp because no eligible provisioning
+profiles found“ a `secinit` „Unable to get bundle identifier for
+container id io.github.schotek.Malachi.malachi-mcp“. Samostatná binárka
+bez bundlu nemůže nést provisioning profile ani mít vlastní kontejner,
+takže varianta z §4 (most s vlastním sandboxem jako holá binárka) nejde.
+Možnosti viz Q9.
+
+Pomocný bundle (2026-11-05, vlastník zvolil): App ID
+`io.github.schotek.Malachi.malachi-mcp` se skupinou, profily „Malachi Mail
+MCP Mac Development“ (do 2027-11-05) a „Malachi Mail MCP Mac App Store“
+(do 2027-10-28); `macos/Makefile` v App Store verzi dává most do
+`Contents/Helpers/Malachi Mail MCP.app` (`Resources/mas/mcp-Info.plist.in`,
+vlastní profil `MCP_PROFILE`, application identifier v entitlements),
+`Paths.bridgeExecutable` ho tam najde. Měření:
+
+- Spuštěný zvenku (jako ho spustí Claude) s `MALACHI_SOCKET` na socket ve
+  skupině: sandbox ho pustí, připojí se k démonovi aplikace (handshake,
+  protokol 2) a `list_accounts` odpoví. Tahle polovina funguje.
+- Spuštěný aplikací (`malachi-mcp status --json` z
+  `MCPRegistrationController`): padá v `_libsecinit_appsandbox`
+  (`EXC_BREAKPOINT`, rodič `MalachiMail`). Proces s vlastním sandboxem
+  nesmí být potomkem sandboxované aplikace; `inherit` by zase nefungoval
+  pod Claude. Registraci (`status`, `install`, `uninstall`) proto
+  aplikace nemůže spouštět jako podproces mostu; možnosti viz Q10.
+- `secinitd` u prvního spuštění aplikací zapsal „user consented to
+  launching … malachi-mcp with container …io.github.schotek.Malachi/Data“;
+  ověřit u vlastníka, zda viděl dialog.
+
+Registrace přes LaunchServices (2026-11-05): most dostal platformně
+neutrální parametry `--claude-code-config`, `--socket` (položka s
+`env.MALACHI_SOCKET`) a `--output` (výsledek či `{"error": …}` do
+souboru) a dočasný soubor s pevným jménem `.<jméno>.malachi-mcp.tmp`
+(`docs/mcp.md`, Go testy); pomocník má dočasné výjimky na
+`~/Library/Application Support/Claude/`, `~/.claude.json`,
+`~/..claude.json.malachi-mcp.tmp` (zápis) a `~/.claude/` (čtení).
+Ověřeno: pomocník v sandboxu oba soubory Claude přečte a výsledek do
+skupiny zapíše; spuštěný přes LaunchServices z shellu (`open -n … --args
+install`) zapsal do testovacího souboru ve složce Claude správnou položku
+se socketem ve skupině. Nefunguje: spuštěný přes LaunchServices
+z *aplikace* (`NSWorkspace.openApplication` s `arguments`) běží, sandbox
+se mu nastaví, ale příkaz neprovede a nezapíše nic ani do složky Claude.
+Nejspíš sandboxovaná aplikace argumenty spouštěné aplikaci nepředá
+(neověřeno v dokumentaci). Možnosti viz Q11. Konfigurace Claude jsou
+beze změny (otisk Claude Desktop shodný se zálohou, položka `malachi`
+v `~/.claude.json` shodná).
+
+Soubor se žádostí (2026-11-05, vlastník zvolil, Q11): aplikace zapíše
+příkazovou řádku do `mcp-setup-request.json` ve skupině, pomocníka spustí
+přes LaunchServices bez argumentů a jeho `Info.plist` (`LSEnvironment`
+`MALACHI_MCP_SETUP_REQUEST`, „~/“ = domov z databáze účtů) ho na žádost
+nasměruje; most ji přečte, smaže a provede jen s `--output`
+(`setup.go` `runSetupRequest`, test `TestSetupRequestFile`). Claude
+spouští tutéž binárku přímo, bez proměnné, jako server. Spouštěč
+(`MalachiMail/App/BridgeSetupLauncher.swift`, háček
+`MCPRegistrationController.setupLauncher`) řadí volání za sebe.
+Vývojové kroky `mcp-status`, `mcp-install`, `mcp-uninstall`
+(`MainWindowController+DevStartMCP.swift`; píšou skutečné konfigurace).
+
+Ověřeno ze sandboxované aplikace (vývojový podpis, Claude Desktop
+neběžel, obě konfigurace předem zazálohované): `status` při startu bez
+chyby; `install` zapsal do Claude Desktop i `~/.claude.json` položku
+s příkazem pomocníka a `env.MALACHI_SOCKET` do skupiny, přes pevný
+dočasný soubor bez zbytku; `status` pak `registered=true`; `uninstall`
+obě položky odebral. Po testu Claude Desktop vrácen ze zálohy bajt po
+bajtu, v `~/.claude.json` vrácena původní položka `malachi` (zbytek
+souboru mezitím přepisoval Claude Code). Spolu s dřívějším měřením
+(pomocník spuštěný zvenku s `MALACHI_SOCKET` odpoví `list_accounts`) je
+cesta Claude → most → démon App Store verze ověřená až na skutečné
+spuštění samotným Claude Desktop nebo Claude Code.
+
+Zbývá v A2: restart Claude Desktop v App Store verzi (bez Apple events
+vypustit), `Relaunch` pod sandboxem, PDF bez
+`allow-unsigned-executable-memory`, příloha jako soubor, ruční průchod
+Předvoleb → AI a spuštění mostu skutečným Claude.

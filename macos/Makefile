@@ -53,6 +53,12 @@ HELPER_ENTITLEMENTS :=
 # ask for.
 DISTRIBUTION  ?= direct
 PROFILE       ?=
+# The App Store build carries malachi-mcp in a bundle of its own
+# (MCP_APP), with the profile MCP_PROFILE of io.github.schotek.Malachi.malachi-mcp:
+# Claude starts it, so it has a sandbox of its own, and a sandboxed
+# executable outside a bundle gets neither the app group nor a container.
+MCP_PROFILE   ?=
+MCP_APP       = $(CONTENTS)/Helpers/Malachi Mail MCP.app
 ifeq ($(DISTRIBUTION),appstore)
 ENTITLEMENTS        := Resources/mas/MalachiMail.entitlements
 MCP_ENTITLEMENTS    := Resources/mas/malachi-mcp.entitlements
@@ -160,17 +166,22 @@ icon:
 app: build locale icon
 	@test -x "$(GO_DIR)/malachid" -a -x "$(GO_DIR)/malachi-mcp" || { \
 		echo "macos: $(GO_DIR)/malachid or malachi-mcp is missing; run 'make backend mcp' in $(ROOT) first" >&2; exit 1; }
-	$(if $(filter appstore,$(DISTRIBUTION)),@test -f "$(PROFILE)" || { \
-		echo "macos: DISTRIBUTION=appstore needs PROFILE=<the .provisionprofile of io.github.schotek.Malachi>" >&2; exit 1; })
+	$(if $(filter appstore,$(DISTRIBUTION)),@test -f "$(PROFILE)" -a -f "$(MCP_PROFILE)" || { \
+		echo "macos: DISTRIBUTION=appstore needs PROFILE=<the .provisionprofile of io.github.schotek.Malachi> and MCP_PROFILE=<that of io.github.schotek.Malachi.malachi-mcp>" >&2; exit 1; })
 	@set -e; bin="$$($(SWIFT_BUILD) --show-bin-path)"; \
 	rm -rf "$(APP)"; \
 	mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources"; \
 	cp "$$bin/$(EXE)" "$(CONTENTS)/MacOS/$(EXE)"; \
 	cp "$$bin/$(HELPER)" "$(CONTENTS)/MacOS/$(HELPER)"; \
-	cp "$(GO_DIR)/malachid" "$(GO_DIR)/malachi-mcp" "$(CONTENTS)/MacOS/"; \
+	cp "$(GO_DIR)/malachid" "$(CONTENTS)/MacOS/"; \
+	$(if $(filter appstore,$(DISTRIBUTION)),mkdir -p "$(MCP_APP)/Contents/MacOS"; \
+	cp "$(GO_DIR)/malachi-mcp" "$(MCP_APP)/Contents/MacOS/"; \
+	cp "$(MCP_PROFILE)" "$(MCP_APP)/Contents/embedded.provisionprofile"; \
+	sed -e 's/@VERSION@/$(SHORT_VERSION)/g' -e 's/@BUNDLE_ID@/$(APP_ID)/g' Resources/mas/mcp-Info.plist.in > "$(MCP_APP)/Contents/Info.plist"; \
+	plutil -lint "$(MCP_APP)/Contents/Info.plist" >/dev/null;,cp "$(GO_DIR)/malachi-mcp" "$(CONTENTS)/MacOS/";) \
 	$(if $(SDK_VERSION),$(call set_sdk,$(CONTENTS)/MacOS/$(EXE))) \
 	for arch in $(ARCHS); do \
-		for f in "$(CONTENTS)"/MacOS/*; do \
+		for f in "$(CONTENTS)"/MacOS/* $(if $(filter appstore,$(DISTRIBUTION)),"$(MCP_APP)/Contents/MacOS/malachi-mcp"); do \
 			lipo "$$f" -verify_arch "$$arch" || { echo "macos: $$f has no $$arch code" >&2; exit 1; }; \
 		done; \
 	done; \
@@ -192,7 +203,7 @@ app: build locale icon
 	for f in malachid $(HELPER); do \
 		$(CODESIGN) --identifier "$(APP_ID).$$f" $(if $(HELPER_ENTITLEMENTS),--entitlements "$(HELPER_ENTITLEMENTS)") "$(CONTENTS)/MacOS/$$f"; \
 	done; \
-	$(CODESIGN) --identifier "$(APP_ID).malachi-mcp" --entitlements "$(MCP_ENTITLEMENTS)" "$(CONTENTS)/MacOS/malachi-mcp"; \
+	$(if $(filter appstore,$(DISTRIBUTION)),$(CODESIGN) --entitlements "$(MCP_ENTITLEMENTS)" "$(MCP_APP)",$(CODESIGN) --identifier "$(APP_ID).malachi-mcp" --entitlements "$(MCP_ENTITLEMENTS)" "$(CONTENTS)/MacOS/malachi-mcp"); \
 	$(CODESIGN) --entitlements "$(ENTITLEMENTS)" "$(APP)"; \
 	codesign --verify --strict --deep "$(APP)"; \
 	echo "built $(APP) ($(VERSION), $(or $(ARCHS),$(shell uname -m)), languages: $(LANGS))"

@@ -283,11 +283,27 @@ public final class MCPRegistrationController {
         onEnabled?(on)
     }
 
+    /// How the App Store build runs a setup subcommand instead of as a
+    /// child: there the bridge has a sandbox of its own, which a child of
+    /// the sandboxed app cannot have, so the app starts it through
+    /// LaunchServices and reads its report from a file
+    /// (`BridgeSetupLauncher` in MalachiMail, docs/plans/mac-app-store.md).
+    /// The same shape as `BridgeRunner.run`: what stdout and stderr would
+    /// have held and the exit status. Set once at launch; nil runs the
+    /// bridge as a child (the DMG, development builds, tests).
+    public typealias SetupLauncher = @Sendable (_ bridge: String, _ subcommand: String, _ timeout: Duration) async throws
+        -> (stdout: Data, stderr: Data, status: Int32)
+    nonisolated(unsafe) public static var setupLauncher: SetupLauncher?
+
     /// Runs one subcommand and reads its status, off the main actor.
     private nonisolated static func invoke(_ runner: BridgeRunner, _ bridge: String, _ command: Command, _ timeout: Duration) async -> Result<MCPStatus, MCPCallFailure> {
         let output: (stdout: Data, stderr: Data, status: Int32)
         do {
-            output = try await runner.run(bridge, [command.rawValue, "--json"], timeout: timeout)
+            if let launch = setupLauncher {
+                output = try await launch(bridge, command.rawValue, timeout)
+            } else {
+                output = try await runner.run(bridge, [command.rawValue, "--json"], timeout: timeout)
+            }
         } catch {
             return .failure(.run(String(describing: error)))
         }

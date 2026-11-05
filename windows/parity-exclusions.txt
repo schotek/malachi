@@ -110,3 +110,4 @@ The items of the Calendar's toolbar	gschema: a key's summary or description, for
 The toolbar's items in order, as the user arranged them; empty for the default toolbar.	gschema: a key's summary or description, for dconf editors, not the UI
 What the toolbars' items show	gschema: a key's summary or description, for dconf editors, not the UI
 Icons only, icons with their labels or labels only, for every toolbar of the main window.	gschema: a key's summary or description, for dconf editors, not the UI
+The In App assistant, the board's triage and Suggest Reply are only in Malachi Mail from malachimail.app.	Mac App Store: only the macOS client's App Store build shows it (docs/plans/mac-app-store.md §3.3); Windows has no such build

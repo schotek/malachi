@@ -6,12 +6,21 @@ SPDX-License-Identifier: GPL-3.0-or-later
 The entitlements of malachi-mcp in the Mac App Store build. Claude starts
 the bridge, not the app, so it cannot inherit the app's sandbox and gets
 one of its own, with the app group whose container holds the daemon's
-socket and key. Its document worker is the same binary started again as
+socket and key. It lives in its own bundle (Contents/Helpers/Malachi Mail
+MCP.app) with its own application identifier and provisioning profile:
+without them macOS refuses the app group and ends the process. Its document worker is the same binary started again as
 a child and runs in this sandbox too. No unsigned executable memory for
 wazero: the App Store build has no hardened runtime, which is what kills
 the process without it in the DMG; that PDFs still read under the sandbox
-is checked in A2 of docs/plans/mac-app-store.md, as is the registration
-in Claude's configuration (temporary exceptions, Q2).
+is checked in A2 of docs/plans/mac-app-store.md.
+
+The registration in Claude (malachi-mcp status / install / uninstall,
+started by the app through LaunchServices, since a child with its own
+sandbox cannot run under the app's) writes only Claude Desktop's
+configuration directory, ~/.claude.json and the fixed temporary file
+beside it (setup.go tempName), and reads ~/.claude/ to see whether Claude
+Code is installed: the temporary exceptions below, nothing else of the
+home directory (Q2 (a) of the plan).
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -21,6 +30,20 @@ in Claude's configuration (temporary exceptions, Q2).
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>PG9F7XU6X8.io.github.schotek.Malachi</string>
+	</array>
+	<key>com.apple.application-identifier</key>
+	<string>PG9F7XU6X8.io.github.schotek.Malachi.malachi-mcp</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>PG9F7XU6X8</string>
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+	<array>
+		<string>/Library/Application Support/Claude/</string>
+		<string>/.claude.json</string>
+		<string>/..claude.json.malachi-mcp.tmp</string>
+	</array>
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+	<array>
+		<string>/.claude/</string>
 	</array>
 </dict>
 </plist>

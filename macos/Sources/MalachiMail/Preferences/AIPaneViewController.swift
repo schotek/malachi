@@ -368,7 +368,9 @@ final class AIPaneViewController: PreferencesPaneViewController {
             c.adopt(known)
         }
         bindClaudeDesktop()
-        if chatGPTPreferences == nil, let assistant, let settings {
+        // The App Store build has no ChatGPT provider (`Distribution
+        // .allowsLocalAgents`): no row, no group.
+        if chatGPTPreferences == nil, let assistant, let settings, settings.distribution.allowsLocalAgents {
             let preferences = ChatGPTPreferences(settings: settings, assistant: assistant) { [weak self] in self?.toast?($0) }
             chatGPTPreferences = preferences
             assistantGroup.setRows([preferences.providerRow] + [menuRow, targetRow, claudeCodeRow, modelRow].compactMap { $0 })
@@ -457,7 +459,11 @@ final class AIPaneViewController: PreferencesPaneViewController {
         chatGPTPreferences?.scheduleUpdate()
         let inAppChatGPT = settings.assistantProvider == .chatgpt && settings.assistantTarget == .app
         assistantGroup.descriptionText = inAppChatGPT
-            ? L10n.T("Connect ChatGPT to use your plan with the in-app assistant.") : Assistant.texts().description
+            ? L10n.T("Connect ChatGPT to use your plan with the in-app assistant.")
+            : settings.distribution.allowsLocalAgents
+                ? Assistant.texts().description
+                // The App Store build says where the rest of the assistant is.
+                : Assistant.texts().description + "\n\n" + Assistant.websiteOnlyText()
         let registered = bridgeRegistered || inAppChatGPT
         let unknown = !registered && !bridgeKnown
         menuRow?.isEnabled = registered

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Info.plist of the bundle that carries malachi-mcp in the Mac App Store
+build (Contents/Helpers/Malachi Mail MCP.app; macos/Makefile). A bare
+sandboxed executable has no bundle identifier, so no container and no
+place for the provisioning profile its app group needs, and macOS ends it
+at once; this bundle gives it both. Claude starts its executable over
+stdio; it shows no window and no Dock icon. LSEnvironment points the
+bridge at the setup request the app writes into the app group when it
+starts this bundle through LaunchServices, which drops the arguments a
+sandboxed app passes (setup.go setupRequestEnv; "~/" is the account's
+home); Claude starts the executable directly and never gets it.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>@BUNDLE_ID@.malachi-mcp</string>
+	<key>CFBundleName</key>
+	<string>Malachi Mail MCP</string>
+	<key>CFBundleExecutable</key>
+	<string>malachi-mcp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>LSEnvironment</key>
+	<dict>
+		<key>MALACHI_MCP_SETUP_REQUEST</key>
+		<string>~/Library/Group Containers/PG9F7XU6X8.io.github.schotek.Malachi/mcp-setup-request.json</string>
+	</dict>
+</dict>
+</plist>

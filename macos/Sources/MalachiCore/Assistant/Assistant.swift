@@ -296,6 +296,14 @@ public enum Assistant {
         )
     }
 
+    /// assistant.WebsiteOnlyText: what the App Store build shows in
+    /// Settings → AI instead of the In App target, the ChatGPT provider and
+    /// the board's triage (`Distribution.allowsLocalAgents`).
+    public static func websiteOnlyText() -> String {
+        // TRANSLATORS: Settings → AI of Malachi Mail from the Mac App Store. "In App" is the third choice of "Open In" in the other builds; malachimail.app is the website and stays as it is.
+        L10n.T("The In App assistant, the board's triage and Suggest Reply are only in Malachi Mail from malachimail.app.")
+    }
+
     /// assistant.RestartStrings: the texts of the offer to restart Claude
     /// Desktop around a change of "Register with Claude". Claude Desktop
     /// reads its MCP servers only when it starts and, while it runs,
