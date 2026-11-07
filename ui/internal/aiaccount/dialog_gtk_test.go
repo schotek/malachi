@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -59,6 +60,17 @@ func TestAIAccountDialogGTKSmoke(t *testing.T) {
 		t.Error("the model popover waits for the models")
 	}
 
+	// Until a test reached the server, the models, the consent and Save
+	// are greyed; a successful test unlocks them.
+	if d.modelGroup.Sensitive() || d.consentGroup.Sensitive() || d.save.Sensitive() {
+		t.Error("unlocked before a test")
+	}
+	d.ctl.test = &TestOutcome{OK: true}
+	d.refresh()
+	if !d.modelGroup.Sensitive() || !d.consentGroup.Sensitive() || !d.save.Sensitive() {
+		t.Error("still locked after a successful test")
+	}
+
 	// Save with an empty name flags the name row and says why.
 	d.onSave()
 	if d.flaggedRow != d.nameRow || !d.nameRow.HasCSSClass("error") || !d.banner.Revealed() || d.banner.Title() != tx.NameMissing {
@@ -87,6 +99,17 @@ func TestAIAccountDialogGTKSmoke(t *testing.T) {
 	row, ok := d.modelList.RowAtIndex(1).Cast().(*adw.ActionRow)
 	if !ok || row.Title() != "qwen2.5" || row.Subtitle() != "Qwen 2.5" {
 		t.Errorf("the second model's row: %v", ok)
+	}
+	// The popover is as wide as its ids, within bounds, not the ellipsised
+	// minimum of a row (B2 finding 2026-11-07).
+	for _, b := range []*gtk.MenuButton{d.modelButton, d.boardModelMenu} {
+		sc, ok := b.Popover().Child().(*gtk.ScrolledWindow)
+		if !ok || !sc.PropagateNaturalWidth() || sc.MinContentWidth() != modelPopoverMinWidth || sc.MaxContentWidth() != modelPopoverMaxWidth {
+			t.Errorf("the model popover's width: %v", ok)
+		}
+		if _, nat, _, _ := sc.Measure(gtk.OrientationHorizontal, -1); nat < modelPopoverMinWidth {
+			t.Errorf("the model popover's natural width %d", nat)
+		}
 	}
 
 	// The edit mode of a stored Anthropic account.

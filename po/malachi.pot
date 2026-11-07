@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-07 13:32+0000\n"
+"POT-Creation-Date: 2026-11-07 13:43+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -202,13 +202,13 @@ msgstr ""
 
 #. TRANSLATORS: dialog heading, the pinned certificate of a server
 #. has changed
-#: ui/internal/accountwizard/trust.go:101 ui/internal/aiaccount/dialog.go:358
+#: ui/internal/accountwizard/trust.go:101 ui/internal/aiaccount/dialog.go:372
 msgid "Trust the New Certificate?"
 msgstr ""
 
 #. TRANSLATORS: %s is one server ("host:port") or two joined by
 #. "%s and %s".
-#: ui/internal/accountwizard/trust.go:104 ui/internal/aiaccount/dialog.go:361
+#: ui/internal/accountwizard/trust.go:104 ui/internal/aiaccount/dialog.go:375
 #, c-format
 msgid ""
 "The certificate of %s has changed since you trusted it. If you did not renew "
@@ -217,13 +217,13 @@ msgid ""
 msgstr ""
 
 #. TRANSLATORS: dialog heading
-#: ui/internal/accountwizard/trust.go:107 ui/internal/aiaccount/dialog.go:364
+#: ui/internal/accountwizard/trust.go:107 ui/internal/aiaccount/dialog.go:378
 msgid "Trust This Certificate?"
 msgstr ""
 
 #. TRANSLATORS: %s is one server ("host:port") or two joined by
 #. "%s and %s".
-#: ui/internal/accountwizard/trust.go:110 ui/internal/aiaccount/dialog.go:367
+#: ui/internal/accountwizard/trust.go:110 ui/internal/aiaccount/dialog.go:381
 #, c-format
 msgid ""
 "Only trust a certificate you expect, for example the one of a mail bridge on "
@@ -233,7 +233,7 @@ msgid ""
 msgstr ""
 
 #. TRANSLATORS: destructive confirm button of "Trust This Certificate?"
-#: ui/internal/accountwizard/trust.go:113 ui/internal/aiaccount/dialog.go:370
+#: ui/internal/accountwizard/trust.go:113 ui/internal/aiaccount/dialog.go:384
 msgid "_Trust"
 msgstr ""
 

@@ -348,8 +348,30 @@ func (c *Controller) Closed() bool { return c.closed }
 // CanTest reports Test offered: no call runs.
 func (c *Controller) CanTest() bool { return !c.Busy() }
 
-// CanSave reports Save offered: no call runs.
-func (c *Controller) CanSave() bool { return !c.Busy() }
+// CanSave reports Save offered: no call runs, and the provider was
+// reached (Connected).
+func (c *Controller) CanSave() bool { return !c.Busy() && c.Connected() }
+
+// Connected reports the provider reached with the form's key and server:
+// a test of this dialog that succeeded (a changed key or server takes it
+// back), or an existing account kept on its stored key and server, which
+// connected when it was added. Until then only the name, the server, the
+// key, the pin and Test are available (owner's decision 2026-11-07, B2):
+// the models come from the test, so the model, the board's model, the
+// consent and Save wait for it (Unlocked).
+func (c *Controller) Connected() bool {
+	if c.test != nil && c.test.OK {
+		return true
+	}
+	if !c.KeyStored() || c.editing.Config.AI == nil {
+		return false
+	}
+	return hostOf(c.form.BaseURL) == hostOf(c.editing.Config.AI.BaseURL)
+}
+
+// Unlocked reports the model group and the consent available: Connected
+// and not saving.
+func (c *Controller) Unlocked() bool { return c.Connected() && !c.saving }
 
 // IsChanged reports a form that differs from the stored account in what
 // the daemon acts on: the name, the server, the models, the pin, a new
@@ -641,7 +663,7 @@ func (c *Controller) trustable(err error) (certtrust.Problem, bool) {
 // the consent only when given now); nothing (OnClose) when an edited
 // form changes nothing.
 func (c *Controller) Save() {
-	if c.closed || c.Busy() {
+	if c.closed || c.Busy() || !c.Connected() {
 		return
 	}
 	if field, problem := c.Check(true); field != FieldNone {

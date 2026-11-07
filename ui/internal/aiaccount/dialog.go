@@ -213,6 +213,17 @@ func (d *Dialog) build() {
 	d.consentRow.SetTitle(c.Consent.Checkbox)
 }
 
+// The width of a model popover: as wide as its longest model id, but
+// never narrower than a short id's row nor wider than the dialog (a
+// longer id scrolls sideways). Without the propagated natural width the
+// popover shrank to the ellipsised minimum of the rows, a column two
+// characters wide (B2 finding 2026-11-07); the bounds take effect only
+// with a horizontal policy other than never.
+const (
+	modelPopoverMinWidth = 280
+	modelPopoverMaxWidth = 520
+)
+
 // newModelPopover gives button a popover with a list of the provider's
 // models (fillModels); a row picked goes into target.
 func (d *Dialog) newModelPopover(button *gtk.MenuButton, target *adw.EntryRow) *gtk.ListBox {
@@ -220,9 +231,12 @@ func (d *Dialog) newModelPopover(button *gtk.MenuButton, target *adw.EntryRow) *
 	list.SetSelectionMode(gtk.SelectionNone)
 	list.AddCSSClass("navigation-sidebar")
 	scroller := gtk.NewScrolledWindow()
-	scroller.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
+	scroller.SetPolicy(gtk.PolicyAutomatic, gtk.PolicyAutomatic)
 	scroller.SetPropagateNaturalHeight(true)
 	scroller.SetMaxContentHeight(320)
+	scroller.SetPropagateNaturalWidth(true)
+	scroller.SetMinContentWidth(modelPopoverMinWidth)
+	scroller.SetMaxContentWidth(modelPopoverMaxWidth)
 	scroller.SetChild(list)
 	popover := gtk.NewPopover()
 	popover.SetChild(scroller)
@@ -435,12 +449,14 @@ func (d *Dialog) refresh() {
 	if d.boardModelRow.Text() != form.BoardModel {
 		d.boardModelRow.SetText(form.BoardModel)
 	}
-	d.modelGroup.SetSensitive(editable)
+	// The models, the consent and Save wait for a successful test
+	// (Controller.Connected).
+	d.modelGroup.SetSensitive(c.Unlocked())
 
 	d.consentGroup.SetVisible(c.NeedsConsent())
 	d.consentRow.SetSubtitle(c.ConsentBody())
 	d.consentRow.SetActive(form.Consent)
-	d.consentGroup.SetSensitive(editable)
+	d.consentGroup.SetSensitive(c.Unlocked())
 
 	d.save.SetSensitive(c.CanSave())
 }

@@ -975,8 +975,20 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   `RunTest` přeskočí `ModelMissing`; test `TestTestNeedsNoModelYet`);
   pole Model zůstává i ručně zapisovatelné (server, který modely
   nevypisuje). Postřeh agenta bez změny: odmítnutý Test ukazuje jen
-  červený řádek a banner, nic u tlačítka Test. (2) Integrace: lokální
-  řádky, kapsle a jedna skupina katalogu (výše).
+  červený řádek a banner, nic u tlačítka Test. (2) Nabídka modelů pod
+  šipkou řádku Model byla široká dva znaky (popover se smrskl na
+  elipsované minimum řádků): `ScrolledWindow` má
+  `SetPropagateNaturalWidth(true)` s mezemi 280–520 px
+  (`modelPopoverMinWidth`/`MaxWidth`). (3) Rozhodnutí vlastníka: dokud
+  Test neprojde, jsou skupina Model, souhlas a Uložit zašedlé, dostupné
+  zůstávají název, server, klíč, pin a Test (`Controller.Connected`:
+  úspěšný test dialogu, zpět ho vezme změna klíče či serveru;
+  `Unlocked`, `CanSave`, `Save` bez spojení nic nedělá). Předpoklad
+  pro editaci, kterou vlastník nespecifikoval: uložený účet na svém
+  klíči a serveru se počítá jako připojený (připojil se při přidání),
+  Nahradit klíč… nebo jiný server spojení vezmou zpět do nového Testu.
+  (4) Integrace: lokální řádky, kapsle a jedna skupina katalogu
+  (výše).
 - **Neověřeno**: zbytek B2 (účet Ollama nebo klíč, model, souhlas,
   panel, přepis, hledání, triage, Navrhnout odpověď), skutečný
   `agent.StartBridge`, živá API.

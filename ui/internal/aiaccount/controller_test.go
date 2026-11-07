@@ -201,6 +201,62 @@ func TestAddingANamedProviderNeedsAKey(t *testing.T) {
 	}
 }
 
+func TestTheRestWaitsForAConnection(t *testing.T) {
+	// Owner's decision 2026-11-07 (B2): until a test reached the provider,
+	// the models, the consent and Save are unavailable; a changed key or
+	// server takes the connection back. An existing account on its stored
+	// key counts as connected.
+	d := newFakeDaemon()
+	d.reply(api.MethodAccountTest, testOKJSON)
+	c, _, loop := start(d, api.AIAnthropic, nil)
+	c.SetName("Work")
+	c.SetKey("sk-ant-test")
+	c.SetModel("claude-opus-5-5")
+	c.SetConsent(true)
+	if c.Connected() || c.Unlocked() || c.CanSave() || !c.CanTest() {
+		t.Fatal("unlocked before a test")
+	}
+	c.Save()
+	if len(d.callList()) != 0 || c.Problem() != FieldNone {
+		t.Fatalf("saved before a test: %v", d.callList())
+	}
+	c.RunTest()
+	loop.runUntil(t, func() bool { return c.Test() != nil })
+	if !c.Connected() || !c.Unlocked() || !c.CanSave() {
+		t.Fatal("still locked after a successful test")
+	}
+	c.SetKey("sk-ant-other")
+	if c.Connected() || c.CanSave() {
+		t.Error("a changed key kept the connection")
+	}
+	d.reply(api.MethodAccountTest, test401JSON)
+	c.RunTest()
+	loop.runUntil(t, func() bool { return c.Test() != nil })
+	if c.Connected() {
+		t.Error("a refused key connected")
+	}
+
+	a := storedAccount()
+	e, _, _ := start(newFakeDaemon(), "", &a)
+	if !e.Connected() || !e.CanSave() {
+		t.Fatal("an existing account on its stored key is not connected")
+	}
+	e.ReplaceKey()
+	if e.Connected() {
+		t.Error("a replaced key kept the connection")
+	}
+	e.KeepKey()
+	if !e.Connected() {
+		t.Error("keeping the key did not restore the connection")
+	}
+	if e.UsesServer() {
+		e.SetBaseURL("https://elsewhere.example.invalid/v1")
+		if e.Connected() {
+			t.Error("another server kept the connection")
+		}
+	}
+}
+
 func TestTestNeedsNoModelYet(t *testing.T) {
 	// The B2 finding of 2026-11-07: the Test button did nothing with an
 	// empty model, while the model is chosen from what the test lists.
@@ -484,12 +540,22 @@ func TestCompatibleServer(t *testing.T) {
 	if !c.HTTPWarning() || c.HTTPWarningText() != "The API key and your mail travel unencrypted over http to ollama.lan." {
 		t.Errorf("http outside loopback: %q", c.HTTPWarningText())
 	}
+	if c.CanSave() || c.Connected() {
+		t.Error("save offered before the server was reached")
+	}
 	if !strings.HasSuffix(c.ConsentBody(), "Over http they travel unencrypted. The API key and your mail travel unencrypted over http to ollama.lan.") {
 		t.Errorf("consent body %q", c.ConsentBody())
 	}
 	c.SetBaseURL("https://ollama.lan:11434/v1")
 	if c.HTTPWarning() || !strings.HasSuffix(c.ConsentBody(), "Over http they travel unencrypted.") {
 		t.Errorf("https warned: %q", c.ConsentBody())
+	}
+	// Save waits for the server to be reached, without a key.
+	d.reply(api.MethodAccountTest, testOKJSON)
+	c.RunTest()
+	loop.runUntil(t, func() bool { return c.Test() != nil })
+	if !c.Connected() || !c.CanSave() {
+		t.Fatalf("not connected after the test: %+v", c.Test())
 	}
 	c.SetConsent(true)
 	c.Save()
