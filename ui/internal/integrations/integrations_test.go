@@ -389,7 +389,7 @@ func TestRowForByKind(t *testing.T) {
 
 func TestTexts(t *testing.T) {
 	x := Texts(msgids{})
-	for _, s := range []string{x.Title, x.Description, x.ConnectedTitle, x.AvailableTitle, x.AITitle, x.EmptyTitle, x.EmptySubtitle, x.Add, x.Settings, x.CalendarSettings,
+	for _, s := range []string{x.Title, x.Description, x.ConnectedTitle, x.AvailableTitle, x.EmptyTitle, x.EmptySubtitle, x.Add, x.Settings, x.CalendarSettings,
 		x.UnregisterHeading, x.UnregisterBody, x.DisconnectHeading, x.DisconnectBody} {
 		if s == "" {
 			t.Errorf("empty text in %+v", x)
@@ -398,7 +398,7 @@ func TestTexts(t *testing.T) {
 	if x.UnregisterHeading != "Unregister from Claude?" || x.DisconnectHeading != "Disconnect ChatGPT?" {
 		t.Errorf("%+v", x)
 	}
-	if x.Title != "Integrations" || x.Add != "Add…" || x.CalendarSettings != "Calendar Settings" || x.AITitle != "AI" || x.Settings != "Settings" ||
+	if x.Title != "Integrations" || x.Add != "Add…" || x.CalendarSettings != "Calendar Settings" || x.Settings != "Settings" ||
 		x.Description != "Services beside your mail: issue trackers, calendars, CRM and AI" {
 		t.Errorf("%+v", x)
 	}

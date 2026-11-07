@@ -591,7 +591,8 @@ podle `purpose`, smyčka tahu s limity, správce relací), služba
 Klienti (Go reference + GTK hotové): `assistant-provider` je řetězec
 `claude` / `chatgpt` / `acc_…`; `ui/internal/apiassistant` = Provider
 nad RPC a notifikacemi; `ui/internal/aiaccount` = editor účtu s testem,
-výběrem modelu, pinem a souhlasem; Předvolby → Integrace mají katalog AI
+výběrem modelu, pinem a souhlasem; Předvolby → Integrace mají v jedné
+skupině Dostupné služby za službami i AI
 (Claude Code/Desktop a ChatGPT jako lokální integrace s dialogy
 přesunutými z AI záložky — v katalogu s Přidat…, dokud nejsou
 registrované / připojené, pak jen jako řádek v Připojených

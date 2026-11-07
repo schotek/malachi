@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-07 13:22+0000\n"
+"POT-Creation-Date: 2026-11-07 13:32+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -23,10 +23,10 @@ msgstr "Nativní poštovní klient pro prostředí GNOME."
 #: ui/internal/accountwizard/jira_flow.go:216
 #: ui/internal/accountwizard/wizard.go:249
 #: ui/internal/accountwizard/wizard.go:250 ui/internal/aiaccount/text.go:58
-#: ui/internal/integrations/integrations.go:380
 #: ui/internal/integrations/integrations.go:384
-#: ui/internal/integrations/integrations.go:393
-#: ui/internal/integrations/integrations.go:397 ui/internal/crm/text.go:422
+#: ui/internal/integrations/integrations.go:388
+#: ui/internal/integrations/integrations.go:397
+#: ui/internal/integrations/integrations.go:401 ui/internal/crm/text.go:422
 msgid "Edit Account"
 msgstr "Upravit účet"
 
@@ -2272,7 +2272,7 @@ msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
 #: ui/internal/contextmenu/text.go:98 ui/internal/toolbar/text.go:140
-#: ui/internal/window/status.go:270 ui/data/ui/preferences.ui:263
+#: ui/internal/window/status.go:270 ui/data/ui/preferences.ui:260
 #: ui/data/ui/window.ui:171
 msgid "Check for New Mail"
 msgstr "Kontrolovat novou poštu"
@@ -2491,7 +2491,7 @@ msgid "Icons Only"
 msgstr "Jen ikony"
 
 #: ui/internal/toolbar/text.go:70 ui/internal/board/text.go:57
-#: ui/data/ui/preferences.ui:259
+#: ui/data/ui/preferences.ui:256
 msgid "Mail"
 msgstr "Pošta"
 
@@ -2516,7 +2516,7 @@ msgstr "Kalendář"
 msgid "Folders"
 msgstr "Složky"
 
-#: ui/internal/toolbar/text.go:94 ui/data/ui/preferences.ui:484
+#: ui/internal/toolbar/text.go:94 ui/data/ui/preferences.ui:481
 msgid "Message List"
 msgstr "Seznam zpráv"
 
@@ -2538,7 +2538,7 @@ msgstr "Detail případu"
 #. TRANSLATORS: the window's second mode beside Mail: the conversations
 #. that need something, sorted into four states.
 #: ui/internal/toolbar/text.go:107 ui/internal/board/text.go:65
-#: ui/data/ui/preferences.ui:131 ui/data/ui/preferences.ui:620
+#: ui/data/ui/preferences.ui:128 ui/data/ui/preferences.ui:617
 msgid "Board"
 msgstr "Nástěnka"
 
@@ -2747,7 +2747,7 @@ msgstr "Otevřít %s v prohlížeči"
 
 #. TRANSLATORS: a field of a Jira issue.
 #: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1075
-#: ui/data/ui/preferences.ui:654
+#: ui/data/ui/preferences.ui:651
 msgid "Status"
 msgstr "Stav"
 
@@ -2966,22 +2966,22 @@ msgstr[0] "Vyberte nejvýš %d prostor"
 msgstr[1] "Vyberte nejvýš %d prostory"
 msgstr[2] "Vyberte nejvýš %d prostorů"
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:298
-#: ui/data/ui/preferences.ui:318
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:295
+#: ui/data/ui/preferences.ui:315
 msgid "1 week"
 msgstr "1 týden"
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:299
-#: ui/data/ui/preferences.ui:319
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:296
+#: ui/data/ui/preferences.ui:316
 msgid "1 month"
 msgstr "1 měsíc"
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:300
-#: ui/data/ui/preferences.ui:320
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:297
+#: ui/data/ui/preferences.ui:317
 msgid "3 months"
 msgstr "3 měsíce"
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:301
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:298
 msgid "1 year"
 msgstr "1 rok"
 
@@ -3214,17 +3214,17 @@ msgid "The status could not be changed: %s"
 msgstr "Stav se nepodařilo změnit: %s"
 
 #. TRANSLATORS: capsule on an AI integration that uses the apps installed on this computer (Claude Code, Claude Desktop, Codex).
-#: ui/internal/integrations/integrations.go:206
+#: ui/internal/integrations/integrations.go:210
 msgid "This computer"
 msgstr "Tento počítač"
 
 #. TRANSLATORS: capsule on an AI provider account that uses an API key.
-#: ui/internal/integrations/integrations.go:208
+#: ui/internal/integrations/integrations.go:212
 msgid "API key"
 msgstr "Klíč API"
 
 #. TRANSLATORS: Preferences → Integrations: what the Claude apps on this computer bring.
-#: ui/internal/integrations/integrations.go:246
+#: ui/internal/integrations/integrations.go:250
 msgid ""
 "Hand mail to Claude Desktop or Claude Code, and run the assistant in the app "
 "with Claude Code"
@@ -3233,25 +3233,25 @@ msgstr ""
 "aplikaci přes Claude Code"
 
 #. TRANSLATORS: Preferences → Integrations: what ChatGPT (Codex) brings.
-#: ui/internal/integrations/integrations.go:252
+#: ui/internal/integrations/integrations.go:256
 msgid "Run the assistant in the app through Codex, using your ChatGPT plan"
 msgstr "Spouští asistenta v aplikaci přes Codex s vaším plánem ChatGPT"
 
 #. TRANSLATORS: Preferences → Integrations: what an Anthropic API account brings.
-#: ui/internal/integrations/integrations.go:258
+#: ui/internal/integrations/integrations.go:262
 msgid ""
 "Run the assistant in the app over the Anthropic API with your own API key"
 msgstr ""
 "Spouští asistenta v aplikaci přes Anthropic API s vaším vlastním klíčem API"
 
 #. TRANSLATORS: Preferences → Integrations: what an OpenAI API account brings.
-#: ui/internal/integrations/integrations.go:264
+#: ui/internal/integrations/integrations.go:268
 msgid "Run the assistant in the app over the OpenAI API with your own API key"
 msgstr ""
 "Spouští asistenta v aplikaci přes OpenAI API s vaším vlastním klíčem API"
 
 #. TRANSLATORS: Preferences → Integrations: what an OpenAI-compatible server brings; the product names stay as they are.
-#: ui/internal/integrations/integrations.go:270
+#: ui/internal/integrations/integrations.go:274
 msgid ""
 "Ollama, llama.cpp, LM Studio, vLLM and gateways such as OpenRouter: a model "
 "on your computer or a server of your choice"
@@ -3261,28 +3261,28 @@ msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: what a Jira
 #. account brings ("issues" as in Jira's own word).
-#: ui/internal/integrations/integrations.go:283
+#: ui/internal/integrations/integrations.go:287
 msgid "Issues read as mail, comments and status changes"
 msgstr "Issues jako pošta, komentáře a změny stavu"
 
 #. TRANSLATORS: Preferences → Integrations: the name of the
 #. service in the list of services that can be added.
-#: ui/internal/integrations/integrations.go:290
+#: ui/internal/integrations/integrations.go:294
 msgid "CalDAV Calendar"
 msgstr "Kalendář CalDAV"
 
-#: ui/internal/integrations/integrations.go:291
+#: ui/internal/integrations/integrations.go:295
 msgid "Nextcloud, iCloud, Fastmail and other CalDAV servers"
 msgstr "Nextcloud, iCloud, Fastmail a další servery CalDAV"
 
 #. TRANSLATORS: Preferences → Integrations: what an eWay-CRM
 #. account brings ("deals" as eWay-CRM's sales opportunities).
-#: ui/internal/integrations/integrations.go:298
+#: ui/internal/integrations/integrations.go:302
 msgid "Save messages to your CRM with their contacts, companies and deals"
 msgstr "Ukládání zpráv do CRM s kontakty, společnostmi a obchody"
 
 #. TRANSLATORS: %s is the account's e-mail address.
-#: ui/internal/integrations/integrations.go:382
+#: ui/internal/integrations/integrations.go:386
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Mail on the server is not affected."
@@ -3291,7 +3291,7 @@ msgstr ""
 "nedotčena."
 
 #. TRANSLATORS: %s is the account's name (or its site's host).
-#: ui/internal/integrations/integrations.go:386
+#: ui/internal/integrations/integrations.go:390
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Issues on the Jira site are not "
@@ -3301,7 +3301,7 @@ msgstr ""
 "zůstanou beze změny."
 
 #. TRANSLATORS: %s is the calendar account's name.
-#: ui/internal/integrations/integrations.go:391
+#: ui/internal/integrations/integrations.go:395
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Calendars on the server are not "
@@ -3311,7 +3311,7 @@ msgstr ""
 "beze změny."
 
 #. TRANSLATORS: %s is the eWay-CRM account's name.
-#: ui/internal/integrations/integrations.go:395
+#: ui/internal/integrations/integrations.go:399
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Messages saved in eWay-CRM stay there."
@@ -3320,99 +3320,94 @@ msgstr ""
 "zůstanou."
 
 #. TRANSLATORS: %s is the AI provider account's name; its API key leaves the keyring with it.
-#: ui/internal/integrations/integrations.go:404
+#: ui/internal/integrations/integrations.go:408
 #, c-format
 msgid "%s will be removed from Malachi Mail, and its API key with it."
 msgstr "%s bude z Malachi Mail odebrán i s klíčem API."
 
 #. TRANSLATORS: %s is the account's name.
-#: ui/internal/integrations/integrations.go:408
+#: ui/internal/integrations/integrations.go:412
 #, c-format
 msgid "%s will be removed from Malachi Mail."
 msgstr "Účet %s bude z aplikace Malachi Mail odebrán."
 
 #. TRANSLATORS: Preferences → Integrations, the Claude row: the bridge is registered in both Claude apps.
-#: ui/internal/integrations/integrations.go:562
+#: ui/internal/integrations/integrations.go:566
 msgid "Registered in Claude Desktop and Claude Code"
 msgstr "Registrováno v Claude Desktop a Claude Code"
 
-#: ui/internal/integrations/integrations.go:565
+#: ui/internal/integrations/integrations.go:569
 msgid "Claude Code not found"
 msgstr "Claude Code se nenašel"
 
 #. TRANSLATORS: %s is the version of Claude Code found on this computer.
-#: ui/internal/integrations/integrations.go:568
+#: ui/internal/integrations/integrations.go:572
 #, c-format
 msgid "Claude Code %s"
 msgstr "Claude Code %s"
 
 #. TRANSLATORS: Preferences → Integrations, the Claude row: Claude Code is signed in (lower case, after " · ").
-#: ui/internal/integrations/integrations.go:575
+#: ui/internal/integrations/integrations.go:579
 msgid "signed in"
 msgstr "přihlášen"
 
 #. TRANSLATORS: Preferences → Integrations, the Claude row: Claude Code is not signed in (lower case, after " · ").
-#: ui/internal/integrations/integrations.go:578
+#: ui/internal/integrations/integrations.go:582
 msgid "not signed in"
 msgstr "nepřihlášen"
 
 #. TRANSLATORS: the Remove button of the Claude row in Preferences → Integrations: it unregisters the bridge from the Claude apps.
-#: ui/internal/integrations/integrations.go:585
+#: ui/internal/integrations/integrations.go:589
 msgid "Unregister"
 msgstr "Odregistrovat"
 
-#: ui/internal/integrations/integrations.go:591
+#: ui/internal/integrations/integrations.go:595
 msgid "Codex not found"
 msgstr "Codex se nenašel"
 
 #. TRANSLATORS: a page of the preferences: services beside the
 #. mail, such as Jira, CalDAV calendars, eWay-CRM and AI.
-#: ui/internal/integrations/integrations.go:624
+#: ui/internal/integrations/integrations.go:627
 msgid "Integrations"
 msgstr "Integrace"
 
-#: ui/internal/integrations/integrations.go:625
+#: ui/internal/integrations/integrations.go:628
 msgid "Services beside your mail: issue trackers, calendars, CRM and AI"
 msgstr "Služby vedle pošty: sledování úkolů, kalendáře, CRM a AI"
 
-#: ui/internal/integrations/integrations.go:626
+#: ui/internal/integrations/integrations.go:629
 msgid "Connected Services"
 msgstr "Připojené služby"
 
-#: ui/internal/integrations/integrations.go:627
+#: ui/internal/integrations/integrations.go:630
 msgid "Available Services"
 msgstr "Dostupné služby"
 
-#. TRANSLATORS: the AI section of the catalogue in Preferences → Integrations.
-#: ui/internal/integrations/integrations.go:629 ui/data/ui/preferences.ui:583
-msgid "AI"
-msgstr "AI"
-
-#: ui/internal/integrations/integrations.go:630
+#: ui/internal/integrations/integrations.go:631
 msgid "No integrations yet"
 msgstr "Zatím žádné integrace"
 
-#: ui/internal/integrations/integrations.go:631
+#: ui/internal/integrations/integrations.go:632
 msgid "Add one from the list below"
 msgstr "Přidejte některou ze seznamu níže"
 
 #. TRANSLATORS: the button of a service in Preferences →
 #. Integrations → Available Services.
-#: ui/internal/integrations/integrations.go:634
+#: ui/internal/integrations/integrations.go:635
 msgid "Add…"
 msgstr "Přidat…"
 
 #. TRANSLATORS: tooltip of the Edit button of a local integration (Claude, ChatGPT) in Preferences → Integrations.
-#: ui/internal/integrations/integrations.go:636
+#: ui/internal/integrations/integrations.go:637
 msgid "Settings"
 msgstr "Nastavení"
 
 #. TRANSLATORS: confirmation of the Claude row's Unregister in Preferences → Integrations.
-#: ui/internal/integrations/integrations.go:639
+#: ui/internal/integrations/integrations.go:640
 msgid "Unregister from Claude?"
 msgstr "Odregistrovat z Claude?"
 
-#: ui/internal/integrations/integrations.go:640
+#: ui/internal/integrations/integrations.go:641
 msgid ""
 "Claude Desktop and Claude Code will no longer read your mail through Malachi "
 "Mail. The assistant in the app keeps working."
@@ -3421,11 +3416,11 @@ msgstr ""
 "Asistent v aplikaci funguje dál."
 
 #. TRANSLATORS: confirmation of the ChatGPT row's Disconnect in Preferences → Integrations.
-#: ui/internal/integrations/integrations.go:642
+#: ui/internal/integrations/integrations.go:643
 msgid "Disconnect ChatGPT?"
 msgstr "Odpojit ChatGPT?"
 
-#: ui/internal/integrations/integrations.go:643
+#: ui/internal/integrations/integrations.go:644
 msgid ""
 "Malachi Mail signs out of ChatGPT on this computer. You can connect it again "
 "any time."
@@ -3435,7 +3430,7 @@ msgstr ""
 
 #. TRANSLATORS: tooltip of a CalDAV account's Edit button in
 #. Preferences → Integrations; it opens the Calendar page.
-#: ui/internal/integrations/integrations.go:651
+#: ui/internal/integrations/integrations.go:652
 msgid "Calendar Settings"
 msgstr "Nastavení kalendáře"
 
@@ -3732,12 +3727,12 @@ msgid "Back to the timeline: the messages as cards, newest first"
 msgstr "Zpět na časovou osu: zprávy jako karty, nejnovější první"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, a message in the chat layout of a conversation shows its formatting (HTML) instead of plain text.
-#: ui/internal/conversation/chat.go:212 ui/data/ui/preferences.ui:536
+#: ui/internal/conversation/chat.go:212 ui/data/ui/preferences.ui:533
 msgid "Render HTML in Chat"
 msgstr "V chatu vykreslovat HTML"
 
 #. TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
-#: ui/internal/conversation/chat.go:219 ui/data/ui/preferences.ui:537
+#: ui/internal/conversation/chat.go:219 ui/data/ui/preferences.ui:534
 msgid ""
 "Messages in the chat layout as they were sent, in a locked web view, instead "
 "of their plain text"
@@ -3751,23 +3746,23 @@ msgid "Show More"
 msgstr "Zobrazit více"
 
 #. TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
-#: ui/internal/conversation/chat.go:300 ui/data/ui/preferences.ui:527
+#: ui/internal/conversation/chat.go:300 ui/data/ui/preferences.ui:524
 msgid "Conversations"
 msgstr "Konverzace"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:308 ui/data/ui/preferences.ui:542
+#: ui/internal/conversation/chat.go:308 ui/data/ui/preferences.ui:539
 msgid "Shorten My Messages in Chat"
 msgstr "Zkracovat moje zprávy v chatu"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:315 ui/data/ui/preferences.ui:548
+#: ui/internal/conversation/chat.go:315 ui/data/ui/preferences.ui:545
 msgid "Shorten Others' Messages in Chat"
 msgstr "Zkracovat cizí zprávy v chatu"
 
 #. TRANSLATORS: the subtitle of the "Shorten My Messages in Chat" and "Shorten Others' Messages in Chat" switches in Preferences → Message list.
-#: ui/internal/conversation/chat.go:323 ui/data/ui/preferences.ui:543
-#: ui/data/ui/preferences.ui:549
+#: ui/internal/conversation/chat.go:323 ui/data/ui/preferences.ui:540
+#: ui/data/ui/preferences.ui:546
 msgid ""
 "About three lines of each message in its bubble; a click shows the whole "
 "message"
@@ -5933,7 +5928,7 @@ msgid "Custom…"
 msgstr "Vlastní…"
 
 #. TRANSLATORS: the editor's Repeat popup: the event does not repeat.
-#: ui/internal/calendar/recurrence.go:336 ui/data/ui/preferences.ui:283
+#: ui/internal/calendar/recurrence.go:336 ui/data/ui/preferences.ui:280
 msgid "Never"
 msgstr "Nikdy"
 
@@ -8291,7 +8286,7 @@ msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/integrations_page.go:310
+#: ui/internal/window/integrations_page.go:304
 #: ui/internal/window/claude_integration.go:239
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
@@ -8409,47 +8404,47 @@ msgstr "_Neodesílat"
 msgid "Cancelling the send"
 msgstr "Rušení odeslání"
 
-#: ui/internal/window/preferences.go:368
+#: ui/internal/window/preferences.go:366
 msgid "Saving mail settings"
 msgstr "Uložení nastavení pošty"
 
-#: ui/internal/window/preferences.go:397
+#: ui/internal/window/preferences.go:395
 msgid "Loading mail settings"
 msgstr "Načtení nastavení pošty"
 
-#: ui/internal/window/preferences.go:460
+#: ui/internal/window/preferences.go:458
 msgid "Measuring the disk space"
 msgstr "Zjišťování obsazeného místa"
 
-#: ui/internal/window/preferences.go:496
+#: ui/internal/window/preferences.go:494
 msgid "Converting the stored mail in the background"
 msgstr "Uložená pošta se převádí na pozadí"
 
-#: ui/internal/window/preferences.go:498
+#: ui/internal/window/preferences.go:496
 msgid "Converting stopped: the disk is full"
 msgstr "Převod se zastavil: disk je plný"
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:502
+#: ui/internal/window/preferences.go:500
 #, c-format
 msgid "Compression saves %s"
 msgstr "Komprese šetří %s"
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:506
+#: ui/internal/window/preferences.go:504
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr "%s příloh je jen na serveru"
 
-#: ui/internal/window/preferences.go:644
+#: ui/internal/window/preferences.go:642
 msgid "The desktop portal refused to change autostart"
 msgstr "Portál pracovní plochy odmítl změnit automatické spouštění"
 
-#: ui/internal/window/preferences.go:647
+#: ui/internal/window/preferences.go:645
 msgid "Autostart needs xdg-desktop-portal"
 msgstr "Automatické spouštění vyžaduje xdg-desktop-portal"
 
-#: ui/internal/window/preferences.go:650
+#: ui/internal/window/preferences.go:648
 msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
 
@@ -10733,39 +10728,39 @@ msgstr "Zatím žádné účty"
 msgid "Use the + button to add one"
 msgstr "Přidejte účet tlačítkem +"
 
-#: ui/data/ui/preferences.ui:91
+#: ui/data/ui/preferences.ui:88
 msgid "General"
 msgstr "Obecné"
 
-#: ui/data/ui/preferences.ui:95
+#: ui/data/ui/preferences.ui:92
 msgid "Startup"
 msgstr "Spouštění"
 
-#: ui/data/ui/preferences.ui:98
+#: ui/data/ui/preferences.ui:95
 msgid "Launch at Login"
 msgstr "Spustit při přihlášení"
 
-#: ui/data/ui/preferences.ui:99
+#: ui/data/ui/preferences.ui:96
 msgid "Start hidden in the background when you log in"
 msgstr "Po přihlášení se spustí skrytě na pozadí"
 
-#: ui/data/ui/preferences.ui:104
+#: ui/data/ui/preferences.ui:101
 msgid "Run in Background"
 msgstr "Běžet na pozadí"
 
-#: ui/data/ui/preferences.ui:105
+#: ui/data/ui/preferences.ui:102
 msgid "Closing the window keeps Malachi Mail running for notifications"
 msgstr "Zavření okna ponechá Malachi Mail běžet kvůli oznámením"
 
-#: ui/data/ui/preferences.ui:211
+#: ui/data/ui/preferences.ui:208
 msgid "Reading"
 msgstr "Čtení"
 
-#: ui/data/ui/preferences.ui:214
+#: ui/data/ui/preferences.ui:211
 msgid "Mark as Read After"
 msgstr "Označit jako přečtené po"
 
-#: ui/data/ui/preferences.ui:215
+#: ui/data/ui/preferences.ui:212
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 marks it "
 "immediately"
@@ -10773,83 +10768,83 @@ msgstr ""
 "Počet sekund, po které musí být zpráva zobrazena, než se označí jako "
 "přečtená; 0 označí ihned"
 
-#: ui/data/ui/preferences.ui:230
+#: ui/data/ui/preferences.ui:227
 msgid "Deleting"
 msgstr "Mazání"
 
-#: ui/data/ui/preferences.ui:233
+#: ui/data/ui/preferences.ui:230
 msgid "Confirm Before Deleting"
 msgstr "Potvrdit před smazáním"
 
-#: ui/data/ui/preferences.ui:234 data/io.github.schotek.Malachi.gschema.xml:137
+#: ui/data/ui/preferences.ui:231 data/io.github.schotek.Malachi.gschema.xml:137
 msgid "Ask before moving a message to Trash"
 msgstr "Ptát se před přesunutím zprávy do koše"
 
-#: ui/data/ui/preferences.ui:242
+#: ui/data/ui/preferences.ui:239
 msgid "Notifications"
 msgstr "Oznámení"
 
-#: ui/data/ui/preferences.ui:245
+#: ui/data/ui/preferences.ui:242
 msgid "Show Desktop Notifications"
 msgstr "Zobrazovat oznámení na ploše"
 
-#: ui/data/ui/preferences.ui:251
+#: ui/data/ui/preferences.ui:248
 msgid "Play Sound"
 msgstr "Přehrát zvuk"
 
-#: ui/data/ui/preferences.ui:252 data/io.github.schotek.Malachi.gschema.xml:145
+#: ui/data/ui/preferences.ui:249 data/io.github.schotek.Malachi.gschema.xml:145
 msgid "Play the system new-mail sound"
 msgstr "Přehrát systémový zvuk nové pošty"
 
-#: ui/data/ui/preferences.ui:260
+#: ui/data/ui/preferences.ui:257
 msgid "Stored by the mail daemon."
 msgstr "Ukládá poštovní démon."
 
-#: ui/data/ui/preferences.ui:268
+#: ui/data/ui/preferences.ui:265
 msgid "Manually"
 msgstr "Ručně"
 
-#: ui/data/ui/preferences.ui:269
+#: ui/data/ui/preferences.ui:266
 msgid "Every 5 minutes"
 msgstr "Každých 5 minut"
 
-#: ui/data/ui/preferences.ui:270
+#: ui/data/ui/preferences.ui:267
 msgid "Every 15 minutes"
 msgstr "Každých 15 minut"
 
-#: ui/data/ui/preferences.ui:271
+#: ui/data/ui/preferences.ui:268
 msgid "Every 30 minutes"
 msgstr "Každých 30 minut"
 
-#: ui/data/ui/preferences.ui:279
+#: ui/data/ui/preferences.ui:276
 msgid "Load Remote Images"
 msgstr "Načítat vzdálené obrázky"
 
-#: ui/data/ui/preferences.ui:284
+#: ui/data/ui/preferences.ui:281
 msgid "From Known Senders"
 msgstr "Od známých odesílatelů"
 
-#: ui/data/ui/preferences.ui:285
+#: ui/data/ui/preferences.ui:282
 msgid "Always"
 msgstr "Vždy"
 
-#: ui/data/ui/preferences.ui:293
+#: ui/data/ui/preferences.ui:290
 msgid "Keep Mail Offline For"
 msgstr "Uchovávat poštu offline po dobu"
 
-#: ui/data/ui/preferences.ui:294
+#: ui/data/ui/preferences.ui:291
 msgid "Older messages stay on the server and are not shown"
 msgstr "Starší zprávy zůstávají na serveru a nezobrazují se"
 
-#: ui/data/ui/preferences.ui:302 ui/data/ui/preferences.ui:321
+#: ui/data/ui/preferences.ui:299 ui/data/ui/preferences.ui:318
 msgid "Everything"
 msgstr "Vše"
 
-#: ui/data/ui/preferences.ui:310
+#: ui/data/ui/preferences.ui:307
 msgid "Keep Attachments Offline For"
 msgstr "Uchovávat přílohy offline po dobu"
 
-#: ui/data/ui/preferences.ui:311
+#: ui/data/ui/preferences.ui:308
 msgid ""
 "Large attachments of older messages stay on the server and are downloaded "
 "when you open them"
@@ -10857,107 +10852,111 @@ msgstr ""
 "Velké přílohy starších zpráv zůstávají na serveru a stáhnou se, až je "
 "otevřete"
 
-#: ui/data/ui/preferences.ui:317
+#: ui/data/ui/preferences.ui:314
 msgid "Small Attachments Only"
 msgstr "Jen malé přílohy"
 
-#: ui/data/ui/preferences.ui:329
+#: ui/data/ui/preferences.ui:326
 msgid "Never Store Attachments"
 msgstr "Nikdy neukládat přílohy"
 
-#: ui/data/ui/preferences.ui:330
+#: ui/data/ui/preferences.ui:327
 msgid ""
 "Attachments are downloaded whenever you open them and are gone when you quit"
 msgstr ""
 "Přílohy se stáhnou pokaždé, když je otevřete, a po ukončení aplikace zmizí"
 
-#: ui/data/ui/preferences.ui:336
+#: ui/data/ui/preferences.ui:333
 msgid "Compress Stored Mail"
 msgstr "Komprimovat uloženou poštu"
 
-#: ui/data/ui/preferences.ui:337
+#: ui/data/ui/preferences.ui:334
 msgid "Uses less disk space; stored mail is converted in the background"
 msgstr "Šetří místo na disku; uložená pošta se převede na pozadí"
 
-#: ui/data/ui/preferences.ui:343
+#: ui/data/ui/preferences.ui:340
 msgid "Disk Space Used"
 msgstr "Obsazené místo na disku"
 
-#: ui/data/ui/preferences.ui:461
+#: ui/data/ui/preferences.ui:458
 msgid "Appearance"
 msgstr "Vzhled"
 
-#: ui/data/ui/preferences.ui:465
+#: ui/data/ui/preferences.ui:462
 msgid "Theme"
 msgstr "Motiv"
 
-#: ui/data/ui/preferences.ui:468
+#: ui/data/ui/preferences.ui:465
 msgid "Color Scheme"
 msgstr "Barevné schéma"
 
-#: ui/data/ui/preferences.ui:472
+#: ui/data/ui/preferences.ui:469
 msgid "Follow System"
 msgstr "Podle systému"
 
-#: ui/data/ui/preferences.ui:473
+#: ui/data/ui/preferences.ui:470
 msgid "Light"
 msgstr "Světlé"
 
-#: ui/data/ui/preferences.ui:474
+#: ui/data/ui/preferences.ui:471
 msgid "Dark"
 msgstr "Tmavé"
 
-#: ui/data/ui/preferences.ui:487
+#: ui/data/ui/preferences.ui:484
 msgid "Density"
 msgstr "Hustota"
 
-#: ui/data/ui/preferences.ui:491
+#: ui/data/ui/preferences.ui:488
 msgid "Comfortable"
 msgstr "Pohodlná"
 
-#: ui/data/ui/preferences.ui:492
+#: ui/data/ui/preferences.ui:489
 msgid "Compact"
 msgstr "Kompaktní"
 
-#: ui/data/ui/preferences.ui:500
+#: ui/data/ui/preferences.ui:497
 msgid "Show Preview Line"
 msgstr "Zobrazit řádek s náhledem"
 
-#: ui/data/ui/preferences.ui:506
+#: ui/data/ui/preferences.ui:503
 msgid "Show Avatars"
 msgstr "Zobrazit avatary"
 
-#: ui/data/ui/preferences.ui:512
+#: ui/data/ui/preferences.ui:509
 msgid "Monochrome Avatars"
 msgstr "Jednobarevné avatary"
 
-#: ui/data/ui/preferences.ui:513
+#: ui/data/ui/preferences.ui:510
 msgid "Neutral grey instead of a colour per sender"
 msgstr "Neutrální šedá místo barvy pro každého odesílatele"
 
-#: ui/data/ui/preferences.ui:530
+#: ui/data/ui/preferences.ui:527
 msgid "Group by Conversation"
 msgstr "Seskupovat podle konverzací"
 
-#: ui/data/ui/preferences.ui:531
+#: ui/data/ui/preferences.ui:528
 msgid "One row per conversation; expand it to see its messages"
 msgstr "Jeden řádek na konverzaci; po rozbalení zobrazí její zprávy"
 
-#: ui/data/ui/preferences.ui:556
+#: ui/data/ui/preferences.ui:553
 msgid "Message View"
 msgstr "Zobrazení zprávy"
 
-#: ui/data/ui/preferences.ui:559
+#: ui/data/ui/preferences.ui:556
 msgid "Use Monospace Font for Plain Text"
 msgstr "Pro prostý text použít neproporcionální písmo"
 
-#: ui/data/ui/preferences.ui:564
+#: ui/data/ui/preferences.ui:561
 msgid "Text Zoom"
 msgstr "Přiblížení textu"
 
-#: ui/data/ui/preferences.ui:565
+#: ui/data/ui/preferences.ui:562
 msgid "Percent"
 msgstr "Procenta"
+
+#: ui/data/ui/preferences.ui:580
+msgid "AI"
+msgstr "AI"
 
 #: ui/data/ui/window.ui:98
 msgid "New Message (Ctrl+N)"

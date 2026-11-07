@@ -34,7 +34,13 @@ const (
 // validateAI checks an account of kind ai: the ai block and nothing of
 // mail, issue trackers, calendars or CRM. The base URL is normalised in
 // place. Every failure is invalidArgument.
-func validateAI(c *api.AccountConfig) error {
+func validateAI(c *api.AccountConfig) error { return validateAIConfig(c, true) }
+
+// validateAIConfig is validateAI; modelRequired is false for
+// account.test, which lists the models the user then chooses from, so a
+// test before the choice has an empty model (an invalid one still
+// fails).
+func validateAIConfig(c *api.AccountConfig, modelRequired bool) error {
 	bad := func(format string, args ...any) error {
 		return api.NewError(api.CodeInvalidArgument, format, args...)
 	}
@@ -59,7 +65,7 @@ func validateAI(c *api.AccountConfig) error {
 		return bad("ai: baseUrl applies to an openaiCompatible account only")
 	}
 	a.Model = strings.TrimSpace(a.Model)
-	if a.Model == "" {
+	if a.Model == "" && modelRequired {
 		return bad("ai: model is required")
 	}
 	a.BoardModel = strings.TrimSpace(a.BoardModel)

@@ -546,7 +546,11 @@ eWay).
   (`integrations.Badges`, totéž co kapsle druhu účtu v postranním
   panelu): lokální „This computer“ (Tento počítač), účty přes API
   „API key“ (Klíč API), i na řádku v Připojených; služby kapsli nemají
-  (rozhodnutí vlastníka 2026-11-07).
+  (rozhodnutí vlastníka 2026-11-07). Katalog je jedna skupina Dostupné
+  služby (služby, pak AI); samostatná skupina „AI“ zmizela, protože dva
+  stejně velké nadpisy četl vlastník jako dvě kategorie, ač AI je část
+  dostupných služeb (rozhodnutí 2026-11-07; `integrations.Section` je
+  jen pořadí).
 - Odebrání účtu `ai`: věta podle druhu („…a jeho klíč“).
 
 ### 7.3 Předvolby → AI
@@ -939,7 +943,9 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   v katalogu, vlastník to 2026-11-07 shledal matoucím; msgid „Not
   registered“ zmizel; kapsle „This computer“ / „API key“ (`Service.Badge`,
   `Row.Badge`, `LocalRow.Badge`, GTK `widget.NewSourcePill` ve stylu
-  neutrální pilulky); dialogy `claude_integration.blp`,
+  neutrální pilulky); katalog v jedné skupině `integrations_available_group`
+  z `integrations.Catalog`, `integrations_ai_group` a `PageTexts.AITitle`
+  zrušené; dialogy `claude_integration.blp`,
   `chatgpt_integration.blp` přesunuté z AI záložky, Odebrat
   = odregistrovat / odpojit s potvrzením);
   řádek účtu `ai` ukazuje „%s tokens today“ (účtování po místních dnech,
@@ -958,6 +964,19 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   změněný popis Integrací („… CRM and AI“) a nepoužitý „In-app provider“
   shodí `build.ps1 lint`, dokud E3 nepřejde; `windows/src` dál používá
   výčet `AssistantProviderID`.
-- **Neověřeno**: B2 vlastníka (XQuartz nad kopií dat: účet Ollama,
-  Test, model, souhlas, panel, přepis, hledání, triage, Navrhnout
-  odpověď, Integrace), skutečný `agent.StartBridge`, živá API.
+- **Nálezy B2** (2026-11-07, vlastník na Fedoře přes linuxového agenta
+  nad kopií dat, démon 5c9b39c1, klient 786d3022): (1) Test účtu AI
+  nešel spustit bez modelu, ač model se vybírá až z jeho výsledku —
+  rozhodnutí vlastníka: Test s prázdným modelem u všech tří druhů, model
+  povinný až pro Uložit; opraveno v démonu
+  (`validateAccountConfigFor(c, forTest)` → `validateAIConfig(c,
+  modelRequired)`, `account.test` model nevyžaduje, neplatný dál
+  odmítne, `docs/api.md` §4.1) i v kontroleru (`check(forSave, forTest)`,
+  `RunTest` přeskočí `ModelMissing`; test `TestTestNeedsNoModelYet`);
+  pole Model zůstává i ručně zapisovatelné (server, který modely
+  nevypisuje). Postřeh agenta bez změny: odmítnutý Test ukazuje jen
+  červený řádek a banner, nic u tlačítka Test. (2) Integrace: lokální
+  řádky, kapsle a jedna skupina katalogu (výše).
+- **Neověřeno**: zbytek B2 (účet Ollama nebo klíč, model, souhlas,
+  panel, přepis, hledání, triage, Navrhnout odpověď), skutečný
+  `agent.StartBridge`, živá API.

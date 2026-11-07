@@ -381,7 +381,12 @@ func (c *Controller) IsChanged() bool {
 // (docs/api.md §4.1), or FieldNone and "": the name, the server address
 // (with https for a pin), the key (needed for a named provider, when
 // adding or replacing), the models, and for Save the consent.
-func (c *Controller) Check(forSave bool) (Field, string) {
+func (c *Controller) Check(forSave bool) (Field, string) { return c.check(forSave, false) }
+
+// check is Check; forTest is the Test button, before which the model may
+// still be empty: the test is what lists the models to choose from
+// (account.test accepts an empty model, an invalid one it refuses).
+func (c *Controller) check(forSave, forTest bool) (Field, string) {
 	s := c.Texts
 	if strings.TrimSpace(c.form.Name) == "" {
 		return FieldName, s.NameMissing
@@ -404,7 +409,9 @@ func (c *Controller) Check(forSave bool) (Field, string) {
 	}
 	switch checkModel(c.form.Model) {
 	case modelMissing:
-		return FieldModel, s.ModelMissing
+		if !forTest {
+			return FieldModel, s.ModelMissing
+		}
 	case modelInvalid:
 		return FieldModel, s.ModelInvalid
 	}
@@ -547,12 +554,12 @@ func (c *Controller) ForgetPin() {
 
 // RunTest is account.test with the form: the provider's models and the
 // status. An existing account without a replaced key is tested with its
-// stored key.
+// stored key. The model may still be empty: the test lists the models.
 func (c *Controller) RunTest() {
 	if c.closed || c.Busy() {
 		return
 	}
-	if field, problem := c.Check(false); field != FieldNone {
+	if field, problem := c.check(false, true); field != FieldNone {
 		c.fail(field, problem)
 		return
 	}

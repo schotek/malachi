@@ -949,9 +949,10 @@ host of the account's base URL, as a bearer token or Anthropic's
   provider refused. `account.update` that changes `provider` or the
   host of `baseUrl` needs `credentials.password` again (the stored one
   is never sent elsewhere); an update without credentials keeps it.
-- `model`: required, ≤ 256 bytes, no control characters (an id the
-  provider listed, or one typed by the user); `boardModel` the same,
-  optional.
+- `model`: required by `account.add` and `account.update`, ≤ 256 bytes,
+  no control characters (an id the provider listed, or one typed by the
+  user); `account.test` accepts an empty one, since the test is what
+  lists the models to choose from; `boardModel` the same, optional.
 - `consent`: a client sends `{ "version": n }` when the user accepted
   the consent text of version `n` (`api.AssistantConsentVersion`, 1);
   the daemon sets `acceptedAt`, and an update that carries a lower

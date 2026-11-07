@@ -32,8 +32,8 @@ import (
 // of the daemon: integrations.LocalRowFor over the Assistant's state,
 // each shown only while it is connected and then gone from the
 // catalogue, integrations.Offered), and the catalogue of what can be
-// added in two sections, the services and the AI
-// (integrations.CatalogSection). A Jira row edits its settings, a
+// added in one group, the services and then the AI, told apart by their
+// capsules (integrations.Catalog). A Jira row edits its settings, a
 // CalDAV row switches to the Calendar page, which keeps the CalDAV
 // account's server, password, certificate and calendars, an AI provider
 // account's row its dialog (ai_editors.go), a local row its own dialog
@@ -50,14 +50,8 @@ func (d *PreferencesDialog) bindIntegrations(c *client.Client) (unbind func()) {
 	d.integrationList.empty.SetTitle(tx.EmptyTitle)
 	d.integrationList.empty.SetSubtitle(tx.EmptySubtitle)
 	d.integrationsServices.SetTitle(glib.MarkupEscapeText(tx.AvailableTitle))
-	for _, s := range integrations.CatalogSection(i18n.Tr, integrations.SectionServices) {
+	for _, s := range integrations.Catalog(i18n.Tr) {
 		d.integrationsServices.Add(d.newServiceRow(c, s, tx.Add))
-	}
-	if d.integrationsAI != nil {
-		d.integrationsAI.SetTitle(glib.MarkupEscapeText(tx.AITitle))
-		for _, s := range integrations.CatalogSection(i18n.Tr, integrations.SectionAI) {
-			d.integrationsAI.Add(d.newServiceRow(c, s, tx.Add))
-		}
 	}
 	var cleanup []func()
 	if d.integrationsLocal != nil {

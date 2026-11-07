@@ -7,8 +7,11 @@
 // account — the services beside the mail, today Jira (kind jira), CalDAV
 // calendars (kind caldav), eWay-CRM (kind eway) and AI provider accounts
 // (kind ai, docs/plans/ai-api.md D3); a kind added later lands there by
-// itself — and the catalogue of services that can be added, in two
-// sections: the services and the AI (docs/plans/ai-api.md §7.2).
+// itself — and the catalogue of services that can be added: one group,
+// the services first and then the AI, which a capsule tells apart
+// (docs/plans/ai-api.md §7.2; the AI had a group of its own until the
+// owner's decision 2026-11-07, as two equal headings read as two
+// categories while the AI is part of the available services).
 //
 // The AI section also names two integrations that are not accounts of
 // the daemon but state of this client (D15): Claude Code / Claude Desktop
@@ -151,10 +154,11 @@ const (
 	AIIcon = "malachi-assistant-symbolic"
 )
 
-// Section is a section of the catalogue.
+// Section is a section of the catalogue: its order, not a heading of
+// the page.
 type Section int
 
-// The sections, in the order of the page.
+// The sections, in the order of the catalogue.
 const (
 	// SectionServices: Jira, CalDAV calendars, eWay-CRM.
 	SectionServices Section = iota
@@ -210,7 +214,7 @@ func Badges(tr Translator) BadgeTexts {
 }
 
 // Catalog is the services that can be added, in the order the page
-// lists them: the services first, then the AI section.
+// lists them in its one group: the services first, then the AI section.
 func Catalog(tr Translator) []Service {
 	return append(services(tr), aiServices(tr)...)
 }
@@ -604,8 +608,7 @@ type PageTexts struct {
 	Title            string // the page's title in the preferences' navigation
 	Description      string // under the title
 	ConnectedTitle   string // the group of the added services
-	AvailableTitle   string // the group of the catalogue (its services section)
-	AITitle          string // the catalogue's AI section
+	AvailableTitle   string // the group of the catalogue
 	EmptyTitle       string // the connected group's placeholder row
 	EmptySubtitle    string
 	Add              string // a catalogue row's button
@@ -625,10 +628,8 @@ func Texts(tr Translator) PageTexts {
 		Description:    tr.T("Services beside your mail: issue trackers, calendars, CRM and AI"),
 		ConnectedTitle: tr.T("Connected Services"),
 		AvailableTitle: tr.T("Available Services"),
-		// TRANSLATORS: the AI section of the catalogue in Preferences → Integrations.
-		AITitle:       tr.T("AI"),
-		EmptyTitle:    tr.T("No integrations yet"),
-		EmptySubtitle: tr.T("Add one from the list below"),
+		EmptyTitle:     tr.T("No integrations yet"),
+		EmptySubtitle:  tr.T("Add one from the list below"),
 		// TRANSLATORS: the button of a service in Preferences →
 		// Integrations → Available Services.
 		Add: tr.T("Add…"),

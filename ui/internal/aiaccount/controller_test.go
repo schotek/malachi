@@ -201,6 +201,41 @@ func TestAddingANamedProviderNeedsAKey(t *testing.T) {
 	}
 }
 
+func TestTestNeedsNoModelYet(t *testing.T) {
+	// The B2 finding of 2026-11-07: the Test button did nothing with an
+	// empty model, while the model is chosen from what the test lists.
+	d := newFakeDaemon()
+	d.reply(api.MethodAccountTest, testOKJSON)
+	c, _, loop := start(d, api.AIAnthropic, nil)
+	c.SetName("Work")
+	c.SetKey("sk-ant-test")
+	if f, p := c.Check(false); f != FieldModel || p != "Enter or choose a model" {
+		t.Errorf("check without a model: %v %q", f, p)
+	}
+	c.RunTest()
+	if !c.Busy() || c.Problem() != FieldNone {
+		t.Fatalf("the test did not start: busy %v problem %v banner %q", c.Busy(), c.Problem(), c.Banner())
+	}
+	loop.runUntil(t, func() bool { return c.Test() != nil })
+	if p := lastParams[api.AccountTestParams](t, d, api.MethodAccountTest); p.Config.AI == nil || p.Config.AI.Model != "" {
+		t.Errorf("test params %+v", p.Config.AI)
+	}
+	if ids := modelIDs(c.Models()); !slices.Equal(ids, []string{"claude-opus-5-5", "claude-sonnet-5"}) || !c.Test().OK {
+		t.Errorf("models %v outcome %+v", ids, c.Test())
+	}
+	// Save still needs the model; an invalid one stops the test too.
+	c.SetConsent(true)
+	c.Save()
+	if c.Problem() != FieldModel || len(d.callList()) != 1 {
+		t.Errorf("saved without a model: %v %v", c.Problem(), d.callList())
+	}
+	c.SetModel("bad\x00model")
+	c.RunTest()
+	if c.Busy() || c.Problem() != FieldModel || len(d.callList()) != 1 {
+		t.Errorf("tested an invalid model: busy %v problem %v", c.Busy(), c.Problem())
+	}
+}
+
 func TestTestListsTheModelsAndSaveSendsTheKeyAndTheConsent(t *testing.T) {
 	d := newFakeDaemon()
 	d.reply(api.MethodAccountTest, testOKJSON)

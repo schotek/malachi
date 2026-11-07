@@ -19,8 +19,8 @@ import (
 // Preferences → Accounts and Integrations over made-up accounts (no
 // daemon, no window): the mail accounts on Accounts, Jira, CalDAV and an
 // AI provider account on Integrations with the switch on the Jira and
-// the AI row, the AI row's usage line, the two local rows, both sections
-// of the catalogue, and the placeholders. Run with MALACHI_GTK_SMOKE=1
+// the AI row, the AI row's usage line, the two local rows, the one
+// catalogue group, and the placeholders. Run with MALACHI_GTK_SMOKE=1
 // and a GTK display.
 func TestPreferencesIntegrationsGTKSmoke(t *testing.T) {
 	if os.Getenv("MALACHI_GTK_SMOKE") != "1" {
@@ -45,7 +45,6 @@ func TestPreferencesIntegrationsGTKSmoke(t *testing.T) {
 		integrationsPage:     b.GetObject("integrations_page").Cast().(*adw.PreferencesPage),
 		integrationsServices: b.GetObject("integrations_available_group").Cast().(*adw.PreferencesGroup),
 		integrationsLocal:    b.GetObject("integrations_local_group").Cast().(*adw.PreferencesGroup),
-		integrationsAI:       b.GetObject("integrations_ai_group").Cast().(*adw.PreferencesGroup),
 	}
 	defer func() { d.closed = true }()
 	unbind := d.bindIntegrations(nil)
@@ -54,8 +53,11 @@ func TestPreferencesIntegrationsGTKSmoke(t *testing.T) {
 	if d.integrationsPage.Title() != tx.Title || d.integrationList.empty.Title() != tx.EmptyTitle {
 		t.Errorf("texts: %q / %q", d.integrationsPage.Title(), d.integrationList.empty.Title())
 	}
-	if d.integrationsAI.Title() != tx.AITitle || d.integrationsServices.Title() != tx.AvailableTitle {
-		t.Errorf("catalogue titles: %q / %q", d.integrationsServices.Title(), d.integrationsAI.Title())
+	if d.integrationsServices.Title() != tx.AvailableTitle {
+		t.Errorf("catalogue title: %q", d.integrationsServices.Title())
+	}
+	if n := len(integrations.Catalog(i18n.Tr)); len(d.localOffers) != 2 || n != 8 {
+		t.Errorf("one catalogue group of %d entries, %d local", n, len(d.localOffers))
 	}
 	// The two local rows, without an Assistant: built with their titles
 	// and the Settings button, hidden with their group while nothing is

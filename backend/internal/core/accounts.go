@@ -495,16 +495,17 @@ func (s *accountService) Discover(ctx context.Context, p api.AccountDiscoverPara
 	return &api.AccountDiscoverResult{Config: res.Config, Source: res.Source, ProviderName: res.ProviderName, Alternatives: alternatives}, nil
 }
 
-// Test validates like Add, then probes the endpoints of the account kind
-// (IMAP and SMTP concurrently, the Graph mailbox, or the Jira site, see
-// testJira). Each endpoint reports its own outcome; the call itself fails
-// only for an invalid configuration.
+// Test validates like Add (except that an ai account needs no model yet:
+// the test lists the models), then probes the endpoints of the account
+// kind (IMAP and SMTP concurrently, the Graph mailbox, or the Jira site,
+// see testJira). Each endpoint reports its own outcome; the call itself
+// fails only for an invalid configuration.
 // The password is used for the connections and never logged; so is a
 // token, which comes from GNOME Online Accounts, from the session named by
 // credentials.oauthSession (not consumed) or from the stored sign-in of
 // accountId.
 func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*api.AccountTestResult, error) {
-	if err := validateAccountConfig(&p.Config); err != nil {
+	if err := validateAccountConfigFor(&p.Config, true); err != nil {
 		return nil, err
 	}
 	if err := checkCredentials(p.Config, p.Credentials); err != nil {
@@ -820,7 +821,12 @@ func usesAuth(c api.AccountConfig, m api.AuthMethod) bool {
 // validateAccountConfig checks an AccountConfig against the rules documented
 // in docs/api.md §4.1 and trims the free-text fields in place. Every failure
 // is invalidArgument.
-func validateAccountConfig(c *api.AccountConfig) error {
+func validateAccountConfig(c *api.AccountConfig) error { return validateAccountConfigFor(c, false) }
+
+// validateAccountConfigFor is validateAccountConfig; forTest is
+// account.test, which an ai account may make before it has a model (the
+// test is what lists the models to choose from).
+func validateAccountConfigFor(c *api.AccountConfig, forTest bool) error {
 	bad := func(format string, args ...any) error {
 		return api.NewError(api.CodeInvalidArgument, format, args...)
 	}
@@ -944,7 +950,7 @@ func validateAccountConfig(c *api.AccountConfig) error {
 			return err
 		}
 	case api.AccountAI:
-		if err := validateAI(c); err != nil {
+		if err := validateAIConfig(c, !forTest); err != nil {
 			return err
 		}
 	default:

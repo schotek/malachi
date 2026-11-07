@@ -97,6 +97,21 @@ func TestAIAccount(t *testing.T) {
 	if err != nil || tr.AI == nil || tr.AI.OK || tr.AI.Error == nil || tr.AI.Error.Code != api.CodeAuthRequired {
 		t.Fatalf("test without a key: %+v %v", tr, err)
 	}
+	// A test before the model is chosen: the test is what lists the
+	// models, so it needs none (B2 finding 2026-11-07); add still does.
+	noModel := anthropicConfig("x")
+	noModel.AI.Model = ""
+	tr, err = svc.Test(ctx, api.AccountTestParams{Config: noModel, Credentials: api.Credentials{Password: "sk-ant-test"}})
+	if err != nil || tr.AI == nil || !tr.AI.OK || len(tr.AI.Models) != 2 {
+		t.Fatalf("test without a model: %+v %v", tr, err)
+	}
+	if _, err := svc.Add(ctx, api.AccountAddParams{Config: noModel, Credentials: api.Credentials{Password: "sk-ant-test"}}); errCode(t, err) != api.CodeInvalidArgument {
+		t.Fatalf("add without a model: %v", err)
+	}
+	noModel.AI.Model = "bad\x00model"
+	if _, err := svc.Test(ctx, api.AccountTestParams{Config: noModel, Credentials: api.Credentials{Password: "sk-ant-test"}}); errCode(t, err) != api.CodeInvalidArgument {
+		t.Fatalf("test with an invalid model: %v", err)
+	}
 	// The state follows the last test with the stored key.
 	f.err = &llm.Error{Class: api.FailureAuth, Status: 401}
 	if tr, err := svc.Test(ctx, api.AccountTestParams{Config: a.Config, AccountID: id}); err != nil || tr.AI.OK {

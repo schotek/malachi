@@ -60,11 +60,10 @@ type PreferencesDialog struct {
 	integrationsPage     *adw.PreferencesPage
 	integrationsServices *adw.PreferencesGroup
 	// integrationsLocal holds the two local AI integrations' rows
-	// (localRows, each shown only while connected), integrationsAI the AI
-	// section of the catalogue, localOffers its entries of the local
-	// integrations (shown while not connected; integrations_page.go).
+	// (localRows, each shown only while connected), localOffers the
+	// catalogue's entries of the local integrations (shown while not
+	// connected; integrations_page.go).
 	integrationsLocal *adw.PreferencesGroup
-	integrationsAI    *adw.PreferencesGroup
 	localRows         []*localRow
 	localOffers       map[integrations.LocalKind]*adw.ActionRow
 
@@ -183,7 +182,6 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		integrationsPage:     b.GetObject("integrations_page").Cast().(*adw.PreferencesPage),
 		integrationsServices: b.GetObject("integrations_available_group").Cast().(*adw.PreferencesGroup),
 		integrationsLocal:    b.GetObject("integrations_local_group").Cast().(*adw.PreferencesGroup),
-		integrationsAI:       b.GetObject("integrations_ai_group").Cast().(*adw.PreferencesGroup),
 		launchAtLogin:        b.GetObject("launch_at_login").Cast().(*adw.SwitchRow),
 		runInBackground:      b.GetObject("run_in_background").Cast().(*adw.SwitchRow),
 		boardGroup:           b.GetObject("board_group").Cast().(*adw.PreferencesGroup),
