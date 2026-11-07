@@ -13,9 +13,12 @@
 // The AI section also names two integrations that are not accounts of
 // the daemon but state of this client (D15): Claude Code / Claude Desktop
 // (the bridge registered in the Claude apps, Settings → AI's Register in
-// Claude, and the Claude Code the panel runs) and ChatGPT (Codex). The
-// page shows them as rows after the daemon's accounts (LocalRows, from
-// the state the window has); they are never in FullOrder.
+// Claude, and the Claude Code the panel runs) and ChatGPT (Codex). Each
+// is in one place at a time (owner's decision 2026-11-07): in the
+// catalogue with Add… while it is not connected, and as a row after the
+// daemon's accounts once it is (LocalRows, from the state the window
+// has; Offered says which catalogue entries remain); they are never in
+// FullOrder.
 //
 // Both pages show rows of the same shape (Row): the switch, the editor
 // and the sentence of the remove confirmation depend on the kind. The
@@ -201,6 +204,14 @@ func CatalogSection(tr Translator, s Section) []Service {
 		}
 	}
 	return out
+}
+
+// Offered reports whether catalogue entry s is shown with the local
+// integrations in the states c and g: an account kind always (another
+// account can be added), a local integration only while it is not
+// connected — connected, it is a row of Connected Services instead.
+func Offered(s Service, c ClaudeState, g ChatGPTState) bool {
+	return s.Local == LocalNone || !LocalConnected(s.Local, c, g)
 }
 
 // aiServices is the AI section of the catalogue (docs/plans/ai-api.md
@@ -479,63 +490,87 @@ type LocalRow struct {
 	RemoveLabel string
 }
 
-// LocalRows are the rows of the two local integrations, Claude first:
-// Claude Code / Claude Desktop with "Registered in Claude Desktop and
-// Claude Code" or "Not registered", the Claude Code found (its version,
-// else its path) or "Claude Code not found", and "signed in" or "not
-// signed in" once known; ChatGPT (Codex) with "Connected as …" or "Not
-// connected" and "Codex not found" when it is missing. Remove is
-// Unregister (only when registered) and Disconnect (only when connected).
+// LocalKinds are the local integrations in the order of the page.
+var LocalKinds = []LocalKind{LocalClaude, LocalChatGPT}
+
+// LocalConnected reports whether local integration kind is connected: the
+// bridge registered in the Claude apps, or ChatGPT continued with. A
+// connected one has a row of Connected Services and leaves the catalogue
+// (Offered); Remove on its row disconnects it.
+func LocalConnected(kind LocalKind, c ClaudeState, g ChatGPTState) bool {
+	switch kind {
+	case LocalClaude:
+		return c.Registered
+	case LocalChatGPT:
+		return g.Connected
+	}
+	return false
+}
+
+// LocalRows are the rows of the connected local integrations, Claude
+// first, from LocalRowFor; none while nothing is connected.
 func LocalRows(c ClaudeState, g ChatGPTState, tr Translator) []LocalRow {
-	labels := assistant.ChatGPTText(plural{tr})
-	var claude []string
-	if c.Registered {
-		// TRANSLATORS: Preferences → Integrations, the Claude row: the bridge is registered in both Claude apps.
-		claude = append(claude, tr.T("Registered in Claude Desktop and Claude Code"))
-	} else {
-		// TRANSLATORS: Preferences → Integrations, the Claude row: the bridge is registered in neither Claude app.
-		claude = append(claude, tr.T("Not registered"))
-	}
-	switch {
-	case !c.Present:
-		claude = append(claude, tr.T("Claude Code not found"))
-	case c.Version != "":
-		// TRANSLATORS: %s is the version of Claude Code found on this computer.
-		claude = append(claude, fmt.Sprintf(tr.T("Claude Code %s"), jira.Clean(c.Version)))
-	case c.Path != "":
-		claude = append(claude, jira.Clean(c.Path))
-	}
-	if c.Present && c.SignInKnown {
-		if c.SignedIn {
-			// TRANSLATORS: Preferences → Integrations, the Claude row: Claude Code is signed in (lower case, after " · ").
-			claude = append(claude, tr.T("signed in"))
-		} else {
-			// TRANSLATORS: Preferences → Integrations, the Claude row: Claude Code is not signed in (lower case, after " · ").
-			claude = append(claude, tr.T("not signed in"))
+	var rows []LocalRow
+	for _, kind := range LocalKinds {
+		if r, shown := LocalRowFor(kind, c, g, tr); shown {
+			rows = append(rows, r)
 		}
 	}
-	var chatgpt []string
-	if g.Connected {
-		chatgpt = append(chatgpt, fmt.Sprintf(labels.Connected, jira.Clean(g.Account)))
-	} else {
-		chatgpt = append(chatgpt, labels.Disconnected)
-	}
-	if !g.CodexFound {
-		chatgpt = append(chatgpt, tr.T("Codex not found"))
-	}
-	return []LocalRow{
-		{
+	return rows
+}
+
+// LocalRowFor is the row of local integration kind, and whether the page
+// shows it (LocalConnected; a view that keeps a widget per kind hides the
+// row of one that is not connected). Claude Code / Claude Desktop says
+// "Registered in Claude Desktop and Claude Code", then the Claude Code
+// found (its version, else its path) or "Claude Code not found", and
+// "signed in" or "not signed in" once known; ChatGPT (Codex) says
+// "Connected as …" and "Codex not found" when it is missing. Remove is
+// Unregister and Disconnect; CanRemove is the row's being shown.
+func LocalRowFor(kind LocalKind, c ClaudeState, g ChatGPTState, tr Translator) (LocalRow, bool) {
+	shown := LocalConnected(kind, c, g)
+	switch kind {
+	case LocalClaude:
+		var claude []string
+		// TRANSLATORS: Preferences → Integrations, the Claude row: the bridge is registered in both Claude apps.
+		claude = append(claude, tr.T("Registered in Claude Desktop and Claude Code"))
+		switch {
+		case !c.Present:
+			claude = append(claude, tr.T("Claude Code not found"))
+		case c.Version != "":
+			// TRANSLATORS: %s is the version of Claude Code found on this computer.
+			claude = append(claude, fmt.Sprintf(tr.T("Claude Code %s"), jira.Clean(c.Version)))
+		case c.Path != "":
+			claude = append(claude, jira.Clean(c.Path))
+		}
+		if c.Present && c.SignInKnown {
+			if c.SignedIn {
+				// TRANSLATORS: Preferences → Integrations, the Claude row: Claude Code is signed in (lower case, after " · ").
+				claude = append(claude, tr.T("signed in"))
+			} else {
+				// TRANSLATORS: Preferences → Integrations, the Claude row: Claude Code is not signed in (lower case, after " · ").
+				claude = append(claude, tr.T("not signed in"))
+			}
+		}
+		return LocalRow{
 			Kind: LocalClaude, Title: claudeName, Subtitle: strings.Join(claude, " · "),
-			Editor: EditorClaude, Icon: AIIcon, CanRemove: c.Registered,
+			Editor: EditorClaude, Icon: AIIcon, CanRemove: shown,
 			// TRANSLATORS: the Remove button of the Claude row in Preferences → Integrations: it unregisters the bridge from the Claude apps.
 			RemoveLabel: tr.T("Unregister"),
-		},
-		{
+		}, shown
+	case LocalChatGPT:
+		labels := assistant.ChatGPTText(plural{tr})
+		chatgpt := []string{fmt.Sprintf(labels.Connected, jira.Clean(g.Account))}
+		if !g.CodexFound {
+			chatgpt = append(chatgpt, tr.T("Codex not found"))
+		}
+		return LocalRow{
 			Kind: LocalChatGPT, Title: chatGPTName, Subtitle: strings.Join(chatgpt, " · "),
-			Editor: EditorChatGPT, Icon: AIIcon, CanRemove: g.Connected,
+			Editor: EditorChatGPT, Icon: AIIcon, CanRemove: shown,
 			RemoveLabel: labels.Disconnect,
-		},
+		}, shown
 	}
+	return LocalRow{}, false
 }
 
 // PageTexts are the fixed texts of the Integrations page.

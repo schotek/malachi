@@ -60,11 +60,13 @@ type PreferencesDialog struct {
 	integrationsPage     *adw.PreferencesPage
 	integrationsServices *adw.PreferencesGroup
 	// integrationsLocal holds the two local AI integrations' rows
-	// (localRows), integrationsAI the AI section of the catalogue
-	// (integrations_page.go).
+	// (localRows, each shown only while connected), integrationsAI the AI
+	// section of the catalogue, localOffers its entries of the local
+	// integrations (shown while not connected; integrations_page.go).
 	integrationsLocal *adw.PreferencesGroup
 	integrationsAI    *adw.PreferencesGroup
 	localRows         []*localRow
+	localOffers       map[integrations.LocalKind]*adw.ActionRow
 
 	launchAtLogin     *adw.SwitchRow
 	runInBackground   *adw.SwitchRow

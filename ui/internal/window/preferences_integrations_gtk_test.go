@@ -57,21 +57,35 @@ func TestPreferencesIntegrationsGTKSmoke(t *testing.T) {
 	if d.integrationsAI.Title() != tx.AITitle || d.integrationsServices.Title() != tx.AvailableTitle {
 		t.Errorf("catalogue titles: %q / %q", d.integrationsServices.Title(), d.integrationsAI.Title())
 	}
-	// The two local rows, without an Assistant: their titles and the
-	// Settings button, Remove hidden while nothing is registered or
-	// connected.
-	locals := integrations.LocalRows(integrations.ClaudeState{}, integrations.ChatGPTState{}, i18n.Tr)
-	if len(d.localRows) != 2 || d.localRows[0].Title() != locals[0].Title || d.localRows[1].Title() != locals[1].Title {
-		t.Fatalf("local rows %d", len(d.localRows))
+	// The two local rows, without an Assistant: built with their titles
+	// and the Settings button, hidden with their group while nothing is
+	// registered or connected, their catalogue entries shown instead.
+	if len(d.localRows) != 2 || len(d.localOffers) != 2 {
+		t.Fatalf("local rows %d, offers %d", len(d.localRows), len(d.localOffers))
 	}
-	for _, r := range d.localRows {
-		if r.settings.TooltipText() != tx.Settings || r.remove.Visible() {
-			t.Errorf("local row %q: tooltip %q, remove %v", r.Title(), r.settings.TooltipText(), r.remove.Visible())
+	for i, kind := range integrations.LocalKinds {
+		r := d.localRows[i]
+		spec, _ := integrations.LocalRowFor(kind, integrations.ClaudeState{}, integrations.ChatGPTState{}, i18n.Tr)
+		if r.Title() != spec.Title || r.settings.TooltipText() != tx.Settings || r.Visible() || r.offer != d.localOffers[kind] || !r.offer.Visible() {
+			t.Errorf("local row %q: tooltip %q, visible %v, offer %v", r.Title(), r.settings.TooltipText(), r.Visible(), r.offer.Visible())
 		}
 	}
-	d.applyLocalRows(integrations.ClaudeState{Registered: true, Present: true, Path: "/usr/bin/claude"}, integrations.ChatGPTState{})
-	if !d.localRows[0].remove.Visible() || d.localRows[0].remove.Label() != locals[0].RemoveLabel || d.localRows[0].Subtitle() == locals[0].Subtitle {
-		t.Error("the registered Claude row offers Unregister and says so")
+	if d.integrationsLocal.Visible() {
+		t.Error("the local group is hidden while nothing is connected")
+	}
+	registered := integrations.ClaudeState{Registered: true, Present: true, Path: "/usr/bin/claude"}
+	d.applyLocalRows(registered, integrations.ChatGPTState{})
+	claude, chatgpt := d.localRows[0], d.localRows[1]
+	spec, _ := integrations.LocalRowFor(integrations.LocalClaude, registered, integrations.ChatGPTState{}, i18n.Tr)
+	if !claude.Visible() || claude.offer.Visible() || !claude.remove.Visible() || claude.remove.Label() != spec.RemoveLabel || claude.Subtitle() != spec.Subtitle {
+		t.Error("the registered Claude row is shown with Unregister, its catalogue entry gone")
+	}
+	if chatgpt.Visible() || !chatgpt.offer.Visible() || !d.integrationsLocal.Visible() || d.integrationList.empty.Visible() {
+		t.Error("ChatGPT stays in the catalogue; the group shows, the placeholder not")
+	}
+	d.applyLocalRows(integrations.ClaudeState{}, integrations.ChatGPTState{})
+	if claude.Visible() || d.integrationsLocal.Visible() || !d.integrationList.empty.Visible() {
+		t.Error("unregistered again: row and group hidden, the placeholder back")
 	}
 
 	caldav := api.Account{ID: "c", Config: api.AccountConfig{Name: "Nextcloud", Kind: api.AccountCalDAV,

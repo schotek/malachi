@@ -592,8 +592,11 @@ Klienti (Go reference + GTK hotové): `assistant-provider` je řetězec
 `claude` / `chatgpt` / `acc_…`; `ui/internal/apiassistant` = Provider
 nad RPC a notifikacemi; `ui/internal/aiaccount` = editor účtu s testem,
 výběrem modelu, pinem a souhlasem; Předvolby → Integrace mají katalog AI
-(Claude Code/Desktop a ChatGPT jako lokální řádky s dialogy přesunutými
-z AI záložky, Anthropic API, OpenAI API, OpenAI-kompatibilní server) a
+(Claude Code/Desktop a ChatGPT jako lokální integrace s dialogy
+přesunutými z AI záložky — v katalogu s Přidat…, dokud nejsou
+registrované / připojené, pak jen jako řádek v Připojených
+(`integrations.LocalRowFor`, `Offered`; rozhodnutí vlastníka 2026-11-07) —,
+Anthropic API, OpenAI API, OpenAI-kompatibilní server) a
 řádek účtu `ai` se spotřebou; Předvolby → AI jen „Asistent používá“,
 nabídka, cíl, model, Nástěnka, O mně. Ověřeno: celá sada backendu, celá
 sada `ui/` v kontejneru, GTK smoke testy, `make po`, `make lint`.

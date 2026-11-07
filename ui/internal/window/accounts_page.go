@@ -161,6 +161,7 @@ func (d *PreferencesDialog) setAccounts(c *client.Client, accounts []api.Account
 	}
 	if d.integrationList != nil {
 		d.setListAccounts(c, d.integrationList, other)
+		d.refreshIntegrationsEmpty()
 	}
 }
 

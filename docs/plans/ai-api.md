@@ -539,6 +539,10 @@ eWay).
   / Claude Code, cesta, přihlášen; tlačítka Nastavení, Odebrat
   = odregistrovat) a „ChatGPT“ (Připojeno jako …, Odpojit). Pořadí:
   účty podle `account.reorder`, lokální řádky za nimi, bez přetahování.
+  Lokální integrace je vždy jen na jednom místě (rozhodnutí vlastníka
+  2026-11-07 po B2): v katalogu AI s Přidat…, dokud není registrovaná
+  / připojená, pak jako řádek v Připojených a z katalogu zmizí
+  (`integrations.LocalConnected`, `Offered`).
 - Odebrání účtu `ai`: věta podle druhu („…a jeho klíč“).
 
 ### 7.3 Předvolby → AI
@@ -922,9 +926,16 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   neúspěšný `EventResult` (démon po selhání výsledek neposílá);
   `AcceptConsent` zapisuje `account.update` na pozadí, `Open` na zápis
   počká; kódy `api_<class>` v `ProviderFailure` a `APIFailureText`.
-- **Integrace**: lokální řádky Claude Code/Desktop a ChatGPT jsou vždy
-  oba (dialogy `claude_integration.blp`, `chatgpt_integration.blp`
-  přesunuté z AI záložky, Odebrat = odregistrovat / odpojit s potvrzením);
+- **Integrace**: lokální řádky Claude Code/Desktop a ChatGPT jsou
+  v Připojených jen připojené (bridge registrovaný / ChatGPT připojený;
+  `integrations.LocalRowFor` vrací řádek a zda se ukazuje, `LocalRows`
+  jen ukazované, `Offered` nechá v katalogu AI jen nepřipojené; GTK drží
+  widget na druh skrytý a skupinu i zástupný řádek „Zatím žádné
+  integrace“ podle toho; původně byly oba řádky vždy a zároveň
+  v katalogu, vlastník to 2026-11-07 shledal matoucím; msgid „Not
+  registered“ zmizel; dialogy `claude_integration.blp`,
+  `chatgpt_integration.blp` přesunuté z AI záložky, Odebrat
+  = odregistrovat / odpojit s potvrzením);
   řádek účtu `ai` ukazuje „%s tokens today“ (účtování po místních dnech,
   `assistant.usage {days: 0}`), ne 24 h; dialog `ai_account.blp` nad
   `aiaccount.Controller` s popovery modelů, pinem přes dialog důvěry

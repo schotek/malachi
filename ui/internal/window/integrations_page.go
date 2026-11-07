@@ -29,9 +29,11 @@ import (
 // accounts_page.go from integrations.RowFor and filled by the same
 // account.list), the two local AI integrations after them (Claude Code /
 // Claude Desktop and ChatGPT, state of this client rather than accounts
-// of the daemon: integrations.LocalRows over the Assistant's state), and
-// the catalogue of what can be added in two sections, the services and
-// the AI (integrations.CatalogSection). A Jira row edits its settings, a
+// of the daemon: integrations.LocalRowFor over the Assistant's state,
+// each shown only while it is connected and then gone from the
+// catalogue, integrations.Offered), and the catalogue of what can be
+// added in two sections, the services and the AI
+// (integrations.CatalogSection). A Jira row edits its settings, a
 // CalDAV row switches to the Calendar page, which keeps the CalDAV
 // account's server, password, certificate and calendars, an AI provider
 // account's row its dialog (ai_editors.go), a local row its own dialog
@@ -87,6 +89,12 @@ func (d *PreferencesDialog) newServiceRow(c *client.Client, s integrations.Servi
 	row.AddSuffix(button)
 	row.SetActivatableWidget(button)
 	button.ConnectClicked(func() { d.addService(c, s) })
+	if s.Local != integrations.LocalNone {
+		if d.localOffers == nil {
+			d.localOffers = map[integrations.LocalKind]*adw.ActionRow{}
+		}
+		d.localOffers[s.Local] = row
+	}
 	return row
 }
 
@@ -110,23 +118,27 @@ func (d *PreferencesDialog) addService(c *client.Client, s integrations.Service)
 }
 
 // localRow is the row of a local integration: the icon, the title and the
-// subtitle of integrations.LocalRow, Settings and, while it may be
-// removed (unregistered, disconnected), Remove with its label.
+// subtitle of integrations.LocalRow, Settings and Remove with its label
+// (unregister, disconnect). The row is shown only while the integration
+// is connected; offer is its entry of the catalogue, shown the rest of
+// the time.
 type localRow struct {
 	*adw.ActionRow
 	spec     integrations.LocalRow
 	settings *gtk.Button
 	remove   *gtk.Button
+	offer    *adw.ActionRow
 }
 
-// bindLocalRows builds the two local rows and keeps them with the
-// Assistant's state: the bridge's registration, Claude Code (its path,
-// version and sign-in, asked in the background), the ChatGPT connection
-// and Codex. The returned function stops following.
+// bindLocalRows builds the two local rows, hidden, and keeps them with
+// the Assistant's state: the bridge's registration, Claude Code (its
+// path, version and sign-in, asked in the background), the ChatGPT
+// connection and Codex. The returned function stops following.
 func (d *PreferencesDialog) bindLocalRows(tx integrations.PageTexts) (unbind func()) {
 	a := d.assist
-	for _, spec := range integrations.LocalRows(integrations.ClaudeState{}, integrations.ChatGPTState{}, i18n.Tr) {
-		row := &localRow{ActionRow: adw.NewActionRow(), spec: spec}
+	for _, kind := range integrations.LocalKinds {
+		spec, _ := integrations.LocalRowFor(kind, integrations.ClaudeState{}, integrations.ChatGPTState{}, i18n.Tr)
+		row := &localRow{ActionRow: adw.NewActionRow(), spec: spec, offer: d.localOffers[kind]}
 		row.SetUseMarkup(false)
 		row.AddCSSClass("account-row")
 		row.AddPrefix(gtk.NewImageFromIconName(spec.Icon))
@@ -139,7 +151,6 @@ func (d *PreferencesDialog) bindLocalRows(tx integrations.PageTexts) (unbind fun
 		row.remove = gtk.NewButtonWithLabel("")
 		row.remove.SetVAlign(gtk.AlignCenter)
 		row.AddSuffix(row.remove)
-		kind := spec.Kind
 		row.settings.ConnectClicked(func() {
 			switch kind {
 			case integrations.LocalClaude:
@@ -149,10 +160,11 @@ func (d *PreferencesDialog) bindLocalRows(tx integrations.PageTexts) (unbind fun
 			}
 		})
 		row.remove.ConnectClicked(func() { d.removeLocal(kind, tx) })
-		row.apply(spec)
+		row.apply(spec, false)
 		d.integrationsLocal.Add(row)
 		d.localRows = append(d.localRows, row)
 	}
+	d.integrationsLocal.SetVisible(false)
 	if a == nil {
 		return func() {}
 	}
@@ -205,22 +217,52 @@ func (d *PreferencesDialog) localStates() (integrations.ClaudeState, integration
 	return claude, chatgpt
 }
 
-// applyLocalRows shows the rows of the states.
+// applyLocalRows shows the rows of the states: a connected integration's
+// row, its catalogue entry otherwise; the rows' group only with a row in
+// it, and the Connected Services placeholder only without any row.
 func (d *PreferencesDialog) applyLocalRows(claude integrations.ClaudeState, chatgpt integrations.ChatGPTState) {
-	for i, spec := range integrations.LocalRows(claude, chatgpt, i18n.Tr) {
-		if i < len(d.localRows) {
-			d.localRows[i].apply(spec)
+	group := false
+	for i, kind := range integrations.LocalKinds {
+		if i >= len(d.localRows) {
+			break
 		}
+		spec, shown := integrations.LocalRowFor(kind, claude, chatgpt, i18n.Tr)
+		d.localRows[i].apply(spec, shown)
+		group = group || shown
+	}
+	d.integrationsLocal.SetVisible(group)
+	d.refreshIntegrationsEmpty()
+}
+
+// localShown reports whether a local integration's row is shown.
+func (d *PreferencesDialog) localShown() bool {
+	for _, r := range d.localRows {
+		if r.Visible() {
+			return true
+		}
+	}
+	return false
+}
+
+// refreshIntegrationsEmpty shows the Connected Services placeholder only
+// while neither an account nor a local integration has a row there.
+func (d *PreferencesDialog) refreshIntegrationsEmpty() {
+	if l := d.integrationList; l != nil {
+		l.empty.SetVisible(len(l.rows) == 0 && !d.localShown())
 	}
 }
 
-// apply shows spec on the row.
-func (r *localRow) apply(spec integrations.LocalRow) {
+// apply shows spec on the row, and the row or its catalogue entry.
+func (r *localRow) apply(spec integrations.LocalRow, shown bool) {
 	r.spec = spec
 	r.SetTitle(spec.Title)
 	r.SetSubtitle(spec.Subtitle)
 	r.remove.SetLabel(spec.RemoveLabel)
 	r.remove.SetVisible(spec.CanRemove)
+	r.SetVisible(shown)
+	if r.offer != nil {
+		r.offer.SetVisible(!shown)
+	}
 }
 
 // removeLocal is a local row's Remove: after a confirmation, the bridge

@@ -210,20 +210,46 @@ func TestRowForAI(t *testing.T) {
 
 func TestLocalRows(t *testing.T) {
 	tr := msgids{}
-	rows := LocalRows(ClaudeState{}, ChatGPTState{}, tr)
-	if len(rows) != 2 || rows[0].Kind != LocalClaude || rows[1].Kind != LocalChatGPT {
-		t.Fatalf("rows %+v", rows)
+	// Nothing connected: no rows, both local catalogue entries offered.
+	if rows := LocalRows(ClaudeState{}, ChatGPTState{}, tr); len(rows) != 0 {
+		t.Fatalf("rows while nothing is connected %+v", rows)
 	}
-	claude, chatgpt := rows[0], rows[1]
-	if claude.Title != "Claude Code / Claude Desktop" || claude.Editor != EditorClaude || claude.Icon != AIIcon ||
-		claude.CanRemove || claude.RemoveLabel != "Unregister" ||
-		claude.Subtitle != "Not registered · Claude Code not found" {
-		t.Errorf("claude nothing %+v", claude)
+	for _, s := range CatalogSection(tr, SectionAI) {
+		if !Offered(s, ClaudeState{}, ChatGPTState{}) {
+			t.Errorf("%s not offered while nothing is connected", s.Name)
+		}
 	}
-	if chatgpt.Title != "ChatGPT (Codex)" || chatgpt.Editor != EditorChatGPT || chatgpt.Icon != AIIcon ||
-		chatgpt.CanRemove || chatgpt.RemoveLabel != "Disconnect" ||
-		chatgpt.Subtitle != "Not connected · Codex not found" {
-		t.Errorf("chatgpt nothing %+v", chatgpt)
+	// The row of an unconnected integration exists for a view that keeps a
+	// widget per kind, hidden, without Remove.
+	if r, shown := LocalRowFor(LocalClaude, ClaudeState{Present: true, Version: "2.1.284"}, ChatGPTState{}, tr); shown || r.CanRemove ||
+		r.Title != "Claude Code / Claude Desktop" || r.Editor != EditorClaude || r.Icon != AIIcon || r.RemoveLabel != "Unregister" {
+		t.Errorf("claude unconnected %+v shown %v", r, shown)
+	}
+	if r, shown := LocalRowFor(LocalChatGPT, ClaudeState{}, ChatGPTState{CodexFound: true}, tr); shown || r.CanRemove ||
+		r.Title != "ChatGPT (Codex)" || r.Editor != EditorChatGPT || r.Icon != AIIcon || r.RemoveLabel != "Disconnect" {
+		t.Errorf("chatgpt unconnected %+v shown %v", r, shown)
+	}
+	if _, shown := LocalRowFor(LocalNone, ClaudeState{Registered: true}, ChatGPTState{Connected: true}, tr); shown {
+		t.Error("LocalNone is never shown")
+	}
+
+	// Both connected: both rows, Claude first, neither in the catalogue.
+	both := LocalRows(ClaudeState{Registered: true}, ChatGPTState{Connected: true, Account: "jana@example.invalid", CodexFound: true}, tr)
+	if len(both) != 2 || both[0].Kind != LocalClaude || both[1].Kind != LocalChatGPT || !both[0].CanRemove || !both[1].CanRemove {
+		t.Fatalf("rows %+v", both)
+	}
+	for _, s := range CatalogSection(tr, SectionAI) {
+		if offered := Offered(s, ClaudeState{Registered: true}, ChatGPTState{Connected: true}); offered != (s.Local == LocalNone) {
+			t.Errorf("%s offered %v while both are connected", s.Name, offered)
+		}
+	}
+	// One connected: its row alone, the other still in the catalogue.
+	if rows := LocalRows(ClaudeState{}, ChatGPTState{Connected: true}, tr); len(rows) != 1 || rows[0].Kind != LocalChatGPT {
+		t.Errorf("chatgpt alone %+v", rows)
+	}
+	if !Offered(Service{Local: LocalClaude}, ClaudeState{}, ChatGPTState{Connected: true}) ||
+		Offered(Service{Local: LocalChatGPT}, ClaudeState{}, ChatGPTState{Connected: true}) {
+		t.Error("offered with ChatGPT connected")
 	}
 
 	for _, c := range []struct {
@@ -231,24 +257,25 @@ func TestLocalRows(t *testing.T) {
 		state ClaudeState
 		want  string
 	}{
-		{"registered, signed in", ClaudeState{Registered: true, Present: true, Version: "2.1.284", SignInKnown: true, SignedIn: true},
+		{"signed in", ClaudeState{Registered: true, Present: true, Version: "2.1.284", SignInKnown: true, SignedIn: true},
 			"Registered in Claude Desktop and Claude Code · Claude Code 2.1.284 · signed in"},
-		{"registered, not signed in", ClaudeState{Registered: true, Present: true, Version: "2.1.284", SignInKnown: true},
+		{"not signed in", ClaudeState{Registered: true, Present: true, Version: "2.1.284", SignInKnown: true},
 			"Registered in Claude Desktop and Claude Code · Claude Code 2.1.284 · not signed in"},
-		{"sign-in unknown", ClaudeState{Present: true, Version: "2.1.284"},
-			"Not registered · Claude Code 2.1.284"},
-		{"path without a version", ClaudeState{Present: true, Path: "/usr/local/bin/claude"},
-			"Not registered · /usr/local/bin/claude"},
-		{"registered, no claude code", ClaudeState{Registered: true, SignInKnown: true, SignedIn: true},
+		{"sign-in unknown", ClaudeState{Registered: true, Present: true, Version: "2.1.284"},
+			"Registered in Claude Desktop and Claude Code · Claude Code 2.1.284"},
+		{"path without a version", ClaudeState{Registered: true, Present: true, Path: "/usr/local/bin/claude"},
+			"Registered in Claude Desktop and Claude Code · /usr/local/bin/claude"},
+		{"no claude code", ClaudeState{Registered: true, SignInKnown: true, SignedIn: true},
 			"Registered in Claude Desktop and Claude Code · Claude Code not found"},
-		{"cleaned version", ClaudeState{Present: true, Version: " 2.1.284\x00\n"}, "Not registered · Claude Code 2.1.284"},
+		{"cleaned version", ClaudeState{Registered: true, Present: true, Version: " 2.1.284\x00\n"},
+			"Registered in Claude Desktop and Claude Code · Claude Code 2.1.284"},
 	} {
-		r := LocalRows(c.state, ChatGPTState{}, tr)[0]
-		if r.Subtitle != c.want {
-			t.Errorf("%s: %q, want %q", c.name, r.Subtitle, c.want)
+		rows := LocalRows(c.state, ChatGPTState{}, tr)
+		if len(rows) != 1 || rows[0].Kind != LocalClaude {
+			t.Fatalf("%s: rows %+v", c.name, rows)
 		}
-		if r.CanRemove != c.state.Registered {
-			t.Errorf("%s: can remove %v", c.name, r.CanRemove)
+		if r := rows[0]; r.Subtitle != c.want || !r.CanRemove {
+			t.Errorf("%s: %q, want %q (can remove %v)", c.name, r.Subtitle, c.want, r.CanRemove)
 		}
 	}
 
@@ -259,14 +286,14 @@ func TestLocalRows(t *testing.T) {
 	}{
 		{"connected", ChatGPTState{Connected: true, Account: "jana@example.invalid", CodexFound: true}, "Connected as jana@example.invalid"},
 		{"connected, no codex", ChatGPTState{Connected: true, Account: "jana@example.invalid"}, "Connected as jana@example.invalid · Codex not found"},
-		{"codex only", ChatGPTState{CodexFound: true}, "Not connected"},
+		{"cleaned account", ChatGPTState{Connected: true, Account: "jana@example.invalid\x00", CodexFound: true}, "Connected as jana@example.invalid"},
 	} {
-		r := LocalRows(ClaudeState{}, c.state, tr)[1]
-		if r.Subtitle != c.want {
-			t.Errorf("%s: %q, want %q", c.name, r.Subtitle, c.want)
+		rows := LocalRows(ClaudeState{}, c.state, tr)
+		if len(rows) != 1 || rows[0].Kind != LocalChatGPT {
+			t.Fatalf("%s: rows %+v", c.name, rows)
 		}
-		if r.CanRemove != c.state.Connected {
-			t.Errorf("%s: can remove %v", c.name, r.CanRemove)
+		if r := rows[0]; r.Subtitle != c.want || !r.CanRemove {
+			t.Errorf("%s: %q, want %q (can remove %v)", c.name, r.Subtitle, c.want, r.CanRemove)
 		}
 	}
 }
