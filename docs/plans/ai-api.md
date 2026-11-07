@@ -1063,7 +1063,9 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   Chat Completions) čte po kódu i zprávu (`toolsUnsupported`, `quota`),
   Anthropic totéž u své události `error`; `llm.Error.Code` nese kód
   či typ chyby poskytovatele (do 64 B) a log „assistant turn failed“
-  ho vypíše jako `code=`.
+  ho vypíše jako `code=`. Agent ověřil nad `755e1698`: třída `quota`,
+  kód OpenAI je `credit_balance_exhausted` (ne `insufficient_quota`),
+  od té doby i v `openaiClass`.
 - **Neověřeno**: zbytek B2 (model, panel s kreditem, přepis, hledání,
   triage, Navrhnout odpověď), živá API Anthropicu a OpenAI s kreditem
   (zatím jen odmítnutí 400 bez kreditu).

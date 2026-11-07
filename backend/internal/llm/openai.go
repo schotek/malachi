@@ -129,7 +129,9 @@ func openaiClass(typ string) (api.AssistantFailureClass, bool) {
 	switch typ {
 	case "invalid_api_key", "authentication_error":
 		return api.FailureAuth, true
-	case "insufficient_quota":
+	case "insufficient_quota", "credit_balance_exhausted":
+		// credit_balance_exhausted: an error event inside a 200 stream
+		// for a key without credit (seen 2026-11-07).
 		return api.FailureQuota, true
 	case "rate_limit_exceeded", "rate_limit_error":
 		return api.FailureRateLimit, true

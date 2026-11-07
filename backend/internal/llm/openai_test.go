@@ -164,6 +164,8 @@ func TestOpenAIErrorEventByMessage(t *testing.T) {
 		{`{"type":"error","error":{"code":null,"message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}}`, api.FailureQuota, ""},
 		{`{"type":"error","code":"invalid_request_error","message":"The model gpt-6-luna does not support function calling"}`, api.FailureToolsUnsupported, "invalid_request_error"},
 		{`{"type":"error","code":"invalid_prompt","message":"Invalid prompt"}`, api.FailureInvalidRequest, "invalid_prompt"},
+		// The code OpenAI really sends for an exhausted credit (B2).
+		{`{"type":"error","code":"credit_balance_exhausted","message":"No more."}`, api.FailureQuota, "credit_balance_exhausted"},
 		{`{"type":"response.failed","response":{"id":"r","status":"failed","error":{"code":"","message":"Your credit balance is too low."}}}`, api.FailureQuota, ""},
 	} {
 		srv := newRawServer(t, "text/event-stream", "event: error\ndata: "+c.data+"\n\n")

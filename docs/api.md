@@ -4945,7 +4945,8 @@ the bridge's text verbatim, cut to `api.MaxAssistantToolResultBytes`,
 ends the turn; one of class `contextFull`, `bridge`, `auth`,
 `permission`, `toolsUnsupported` or `stopped` ends the session too.
 `quota` is an account that cannot pay for the turn: a 402, Anthropic's
-`billing_error`, OpenAI's 429 `insufficient_quota`, or any other 4xx
+`billing_error`, OpenAI's 429 `insufficient_quota` or its
+`credit_balance_exhausted`, or any other 4xx
 but 401 and 403 whose message names the credit or the quota (Anthropic
 "Your credit balance is too low…", OpenAI "You have no credits
 remaining…", which OpenAI sends as an error event inside a 200
