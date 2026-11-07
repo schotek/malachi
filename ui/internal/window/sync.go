@@ -358,6 +358,9 @@ func (w *Window) editAccount(id api.AccountID) {
 	case editorEway:
 		accountwizard.NewEwayEdit(w.client, w.log, a).Present(w)
 		return
+	case editorAI:
+		w.editAIAccount(a, false)
+		return
 	}
 	accountwizard.NewEdit(w.client, w.log, a).Present(w)
 }
@@ -471,6 +474,11 @@ func (w *Window) signInAgain(kind signin.Kind, reason api.ErrorCode, id api.Acco
 	// assistant (the mail assistant has no page for it).
 	if a, ok := w.model.account(id); ok && accountEditor(a) == editorEway {
 		accountwizard.NewEwayEdit(w.client, w.log, a).Present(w)
+		return
+	}
+	// An AI provider account's key is replaced in its own dialog.
+	if a, ok := w.model.account(id); ok && accountEditor(a) == editorAI {
+		w.editAIAccount(a, true)
 		return
 	}
 	if editsPassword(kind, reason) {

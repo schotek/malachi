@@ -67,7 +67,9 @@ checks, retention or draft persistence. It invokes the existing bridge.
 Provider process orchestration and presentation state follow the current
 Claude client architecture. No OpenAI token is a mail-account credential;
 do not put one into daemon configuration, the mail database or the daemon's
-keyring-helper protocol.
+keyring-helper protocol. (That holds for the ChatGPT grant. The API keys of
+`ai` accounts — the API mode of `docs/plans/ai-api.md`, 2026-11-07 — are the
+daemon's credentials by design, because the daemon makes those calls.)
 
 No backend/API change is required by this design. The board's `source` is
 already a string; `malachi-mcp` derives annotation provenance from the MCP

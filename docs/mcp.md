@@ -1837,6 +1837,30 @@ these differences:
   the model writes is shown or logged except as the draft, and no usage
   is recorded (the 24-hour row is the triage's).
 
+### Sessions run by the daemon (AI via API)
+
+When the user chose an `ai` account — an Anthropic or OpenAI key, or an
+OpenAI-compatible server such as Ollama — as the assistant's provider
+([api.md §4.1](api.md#41-account) and [§4.18](api.md#418-assistant); the
+design is `docs/plans/ai-api.md`), the daemon runs the panel, the
+one-shot requests, the triage and the suggested reply itself
+(`assistant.sessionStart`, `assistant.sessionSend`, the events of
+`notify.assistantEvent`), with this bridge as its tools: the daemon
+starts `malachi-mcp --socket <its own socket> --in-app …` as a child
+process, with the tier of the purpose (`--allow-triage --triage-run
+<runId> --triage-max <n>` for a run, `--reply-only <messageId>` for a
+reply, never `--allow-modify` or `--allow-send`), lists its tools,
+offers the purpose's set to the model and runs each call the model makes
+through `tools/call`, passing the result back verbatim — the fence, the
+limits and the confinement above apply as to any client. The bridge's
+client name is `malachi-mail`, which the board's notes record as their
+source (a run's `source` is what `board.runStart` was given). The
+prompts are the texts the apps used to compose: they moved into the
+daemon (`internal/assistant`), and `assistant.prompt` hands them to the
+apps that run Claude Code or Codex, so every provider gets one text.
+`list_accounts` never lists an `ai` account: it is not mail. What goes
+where and what is trusted is [security.md §7.6 and §10.4](security.md).
+
 ## Not in this version
 
 - threads, attached messages (`message.embedded`), draft listing and deletion, the

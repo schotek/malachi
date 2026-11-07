@@ -16,6 +16,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/accountwizard"
+	"github.com/schotek/malachi/ui/internal/aiaccount"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/rules"
@@ -92,6 +93,12 @@ const (
 	devRulesEditor
 	devCrmDialog
 	devEwayWizard
+	// devAIAccount opens the dialog that adds an OpenAI-compatible AI
+	// provider account; devClaudeIntegration and devChatGPTIntegration
+	// the settings of the two local AI integrations.
+	devAIAccount
+	devClaudeIntegration
+	devChatGPTIntegration
 	// devToolbarEditor opens the toolbar editor on a bar (Text, "" for
 	// the window's), devPrefsGeneral Preferences → General.
 	devToolbarEditor
@@ -183,6 +190,12 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind = devCrmDialog
 		case name == "eway-wizard":
 			st.Kind = devEwayWizard
+		case name == "ai-account":
+			st.Kind = devAIAccount
+		case name == "claude-integration":
+			st.Kind = devClaudeIntegration
+		case name == "chatgpt-integration":
+			st.Kind = devChatGPTIntegration
 		case name == "toolbar-editor" || strings.HasPrefix(name, "toolbar-editor:"):
 			st.Kind, st.Text = devToolbarEditor, strings.TrimPrefix(strings.TrimPrefix(name, "toolbar-editor"), ":")
 		case name == "prefs-general":
@@ -398,6 +411,12 @@ func (w *Window) runDevStep(n int, st devStep) {
 		d.Present(w)
 	case devEwayWizard:
 		accountwizard.NewEway(w.client, w.log).Present(w)
+	case devAIAccount:
+		aiaccount.New(w.client, w.log, api.AIOpenAICompatible, nil).Present(w)
+	case devClaudeIntegration:
+		newClaudeIntegration(w.settings, w.assist, w.log).Present(w)
+	case devChatGPTIntegration:
+		newChatGPTIntegration(w.settings, w.assist, w.log).Present(w)
 	case devSize:
 		w.SetDefaultSize(st.Width, st.Height)
 	case devQuit:

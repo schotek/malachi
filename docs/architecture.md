@@ -2209,6 +2209,17 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
 
 ## 7. Open decisions
 
+- AI provider accounts and the daemon's own assistant: **decided
+  2026-11-07** (`docs/plans/ai-api.md`, D1–D22). A model API (Anthropic,
+  OpenAI, an OpenAI-compatible server) is an account of kind `ai` with
+  the key in the keyring; the daemon runs the assistant's sessions
+  itself (`internal/llm`, `internal/agent`, `assistant.session*`) with
+  the MCP bridge started as its child for the tools, streams the events
+  to the session's connection and counts the usage; the model-facing
+  prompts moved into the daemon (`internal/assistant`,
+  `assistant.prompt`), the user-facing texts stay in the clients. The
+  Mac App Store build, which cannot run the user's Claude Code or Codex,
+  gets the in-app assistant this way.
 - UI language: Go + gotk4 for phase 1; Rust + gtk4-rs or Python + PyGObject
   remain possible because the backend does not care. The other platforms'
   clients are settled: Swift/AppKit on macOS (2026-09-24) and C#/WinUI 3 on

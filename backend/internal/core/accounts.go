@@ -79,6 +79,13 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 			return nil, err
 		}
 	}
+	if p.Config.Protocol() == api.AccountAI {
+		// One listing of the provider's models with the key: a refused
+		// key stores nothing (accounts_ai.go).
+		if err := s.b.prepareAI(ctx, &p.Config, p.Credentials.Password); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
 	}
@@ -213,6 +220,7 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 	}
 	unlock()
 	s.b.forgetProfileAccount(ctx, string(p.AccountID))
+	s.b.forgetAIAccount(p.AccountID)
 	s.b.log.Info("account removed", "id", p.AccountID, "deleteLocalData", p.DeleteLocalData)
 	s.b.notifyBoard(false, string(p.AccountID)) // its cases went with it
 	s.b.contactsChanged(string(p.AccountID))    // its address books too
@@ -328,7 +336,8 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	if err := s.b.checkCalDAVMailAccount(ctx, p.Config, string(p.AccountID)); err != nil {
 		return nil, err
 	}
-	if p.Credentials.Password == "" && (secretMoves(existing.Config, p.Config) || calDAVSecretMoves(existing.Config, p.Config) || ewaySecretMoves(existing.Config, p.Config)) {
+	if p.Credentials.Password == "" && (secretMoves(existing.Config, p.Config) || calDAVSecretMoves(existing.Config, p.Config) ||
+		ewaySecretMoves(existing.Config, p.Config) || aiSecretMoves(existing.Config, p.Config)) {
 		// The stored secret belongs to another site (or kind): it is
 		// never sent to this one.
 		return nil, api.NewError(api.CodeInvalidArgument, "the account's new site or server needs its own password or token")
@@ -354,6 +363,13 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 
 	if p.Config.Protocol() == api.AccountEway && sameEwayLogin(existing.Config, p.Config) && p.Config.Eway.UserGUID == "" {
 		p.Config.Eway.UserGUID = existing.Config.Eway.UserGUID // the daemon's, kept
+	}
+	if p.Config.Protocol() == api.AccountAI {
+		var old *api.AIConfig
+		if existing.Config.Protocol() == api.AccountAI {
+			old = existing.Config.AI
+		}
+		settleAIConsent(p.Config.AI, old, time.Now())
 	}
 	updated := existing
 	updated.Name = p.Config.Name
@@ -383,6 +399,11 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 			revert()
 			return nil, keyringErr(err)
 		}
+	}
+	if existing.Config.Protocol() == api.AccountAI || updated.Config.Protocol() == api.AccountAI {
+		// A new key or endpoint: the sessions and the recorded state of
+		// the old one are moot.
+		s.b.forgetAIAccount(p.AccountID)
 	}
 	if p.Credentials.OAuthSession != "" {
 		ts, err := s.b.tokenSourceFor(updated.ID, updated.Config)
@@ -508,6 +529,9 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	}
 	if p.Config.Protocol() == api.AccountEway {
 		return s.testEway(ctx, p)
+	}
+	if p.Config.Protocol() == api.AccountAI {
+		return s.testAI(ctx, p)
 	}
 	password := p.Credentials.Password
 	switch {
@@ -810,10 +834,10 @@ func validateAccountConfig(c *api.AccountConfig) error {
 	}
 	c.Email = strings.TrimSpace(c.Email)
 	// An eWay-CRM account needs no address: its user may have none in the
-	// CRM and its user name need not be one (docs/eway.md D2); every other
-	// kind has a mailbox or a sign-in address. A given address must still
-	// be one.
-	if c.Email != "" || c.Protocol() != api.AccountEway {
+	// CRM and its user name need not be one (docs/eway.md D2); an AI
+	// provider account has none either; every other kind has a mailbox or
+	// a sign-in address. A given address must still be one.
+	if c.Email != "" || (c.Protocol() != api.AccountEway && c.Protocol() != api.AccountAI) {
 		if err := validateAddress(api.Address{Address: c.Email}); err != nil {
 			return err
 		}
@@ -831,6 +855,9 @@ func validateAccountConfig(c *api.AccountConfig) error {
 	}
 	if k := c.Protocol(); c.Eway != nil && k != api.AccountEway {
 		return bad("eway settings do not apply to an %s account", k)
+	}
+	if k := c.Protocol(); c.AI != nil && k != api.AccountAI {
+		return bad("ai settings do not apply to an %s account", k)
 	}
 	if err := validateCalendarConfig(c); err != nil {
 		return err
@@ -916,8 +943,12 @@ func validateAccountConfig(c *api.AccountConfig) error {
 		if err := validateEway(c); err != nil {
 			return err
 		}
+	case api.AccountAI:
+		if err := validateAI(c); err != nil {
+			return err
+		}
 	default:
-		return bad("kind must be imap, graph, jira, caldav or eway")
+		return bad("kind must be imap, graph, jira, caldav, eway or ai")
 	}
 
 	if c.SyncInterval != 0 && c.SyncInterval < api.SyncIntervalMin {

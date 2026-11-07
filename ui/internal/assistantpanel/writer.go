@@ -3,13 +3,16 @@
 
 package assistantpanel
 
-import "github.com/schotek/malachi/ui/internal/assistant"
+import (
+	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/assistant"
+)
 
 // Writer is the compose window's assistant bar without its widgets (macOS
 // ComposeWindowController writeWithAssistant): the optional instruction,
 // the subject, the user's own text and the prepared original go to the
-// user's assistant (assistant.WriteMessage under
-// assistant.WriteSystemPrompt, one Request), and the answer, cleaned
+// user's assistant (the daemon's prompt of purpose write, api.WriteInput,
+// one Request), and the answer, cleaned
 // (assistant.CleanRewrite), is previewed in the bar for Replace, which the
 // window does as plain text through the editor bridge. It goes through the
 // same states as the rewrite (RewriteState): the answer so far while
@@ -20,9 +23,9 @@ import "github.com/schotek/malachi/ui/internal/assistant"
 type Writer struct {
 	// OnState: the state changed.
 	OnState func(RewriteState)
-	// Profile is the user's profile with the note of the account the
-	// window writes from (assistant.Profile.For); nil: none.
-	Profile func() assistant.Profile
+	// Account is the account the window writes from, whose profile note
+	// the daemon appends to the system prompt; nil: none.
+	Account func() api.AccountID
 
 	tr      assistant.Translator
 	request *Request
@@ -53,18 +56,12 @@ func (w *Writer) set(s RewriteState) {
 	}
 }
 
-// Start asks for the body of a window of mode. A request that cannot be
-// made (nothing to work from, too long; assistant.WriteMessage) fails at
-// once with its reason; nothing is sent then.
+// Start asks for the body of a window of mode. A request the daemon
+// refuses (nothing to work from, too long) fails with its reason.
 func (w *Writer) Start(mode assistant.WriteMode, instruction, subject, own, quote string) {
-	message, err := assistant.WriteMessage(mode, instruction, subject, own, quote)
-	if err != nil {
-		w.request.Cancel()
-		w.set(RewriteState{Kind: RewriteFailed, Text: assistant.StoppedText(w.tr, err.Error())})
-		return
-	}
 	w.set(RewriteState{Kind: RewriteRunning})
-	w.request.Start(assistant.WithProfile(assistant.WriteSystemPrompt(), profileOf(w.Profile)), message, "", func(text string) {
+	input := api.PromptInput{Write: &api.WriteInput{Mode: mode.API(), Instruction: instruction, Subject: subject, Own: own, Quote: quote}}
+	w.request.Start(api.PurposeWrite, input, accountOf(w.Account), func(text string) {
 		if w.Running() {
 			w.set(RewriteState{Kind: RewriteRunning, Text: assistant.CleanRewrite(text)})
 		}

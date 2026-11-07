@@ -18,15 +18,20 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 	"github.com/schotek/malachi/ui/internal/board"
 )
 
 // The board's Suggest Reply (Controller) against a fake daemon (board.get,
-// board.setDraft, draft.delete) and the stand-in claude (macOS
-// BoardReplyControllerTests). No real Claude Code, daemon or bridge is ever
-// run: the bridge's path is only passed on.
+// board.setDraft, draft.delete), the stand-in claude and the fake
+// daemon's prompts (prompttest; macOS BoardReplyControllerTests). No real
+// Claude Code, daemon or bridge is ever run: the bridge's path is only
+// passed on.
 
 const testBridge = "/b/malachi-mcp"
+
+// testLanguage is the UI language of the tests, as a BCP 47 tag.
+const testLanguage = "cs"
 
 func boardCase(n string) board.Case {
 	return board.Case{
@@ -164,6 +169,7 @@ type replyHarness struct {
 	daemon        *replyDaemon
 	fake          *fakeClaude
 	settings      *memSettings
+	prompter      *prompttest.Prompter
 	available     bool
 	c             *Controller
 	states        []board.SuggestReplyState
@@ -177,13 +183,14 @@ func discardLog() *slog.Logger { return slog.New(slog.DiscardHandler) }
 func newReplyHarness(t *testing.T, fake *fakeClaude, consent bool, bridge string) *replyHarness {
 	t.Helper()
 	h := &replyHarness{
-		t: t, loop: newTestLoop(), daemon: &replyDaemon{}, fake: fake, available: true,
+		t: t, loop: newTestLoop(), daemon: &replyDaemon{}, fake: fake, prompter: &prompttest.Prompter{}, available: true,
 		consentAnswer: true,
 	}
 	h.settings = &memSettings{model: assistant.Haiku, consent: consent, claudePath: fake.path}
 	locator := assistantpanel.NewLocator(h.settings, []string{"HOME=" + fake.dir}, h.loop, "", discardLog())
 	request := assistantpanel.NewRequest(assistantpanel.RequestConfig{
 		Settings: h.settings, Locator: locator, Loop: h.loop, Log: discardLog(), Directory: filepath.Join(fake.dir, "work"),
+		Prompter: h.prompter, Language: func() string { return testLanguage },
 		Env: []string{"HOME=" + fake.dir}, KillGrace: 300 * time.Millisecond,
 	})
 	request.Timeout = 10 * time.Second
@@ -250,12 +257,15 @@ func TestReplySuccess(t *testing.T) {
 	if !strings.Contains(joined, "--reply-only") || !strings.Contains(joined, "m_1") {
 		t.Errorf("args missing --reply-only m_1: %s", joined)
 	}
-	prompts := fake.prompts()
-	if len(prompts) != 1 || !strings.Contains(prompts[0], "Say yes, thanks") {
-		t.Errorf("prompts = %+v", prompts)
+	// The daemon gets the instruction as typed (it cleans it) and the
+	// case's members, oldest first; its message is the turn.
+	last, ok := h.prompter.Last()
+	if !ok || last.Input == nil || last.Input.Reply == nil || last.Input.Reply.Instruction != "  Say yes,\n thanks  " ||
+		len(last.Input.Reply.Others) != 8 || last.Input.Reply.Others[0] != "m_1_1" || last.Input.Reply.Others[7] != "m_1_8" {
+		t.Errorf("prompter = %+v", last)
 	}
-	if strings.Contains(prompts[0], "m_1_3") || !strings.Contains(prompts[0], "m_1_4") {
-		t.Errorf("prompt message ids wrong: %s", prompts[0])
+	if prompts := fake.prompts(); len(prompts) != 1 || prompts[0] != prompttest.ReplyMessage(*last.Input.Reply) {
+		t.Errorf("prompts = %+v", prompts)
 	}
 }
 
@@ -550,8 +560,8 @@ func TestReplyNeverOffersTheSamples(t *testing.T) {
 	}
 }
 
-// A case that waits on the other side gets the follow-up prompt; any other
-// the reply prompt.
+// A case that waits on the other side asks the daemon for the follow-up
+// prompt; any other for the reply prompt.
 func TestReplyFollowUpPrompt(t *testing.T) {
 	for _, tt := range []struct {
 		reason   api.BoardReason
@@ -562,12 +572,12 @@ func TestReplyFollowUpPrompt(t *testing.T) {
 		h.daemon.ruleReason = tt.reason
 		h.c.Start(boardCase("1"), "")
 		h.ended()
-		joined := strings.Join(fake.args(), " ")
-		if got := strings.Contains(joined, assistant.SuggestReplySystemPromptFor(true)); got != tt.followUp {
-			t.Errorf("%q: follow-up prompt = %v, want %v", tt.reason, got, tt.followUp)
+		last, ok := h.prompter.Last()
+		if !ok || last.Purpose != api.PurposeReply || last.Input == nil || last.Input.Reply == nil || last.Input.Reply.FollowUp != tt.followUp {
+			t.Errorf("%q: prompter %+v, want follow-up %v", tt.reason, last, tt.followUp)
 		}
-		if got := strings.Contains(joined, assistant.SuggestReplySystemPromptFor(false)); got == tt.followUp {
-			t.Errorf("%q: reply prompt = %v", tt.reason, got)
+		if got := strings.HasSuffix(fake.prompts()[0], " follow-up"); got != tt.followUp {
+			t.Errorf("%q: message %q", tt.reason, fake.prompts())
 		}
 	}
 }

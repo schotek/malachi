@@ -11,7 +11,6 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
-	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/boardtriage"
 	"github.com/schotek/malachi/ui/internal/client"
@@ -99,8 +98,14 @@ func (a *Assistant) AttachBoardTriage(rpc *client.Client, mainWindow func() *Win
 		return a.board
 	}
 	b := &BoardTriage{assistant: a, rpc: rpc, log: a.log.With("part", "board-triage"), mainWindow: mainWindow}
+	// The prompts of every assistant request come from the daemon from
+	// now on (Assistant.prompter).
+	a.rpc.Store(rpc)
 	a.chatGPTSocket = rpc.Socket
 	a.rebuildCodex()
+	a.rebuildAPI()
+	// The AI provider accounts, now that they can be listed.
+	a.refreshAIAccounts()
 	b.prefs = boardtriage.NewPreferences(boardtriage.PreferencesConfig{
 		Caller: rpc, Loop: glibLoop{}, Log: b.log, Translator: i18n.Tr,
 		Disconnected: func(err error) bool { return errors.Is(err, client.ErrDisconnected) },
@@ -112,20 +117,13 @@ func (a *Assistant) AttachBoardTriage(rpc *client.Client, mainWindow func() *Win
 		Request: a.newRequest(a.boardProvider), Loop: glibLoop{}, Log: b.log, Translator: providerBoardTranslator{a, i18n.Tr},
 		Bridge: a.bridge, Socket: rpc.Socket, Available: a.triageAvailable, Number: formatTokens,
 	})
-	b.ctl.Language = uiLanguage
-	b.ctl.Profile = a.Profile
 	b.ctl.ConsentIdentity = a.RuntimeGeneration
-	b.ctl.Source = func() string {
-		if a.usesChatGPT() {
-			return "malachi-chatgpt"
-		}
-		return assistant.TriageSource
-	}
+	b.ctl.Source = a.triageSource
 	b.ctl.ModelID = func() string {
 		if a.usesChatGPT() {
 			return a.settings.BoardChatGPTModel()
 		}
-		return ""
+		return "" // Claude Code's model is the settings', the daemon's its account's
 	}
 	b.ctl.Consent = b.askConsent
 	b.ctl.OnRefresh = b.refresh

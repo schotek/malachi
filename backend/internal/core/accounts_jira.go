@@ -209,6 +209,8 @@ func capabilitiesFor(c api.AccountConfig) []api.AccountCapability {
 		return caps
 	case api.AccountEway:
 		return []api.AccountCapability{api.CapabilityCrm}
+	case api.AccountAI:
+		return []api.AccountCapability{api.CapabilityAssistant}
 	case api.AccountJira:
 		return []api.AccountCapability{api.CapabilityComment, api.CapabilityForward, api.CapabilityTransition}
 	default:

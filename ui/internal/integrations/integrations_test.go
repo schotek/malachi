@@ -108,7 +108,7 @@ func TestFullOrder(t *testing.T) {
 
 func TestCatalog(t *testing.T) {
 	c := Catalog(msgids{})
-	if len(c) != 3 || c[0].Kind != api.AccountJira || c[1].Kind != api.AccountCalDAV || c[2].Kind != api.AccountEway {
+	if len(c) != 8 || c[0].Kind != api.AccountJira || c[1].Kind != api.AccountCalDAV || c[2].Kind != api.AccountEway {
 		t.Fatalf("catalog %+v", c)
 	}
 	if c[0].Name != "Jira" || c[0].Icon != JiraIcon || c[1].Name != "CalDAV Calendar" || c[1].Icon != CalDAVIcon ||
@@ -116,10 +116,168 @@ func TestCatalog(t *testing.T) {
 		c[2].Description != "Save messages to your CRM with their contacts, companies and deals" {
 		t.Errorf("catalog %+v", c)
 	}
-	for _, s := range c {
+	for i, s := range c {
 		if s.Description == "" {
-			t.Errorf("%s: no description", s.Kind)
+			t.Errorf("%d: no description", i)
 		}
+		if want := Section(0); i >= 3 {
+			want = SectionAI
+		} else if s.Section != want {
+			t.Errorf("%d: section %v, want %v", i, s.Section, want)
+		}
+		if (s.Kind == "") != (s.Local != LocalNone) {
+			t.Errorf("%d: kind %q with local %v", i, s.Kind, s.Local)
+		}
+		if (s.Kind == api.AccountAI) != (s.Provider != "") {
+			t.Errorf("%d: kind %q with provider %q", i, s.Kind, s.Provider)
+		}
+	}
+	// The AI section (docs/plans/ai-api.md §7.2): the local integrations,
+	// then the three provider kinds; brands are not translated.
+	ai := c[3:]
+	if ai[0].Local != LocalClaude || ai[0].Name != "Claude Code / Claude Desktop" ||
+		ai[1].Local != LocalChatGPT || ai[1].Name != "ChatGPT (Codex)" ||
+		ai[2].Provider != api.AIAnthropic || ai[2].Name != "Anthropic API" ||
+		ai[3].Provider != api.AIOpenAI || ai[3].Name != "OpenAI API" ||
+		ai[4].Provider != api.AIOpenAICompatible || ai[4].Name != "OpenAI-compatible server" {
+		t.Errorf("ai section %+v", ai)
+	}
+	for i, s := range ai {
+		if s.Icon != AIIcon || s.Section != SectionAI {
+			t.Errorf("ai %d: %+v", i, s)
+		}
+	}
+	if !strings.Contains(ai[4].Description, "Ollama") || !strings.Contains(ai[4].Description, "OpenRouter") {
+		t.Errorf("compatible description %q", ai[4].Description)
+	}
+	if got := CatalogSection(msgids{}, SectionServices); len(got) != 3 || got[2].Kind != api.AccountEway {
+		t.Errorf("services section %+v", got)
+	}
+	if got := CatalogSection(msgids{}, SectionAI); len(got) != 5 || got[0].Local != LocalClaude {
+		t.Errorf("ai section %+v", got)
+	}
+}
+
+func aiAccount(id, name string, p api.AIProvider, model string) api.Account {
+	return api.Account{ID: api.AccountID(id), Enabled: true,
+		Config:       api.AccountConfig{Kind: api.AccountAI, Name: name, AI: &api.AIConfig{Provider: p, Model: model}},
+		Capabilities: []api.AccountCapability{api.CapabilityAssistant}}
+}
+
+func TestRowForAI(t *testing.T) {
+	tr := msgids{}
+	a := aiAccount("acc_1", "Work", api.AIAnthropic, "claude-opus-5-5")
+	r := RowFor(a, tr)
+	if r.ID != "acc_1" || r.Kind != api.AccountAI || r.Title != "Work" || r.Subtitle != "Anthropic API · claude-opus-5-5" ||
+		!r.OffersSwitch || r.Editor != EditorAI || r.EditLabel != "Edit Account" || r.Icon != AIIcon {
+		t.Errorf("anthropic %+v", r)
+	}
+	if r.RemoveBody != "Work will be removed from Malachi Mail, and its API key with it." {
+		t.Errorf("remove %q", r.RemoveBody)
+	}
+	if !ShowsInIntegrations(a) || ShowsInAccounts(a) {
+		t.Error("an ai account belongs on Integrations")
+	}
+	if h := host(a); h != "api.anthropic.com" {
+		t.Errorf("host %q", h)
+	}
+
+	o := aiAccount("acc_2", "", api.AIOpenAI, "")
+	if r = RowFor(o, tr); r.Title != "OpenAI API" || r.Subtitle != "OpenAI API" {
+		t.Errorf("unnamed openai without a model %+v", r)
+	}
+	if h := host(o); h != "api.openai.com" {
+		t.Errorf("host %q", h)
+	}
+
+	c := aiAccount("acc_3", "Home", api.AIOpenAICompatible, "llama3.3\x01\n")
+	c.Config.AI.BaseURL = "http://Ollama.lan:11434/v1"
+	if r = RowFor(c, tr); r.Title != "Home" || r.Subtitle != "OpenAI-compatible server · llama3.3" {
+		t.Errorf("compatible %+v", r)
+	}
+	if h := host(c); h != "ollama.lan" {
+		t.Errorf("host %q", h)
+	}
+
+	bare := api.Account{ID: "acc_4", Config: api.AccountConfig{Kind: api.AccountAI}}
+	if r = RowFor(bare, tr); r.Title != "OpenAI-compatible server" || r.Subtitle != "OpenAI-compatible server" || r.Editor != EditorAI {
+		t.Errorf("without config %+v", r)
+	}
+	if h := host(bare); h != "" {
+		t.Errorf("host %q", h)
+	}
+}
+
+func TestLocalRows(t *testing.T) {
+	tr := msgids{}
+	rows := LocalRows(ClaudeState{}, ChatGPTState{}, tr)
+	if len(rows) != 2 || rows[0].Kind != LocalClaude || rows[1].Kind != LocalChatGPT {
+		t.Fatalf("rows %+v", rows)
+	}
+	claude, chatgpt := rows[0], rows[1]
+	if claude.Title != "Claude Code / Claude Desktop" || claude.Editor != EditorClaude || claude.Icon != AIIcon ||
+		claude.CanRemove || claude.RemoveLabel != "Unregister" ||
+		claude.Subtitle != "Not registered · Claude Code not found" {
+		t.Errorf("claude nothing %+v", claude)
+	}
+	if chatgpt.Title != "ChatGPT (Codex)" || chatgpt.Editor != EditorChatGPT || chatgpt.Icon != AIIcon ||
+		chatgpt.CanRemove || chatgpt.RemoveLabel != "Disconnect" ||
+		chatgpt.Subtitle != "Not connected · Codex not found" {
+		t.Errorf("chatgpt nothing %+v", chatgpt)
+	}
+
+	for _, c := range []struct {
+		name  string
+		state ClaudeState
+		want  string
+	}{
+		{"registered, signed in", ClaudeState{Registered: true, Present: true, Version: "2.1.284", SignInKnown: true, SignedIn: true},
+			"Registered in Claude Desktop and Claude Code · Claude Code 2.1.284 · signed in"},
+		{"registered, not signed in", ClaudeState{Registered: true, Present: true, Version: "2.1.284", SignInKnown: true},
+			"Registered in Claude Desktop and Claude Code · Claude Code 2.1.284 · not signed in"},
+		{"sign-in unknown", ClaudeState{Present: true, Version: "2.1.284"},
+			"Not registered · Claude Code 2.1.284"},
+		{"path without a version", ClaudeState{Present: true, Path: "/usr/local/bin/claude"},
+			"Not registered · /usr/local/bin/claude"},
+		{"registered, no claude code", ClaudeState{Registered: true, SignInKnown: true, SignedIn: true},
+			"Registered in Claude Desktop and Claude Code · Claude Code not found"},
+		{"cleaned version", ClaudeState{Present: true, Version: " 2.1.284\x00\n"}, "Not registered · Claude Code 2.1.284"},
+	} {
+		r := LocalRows(c.state, ChatGPTState{}, tr)[0]
+		if r.Subtitle != c.want {
+			t.Errorf("%s: %q, want %q", c.name, r.Subtitle, c.want)
+		}
+		if r.CanRemove != c.state.Registered {
+			t.Errorf("%s: can remove %v", c.name, r.CanRemove)
+		}
+	}
+
+	for _, c := range []struct {
+		name  string
+		state ChatGPTState
+		want  string
+	}{
+		{"connected", ChatGPTState{Connected: true, Account: "jana@example.invalid", CodexFound: true}, "Connected as jana@example.invalid"},
+		{"connected, no codex", ChatGPTState{Connected: true, Account: "jana@example.invalid"}, "Connected as jana@example.invalid · Codex not found"},
+		{"codex only", ChatGPTState{CodexFound: true}, "Not connected"},
+	} {
+		r := LocalRows(ClaudeState{}, c.state, tr)[1]
+		if r.Subtitle != c.want {
+			t.Errorf("%s: %q, want %q", c.name, r.Subtitle, c.want)
+		}
+		if r.CanRemove != c.state.Connected {
+			t.Errorf("%s: can remove %v", c.name, r.CanRemove)
+		}
+	}
+}
+
+func TestFullOrderSkipsNothingOfTheDaemon(t *testing.T) {
+	// Local rows are not accounts: FullOrder sees only the daemon's
+	// accounts, an ai account among the integrations.
+	all := []api.Account{account("m1", ""), aiAccount("acc_1", "AI", api.AIAnthropic, "m"), account("j1", api.AccountJira)}
+	got := FullOrder(all, PageIntegrations, []api.AccountID{"j1", "acc_1"})
+	if !slices.Equal(got, []api.AccountID{"m1", "j1", "acc_1"}) {
+		t.Errorf("%v", got)
 	}
 }
 
@@ -194,13 +352,17 @@ func TestRowForByKind(t *testing.T) {
 
 func TestTexts(t *testing.T) {
 	x := Texts(msgids{})
-	for _, s := range []string{x.Title, x.Description, x.ConnectedTitle, x.AvailableTitle, x.EmptyTitle, x.EmptySubtitle, x.Add, x.CalendarSettings} {
+	for _, s := range []string{x.Title, x.Description, x.ConnectedTitle, x.AvailableTitle, x.AITitle, x.EmptyTitle, x.EmptySubtitle, x.Add, x.Settings, x.CalendarSettings,
+		x.UnregisterHeading, x.UnregisterBody, x.DisconnectHeading, x.DisconnectBody} {
 		if s == "" {
 			t.Errorf("empty text in %+v", x)
 		}
 	}
-	if x.Title != "Integrations" || x.Add != "Add…" || x.CalendarSettings != "Calendar Settings" ||
-		x.Description != "Services beside your mail: issue trackers, calendars and CRM" {
+	if x.UnregisterHeading != "Unregister from Claude?" || x.DisconnectHeading != "Disconnect ChatGPT?" {
+		t.Errorf("%+v", x)
+	}
+	if x.Title != "Integrations" || x.Add != "Add…" || x.CalendarSettings != "Calendar Settings" || x.AITitle != "AI" || x.Settings != "Settings" ||
+		x.Description != "Services beside your mail: issue trackers, calendars, CRM and AI" {
 		t.Errorf("%+v", x)
 	}
 }

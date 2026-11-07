@@ -199,6 +199,12 @@ func TestInMail(t *testing.T) {
 	}
 	crmOff := crm
 	crmOff.Enabled = false
+	ai := api.Account{
+		ID: "ai", Enabled: true, Config: api.AccountConfig{Kind: api.AccountAI, Name: "Anthropic"},
+		Capabilities: []api.AccountCapability{api.CapabilityAssistant},
+	}
+	aiOff := ai
+	aiOff.Enabled = false
 	tests := []struct {
 		name string
 		acc  api.Account
@@ -211,6 +217,8 @@ func TestInMail(t *testing.T) {
 		{"calendar-only", caldav, false},
 		{"calendar-only, switched off", off, false},
 		{"crm", crm, false},
+		{"ai provider", ai, false},
+		{"ai provider, switched off", aiOff, false},
 		{"crm, switched off", crmOff, false},
 	}
 	for _, tt := range tests {

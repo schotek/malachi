@@ -7,7 +7,6 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/client"
 )
@@ -15,9 +14,10 @@ import (
 // The user's profile for the assistant (docs/api.md §4.18,
 // docs/plans/assistant-profile.md): one store for the application
 // (assistantpanel.ProfileStore), read when the connection comes and on
-// notify.assistantProfileChanged and notify.accountsChanged; every prompt
-// carries it, Preferences → AI → About You edits it, the panel's proposal
-// cards resolve through it. macOS AppState.profile.
+// notify.assistantProfileChanged and notify.accountsChanged; the daemon
+// appends it to every prompt it builds (assistant.prompt), Preferences →
+// AI → About You edits it, the panel's proposal cards resolve through it.
+// macOS AppState.profile.
 
 // profileState is the Assistant's part for the profile.
 type profileState struct {
@@ -45,15 +45,6 @@ func (a *Assistant) AttachProfile(rpc *client.Client) *assistantpanel.ProfileSto
 
 // ProfileStore is the application's profile; nil before AttachProfile.
 func (a *Assistant) ProfileStore() *assistantpanel.ProfileStore { return a.profile.store }
-
-// Profile is the user's profile for the prompts, every account's note;
-// empty before AttachProfile (compose.Assistant).
-func (a *Assistant) Profile() assistant.Profile {
-	if a.profile.store == nil {
-		return assistant.Profile{}
-	}
-	return a.profile.store.Profile()
-}
 
 // RefreshProfile reads the profile again (the window's notifications).
 func (a *Assistant) RefreshProfile() {

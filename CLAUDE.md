@@ -562,6 +562,47 @@ Pořadí prací:
     neověřené: skutečné podepsané zprávy (Outlook, Graph `$value`, Apple
     Mail, Thunderbird, Proton); plán, rozhodnutí a „As built“
     v `docs/plans/signatures.md`
+21. Asistent přes API (účty `ai`: Anthropic, OpenAI, OpenAI-kompatibilní
+    servery) — větev `feat/ai-api` 2026-11-07; démon (E0) a Go reference
+    + GTK (E1) napsané a otestované, macOS (E2) a Windows (E3) čekají; viz
+    odstavec Asistent přes API níže a `docs/plans/ai-api.md` (§13 As built)
+
+Asistent přes API (2026-11-07, větev `feat/ai-api`, necommitnuté;
+rozhodnutí vlastníka Q1–Q19 a „As built“ v `docs/plans/ai-api.md`,
+API `docs/api.md` §4.1 a §4.18, bezpečnost `docs/security.md` §7.6
+a §10.4, most `docs/mcp.md` „Sessions run by the daemon“). Poskytovatel
+modelu je účet démona druhu `ai` (`AIConfig`: `provider`
+anthropic/openai/openaiCompatible, `baseUrl` jen u kompatibilních,
+`model`, `boardModel`, `consent`, pin certifikátu; klíč API jako
+`credentials.password` v klíčence; capability `assistant`; nikdy v Poště,
+realm `ai:<host>#<id>`, takže víc účtů téhož poskytovatele). Démon běží
+asistenta sám: `internal/llm` (Messages API, Responses API, Chat
+Completions + SSE, vlastní tenký klient bez SDK, `llmtest` falešné
+servery), `internal/assistant` (prompty modelu přesunuté z
+`ui/internal/assistant`, jediný zdroj; `assistant.prompt` je dává i
+klientům pro Claude Code a Codex; golden
+`ui/internal/assistant/testdata/prompts.golden` a paritní test),
+`internal/agent` (most jako MCP podproces démona s `--in-app` a tierem
+podle `purpose`, smyčka tahu s limity, správce relací), služba
+`assistant.sessionStart/Send/Stop/providerModels/usage` s událostmi
+`notify.assistantEvent` jen zakládajícímu spojení (`api.ConnFromContext`,
+`rpc.NotifyConn`, `ConnObserver`), spotřeba v `assistant_usage` (migrace
+0027) a doplnění do `board.runEnd` (D19), souhlas per účet v démonu.
+Klienti (Go reference + GTK hotové): `assistant-provider` je řetězec
+`claude` / `chatgpt` / `acc_…`; `ui/internal/apiassistant` = Provider
+nad RPC a notifikacemi; `ui/internal/aiaccount` = editor účtu s testem,
+výběrem modelu, pinem a souhlasem; Předvolby → Integrace mají katalog AI
+(Claude Code/Desktop a ChatGPT jako lokální řádky s dialogy přesunutými
+z AI záložky, Anthropic API, OpenAI API, OpenAI-kompatibilní server) a
+řádek účtu `ai` se spotřebou; Předvolby → AI jen „Asistent používá“,
+nabídka, cíl, model, Nástěnka, O mně. Ověřeno: celá sada backendu, celá
+sada `ui/` v kontejneru, GTK smoke testy, `make po`, `make lint`.
+Neověřeno: vlastník na obrazovce (B2: `make run-gtk-live` nad kopií dat
+s Ollamou nebo klíčem), skutečný most spuštěný démonem jako podproces,
+živá API (názvy událostí OpenAI Responses jen z dokumentace); Windows
+`build.ps1 lint` do E3 padá (90 msgidů v exclusions, změněný popis
+Integrací). Odchylka: řádek spotřeby ukazuje tokeny za dnešek (účtování
+po místních dnech), ne za 24 h.
 
 Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
 U1–U4 v `docs/plans/unified-inbox.md`). Položka je od 2026-11-03 první

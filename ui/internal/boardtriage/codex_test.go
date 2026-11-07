@@ -6,12 +6,14 @@ package boardtriage
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 	"github.com/schotek/malachi/ui/internal/board"
 )
 
@@ -30,6 +32,7 @@ type scriptedProvider struct {
 	specs   []assistantpanel.SessionSpec
 }
 
+func (p *scriptedProvider) Name() string     { return "Scripted" }
 func (p *scriptedProvider) Model() string    { return "fixture-model" }
 func (p *scriptedProvider) HasConsent() bool { return true }
 func (p *scriptedProvider) AcceptConsent()   {}
@@ -53,7 +56,7 @@ type scriptedSession struct {
 }
 
 func (s *scriptedSession) Running() bool { s.mu.Lock(); defer s.mu.Unlock(); return !s.ended }
-func (s *scriptedSession) Submit(context.Context, string) error {
+func (s *scriptedSession) Submit(context.Context, api.PromptInput) error {
 	go s.script(s)
 	return nil
 }
@@ -130,7 +133,11 @@ func TestCodexRunCountsDistinctCasesAndWholeUsage(t *testing.T) {
 	if f := h.fake.starts(); f != 0 {
 		t.Errorf("claude started %d times", f)
 	}
-	if len(p.specs) != 1 || p.specs[0].Tools == nil || p.specs[0].Tools.BridgeArgs[0] != "--allow-triage" {
+	// The session's spec: the triage purpose with its trigger and run,
+	// the daemon's prompt resolved (its bridge arguments, its tools).
+	if len(p.specs) != 1 || p.specs[0].Purpose != api.PurposeTriage || p.specs[0].Trigger != api.TriggerManual || p.specs[0].RunID != "run_1" ||
+		p.specs[0].Tools == nil || !slices.Equal(p.specs[0].Tools.BridgeArgs, prompttest.TriageBridgeArgs("run_1", 40)) ||
+		!slices.Contains(p.specs[0].Tools.Allowed, "mcp__malachi__annotate_case") || p.specs[0].SystemPrompt != "SYS triage cs" {
 		t.Errorf("specs %+v", p.specs)
 	}
 }

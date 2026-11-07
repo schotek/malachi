@@ -9,6 +9,9 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel"
 )
 
 // Status is safe connection presentation, independent of Claude registration.
@@ -72,6 +75,9 @@ type InferenceObserver interface {
 }
 
 // Options captures non-secret runtime configuration at session creation.
+// Prompter builds the message of every turn (the daemon's assistant.prompt;
+// required for a session that takes input); Translator names the provider
+// (assistant.ChatGPTText; nil: the English msgid).
 type Options struct {
 	Executable                func() string
 	Bridge, Socket, Directory string
@@ -80,6 +86,8 @@ type Options struct {
 	HasConsent                func() bool
 	AcceptConsent             func()
 	HTTPClient                *http.Client
+	Prompter                  assistantpanel.Prompter
+	Translator                assistant.Translator
 }
 
 // Model is a provider catalog entry without mail or credentials.

@@ -9,8 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 )
+
+// writeInput is the bar's input of a window of mode.
+func writeInput(mode api.WriteMode, instruction, subject, own, quote string) api.PromptInput {
+	return api.PromptInput{Write: &api.WriteInput{Mode: mode, Instruction: instruction, Subject: subject, Own: own, Quote: quote}}
+}
 
 // The bar's request: the JSON message under the writing's system prompt,
 // the answer streamed and cleaned, then done.
@@ -32,27 +39,34 @@ func TestWriterRunsAndCleans(t *testing.T) {
 		!slices.Contains(states, RewriteState{Kind: RewriteRunning, Text: "„Dobrý"}) {
 		t.Errorf("states %+v", states)
 	}
-	msg, _ := assistant.WriteMessage(assistant.WriteReply, "Accept", "Meeting", "", "Can you come?")
+	input := writeInput(api.WriteReply, "Accept", "Meeting", "", "Can you come?")
+	msg, _ := prompttest.WriteMessage(*input.Write)
 	if !slices.Equal(fake.prompts(), []string{msg}) {
 		t.Errorf("prompts %q", fake.prompts())
 	}
-	want := assistant.Args(assistant.Options{Model: assistant.Haiku, SystemPrompt: assistant.WriteSystemPrompt()})
+	want := oneShotArgs(api.PurposeWrite, input, "", assistant.Haiku)
 	if strings.Join(fake.args(), "\n") != strings.Join(want, "\n") {
 		t.Errorf("args %q", fake.args())
 	}
+	if last, ok := h.prompter.Last(); !ok || last.Purpose != api.PurposeWrite || last.Input == nil || last.Input.Write == nil || *last.Input.Write != *input.Write {
+		t.Errorf("prompter %+v", last)
+	}
 }
 
-// Nothing to work from fails at once and sends nothing; an empty answer is
-// a failure, never an empty replacement; Cancel goes back to idle.
+// Nothing to work from fails with the daemon's reason and sends nothing;
+// an empty answer is a failure, never an empty replacement; Cancel goes
+// back to idle.
 func TestWriterRefusesAndFails(t *testing.T) {
 	fake := newFakeClaude(t, "true", "", fakeTurn{lines: []string{fakeInit, fakeResult(`  \"\"  `, true)}})
 	h := newRequestHarness(t, fake, true, true)
 	w := NewWriter(tr, h.request)
 	w.Start(assistant.WriteNew, "  ", "Subject", "", "")
-	if want := "The assistant stopped: assistant: an empty passage"; w.State() != (RewriteState{Kind: RewriteFailed, Text: want}) || fake.starts() != 0 {
+	h.loop.runUntil(t, func() bool { return !w.Running() })
+	if want := "The assistant stopped: an empty passage"; w.State() != (RewriteState{Kind: RewriteFailed, Text: want}) || fake.starts() != 0 {
 		t.Errorf("state %+v", w.State())
 	}
-	w.Start(assistant.WriteForward, "", "", "", strings.Repeat("a", assistant.MaxPassage))
+	w.Start(assistant.WriteForward, "", "", "", strings.Repeat("a", prompttest.MaxPassage+1))
+	h.loop.runUntil(t, func() bool { return !w.Running() })
 	if !strings.Contains(w.State().Text, "the passage is too long") || fake.starts() != 0 {
 		t.Errorf("state %+v", w.State())
 	}

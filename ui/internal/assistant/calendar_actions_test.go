@@ -81,26 +81,6 @@ func TestCalendarPrompts(t *testing.T) {
 	}
 }
 
-func TestCalendarTools(t *testing.T) {
-	want := []string{"list_calendars", "list_events", "get_event", "find_free_time", "list_invitations"}
-	var got []string
-	for _, tool := range CalendarTools {
-		got = append(got, strings.TrimPrefix(tool, toolPrefix))
-		if !slices.Contains(AllowedTools, tool) {
-			t.Errorf("the panel lacks %s", tool)
-		}
-		if slices.Contains(TriageTools, tool) || slices.Contains(TriageToolsWith(true), tool) || slices.Contains(TriageToolsWith(false), tool) {
-			t.Errorf("triage has %s", tool)
-		}
-		if slices.Contains(SuggestReplyTools, tool) {
-			t.Errorf("a suggested reply has %s", tool)
-		}
-	}
-	if !slices.Equal(got, want) {
-		t.Errorf("CalendarTools = %q", got)
-	}
-}
-
 func TestAskAboutEventPrompt(t *testing.T) {
 	one := AskAboutEventPrompt(identity{}, "ev1", "")
 	if !strings.Contains(one, "eventId ev1 (get_event)") || strings.Contains(one, "recurrenceId") || !strings.HasSuffix(one, "My question: ") {

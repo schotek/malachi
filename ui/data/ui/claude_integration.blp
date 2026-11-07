@@ -1,0 +1,55 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The settings of the Claude apps on this computer (Preferences →
+// Integrations → Claude Code / Claude Desktop, docs/plans/ai-api.md
+// §7.2): the MCP group, whose switch has no setting of its own and shows
+// what malachi-mcp reports about the Claude configuration files
+// (ui/internal/mcpsetup), and the Claude Code the assistant panel runs
+// (its path, version and sign-in; assistant-claude-path). Object IDs are
+// looked up from ui/internal/window/claude_integration.go; keep them in
+// sync. The Claude Code row's texts come from ui/internal/assistant, set
+// in Go.
+Adw.Dialog claude_integration_dialog {
+  content-width: 560;
+  content-height: 420;
+
+  child: Adw.ToastOverlay toast_overlay {
+    child: Adw.ToolbarView {
+      [top]
+      Adw.HeaderBar {
+        title-widget: Adw.WindowTitle window_title {
+          title: "Claude Code / Claude Desktop";
+        };
+      }
+
+      content: Adw.PreferencesPage {
+        Adw.PreferencesGroup mcp_group {
+          title: _("MCP");
+          description: _("Lets AI assistants read your mail and prepare drafts through the Model Context Protocol.");
+
+          Adw.SwitchRow mcp_switch {
+            title: _("Register with Claude");
+            subtitle: _("Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer");
+          }
+        }
+
+        // The claude the panel runs: its path, version and sign-in as
+        // the subtitle, Choose… and, as the row offers it, Sign In… or
+        // Get Claude Code… (made in Go).
+        Adw.PreferencesGroup claude_code_group {
+          Adw.ActionRow assistant_claude_code {
+            use-markup: false;
+            subtitle-selectable: true;
+
+            [suffix]
+            Button assistant_claude_choose {
+              valign: center;
+            }
+          }
+        }
+      };
+    };
+  };
+}

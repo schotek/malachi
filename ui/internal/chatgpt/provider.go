@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 )
@@ -31,6 +32,28 @@ type Provider struct {
 func NewProvider(options Options, tokens TokenSource) *Provider {
 	options.Env = append([]string{}, options.Env...)
 	return &Provider{options, tokens}
+}
+
+// msgid translates nothing: the English msgids come back (Options without
+// a Translator).
+type msgid struct{}
+
+func (msgid) T(s string) string { return s }
+func (msgid) N(singular, plural string, n int) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
+}
+
+// Name is the provider's name for the panel's subtitle
+// (assistant.ChatGPTText's Name).
+func (p *Provider) Name() string {
+	var tr assistant.Translator = msgid{}
+	if p.options.Translator != nil {
+		tr = p.options.Translator
+	}
+	return assistant.ChatGPTText(tr).Name
 }
 func (p *Provider) Model() string {
 	if p.options.Model == nil {
@@ -141,32 +164,55 @@ func (p *Provider) open(ctx context.Context, spec assistantpanel.SessionSpec) (*
 	return s, nil
 }
 
+// inAppArg is the bridge's first argument whenever the application starts
+// it (the daemon's api.PromptResult.BridgeArgs start with it): the
+// prompts carry the user's profile, so the bridge keeps it out of its
+// instructions.
+const inAppArg = "--in-app"
+
+// The bridge's tools each purpose may call, by their bare names, as the
+// daemon names them (backend/internal/assistant tools.go): the policy
+// accepts no other, whatever the daemon's prompt lists.
+var (
+	panelTools = []string{"list_accounts", "list_folders", "list_messages", "search_messages", "read_message",
+		"get_attachment", "create_draft", "list_calendars", "list_events", "get_event", "find_free_time",
+		"list_invitations", "get_user_profile", "propose_profile_note"}
+	triageTools = []string{"list_accounts", "list_folders", "list_messages", "search_messages", "read_message",
+		"get_attachment", "create_draft", "list_triage_queue", "annotate_case", "add_commitment"}
+	replyTools = []string{"read_message", "list_messages", "create_draft"}
+)
+
 // toolPolicy accepts only the application's known capability sets and complete
-// immutable bridge argument forms. Sending/modifying flags are always denied.
+// immutable bridge argument forms (the daemon's, --in-app first; without
+// it, it is put first). Sending/modifying flags are always denied.
 func toolPolicy(t *assistantpanel.Tools) (map[string]bool, []string, error) {
 	set := map[string]bool{}
 	if t == nil {
 		return set, nil, nil
 	}
-	allowed := assistant.AllowedTools
+	allowed := panelTools
 	args := append([]string{}, t.BridgeArgs...)
+	if len(args) > 0 && args[0] == inAppArg {
+		args = args[1:]
+	}
 	switch {
 	case len(args) == 0:
 	case len(args) == 2 && args[0] == "--reply-only" && validIdentifier(args[1]):
-		allowed = assistant.SuggestReplyTools
+		allowed = replyTools
 	case len(args) == 5 && args[0] == "--allow-triage" && args[1] == "--triage-run" && validIdentifier(args[2]) && args[3] == "--triage-max":
 		// Digits only, as the other clients read it: Atoi would take "+4".
 		n, err := strconv.Atoi(args[4])
 		if err != nil || !digitsOnly(args[4]) || n < assistant.TriageMaxLowest || n > assistant.TriageMaxHighest {
 			return nil, nil, errors.New("chatgpt_invalid_tool_policy")
 		}
-		allowed = assistant.TriageTools
+		allowed = triageTools
 	default:
 		return nil, nil, errors.New("chatgpt_invalid_tool_policy")
 	}
+	args = append([]string{inAppArg}, args...)
 	known := map[string]bool{}
 	for _, name := range allowed {
-		known[strings.TrimPrefix(name, "mcp__malachi__")] = true
+		known[name] = true
 	}
 	for _, name := range t.Allowed {
 		if !strings.HasPrefix(name, "mcp__malachi__") {
@@ -257,8 +303,8 @@ func (s *session) initialize(ctx context.Context, executable string) error {
 		if t.Socket != "" {
 			args = append(args, "--socket", t.Socket)
 		}
-		// The application's own bridge (assistant mcpConfig does the same).
-		args = append(args, "--in-app")
+		// The daemon's arguments of the purpose, --in-app first
+		// (toolPolicy put it there).
 		args = append(args, t.BridgeArgs...)
 		bridge, err := startRPC(t.Bridge, args, assistant.ChildEnv(s.options.Env, t.Bridge), s.work)
 		if err != nil {
@@ -351,7 +397,25 @@ func (s *session) initialize(ctx context.Context, executable string) error {
 	s.mu.Unlock()
 	return nil
 }
-func (s *session) Submit(ctx context.Context, input string) error {
+
+// Submit sends one turn: the message the daemon builds of input
+// (Options.Prompter, assistant.prompt of the session's purpose).
+func (s *session) Submit(ctx context.Context, input api.PromptInput) error {
+	if s.options.Prompter == nil {
+		return errors.New("chatgpt_no_prompter")
+	}
+	res, err := s.options.Prompter.Prompt(ctx, api.AssistantPromptParams{
+		Purpose: s.spec.Purpose, Language: s.spec.Language, AccountID: s.spec.NoteAccountID,
+		Trigger: s.spec.Trigger, RunID: s.spec.RunID, Input: &input,
+	})
+	if err != nil {
+		return err
+	}
+	return s.submit(ctx, res.Message)
+}
+
+// submit sends message as one turn.
+func (s *session) submit(ctx context.Context, message string) error {
 	s.mu.Lock()
 	if s.closing || s.active || s.codex == nil {
 		s.mu.Unlock()
@@ -374,7 +438,7 @@ func (s *session) Submit(ctx context.Context, input string) error {
 		names = append(names, name)
 	}
 	s.emit(assistant.Event{Kind: assistant.EventInit, BridgeConnected: true, Tools: names})
-	params := map[string]any{"threadId": thread, "input": []any{map[string]any{"type": "text", "text": input}}, "environments": []any{}}
+	params := map[string]any{"threadId": thread, "input": []any{map[string]any{"type": "text", "text": message}}, "environments": []any{}}
 	if s.spec.JSONSchema != "" {
 		params["outputSchema"] = json.RawMessage(s.spec.JSONSchema)
 	}

@@ -10,7 +10,14 @@ import (
 	"time"
 
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 )
+
+// providerPanel is a panel over provider with the fake daemon's prompts.
+func providerPanel(loop *testLoop, provider Provider) *Controller {
+	return New(Config{Provider: func() Provider { return provider }, Prompter: &prompttest.Prompter{}, Language: func() string { return testLanguage },
+		Translator: tr, Settings: &memSettings{}, Loop: loop, Log: discardLog(), Bridge: "/fixture/malachi-mcp"})
+}
 
 // A provider's failures read as sentences, never as its codes: the usage
 // limit in the board's words, Codex missing and the ChatGPT connection in
@@ -38,6 +45,22 @@ func TestFailureTextsOfProviders(t *testing.T) {
 	}
 	if got := (Failure{Kind: FailureNotFound}).Text(tr); got != assistant.PanelTexts(tr).NotFound {
 		t.Errorf("Claude Code not found = %q", got)
+	}
+	// The daemon's assistant: each class in the user's words, never the
+	// code; the usage limit of the plan in the board's words.
+	texts := assistant.APIFailureTexts(tr)
+	for reason, want := range map[string]string{
+		"api_consent_required": texts.ConsentRequired, "api_auth": texts.Auth, "api_permission": texts.Permission,
+		"api_rateLimit": texts.RateLimit, "api_overloaded": texts.Overloaded, "api_toolsUnsupported": texts.ToolsUnsupported,
+		"api_bridge": texts.Bridge, "api_network": texts.Network, "api_contextFull": texts.ContextFull, "api_stopped": texts.Stopped,
+	} {
+		f := ProviderFailure(reason)
+		if f.Text(tr) != want || f.ReasonText(tr) != want || strings.Contains(want, "api_") {
+			t.Errorf("%s = %q / %q, want %q", reason, f.Text(tr), f.ReasonText(tr), want)
+		}
+	}
+	if got := ProviderFailure("api_unknownClass").Text(tr); got != "The assistant stopped: api_unknownClass" {
+		t.Errorf("an unknown class = %q", got)
 	}
 }
 
@@ -67,7 +90,7 @@ func lastItem(c *Controller) Content {
 func TestPanelProviderUsageLimit(t *testing.T) {
 	loop := newTestLoop()
 	provider := newFakeProvider()
-	c := New(Config{Provider: func() Provider { return provider }, Translator: tr, Settings: &memSettings{}, Loop: loop, Log: discardLog(), Bridge: "/fixture/malachi-mcp"})
+	c := providerPanel(loop, provider)
 	defer c.Close()
 	s := startProviderTurn(t, loop, c, provider)
 	go s.emit(assistant.Event{Kind: assistant.EventResult, IsError: true, ResultText: "chatgpt_usage_limit"})
@@ -85,7 +108,7 @@ func TestPanelProviderUsageLimit(t *testing.T) {
 func TestPanelProviderReconnect(t *testing.T) {
 	loop := newTestLoop()
 	provider := newFakeProvider()
-	c := New(Config{Provider: func() Provider { return provider }, Translator: tr, Settings: &memSettings{}, Loop: loop, Log: discardLog(), Bridge: "/fixture/malachi-mcp"})
+	c := providerPanel(loop, provider)
 	defer c.Close()
 	var reconnects []func(bool)
 	c.ReconnectProvider = func(_ context.Context, done func(bool)) { reconnects = append(reconnects, done) }
@@ -115,7 +138,7 @@ func TestPanelProviderReconnect(t *testing.T) {
 	loop.runUntil(t, func() bool { return len(provider.sessions) > 0 })
 	next := <-provider.sessions
 	loop.runUntil(t, func() bool { return len(next.sent) > 0 })
-	if msg := <-next.sent; msg == "" {
+	if msg := <-next.sent; msg.Text == "" {
 		t.Fatal("the question was not asked again")
 	}
 }
@@ -125,7 +148,7 @@ func TestPanelProviderReconnect(t *testing.T) {
 func TestPanelProviderNotSignedInWithoutReconnect(t *testing.T) {
 	loop := newTestLoop()
 	provider := newFakeProvider()
-	c := New(Config{Provider: func() Provider { return provider }, Translator: tr, Settings: &memSettings{}, Loop: loop, Log: discardLog(), Bridge: "/fixture/malachi-mcp"})
+	c := providerPanel(loop, provider)
 	defer c.Close()
 	s := startProviderTurn(t, loop, c, provider)
 	go s.emit(assistant.Event{Kind: assistant.EventResult, IsError: true, ResultText: "chatgpt_not_connected"})
@@ -140,7 +163,7 @@ func TestPanelProviderNotSignedInWithoutReconnect(t *testing.T) {
 func TestPanelProviderReconnectStopCancels(t *testing.T) {
 	loop := newTestLoop()
 	provider := newFakeProvider()
-	c := New(Config{Provider: func() Provider { return provider }, Translator: tr, Settings: &memSettings{}, Loop: loop, Log: discardLog(), Bridge: "/fixture/malachi-mcp"})
+	c := providerPanel(loop, provider)
 	defer c.Close()
 	var ctxs []context.Context
 	var dones []func(bool)

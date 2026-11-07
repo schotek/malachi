@@ -186,7 +186,7 @@ func TestCalendarMethodsOrder(t *testing.T) {
 		t.Fatalf("the calendar methods do not follow the board's")
 	}
 	notes := []string{"notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged"}
-	m := len(AllNotifications) - 5
+	m := len(AllNotifications) - 7 // the assistant's three, contacts, update, rules, signatures
 	if !reflect.DeepEqual(AllNotifications[m-len(notes):m], notes) || AllNotifications[m-len(notes)-1] != NotifyDraftsChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}

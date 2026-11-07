@@ -9,17 +9,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 )
 
 // The one-shot request with the bridge (StartCall with Tools), as the
 // board's triage run uses it (macOS AssistantTriageTests, the request
 // part), against the fake claude of the panel's tests.
 
-// triageTools is the bridge of the tests' triage requests.
-var triageTools = &Tools{
-	Bridge: "/b/malachi-mcp", Socket: "/s.sock",
-	BridgeArgs: assistant.TriageBridgeArgs("run_7", 3), Allowed: assistant.TriageTools,
+// triageTools is the bridge of the tests' triage requests; the daemon's
+// prompt names its arguments and the tools.
+var triageTools = &Tools{Bridge: "/b/malachi-mcp", Socket: "/s.sock"}
+
+// triageCall is a manual triage run of run_7 for 3 cases.
+func triageCall() Call {
+	return Call{
+		Purpose: api.PurposeTriage, Input: api.PromptInput{Triage: &api.TriageInput{MaxCases: 3, Drafts: true}},
+		Trigger: api.TriggerManual, RunID: "run_7", Tools: triageTools,
+	}
+}
+
+// triageParams are the Prompter's parameters of triageCall.
+func triageParams() api.AssistantPromptParams {
+	c := triageCall()
+	return api.AssistantPromptParams{Purpose: c.Purpose, Language: testLanguage, Trigger: c.Trigger, RunID: c.RunID, Input: &c.Input}
 }
 
 // toolsRequest records what a StartCall reports.
@@ -49,7 +63,7 @@ func TestRequestWithTools(t *testing.T) {
 	h := newRequestHarness(t, fake, true, true)
 	h.request.env = append(h.request.env, "MALACHI_MCP_ALLOW_SEND=1")
 	var rec toolsRequest
-	h.request.StartCall(rec.call(Call{SystemPrompt: "SYS", Message: "triage", Tools: triageTools}), rec.done)
+	h.request.StartCall(rec.call(triageCall()), rec.done)
 	h.loop.runUntil(t, func() bool { return len(rec.outcomes) > 0 })
 	if len(rec.outcomes) != 1 || rec.outcomes[0].Kind != OutcomeAnswered || rec.outcomes[0].Text != "Done." {
 		t.Errorf("outcomes %+v", rec.outcomes)
@@ -70,15 +84,21 @@ func TestRequestWithTools(t *testing.T) {
 		!slices.Equal(errs, []bool{false, false, false, false, false, true}) {
 		t.Errorf("tools %v %q %q %v", kinds, tools, ids, errs)
 	}
-	want := assistant.Args(assistant.Options{
-		Bridge: "/b/malachi-mcp", Socket: "/s.sock", Model: assistant.Haiku, SystemPrompt: "SYS",
-		BridgeArgs: []string{"--allow-triage", "--triage-run", "run_7", "--triage-max", "3"}, Tools: assistant.TriageTools,
-	})
+	// The daemon's prompt of the run: its bridge arguments after the
+	// socket, its tools prefixed for Claude Code.
+	prompt := prompttest.Must(triageParams())
+	want := assistant.Args(assistant.Options{Bridge: "/b/malachi-mcp", Socket: "/s.sock", Model: assistant.Haiku, Prompt: prompt})
 	if got := fake.args(); !slices.Equal(got, want) {
 		t.Errorf("args\n%q\nwant\n%q", got, want)
 	}
-	if !slices.Equal(fake.prompts(), []string{"triage"}) {
+	if i := slices.Index(want, "--mcp-config"); !strings.Contains(want[i+1], `"args":["--socket","/s.sock","--in-app","--allow-triage","--triage-run","run_7","--triage-max","3"]`) {
+		t.Errorf("--mcp-config %q", want[i+1])
+	}
+	if !slices.Equal(fake.prompts(), []string{prompt.Message}) {
 		t.Errorf("prompts %q", fake.prompts())
+	}
+	if calls := h.prompter.Calls(); len(calls) != 1 || calls[0].Trigger != api.TriggerManual || calls[0].RunID != "run_7" {
+		t.Errorf("prompter calls %+v", calls)
 	}
 	// The child's environment keeps no MALACHI_* variable: the run id goes
 	// as a flag.
@@ -93,7 +113,7 @@ func TestRequestToolsMissing(t *testing.T) {
 	fake := newFakeClaude(t, "true", "", fakeTurn{lines: []string{fakeInitFailed, fakeText("x"), fakeResult("x", true)}})
 	h := newRequestHarness(t, fake, true, true)
 	var rec toolsRequest
-	h.request.StartCall(rec.call(Call{SystemPrompt: "SYS", Message: "triage", Tools: triageTools}), rec.done)
+	h.request.StartCall(rec.call(triageCall()), rec.done)
 	h.loop.runUntil(t, func() bool { return len(rec.outcomes) > 0 })
 	if !slices.EqualFunc(rec.outcomes, []Outcome{failed(FailureToolsMissing, "")}, sameOutcome) {
 		t.Errorf("outcomes %+v", rec.outcomes)
@@ -105,7 +125,7 @@ func TestRequestToolsMissing(t *testing.T) {
 
 	other := newRequestHarness(t, newFakeClaude(t, "true", "", fakeTurn{lines: []string{fakeInitFailed, fakeText("x"), fakeResult("x", true)}}), true, true)
 	var rec2 toolsRequest
-	other.request.StartCall(rec2.call(Call{SystemPrompt: "SYS", Message: "m"}), rec2.done)
+	other.request.StartCall(rec2.call(Call{Purpose: api.PurposeRewrite, Input: rewriteInput("m")}), rec2.done)
 	other.loop.runUntil(t, func() bool { return len(rec2.outcomes) > 0 })
 	if len(rec2.outcomes) != 1 || rec2.outcomes[0].Kind != OutcomeAnswered || rec2.outcomes[0].Text != "x" {
 		t.Errorf("without the bridge: %+v", rec2.outcomes)
@@ -119,7 +139,9 @@ func TestRequestPerCallTimeoutAndModel(t *testing.T) {
 	h := newRequestHarness(t, fake, true, true)
 	var rec toolsRequest
 	started := time.Now()
-	h.request.StartCall(rec.call(Call{SystemPrompt: "S", Message: "m", Tools: triageTools, Timeout: 400 * time.Millisecond, Model: assistant.Opus}), rec.done)
+	c := triageCall()
+	c.Timeout, c.Model = 400*time.Millisecond, assistant.Opus
+	h.request.StartCall(rec.call(c), rec.done)
 	h.loop.runUntil(t, func() bool { return len(rec.outcomes) > 0 })
 	if !slices.EqualFunc(rec.outcomes, []Outcome{failed(FailureStopped, timedOut)}, sameOutcome) || !rec.outcomes[0].Failure.TimedOut() {
 		t.Errorf("outcomes %+v", rec.outcomes)
@@ -145,10 +167,12 @@ func TestRequestCancelFromATool(t *testing.T) {
 	h := newRequestHarness(t, fake, true, true)
 	var tools []string
 	var outcomes []Outcome
-	h.request.StartCall(Call{SystemPrompt: "S", Message: "m", Tools: triageTools, OnTool: func(e assistant.Event) {
+	c := triageCall()
+	c.OnTool = func(e assistant.Event) {
 		tools = append(tools, e.ToolUseID)
 		h.request.Cancel()
-	}}, func(o Outcome) { outcomes = append(outcomes, o) })
+	}
+	h.request.StartCall(c, func(o Outcome) { outcomes = append(outcomes, o) })
 	h.loop.runUntil(t, func() bool { return len(tools) > 0 && !h.request.Running() })
 	h.loop.settle(t, 200*time.Millisecond)
 	if !slices.Equal(tools, []string{"t1"}) || len(outcomes) != 0 {
@@ -165,7 +189,7 @@ func TestRequestUsage(t *testing.T) {
 	h := newRequestHarness(t, fake, true, true)
 	var rec toolsRequest
 	var order []string
-	c := rec.call(Call{SystemPrompt: "S", Message: "m", Tools: triageTools})
+	c := rec.call(triageCall())
 	onUsage, onTool := c.OnUsage, c.OnTool
 	c.OnUsage = func(e assistant.Event) { order = append(order, "usage"); onUsage(e) }
 	c.OnTool = func(e assistant.Event) { order = append(order, "tool"); onTool(e) }

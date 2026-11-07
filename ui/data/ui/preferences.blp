@@ -17,11 +17,13 @@ using Adw 1;
 // until config.get reports them (a daemon that does not know them never
 // does), and storage_row shows what system.storage says, asked again every
 // few seconds while the dialog is open (hidden for a daemon without it).
-// On the "AI" page the MCP switch has no setting of its own: it shows what
-// malachi-mcp reports about the Claude configuration files
-// (ui/internal/mcpsetup). The Assistant group under it is bound to the
-// assistant-* keys and depends on that switch; its texts come from
+// On the "AI" page the Assistant group is bound to the assistant-* keys
+// (Assistant Uses chooses Claude Code, ChatGPT or an AI provider account
+// of the daemon, docs/plans/ai-api.md §7.3); its texts come from
 // ui/internal/assistant, set in Go (window/preferences.go bindAssistant).
+// The MCP switch and the Claude Code row moved to the Claude integration's
+// dialog on the Integrations page (claude_integration.blp), the ChatGPT
+// group to its own (chatgpt_integration.blp).
 Adw.PreferencesDialog preferences_dialog {
   title: _("Preferences");
   search-enabled: true;
@@ -55,8 +57,10 @@ Adw.PreferencesDialog preferences_dialog {
     }
   }
 
-  // Every account that is not a mail account (Jira, CalDAV) and the
-  // catalogue of services that can be added. Its texts come from
+  // Every account that is not a mail account (Jira, CalDAV, eWay-CRM, an
+  // AI provider), the two local AI integrations after them (Claude Code /
+  // Claude Desktop, ChatGPT) and the catalogue of what can be added, in
+  // two sections (the services, the AI). Its texts come from
   // ui/internal/integrations, set in Go (window/integrations_page.go); the
   // rows are built there and in window/accounts_page.go.
   Adw.PreferencesPage integrations_page {
@@ -70,7 +74,12 @@ Adw.PreferencesDialog preferences_dialog {
       }
     }
 
+    // The local rows, under the accounts without a title of their own.
+    Adw.PreferencesGroup integrations_local_group {}
+
     Adw.PreferencesGroup integrations_available_group {}
+
+    Adw.PreferencesGroup integrations_ai_group {}
   }
 
   // Preferences → Rules (docs/plans/rules.md R14, window/preferences_rules.go
@@ -552,18 +561,14 @@ Adw.PreferencesDialog preferences_dialog {
       visible: false;
     }
 
-    Adw.PreferencesGroup mcp_group {
-      title: _("MCP");
-      description: _("Lets AI assistants read your mail and prepare drafts through the Model Context Protocol.");
-
-      Adw.SwitchRow mcp_switch {
-        title: _("Register with Claude");
-        subtitle: _("Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer");
-      }
-    }
-
     Adw.PreferencesGroup assistant_group {
-      Adw.ComboRow assistant_provider { use-markup: false; }
+      // Assistant Uses: Claude Code, ChatGPT, or an AI provider account
+      // (the items are made in Go; one that cannot run is insensitive
+      // and says why).
+      Adw.ComboRow assistant_source {
+        use-markup: false;
+      }
+
       Adw.SwitchRow assistant_menu_switch {
         use-markup: false;
       }
@@ -572,46 +577,11 @@ Adw.PreferencesDialog preferences_dialog {
         use-markup: false;
       }
 
-      // In App only: the claude the panel runs, and the model.
-      Adw.ActionRow assistant_claude_code {
-        use-markup: false;
-        subtitle-selectable: true;
-        visible: false;
-
-        [suffix]
-        Button assistant_claude_choose {
-          valign: center;
-        }
-      }
-
+      // In App only: the model of the provider in effect
+      // (window/preferences_chatgpt.go bindProviderModel).
       Adw.ComboRow assistant_model {
         use-markup: false;
         visible: false;
-      }
-    }
-
-    Adw.PreferencesGroup chatgpt_group {
-      visible: false;
-      Adw.ActionRow codex_executable {
-        use-markup: false;
-        subtitle-selectable: true;
-        [suffix]
-        Button codex_choose { valign: center; }
-        [suffix]
-        Button codex_install { valign: center; }
-      }
-      Adw.ActionRow chatgpt_connection {
-        use-markup: false;
-        [suffix]
-        Button chatgpt_sign_in { valign: center; }
-        [suffix]
-        Button chatgpt_disconnect { valign: center; }
-      }
-      Adw.ComboRow chatgpt_model { use-markup: false; }
-      Adw.ActionRow chatgpt_usage {
-        use-markup: false;
-        [suffix]
-        Button chatgpt_manage_usage { valign: center; }
       }
     }
 

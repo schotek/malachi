@@ -4,6 +4,7 @@
 package compose
 
 import (
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/editor"
@@ -84,7 +85,7 @@ func (u *writeUI) sync() {
 		u.cancel()
 		return
 	}
-	u.bar.title.SetLabel(assistant.WriteBarTitle(i18n.Catalog{}, u.w.m.Assistant.UsesChatGPT()))
+	u.bar.title.SetLabel(assistant.WriteBarTitleFor(i18n.Catalog{}, u.w.m.Assistant.ProviderBrand()))
 }
 
 // setExpanded shows or hides the bar's contents under its heading.
@@ -106,9 +107,8 @@ func (u *writeUI) writerFor() *assistantpanel.Writer {
 	req := u.w.m.Assistant.NewRequest()
 	req.Consent = func(done func(bool)) { u.w.m.Assistant.AskAssistantConsent(u.w, done) }
 	u.writer = assistantpanel.NewWriter(i18n.Catalog{}, req)
-	u.writer.Profile = func() assistant.Profile {
-		return u.w.m.Assistant.Profile().For(string(u.w.pane.account().ID))
-	}
+	// The daemon appends the note of the window's account to the prompt.
+	u.writer.Account = func() api.AccountID { return u.w.pane.account().ID }
 	u.writer.OnState = func(assistantpanel.RewriteState) { u.render() }
 	return u.writer
 }

@@ -13,7 +13,9 @@ import (
 // assistantMethods follow the CRM's in AllMethods; only the address
 // books' (contacts_book_test.go) come after them, and likewise their
 // notification.
-var assistantMethods = []string{"assistant.profileGet", "assistant.profileSet", "assistant.profilePropose", "assistant.profileResolve"}
+var assistantMethods = []string{"assistant.profileGet", "assistant.profileSet", "assistant.profilePropose", "assistant.profileResolve",
+	"assistant.prompt", "assistant.sessionStart", "assistant.sessionSend", "assistant.sessionStop",
+	"assistant.providerModels", "assistant.usage"}
 
 func TestAssistantMethodsOrder(t *testing.T) {
 	n := len(AllMethods) - len(signatureMethods) - len(rulesMethods) - len(updateMethods) - len(contactsBookMethods)
@@ -23,7 +25,9 @@ func TestAssistantMethodsOrder(t *testing.T) {
 	if AllMethods[n-len(assistantMethods)-1] != MethodCrmRemove {
 		t.Fatal("the assistant profile methods do not follow the CRM's")
 	}
-	if AllNotifications[len(AllNotifications)-5] != NotifyAssistantProfileChanged {
+	if AllNotifications[len(AllNotifications)-7] != NotifyAssistantProfileChanged ||
+		AllNotifications[len(AllNotifications)-6] != NotifyAssistantEvent ||
+		AllNotifications[len(AllNotifications)-5] != NotifyAssistantUsageChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

@@ -156,13 +156,15 @@ type Config struct {
 //     never asks. A manual run whose queue is known to be empty ends at
 //     once (board.FailNothingToDo).
 //  2. board.runStart with the trigger and assistant.TriageSource.
-//  3. The request: assistant.TriageMessage for at most the run's limit
-//     under assistant.TriageSystemPrompt, with the board's own model
-//     (board-triage-model, read when the run starts; not the panel's
-//     assistant-model), with the bridge started as --socket <socket>
-//     --allow-triage --triage-run <runId> --triage-max <limit> and only
-//     assistant.TriageToolsFor(trigger) (no create_draft for an automatic
-//     run), for at most Timeout. Every annotate_case call the bridge
+//  3. The request: the daemon's prompt of purpose triage (assistant.prompt
+//     with the trigger, the run and api.TriageInput: at most the run's
+//     limit of cases, drafts for a manual run only; the daemon appends the
+//     user's profile), with the board's own model (board-triage-model,
+//     read when the run starts; not the panel's assistant-model), with the
+//     bridge started as --socket <socket> --in-app --allow-triage
+//     --triage-run <runId> --triage-max <limit> and only the tools the
+//     daemon names (no create_draft for an automatic run), for at most
+//     Timeout. Every annotate_case call the bridge
 //     accepted counts as progress, of the queue's size at the start capped
 //     by the limit; refused ones are counted apart. When the accepted ones
 //     reach the limit the run has succeeded: the bridge refuses more and
@@ -219,14 +221,10 @@ type Controller struct {
 	// OnRefresh asks the board to list again (after a run ended, and from
 	// RelistBoard).
 	OnRefresh func()
-	// Now is the clock; Language the English name of the UI language ("":
-	// English) and Today today as YYYY-MM-DD, for the system prompt.
-	Now      func() time.Time
-	Language func() string
-	Today    func() string
-	// Profile is the user's profile, every account's note (each names its
-	// account); nil: none.
-	Profile func() assistant.Profile
+	// Now is the clock; Today today as YYYY-MM-DD (the local day of the
+	// run's counts).
+	Now   func() time.Time
+	Today func() string
 
 	caller    Caller
 	settings  Settings
@@ -301,14 +299,6 @@ type Controller struct {
 	clockTick    time.Duration
 }
 
-// profile is the user's profile, none without Profile.
-func (c *Controller) profile() assistant.Profile {
-	if c.Profile == nil {
-		return assistant.Profile{}
-	}
-	return c.Profile()
-}
-
 // New is the application's triage, idle.
 func New(cfg Config) *Controller {
 	loc := cfg.Location
@@ -319,7 +309,6 @@ func New(cfg Config) *Controller {
 		Timeout:   assistant.TriageTimeout,
 		Grace:     LimitGrace,
 		Now:       time.Now,
-		Language:  func() string { return "" },
 		caller:    cfg.Caller,
 		settings:  cfg.Settings,
 		locator:   cfg.Locator,
@@ -1041,13 +1030,10 @@ func (c *Controller) ask(my int, t Trigger, limit int, queueKnown bool, id api.B
 		modelID = c.ModelID()
 	}
 	c.request.StartCall(assistantpanel.Call{
-		SystemPrompt: assistant.WithProfile(assistant.TriageSystemPrompt(c.Language(), c.Today()), c.profile()),
-		Message:      assistant.TriageMessage(limit, drafts),
-		Tools: &assistantpanel.Tools{
-			Bridge: c.bridge, Socket: c.socket,
-			BridgeArgs: assistant.TriageBridgeArgs(string(id), limit),
-			Allowed:    assistant.TriageToolsWith(drafts),
-		},
+		Purpose: api.PurposeTriage,
+		Input:   api.PromptInput{Triage: &api.TriageInput{MaxCases: limit, Drafts: drafts}},
+		Trigger: Wire(t), RunID: string(id),
+		Tools:   &assistantpanel.Tools{Bridge: c.bridge, Socket: c.socket},
 		Timeout: c.Timeout,
 		Model:   assistant.ParseModel(string(c.settings.BoardTriageModel())),
 		ModelID: modelID,

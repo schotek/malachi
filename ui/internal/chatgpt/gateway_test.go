@@ -8,12 +8,15 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 )
 
 type fixtureTokens struct{ ctx context.Context }
@@ -95,7 +98,16 @@ func TestGatewayBeforeForwardingAndTokenBoundary(t *testing.T) {
 	}
 }
 func TestToolPolicySnapshotsAndTiers(t *testing.T) {
-	for _, tools := range []*assistantpanel.Tools{nil, {Allowed: assistant.AllowedTools}, {BridgeArgs: assistant.TriageBridgeArgs("run_1", 40), Allowed: assistant.TriageToolsFor(assistant.TriageManual)}, {BridgeArgs: assistant.TriageBridgeArgs("run_2", 40), Allowed: assistant.TriageToolsFor(assistant.TriageAutomatic)}, {BridgeArgs: assistant.SuggestReplyBridgeArgs("m_1"), Allowed: assistant.SuggestReplyTools}} {
+	triage := func(run string, drafts bool) *assistantpanel.Tools {
+		p := prompttest.Must(api.AssistantPromptParams{Purpose: api.PurposeTriage, RunID: run, Trigger: api.TriggerManual, Input: &api.PromptInput{Triage: &api.TriageInput{MaxCases: 40, Drafts: drafts}}})
+		return &assistantpanel.Tools{BridgeArgs: p.BridgeArgs, Allowed: assistant.PrefixTools(p.Tools)}
+	}
+	reply := prompttest.Must(api.AssistantPromptParams{Purpose: api.PurposeReply, Input: &api.PromptInput{Reply: &api.ReplyInput{AccountID: "a", MessageID: "m_1"}}})
+	panel := prompttest.Must(api.AssistantPromptParams{Purpose: api.PurposePanel})
+	for _, tools := range []*assistantpanel.Tools{nil, {Allowed: assistant.PrefixTools(panel.Tools)}, {BridgeArgs: panel.BridgeArgs, Allowed: assistant.PrefixTools(panel.Tools)},
+		triage("run_1", true), triage("run_2", false), {BridgeArgs: reply.BridgeArgs, Allowed: assistant.PrefixTools(reply.Tools)},
+		// The daemon's arguments without --in-app pass too.
+		{BridgeArgs: []string{"--reply-only", "m_1"}, Allowed: assistant.PrefixTools(reply.Tools)}} {
 		set, args, err := toolPolicy(tools)
 		if err != nil {
 			t.Fatal(err)
@@ -103,21 +115,29 @@ func TestToolPolicySnapshotsAndTiers(t *testing.T) {
 		if tools != nil && len(set) != len(tools.Allowed) {
 			t.Fatal("tools lost")
 		}
-		if tools != nil && len(args) > 0 {
-			args[0] = "--allow-send"
-			if tools.BridgeArgs[0] == "--allow-send" {
+		if tools != nil && (len(args) == 0 || args[0] != "--in-app") {
+			t.Fatalf("the bridge's arguments do not start with --in-app: %q", args)
+		}
+		if tools != nil && len(args) > 1 {
+			args[1] = "--allow-send"
+			if slices.Contains(tools.BridgeArgs, "--allow-send") {
 				t.Fatal("mutable policy")
 			}
 		}
 	}
-	for _, tools := range []*assistantpanel.Tools{{BridgeArgs: []string{"--allow-send"}, Allowed: assistant.AllowedTools}, {Allowed: []string{"mcp__malachi__send_message"}}, {Allowed: []string{"read_message"}}, {BridgeArgs: assistant.SuggestReplyBridgeArgs("m_1"), Allowed: assistant.TriageTools}, {BridgeArgs: []string{"--allow-triage", "--triage-run", "r", "--triage-max", "201"}, Allowed: assistant.TriageTools}} {
+	for _, tools := range []*assistantpanel.Tools{{BridgeArgs: []string{"--in-app", "--allow-send"}, Allowed: assistant.PrefixTools(panel.Tools)}, {Allowed: []string{"mcp__malachi__send_message"}}, {Allowed: []string{"read_message"}},
+		{BridgeArgs: reply.BridgeArgs, Allowed: assistant.PrefixTools(triage("r", true).Allowed)}, {BridgeArgs: []string{"--in-app", "--allow-triage", "--triage-run", "r", "--triage-max", "201"}, Allowed: triage("r", true).Allowed},
+		{BridgeArgs: []string{"--in-app", "--in-app"}, Allowed: assistant.PrefixTools(panel.Tools)}} {
 		if _, _, err := toolPolicy(tools); err == nil {
 			t.Fatalf("accepted unsafe policy %#v", tools)
 		}
 	}
-	set, _, _ := toolPolicy(&assistantpanel.Tools{BridgeArgs: assistant.TriageBridgeArgs("r", 2), Allowed: assistant.TriageToolsFor(assistant.TriageAutomatic)})
+	set, args, _ := toolPolicy(triage("r", false))
 	if set["create_draft"] {
 		t.Fatal("automatic run received drafts")
+	}
+	if !slices.Equal(args, []string{"--in-app", "--allow-triage", "--triage-run", "r", "--triage-max", "40"}) {
+		t.Fatalf("args %q", args)
 	}
 }
 

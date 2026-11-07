@@ -151,7 +151,9 @@ func CanComposeNew(accounts []api.Account) bool {
 // kind with mail, that is every kind but a calendar-only one (caldav,
 // docs/calendar.md D16; it shows in the Calendar's sidebar instead) and a
 // CRM one (eway, docs/eway.md D1; it shows only on Preferences →
-// Integrations), which have no mail and no folders. Mail asks it of
+// Integrations) and an AI provider one (ai, docs/api.md §4.1: never in
+// Mail, nor among the board's triage accounts), which have no mail and
+// no folders. Mail asks it of
 // switched-off accounts too, so that such accounts alone count as no
 // account in Mail (the empty sidebar, the No Accounts page); the account
 // name on an all-accounts search result, the Reply All self address and
@@ -159,7 +161,7 @@ func CanComposeNew(accounts []api.Account) bool {
 // it as well. macOS `inMail`, Windows `FolderTree.InMail`.
 func InMail(a api.Account) bool {
 	switch a.Config.Protocol() {
-	case api.AccountCalDAV, api.AccountEway:
+	case api.AccountCalDAV, api.AccountEway, api.AccountAI:
 		return false
 	}
 	return true

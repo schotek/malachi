@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 )
 
@@ -269,14 +270,18 @@ var errNoMessages = errors.New("assistant: no message ids")
 //     conversation stands for its newest message until its members are
 //     known (ResolveContext; after ResolveTimeout the newest message alone
 //     is used).
-//  4. Without a running process: Claude Code is located (none: "Claude Code
-//     was not found on this computer"), the bridge must be there (none: the
-//     tools are not available), and Claude Code must not say it is signed
-//     out (Locator.SignedIn, asked afresh; not known counts as signed in,
-//     and the process then says what is wrong): "Claude Code is not signed
-//     in" with Sign In…, see below. Then the process starts (assistant.Args,
-//     assistant.ChildEnv, the private directory) and is kept for the
-//     follow-up questions of the conversation.
+//  4. The daemon builds the turn (Prompter, assistant.prompt of purpose
+//     panel with the question and its context: the message, and for a new
+//     conversation the system prompt with the user's profile, the tools
+//     and the bridge's arguments). Without a running process: Claude Code
+//     is located (none: "Claude Code was not found on this computer"), the
+//     bridge must be there (none: the tools are not available), and Claude
+//     Code must not say it is signed out (Locator.SignedIn, asked afresh;
+//     not known counts as signed in, and the process then says what is
+//     wrong): "Claude Code is not signed in" with Sign In…, see below. Then
+//     the process starts (assistant.Args, assistant.ChildEnv, the private
+//     directory) and is kept for the follow-up questions of the
+//     conversation.
 //  5. Running: the turn is written to stdin. Its system/init must report
 //     the bridge connected, or the conversation ends with "The Malachi Mail
 //     tools are not available to the assistant". Text deltas stream into
@@ -329,9 +334,10 @@ var errNoMessages = errors.New("assistant: no message ids")
 // message that is part of no pinned context adds it first.
 //
 // The model hears of each pinned context once per Claude Code process: a
-// free question carries a model-facing line in front of it for every
-// context not yet told (assistant.ContextPreamble for the first,
-// assistant.AddedContextPreamble for one added later), and an action's own
+// free question goes with every context not yet told (api.PromptContext;
+// the daemon puts a line in front of the question, marked as an added one
+// for a context pinned after the conversation's first; several untold
+// contexts are told in one message, composeTurn), and an action's own
 // prompt, which names its ids, tells the model of its context. A new
 // process knows nothing, so the contexts are told again.
 //
@@ -369,20 +375,18 @@ type Controller struct {
 	// OnRestoreInput: a question that was not sent (consent declined); its
 	// text goes back into the field.
 	OnRestoreInput func(text string)
-	// Today is the date for the system prompt, YYYY-MM-DD.
+	// Today is the date for the calendar actions' prompts, YYYY-MM-DD.
 	Today func() string
-	// Language is the UI language's English name for the system prompt.
+	// Language is the UI language as a BCP 47 tag ("cs"), which the model
+	// answers in; "" is English. Config.Language sets it.
 	Language func() string
-	// Profile is the user's profile, for the system prompt of a new
-	// conversation: every account's note (the conversation may span
-	// accounts; each note names its account).
-	Profile func() assistant.Profile
 	// ResolveTimeout is how long ResolveContext is waited for.
 	ResolveTimeout time.Duration
 
 	tr        assistant.Translator
 	settings  Settings
 	locator   *Locator
+	prompter  Prompter
 	loop      Loop
 	log       *slog.Logger
 	bridge    string
@@ -440,7 +444,13 @@ type Controller struct {
 // Config is what a Controller needs from the application.
 type Config struct {
 	// Provider selects the in-app runtime; nil retains Claude.
-	Provider   func() Provider
+	Provider func() Provider
+	// Prompter builds the prompts (the daemon's assistant.prompt);
+	// required.
+	Prompter Prompter
+	// Language is the UI language as a BCP 47 tag ("cs"); nil or "" is
+	// English.
+	Language   func() string
 	Translator assistant.Translator
 	Settings   Settings
 	Locator    *Locator
@@ -465,13 +475,17 @@ func New(cfg Config) *Controller {
 	if grace == 0 {
 		grace = DefaultKillGrace
 	}
+	language := cfg.Language
+	if language == nil {
+		language = func() string { return "" }
+	}
 	return &Controller{
 		Today:           func() string { return time.Now().Format("2006-01-02") },
-		Language:        func() string { return "" },
-		Profile:         func() assistant.Profile { return assistant.Profile{} },
+		Language:        language,
 		ResolveTimeout:  DefaultResolveTimeout,
 		tr:              cfg.Translator,
 		providerFactory: cfg.Provider,
+		prompter:        cfg.Prompter,
 		settings:        cfg.Settings,
 		locator:         cfg.Locator,
 		loop:            cfg.Loop,
@@ -705,16 +719,17 @@ func (c *Controller) PendingLabel() string {
 	return ""
 }
 
-// Subtitle is the panel's subtitle: "Claude Code · Sonnet".
+// Subtitle is the panel's subtitle: "Claude Code · Sonnet", or the
+// provider's name and model ("ChatGPT (Codex, experimental) · gpt-6",
+// an ai account's name and model).
 func (c *Controller) Subtitle() string {
 	if c.providerFactory != nil {
 		if provider := c.providerFactory(); provider != nil {
-			labels := assistant.ChatGPTText(c.tr)
 			model := provider.Model()
 			if model == "" {
-				model = labels.DefaultModel
+				model = assistant.ChatGPTText(c.tr).DefaultModel
 			}
-			return labels.Name + " · " + model
+			return provider.Name() + " · " + model
 		}
 	}
 	return assistant.TargetName(c.tr, assistant.Code) + " · " + assistant.ModelName(c.tr, c.settings.AssistantModel())
@@ -752,7 +767,7 @@ func (c *Controller) RemoveContext() {
 
 // AddSelection is the bar's Add to Conversation: the list's selection
 // joins what the conversation is about; the next free question tells the
-// model (assistant.AddedContextPreamble).
+// model (api.PromptContext with Added).
 func (c *Controller) AddSelection() {
 	if c.closed || !c.AnotherSelected() {
 		return
@@ -1180,9 +1195,10 @@ func (c *Controller) awaitMembers(req request, my int, keys []int) {
 	c.resolvePinned(keys[0]).then(func(struct{}) { c.awaitMembers(req, my, keys[1:]) })
 }
 
-// promptReady builds the prompt and goes on to step 4.
+// promptReady builds the question's turn and goes on to step 4: the
+// daemon's prompt, then the provider's session or Claude Code.
 func (c *Controller) promptReady(req request, my int) {
-	prompt, told, err := c.prompt(req)
+	tn, told, err := c.prompt(req)
 	if err != nil {
 		c.log.Warn("assistant prompt", "err", err)
 		c.fail(assistant.StoppedText(c.tr, err.Error()), false)
@@ -1190,17 +1206,106 @@ func (c *Controller) promptReady(req request, my int) {
 	}
 	if c.selectedProvider != nil {
 		if req.signIn && c.ReconnectProvider != nil {
-			c.reconnectFirst(my, func() { c.providerPrompt(my, prompt, told) })
+			c.reconnectFirst(my, func() { c.providerPrompt(my, tn, told) })
 			return
 		}
-		c.providerPrompt(my, prompt, told)
+		c.providerPrompt(my, tn, told)
 		return
 	}
+	if c.prompter == nil {
+		c.fail(assistant.StoppedText(c.tr, errNoPrompter.Error()), false)
+		return
+	}
+	// 4. The daemon's prompt: the message, and for a new conversation the
+	// system prompt and the tools as well.
+	prompter := c.prompter
+	params := c.promptParams()
+	go func() {
+		res, _, err := composeTurn(context.Background(), prompter, params, tn)
+		c.loop.Post(func() {
+			if my != c.gen || c.closed {
+				return
+			}
+			if err != nil {
+				c.log.Warn("assistant prompt", "err", err)
+				c.fail(assistant.StoppedText(c.tr, promptReason(err)), true)
+				return
+			}
+			c.promptBuilt(req, my, res, told)
+		})
+	}()
+}
+
+// promptParams are the Prompter's parameters of the panel: the purpose
+// and the UI language (composeTurn adds the input).
+func (c *Controller) promptParams() api.AssistantPromptParams {
+	return api.AssistantPromptParams{Purpose: api.PurposePanel, Language: c.Language()}
+}
+
+// turn is what a question sends: the text, and the contexts to tell the
+// model about in front of it (none, one, or several when more than one
+// pinned context is untold).
+type turn struct {
+	text     string
+	contexts []api.PromptContext
+}
+
+// composeTurn is the daemon's prompt of tn under params: the system
+// prompt, the tools and the bridge's arguments of the panel, and the
+// message of the turn; and the input a provider's session submits for it.
+// With at most one context both are one assistant.prompt call. With
+// several (a new process after Stop with two pinned contexts, two
+// selections added before a question) the daemon is asked once per
+// context, the context line of each answer (what precedes the text) is
+// taken, and the message is the lines, one per line, a blank line and the
+// text, as the clients composed it before the prompts moved to the
+// daemon; the input is then that whole message as the text, without a
+// context, so that a session gets the same message (assistant.prompt
+// takes one context per turn, docs/api.md §4.18).
+func composeTurn(ctx context.Context, prompter Prompter, params api.AssistantPromptParams, tn turn) (api.PromptResult, api.PromptInput, error) {
+	if len(tn.contexts) <= 1 {
+		input := api.PromptInput{Text: tn.text}
+		if len(tn.contexts) == 1 {
+			c := tn.contexts[0]
+			input.Context = &c
+		}
+		params.Input = &input
+		res, err := prompter.Prompt(ctx, params)
+		return res, input, err
+	}
+	var first api.PromptResult
+	var lines []string
+	for i, c := range tn.contexts {
+		c := c
+		input := api.PromptInput{Text: tn.text, Context: &c}
+		params.Input = &input
+		res, err := prompter.Prompt(ctx, params)
+		if err != nil {
+			return api.PromptResult{}, api.PromptInput{}, err
+		}
+		if i == 0 {
+			first = res
+		}
+		if line, ok := strings.CutSuffix(res.Message, "\n\n"+tn.text); ok && line != "" {
+			lines = append(lines, line)
+		}
+	}
+	message := tn.text
+	if len(lines) > 0 {
+		message = strings.Join(lines, "\n") + "\n\n" + tn.text
+	}
+	first.Message = message
+	return first, api.PromptInput{Text: message}, nil
+}
+
+// promptBuilt has the daemon's prompt: the running process gets the
+// message, else Claude Code is located and started with the system
+// prompt and the tools.
+func (c *Controller) promptBuilt(req request, my int, res api.PromptResult, told []int) {
 	if c.process != nil && c.process.Running() {
-		c.send(prompt, told)
+		c.send(res.Message, told)
 		return
 	}
-	// 4. Claude Code, started when the conversation has none.
 	c.process = nil
 	p := c.locator.Locate()
 	if p == "" {
@@ -1212,14 +1317,14 @@ func (c *Controller) promptReady(req request, my int) {
 		return
 	}
 	launch := func() {
-		proc, err := c.launch(p)
+		proc, err := c.launch(p, res)
 		if err != nil {
 			c.log.Warn("assistant", "err", err)
 			c.fail(assistant.StoppedText(c.tr, err.Error()), true)
 			return
 		}
 		c.process = proc
-		c.send(prompt, told)
+		c.send(res.Message, told)
 	}
 	if req.signIn {
 		c.signInFirst(my, launch)
@@ -1361,9 +1466,9 @@ func (c *Controller) closeSignIn() {
 	}
 }
 
-// send is step 5: the turn.
-func (c *Controller) send(prompt string, told []int) {
-	if c.process == nil || !c.process.Send(assistant.UserMessage(prompt)) {
+// send is step 5: the turn, message as the daemon built it.
+func (c *Controller) send(message string, told []int) {
+	if c.process == nil || !c.process.Send(assistant.UserMessage(message)) {
 		c.fail(assistant.StoppedText(c.tr, "claude is not running"), true)
 		return
 	}
@@ -1377,16 +1482,17 @@ func (c *Controller) send(prompt string, told []int) {
 	c.state()
 }
 
-// prompt is the prompt of a question and the keys of the pinned contexts
-// it tells the model about. A free question carries a line for every
-// context not told yet (assistant.ContextPreamble for the conversation's
-// first, assistant.AddedContextPreamble for one added later); a message
-// action names its context's ids, and an attachment's question its
-// message's.
-func (c *Controller) prompt(req request) (string, []int, error) {
+// prompt is the turn of a question (the daemon builds the message from
+// it, composeTurn) and the keys of the pinned contexts it tells the model
+// about. A free question carries every context not told yet (the
+// conversation's first as it is, one added later marked Added; the
+// daemon's context line goes in front of the question); a message action
+// names its context's ids in its own prompt, and an attachment's question
+// its message's.
+func (c *Controller) prompt(req request) (turn, []int, error) {
 	switch req.kind {
 	case requestFree:
-		var lines []string
+		tn := turn{text: req.text}
 		var told []int
 		for i, p := range c.pinned {
 			if p.Announced {
@@ -1396,54 +1502,71 @@ func (c *Controller) prompt(req request) (string, []int, error) {
 			if p.Context == nil {
 				continue
 			}
-			line := assistant.AddedContextPreamble(p.Context.Selection)
-			if i == 0 {
-				line = assistant.ContextPreamble(p.Context.Selection)
-			}
-			if line != "" {
-				lines = append(lines, line)
+			if ctx := promptContext(p.Context.Selection, i > 0); ctx != nil {
+				tn.contexts = append(tn.contexts, *ctx)
 			}
 		}
-		if preamble := strings.Join(lines, "\n"); preamble != "" {
-			return preamble + "\n\n" + req.text, told, nil
-		}
-		return req.text, told, nil
+		return tn, told, nil
 	case requestAction:
 		if req.target == nil || !req.target.pinned {
-			return "", nil, errNoMessages
+			return turn{}, nil, errNoMessages
 		}
 		ctx := c.pinnedContext(req.target.key)
 		if ctx == nil {
-			return "", nil, errNoMessages
+			return turn{}, nil, errNoMessages
 		}
 		p, err := assistant.Prompt(c.tr, assistant.App, req.action, ctx.Selection)
 		if err != nil {
-			return "", nil, err
+			return turn{}, nil, err
 		}
-		return p + req.text, []int{req.target.key}, nil
+		return turn{text: p + req.text}, []int{req.target.key}, nil
 	case requestUnread:
 		p, err := assistant.UnreadPrompt(c.tr, req.accountID, req.folderID)
-		return p, nil, err
+		return turn{text: p}, nil, err
 	case requestCalendar:
 		p, err := assistant.CalendarPrompt(c.tr, req.action, c.Today())
 		if err != nil {
-			return "", nil, err
+			return turn{}, nil, err
 		}
-		return p + req.text, nil, nil
+		return turn{text: p + req.text}, nil, nil
 	default: // requestAttachment
 		p, err := assistant.AttachmentPrompt(c.tr, req.accountID, req.messageID, req.partID)
 		if err != nil {
-			return "", nil, err
+			return turn{}, nil, err
 		}
 		p += req.text
 		if req.target != nil && req.target.pinned {
 			if ctx := c.pinnedContext(req.target.key); ctx != nil && ctx.Selection.AccountID == req.accountID &&
 				slices.Equal(ctx.Selection.MessageIDs, []string{req.messageID}) {
-				return p, []int{req.target.key}, nil
+				return turn{text: p}, []int{req.target.key}, nil
 			}
 		}
-		return p, nil, nil
+		return turn{text: p}, nil, nil
 	}
+}
+
+// promptContext is the context of a turn for sel: the account and the
+// ids newest first, at most assistant.MaxMessages non-empty ones (the
+// daemon names them); nil without an account or without an id, and then
+// the question goes alone.
+func promptContext(sel assistant.Selection, added bool) *api.PromptContext {
+	if sel.AccountID == "" {
+		return nil
+	}
+	ids := make([]api.MessageID, 0, min(len(sel.MessageIDs), assistant.MaxMessages))
+	for _, id := range sel.MessageIDs {
+		if id == "" {
+			continue
+		}
+		if len(ids) == assistant.MaxMessages {
+			break
+		}
+		ids = append(ids, api.MessageID(id))
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return &api.PromptContext{AccountID: api.AccountID(sel.AccountID), MessageIDs: ids, Added: added}
 }
 
 // unresolved are the pinned folded conversations whose members the prompt
@@ -1542,20 +1665,15 @@ func (c *Controller) resolve(ctx Context, done func(assistant.Selection)) {
 	c.loop.After(c.ResolveTimeout, func() { once(ctx.Selection) })
 }
 
-// systemPrompt is the system prompt of a new conversation, with the
-// user's profile.
-func (c *Controller) systemPrompt() string {
-	return assistant.WithProfile(assistant.SystemPrompt(c.Language(), c.Today()), c.Profile())
-}
-
-// launch starts Claude Code for a new conversation.
-func (c *Controller) launch(path string) (*Process, error) {
+// launch starts Claude Code for a new conversation with the daemon's
+// prompt res: the system prompt with the user's profile, the tools and
+// the bridge's arguments.
+func (c *Controller) launch(path string, res api.PromptResult) (*Process, error) {
 	if err := ensureDirectory(c.directory); err != nil {
 		return nil, fmt.Errorf("the assistant's directory: %w", err)
 	}
 	args := assistant.Args(assistant.Options{
-		Bridge: c.bridge, Socket: c.socket, Model: c.settings.AssistantModel(),
-		SystemPrompt: c.systemPrompt(),
+		Bridge: c.bridge, Socket: c.socket, Model: c.settings.AssistantModel(), Prompt: res,
 	})
 	p := NewProcess(c.loop, c.log, path, args, assistant.ChildEnv(c.env, path), c.directory, c.killGrace)
 	p.OnEvents = func(events []assistant.Event) {

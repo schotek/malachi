@@ -35,10 +35,6 @@
     <value nick="haiku" value="1"/>
     <value nick="opus" value="2"/>
   </enum>
-  <enum id="io.github.schotek.Malachi.AssistantProvider">
-    <value nick="claude" value="0"/>
-    <value nick="chatgpt" value="1"/>
-  </enum>
   <enum id="io.github.schotek.Malachi.BoardStyle">
     <value nick="list" value="0"/>
     <value nick="columns" value="1"/>
@@ -238,10 +234,10 @@
       <description>Set when the user allowed it the first time.</description>
     </key>
     <!-- In-app providers share keys across the three native clients. -->
-    <key name="assistant-provider" enum="io.github.schotek.Malachi.AssistantProvider">
+    <key name="assistant-provider" type="s">
       <default>'claude'</default>
       <summary>The provider of the assistant in the app</summary>
-      <description>The in-app provider; external Claude hand-off is independent.</description>
+      <description>The in-app provider: claude (Claude Code on this computer), chatgpt (Codex with the ChatGPT plan) or the id of an AI provider account of the daemon (acc_…); anything else reads as claude. The external Claude hand-off is independent.</description>
     </key>
     <key name="assistant-codex-path" type="s">
       <default>''</default>

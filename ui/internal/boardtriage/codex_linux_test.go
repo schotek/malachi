@@ -23,6 +23,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/chatgpt"
 )
@@ -99,6 +100,7 @@ func codexHarness(t *testing.T, mode string) (*harness, string) {
 		Model:      func() string { return "fixture-model" },
 		HasConsent: func() bool { return true },
 		HTTPClient: upstream(t),
+		Prompter:   &prompttest.Prompter{},
 	}, fakeTokens{})
 	h := newHarness(t, newFakeClaude(t, "true"), options{provider: p, bridge: self})
 	h.c.Source = func() string { return "malachi-chatgpt" }
@@ -325,9 +327,9 @@ func fakeBridgeMain() {
 			p.reply(l.ID, map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{}, "serverInfo": map[string]any{"name": "malachi"}})
 		case "tools/list":
 			list := []any{}
-			for _, name := range assistant.TriageTools {
+			for _, name := range prompttest.TriageTools {
 				list = append(list, map[string]any{
-					"name": strings.TrimPrefix(name, "mcp__malachi__"), "description": "fixture",
+					"name": name, "description": "fixture",
 					"inputSchema": map[string]any{"type": "object"},
 				})
 			}

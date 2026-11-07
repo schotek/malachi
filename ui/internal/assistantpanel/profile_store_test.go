@@ -71,14 +71,15 @@ func TestProfileStore(t *testing.T) {
 	s := NewProfileStore(d, loop, nil)
 	changes := 0
 	s.OnChange = func() { changes++ }
-	if s.Loaded() || s.Supported() || !s.Profile().Empty() {
+	if s.Loaded() || s.Supported() || s.Stored().Text != "" || len(s.Accounts()) != 0 {
 		t.Fatal("a new store is not empty")
 	}
 	s.Refresh()
 	loop.runUntil(t, s.Loaded)
-	p := s.Profile()
-	if !s.Supported() || changes != 1 || p.Text != "Píšu stručně." || len(p.Accounts) != 1 || p.Accounts[0].Name != "Studio" || p.Accounts[0].Email != "s@example.org" {
-		t.Fatalf("profile %+v", p)
+	p, accounts := s.Stored(), s.Accounts()
+	if !s.Supported() || changes != 1 || p.Text != "Píšu stručně." || len(p.Accounts) != 1 || p.Accounts[0].AccountID != "acc_1" ||
+		len(accounts) != 1 || accounts[0].Config.Name != "Studio" || accounts[0].Config.Email != "s@example.org" {
+		t.Fatalf("profile %+v, accounts %+v", p, accounts)
 	}
 	if q, ok := s.Proposal("p_1"); !ok || q.Text != "Schůzky v pondělí." {
 		t.Fatalf("proposal %+v", q)
@@ -119,7 +120,7 @@ func TestProfileStoreOlderDaemon(t *testing.T) {
 	s := NewProfileStore(d, loop, nil)
 	s.Refresh()
 	loop.runUntil(t, s.Loaded)
-	if s.Supported() || !s.Profile().Empty() || s.Limits() != api.DefaultProfileLimits() || !s.Stored().ShareWithMCP {
+	if s.Supported() || s.Stored().Text != "" || len(s.Accounts()) != 0 || s.Limits() != api.DefaultProfileLimits() || !s.Stored().ShareWithMCP {
 		t.Fatalf("older daemon: supported %v, %+v", s.Supported(), s.Stored())
 	}
 	// A transient failure keeps what was read before.

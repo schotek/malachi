@@ -11,11 +11,42 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 )
 
 // The one-shot requests (macOS AssistantRequestTests) against the fake
-// claude of the panel's tests.
+// claude of the panel's tests and the fake daemon's prompts (prompttest).
+
+// rewriteInput is a plain rewrite of passage, the generic one-shot
+// request of these tests.
+func rewriteInput(passage string) api.PromptInput {
+	return api.PromptInput{Rewrite: &api.RewriteInput{Preset: api.RewritePoliter, Passage: passage}}
+}
+
+// rewriteMessage is the fake daemon's message of rewriteInput(passage).
+func rewriteMessage(passage string) string {
+	m, err := prompttest.RewriteMessage(*rewriteInput(passage).Rewrite)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
+// oneShotArgs is the command line of a one-shot request without the
+// bridge: the fake daemon's prompt of purpose with input and the note of
+// account, with model.
+func oneShotArgs(purpose api.PromptPurpose, input api.PromptInput, account api.AccountID, model assistant.Model) []string {
+	return assistant.Args(assistant.Options{Model: model, Prompt: prompttest.Must(api.AssistantPromptParams{
+		Purpose: purpose, Language: testLanguage, AccountID: account, Input: &input,
+	})})
+}
+
+// start is a generic request: a rewrite of passage.
+func (h *requestHarness) start(passage string, onText func(string), completion func(Outcome)) {
+	h.request.Start(api.PurposeRewrite, rewriteInput(passage), "", onText, completion)
+}
 
 // structuredResult is a result line with a structured_output (raw JSON)
 // and a text.
@@ -31,6 +62,7 @@ type requestHarness struct {
 	loop          *testLoop
 	fake          *fakeClaude
 	settings      *memSettings
+	prompter      *prompttest.Prompter
 	request       *Request
 	work          string
 	consentAsked  int
@@ -46,13 +78,15 @@ func newRequestHarness(t *testing.T, fake *fakeClaude, consent, found bool) *req
 	loc.timeout = 5 * time.Second
 	prefix := fake.dir + "/"
 	loc.usable = func(p string) bool { return found && strings.HasPrefix(p, prefix) && IsExecutableFile(p) }
+	prompter := &prompttest.Prompter{}
 	r := NewRequest(RequestConfig{
 		Settings: s, Locator: loc, Loop: loop, Log: discardLog(), Directory: work,
+		Prompter: prompter, Language: func() string { return testLanguage },
 		Env:       []string{"HOME=" + fake.dir, "LANG=cs_CZ.UTF-8", "ANTHROPIC_API_KEY=sk-never", "CLAUDECODE=1"},
 		KillGrace: 300 * time.Millisecond,
 	})
 	r.Timeout = 10 * time.Second
-	h := &requestHarness{t: t, loop: loop, fake: fake, settings: s, request: r, work: work, consentAnswer: true}
+	h := &requestHarness{t: t, loop: loop, fake: fake, settings: s, prompter: prompter, request: r, work: work, consentAnswer: true}
 	r.Consent = func(done func(bool)) {
 		h.consentAsked++
 		answer := h.consentAnswer
@@ -71,7 +105,7 @@ func TestRequestAnswersOnce(t *testing.T) {
 	h := newRequestHarness(t, fake, true, true)
 	var outcomes []Outcome
 	var texts []string
-	h.request.Start("SYS", "line one\nline two", "", func(s string) { texts = append(texts, s) },
+	h.start("line one\nline two", func(s string) { texts = append(texts, s) },
 		func(o Outcome) { outcomes = append(outcomes, o) })
 	if !h.request.Running() {
 		t.Fatal("not running after Start")
@@ -86,12 +120,17 @@ func TestRequestAnswersOnce(t *testing.T) {
 	if h.request.Running() || h.consentAsked != 0 || fake.starts() != 1 {
 		t.Errorf("running %v, consent %d, starts %d", h.request.Running(), h.consentAsked, fake.starts())
 	}
-	if !slices.Equal(fake.prompts(), []string{"line one\nline two"}) {
+	if !slices.Equal(fake.prompts(), []string{rewriteMessage("line one\nline two")}) {
 		t.Errorf("prompts %q", fake.prompts())
 	}
-	wantArgs := assistant.Args(assistant.Options{Model: assistant.Haiku, SystemPrompt: "SYS"})
+	wantArgs := oneShotArgs(api.PurposeRewrite, rewriteInput("line one\nline two"), "", assistant.Haiku)
 	if got := fake.args(); !slices.Equal(got, wantArgs) || slices.Contains(got, "--mcp-config") || slices.Contains(got, "--allowedTools") {
 		t.Errorf("args %q", got)
+	}
+	// The daemon was asked once, for this purpose in the UI's language.
+	if calls := h.prompter.Calls(); len(calls) != 1 || calls[0].Purpose != api.PurposeRewrite || calls[0].Language != testLanguage ||
+		calls[0].AccountID != "" || calls[0].Input == nil || calls[0].Input.Rewrite == nil || calls[0].Input.Rewrite.Passage != "line one\nline two" {
+		t.Errorf("prompter calls %+v", calls)
 	}
 	env := fake.env()
 	if strings.Contains(env, "ANTHROPIC") || strings.Contains(env, "CLAUDECODE") || !strings.Contains(env, "LANG=cs_CZ.UTF-8") {
@@ -111,7 +150,7 @@ func TestRequestStdinIsClosed(t *testing.T) {
 	fake := newFakeClaude(t, "true", "", fakeTurn{lines: []string{fakeInit}})
 	h := newRequestHarness(t, fake, true, true)
 	var outcomes []Outcome
-	h.request.Start("S", "m", "", nil, func(o Outcome) { outcomes = append(outcomes, o) })
+	h.start("m", nil, func(o Outcome) { outcomes = append(outcomes, o) })
 	h.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
 	if want := failed(FailureStopped, "claude exited with status 0"); !slices.EqualFunc(outcomes, []Outcome{want}, sameOutcome) {
 		t.Errorf("outcomes %+v", outcomes)
@@ -128,12 +167,12 @@ func TestRequestStructuredAnswer(t *testing.T) {
 	fake := newFakeClaude(t, "true", "", fakeTurn{lines: []string{fakeInit, structuredResult(`{"query":"x"}`, "")}})
 	h := newRequestHarness(t, fake, true, true)
 	var outcomes []Outcome
-	h.request.Start("S", "m", assistant.SearchSchema, nil, func(o Outcome) { outcomes = append(outcomes, o) })
+	h.request.Start(api.PurposeSearch, api.PromptInput{Search: &api.SearchInput{Words: "m"}}, "", nil, func(o Outcome) { outcomes = append(outcomes, o) })
 	h.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
 	if want := (Outcome{Kind: OutcomeAnswered, Structured: []byte(`{"query":"x"}`)}); !sameOutcome(outcomes[0], want) {
 		t.Errorf("outcome %+v", outcomes[0])
 	}
-	if args := fake.args(); !slices.Equal(args[len(args)-2:], []string{"--json-schema", assistant.SearchSchema}) {
+	if args := fake.args(); !slices.Equal(args[len(args)-2:], []string{"--json-schema", prompttest.SearchSchema}) {
 		t.Errorf("args %q", args)
 	}
 }
@@ -146,7 +185,7 @@ func TestRequestConsent(t *testing.T) {
 	var outcomes []Outcome
 	record := func(o Outcome) { outcomes = append(outcomes, o) }
 	h.consentAnswer = false
-	h.request.Start("S", "m", "", nil, record)
+	h.start("m", nil, record)
 	h.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
 	if outcomes[0].Kind != OutcomeDeclined || h.consentAsked != 1 || h.settings.consent || fake.starts() != 0 {
 		t.Errorf("outcome %+v, asked %d, consent %v, starts %d", outcomes[0], h.consentAsked, h.settings.consent, fake.starts())
@@ -155,7 +194,7 @@ func TestRequestConsent(t *testing.T) {
 	// Allowed while the request was cancelled: kept, nothing sent.
 	var answer func(bool)
 	h.request.Consent = func(done func(bool)) { answer = done }
-	h.request.Start("S", "m", "", nil, record)
+	h.start("m", nil, record)
 	h.loop.runUntil(t, func() bool { return answer != nil })
 	h.request.Cancel()
 	answer(true)
@@ -166,7 +205,7 @@ func TestRequestConsent(t *testing.T) {
 
 	// From now on nobody is asked.
 	h.request.Consent = nil
-	h.request.Start("S", "m", "", nil, record)
+	h.start("m", nil, record)
 	h.loop.runUntil(t, func() bool { return len(outcomes) == 2 })
 	if want := (Outcome{Kind: OutcomeAnswered, Text: "done"}); !sameOutcome(outcomes[1], want) {
 		t.Errorf("outcome %+v", outcomes[1])
@@ -179,7 +218,7 @@ func TestRequestNoConsentHookSendsNothing(t *testing.T) {
 	h := newRequestHarness(t, fake, false, true)
 	h.request.Consent = nil
 	var outcomes []Outcome
-	h.request.Start("S", "m", "", nil, func(o Outcome) { outcomes = append(outcomes, o) })
+	h.start("m", nil, func(o Outcome) { outcomes = append(outcomes, o) })
 	h.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
 	if outcomes[0].Kind != OutcomeDeclined || fake.starts() != 0 {
 		t.Errorf("outcome %+v, starts %d", outcomes[0], fake.starts())
@@ -191,13 +230,13 @@ func TestRequestNotFoundAndNotSignedIn(t *testing.T) {
 	missing := newRequestHarness(t, newFakeClaude(t, "true", "", answerTurn("x")), true, false)
 	var outcomes []Outcome
 	record := func(o Outcome) { outcomes = append(outcomes, o) }
-	missing.request.Start("S", "m", "", nil, record)
+	missing.start("m", nil, record)
 	missing.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
 	if !sameOutcome(outcomes[0], failed(FailureNotFound, "")) || missing.fake.starts() != 0 {
 		t.Errorf("outcome %+v", outcomes[0])
 	}
 	signedOut := newRequestHarness(t, newFakeClaude(t, "false", "", answerTurn("x")), true, true)
-	signedOut.request.Start("S", "m", "", nil, record)
+	signedOut.start("m", nil, record)
 	signedOut.loop.runUntil(t, func() bool { return len(outcomes) == 2 })
 	if !sameOutcome(outcomes[1], failed(FailureNotSignedIn, "")) || signedOut.fake.starts() != 0 {
 		t.Errorf("outcome %+v", outcomes[1])
@@ -223,12 +262,12 @@ func TestRequestFailures(t *testing.T) {
 	h := newRequestHarness(t, fake, true, true)
 	var outcomes []Outcome
 	record := func(o Outcome) { outcomes = append(outcomes, o) }
-	h.request.Start("S", "m", "", nil, record)
+	h.start("m", nil, record)
 	h.loop.runUntil(t, func() bool { return len(outcomes) == 1 })
 	if !sameOutcome(outcomes[0], failed(FailureStopped, "error_during_execution")) {
 		t.Errorf("outcome %+v", outcomes[0])
 	}
-	h.request.Start("S", "m", "", nil, record)
+	h.start("m", nil, record)
 	h.loop.runUntil(t, func() bool { return len(outcomes) == 2 })
 	if !sameOutcome(outcomes[1], failed(FailureStopped, "Error: boom")) {
 		t.Errorf("outcome %+v", outcomes[1])
@@ -242,7 +281,7 @@ func TestRequestTimeout(t *testing.T) {
 	h.request.Timeout = 500 * time.Millisecond
 	var outcomes []Outcome
 	var texts []string
-	h.request.Start("S", "m", "", func(s string) { texts = append(texts, s) }, func(o Outcome) { outcomes = append(outcomes, o) })
+	h.start("m", func(s string) { texts = append(texts, s) }, func(o Outcome) { outcomes = append(outcomes, o) })
 	h.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
 	if !sameOutcome(outcomes[0], failed(FailureStopped, timedOut)) || !slices.Equal(texts, []string{"thinking"}) || h.request.Running() {
 		t.Errorf("outcome %+v, texts %q", outcomes[0], texts)
@@ -259,7 +298,7 @@ func TestRequestCancelAndReplace(t *testing.T) {
 	var outcomes []Outcome
 	var texts []string
 	record := func(o Outcome) { outcomes = append(outcomes, o) }
-	h.request.Start("S", "one", "", func(s string) { texts = append(texts, s) }, record)
+	h.start("one", func(s string) { texts = append(texts, s) }, record)
 	h.loop.runUntil(t, func() bool { return slices.Equal(texts, []string{"slow"}) })
 	h.request.Cancel()
 	if h.request.Running() {
@@ -271,15 +310,15 @@ func TestRequestCancelAndReplace(t *testing.T) {
 	}
 	// The fake numbers its turns over every start: the second start gets
 	// "second".
-	h.request.Start("S", "two", "", nil, record)
-	h.request.Start("S", "two again", "", nil, record)
+	h.start("two", nil, record)
+	h.start("two again", nil, record)
 	h.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
 	h.loop.settle(t, 200*time.Millisecond)
 	if len(outcomes) != 1 || !sameOutcome(outcomes[0], Outcome{Kind: OutcomeAnswered, Text: "done"}) {
 		t.Errorf("outcomes %+v", outcomes)
 	}
 	prompts := fake.prompts()
-	if prompts[0] != "one" || prompts[len(prompts)-1] != "two again" || slices.Contains(prompts, "two") {
+	if prompts[0] != rewriteMessage("one") || prompts[len(prompts)-1] != rewriteMessage("two again") || slices.Contains(prompts, rewriteMessage("two")) {
 		t.Errorf("prompts %q", prompts)
 	}
 }
@@ -303,17 +342,18 @@ func TestRewriteRunsAndCleans(t *testing.T) {
 		!slices.Contains(states, RewriteState{Kind: RewriteRunning, Text: "```\n„Dobrý"}) {
 		t.Errorf("states %+v", states)
 	}
-	msg, _ := assistant.RewriteMessage(assistant.Politer, "", "Ahoj.")
-	if !slices.Equal(fake.prompts(), []string{msg}) {
+	// The passage goes to the daemon as typed; the message is its.
+	if !slices.Equal(fake.prompts(), []string{rewriteMessage("  Ahoj.\n")}) {
 		t.Errorf("prompts %q", fake.prompts())
 	}
-	if want := assistant.Args(assistant.Options{Model: assistant.Haiku, SystemPrompt: assistant.RewriteSystemPrompt()}); !slices.Equal(fake.args(), want) {
+	if want := oneShotArgs(api.PurposeRewrite, rewriteInput("  Ahoj.\n"), "", assistant.Haiku); !slices.Equal(fake.args(), want) {
 		t.Errorf("args %q", fake.args())
 	}
 }
 
-// Nothing to ask is refused; too long fails at once; an empty answer is a
-// failure, never an empty replacement.
+// Nothing to ask is refused; too long fails with the daemon's reason
+// before anything starts; an empty answer is a failure, never an empty
+// replacement.
 func TestRewriteRefusesAndFails(t *testing.T) {
 	fake := newFakeClaude(t, "true", "", fakeTurn{lines: []string{fakeInit, fakeResult(`  \"\"  `, true)}})
 	h := newRequestHarness(t, fake, true, true)
@@ -321,10 +361,11 @@ func TestRewriteRefusesAndFails(t *testing.T) {
 	if w.Start(assistant.Fix, "", " \n ") || w.Start(assistant.Custom, "  ", "text") || w.State() != (RewriteState{}) {
 		t.Error("nothing to ask was taken")
 	}
-	if !w.Start(assistant.Fix, "", strings.Repeat("a", assistant.MaxPassage+1)) {
+	if !w.Start(assistant.Fix, "", strings.Repeat("a", prompttest.MaxPassage+1)) {
 		t.Fatal("too long refused")
 	}
-	if want := "The assistant stopped: assistant: the passage is too long: 20001 characters, at most 20000"; w.State() != (RewriteState{Kind: RewriteFailed, Text: want}) || fake.starts() != 0 {
+	h.loop.runUntil(t, func() bool { return !w.Running() })
+	if want := "The assistant stopped: the passage is too long: 20001 characters, at most 20000"; w.State() != (RewriteState{Kind: RewriteFailed, Text: want}) || fake.starts() != 0 {
 		t.Errorf("state %+v", w.State())
 	}
 	if !w.Start(assistant.Custom, "Make it shorter", "text") {
@@ -334,8 +375,12 @@ func TestRewriteRefusesAndFails(t *testing.T) {
 	if w.State() != (RewriteState{Kind: RewriteFailed, Text: "The assistant stopped: the answer is empty"}) {
 		t.Errorf("state %+v", w.State())
 	}
-	if !slices.Equal(fake.prompts(), []string{"Follow this instruction: Make it shorter\n\nPassage:\n<<<\ntext\n>>>"}) {
+	custom := api.PromptInput{Rewrite: &api.RewriteInput{Preset: api.RewriteCustom, Instruction: "Make it shorter", Passage: "text"}}
+	if m, _ := prompttest.RewriteMessage(*custom.Rewrite); !slices.Equal(fake.prompts(), []string{m}) {
 		t.Errorf("prompts %q", fake.prompts())
+	}
+	if last, ok := h.prompter.Last(); !ok || last.Input == nil || last.Input.Rewrite == nil || *last.Input.Rewrite != *custom.Rewrite {
+		t.Errorf("prompter %+v", last)
 	}
 	w.Cancel()
 	if w.State() != (RewriteState{}) {
@@ -386,7 +431,6 @@ func TestSearchConverts(t *testing.T) {
 		fakeTurn{lines: []string{fakeInit, structuredResult(`{"q":"x"}`, "no JSON")}})
 	h := newRequestHarness(t, fake, true, true)
 	s := NewSearcher(tr, h.request)
-	s.Today = func() string { return "2026-09-29" }
 	var got []SearchOutcome
 	record := func(o SearchOutcome) { got = append(got, o) }
 	if !s.Convert("  faktury od Jany z března  ", record) || !s.Running() {
@@ -400,7 +444,7 @@ func TestSearchConverts(t *testing.T) {
 		t.Errorf("prompts %q", fake.prompts())
 	}
 	// The fake writes one argument per line, and the prompt has lines.
-	want := assistant.Args(assistant.Options{Model: assistant.Haiku, SystemPrompt: assistant.SearchSystemPrompt("2026-09-29"), JSONSchema: assistant.SearchSchema})
+	want := oneShotArgs(api.PurposeSearch, api.PromptInput{Search: &api.SearchInput{Words: "  faktury od Jany z března  "}}, "", assistant.Haiku)
 	if strings.Join(fake.args(), "\n") != strings.Join(want, "\n") {
 		t.Errorf("args %q", fake.args())
 	}
@@ -424,14 +468,14 @@ func TestSearchRefusesAndFails(t *testing.T) {
 	if s.Convert("   ", record) {
 		t.Error("no words taken")
 	}
-	if !s.Convert(strings.Repeat("a", assistant.MaxSearchWords+1), record) {
+	if !s.Convert(strings.Repeat("a", prompttest.MaxSearchWords+1), record) {
 		t.Error("too many words refused")
 	}
 	if len(got) != 0 {
 		t.Error("completion called inside Convert")
 	}
 	missing.loop.runUntil(t, func() bool { return len(got) == 1 })
-	if got[0].Text != "The search could not be converted: assistant: the words are too long: 501 characters, at most 500" {
+	if got[0].Text != "The search could not be converted: the words are too long: 501 characters, at most 500" {
 		t.Errorf("outcome %+v", got[0])
 	}
 	s.Convert("faktury", record)
@@ -458,7 +502,7 @@ func TestRequestRefusedSignIn(t *testing.T) {
 	h := newRequestHarness(t, fake, true, true)
 	var outcomes []Outcome
 	var texts []string
-	h.request.Start("S", "m", "", func(s string) { texts = append(texts, s) }, func(o Outcome) { outcomes = append(outcomes, o) })
+	h.start("m", func(s string) { texts = append(texts, s) }, func(o Outcome) { outcomes = append(outcomes, o) })
 	h.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
 	if !sameOutcome(outcomes[0], failed(FailureNotSignedIn, "")) || len(texts) != 0 {
 		t.Errorf("outcome %+v, streamed %q", outcomes[0], texts)
@@ -468,7 +512,7 @@ func TestRequestRefusedSignIn(t *testing.T) {
 	other := newRequestHarness(t, newFakeClaude(t, "true", "", fakeTurn{
 		lines: []string{fakeInit, fakeFailure("rate_limit", limit), fakeResult(limit, false)},
 	}), true, true)
-	other.request.Start("S", "m", "", func(s string) { texts = append(texts, s) }, func(o Outcome) { outcomes = append(outcomes, o) })
+	other.start("m", func(s string) { texts = append(texts, s) }, func(o Outcome) { outcomes = append(outcomes, o) })
 	other.loop.runUntil(t, func() bool { return len(outcomes) == 2 })
 	if !sameOutcome(outcomes[1], failed(FailureStopped, limit)) || len(texts) != 0 {
 		t.Errorf("outcome %+v, streamed %q", outcomes[1], texts)

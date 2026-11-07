@@ -15,7 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 )
 
 // The panel against stand-in claude scripts (macOS: the same fakes in
@@ -294,12 +296,26 @@ func (f *fakeClaude) lastPrompt() string {
 // testBridge is the bridge the tests name; nothing ever runs it.
 const testBridge = "/usr/libexec/malachi/malachi-mcp"
 
+// testLanguage is the UI language of the tests, as a BCP 47 tag.
+const testLanguage = "cs"
+
+// panelParams are the Prompter's parameters of a panel turn with input.
+func panelParams(input *api.PromptInput) api.AssistantPromptParams {
+	return api.AssistantPromptParams{Purpose: api.PurposePanel, Language: testLanguage, Input: input}
+}
+
+// panelArgs is the panel's command line with the fake daemon's prompt.
+func panelArgs(bridge, socket string, model assistant.Model) []string {
+	return assistant.Args(assistant.Options{Bridge: bridge, Socket: socket, Model: model, Prompt: prompttest.Must(panelParams(nil))})
+}
+
 // harness is a Controller over a fake claude.
 type harness struct {
 	t        *testing.T
 	loop     *testLoop
 	fake     *fakeClaude
 	settings *memSettings
+	prompter *prompttest.Prompter
 	panel    *Controller
 	work     string
 
@@ -320,15 +336,16 @@ func newHarness(t *testing.T, fake *fakeClaude, consent bool, bridge string) *ha
 	loc.timeout = 5 * time.Second
 	prefix := fake.dir + "/"
 	loc.usable = func(p string) bool { return strings.HasPrefix(p, prefix) && IsExecutableFile(p) }
+	prompter := &prompttest.Prompter{}
 	panel := New(Config{
 		Translator: tr, Settings: s, Locator: loc, Loop: loop, Log: discardLog(),
+		Prompter: prompter, Language: func() string { return testLanguage },
 		Bridge: bridge, Socket: "/tmp/malachi-test.sock", Directory: work,
 		Env:       []string{"HOME=" + fake.dir, "LANG=cs_CZ.UTF-8", "ANTHROPIC_API_KEY=sk-never"},
 		KillGrace: 300 * time.Millisecond,
 	})
-	h := &harness{t: t, loop: loop, fake: fake, settings: s, panel: panel, work: work, consentAnswer: true}
+	h := &harness{t: t, loop: loop, fake: fake, settings: s, prompter: prompter, panel: panel, work: work, consentAnswer: true}
 	panel.Today = func() string { return "2026-09-29" }
-	panel.Language = func() string { return "Czech" }
 	panel.Consent = func(done func(bool)) {
 		h.consentAsked++
 		answer := h.consentAnswer

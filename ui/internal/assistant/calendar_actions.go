@@ -25,17 +25,6 @@ const (
 // follow PanelActions in PanelActionsWith.
 var CalendarActions = []Action{WhatsOnToday, FindFreeSlot}
 
-// CalendarTools are the calendar's read-only bridge tools the panel's
-// conversation may run (they are part of AllowedTools; the board's triage
-// and a suggested reply do not get them).
-var CalendarTools = []string{
-	"mcp__malachi__list_calendars",
-	"mcp__malachi__list_events",
-	"mcp__malachi__get_event",
-	"mcp__malachi__find_free_time",
-	"mcp__malachi__list_invitations",
-}
-
 // PanelActionsWith are the panel's quick actions: PanelActions, and with
 // the Calendar (hasCalendar: a client that has the calendar mode and the
 // bridge's calendar tools) CalendarActions after them. The calendar

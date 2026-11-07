@@ -182,12 +182,19 @@ type CrmService interface {
 	Remove(ctx context.Context, p CrmRemoveParams) (*CrmRemoveResult, error)
 }
 
-// AssistantService is the assistant profile (docs/api.md §4.18).
+// AssistantService is the assistant profile and the daemon's assistant
+// over ai accounts (docs/api.md §4.18).
 type AssistantService interface {
 	ProfileGet(ctx context.Context, p AssistantProfileGetParams) (*AssistantProfileGetResult, error)
 	ProfileSet(ctx context.Context, p AssistantProfileSetParams) (*AssistantProfileSetResult, error)
 	ProfilePropose(ctx context.Context, p AssistantProfileProposeParams) (*AssistantProfileProposeResult, error)
 	ProfileResolve(ctx context.Context, p AssistantProfileResolveParams) (*AssistantProfileResolveResult, error)
+	Prompt(ctx context.Context, p AssistantPromptParams) (*PromptResult, error)
+	SessionStart(ctx context.Context, p AssistantSessionStartParams) (*AssistantSessionStartResult, error)
+	SessionSend(ctx context.Context, p AssistantSessionSendParams) (*AssistantSessionSendResult, error)
+	SessionStop(ctx context.Context, p AssistantSessionStopParams) (*AssistantSessionStopResult, error)
+	ProviderModels(ctx context.Context, p AssistantProviderModelsParams) (*AssistantProviderModelsResult, error)
+	Usage(ctx context.Context, p AssistantUsageParams) (*AssistantUsageResult, error)
 }
 
 // UpdateService is the update check (docs/api.md §4.20). Every method
@@ -287,6 +294,24 @@ type DraftsNotifier interface {
 // notify.assistantProfileChanged, asserted like BoardNotifier.
 type AssistantNotifier interface {
 	AssistantProfileChanged(n AssistantProfileChangedNotification)
+}
+
+// AssistantEventNotifier is the optional extension of Notifier for the
+// daemon's assistant (docs/api.md §4.18), asserted like BoardNotifier:
+// AssistantEvent delivers notify.assistantEvent to one connection only
+// (false when it is gone), AssistantUsageChanged broadcasts
+// notify.assistantUsageChanged.
+type AssistantEventNotifier interface {
+	AssistantEvent(conn ConnID, n AssistantEvent) bool
+	AssistantUsageChanged(n AssistantUsageChangedNotification)
+}
+
+// ConnObserver is the optional extension of a Backend the RPC server
+// asserts at start: ConnClosed is called after a connection ended and
+// its in-flight calls returned, so per-connection state (assistant
+// sessions) can be dropped.
+type ConnObserver interface {
+	ConnClosed(id ConnID)
 }
 
 // CalendarNotifier is the optional extension of Notifier for the calendar

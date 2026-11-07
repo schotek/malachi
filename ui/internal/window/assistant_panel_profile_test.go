@@ -31,9 +31,9 @@ func TestProposalCardFor(t *testing.T) {
 
 func TestProposalAccountLine(t *testing.T) {
 	texts := assistant.ProfileTexts(tr)
-	notes := []assistant.AccountNote{
-		{AccountID: "acc_1", Name: "Studio", Email: "s@example.org"},
-		{AccountID: "acc_2", Email: "me@example.org"},
+	notes := []api.Account{
+		{ID: "acc_1", Config: api.AccountConfig{Name: "Studio", Email: "s@example.org"}},
+		{ID: "acc_2", Config: api.AccountConfig{Email: "me@example.org"}},
 	}
 	for acc, want := range map[api.AccountID]string{
 		"":         "",

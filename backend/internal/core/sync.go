@@ -166,6 +166,12 @@ func (b *Backend) stateFor(a store.Account) api.SyncState {
 	case ok:
 		st = live
 		st.AccountID = id
+	case isAIAccount(a):
+		// What the last test or session said about the key
+		// (assistant_sessions.go).
+		if s := b.assist.aiStatus(id); s != "" {
+			st.Status = s
+		}
 	}
 	st.PendingOutbox, st.FailedOutbox = b.outboxCounts(a.ID)
 	return st

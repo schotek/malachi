@@ -115,10 +115,13 @@ type Config struct {
 //  2. board.get for the case: its newest members' ids and, fresh, its
 //     reply target; a case that has a suggested reply by now ends it
 //     quietly.
-//  3. The request: assistant.SuggestReplyMessage under
-//     assistant.SuggestReplySystemPrompt, with the assistant's model, the
-//     bridge started as "--socket <socket> --reply-only <replyMessageId>"
-//     and only assistant.SuggestReplyTools.
+//  3. The request: the daemon's prompt of purpose reply (assistant.prompt
+//     with api.ReplyInput: the case's account and reply target, its newest
+//     members, the user's instruction, follow-up for a case waiting on the
+//     other side; the daemon appends the note of the case's account), with
+//     the assistant's model, the bridge started as "--socket <socket>
+//     --in-app --reply-only <replyMessageId>" and only the tools the
+//     daemon names.
 //  4. The draft is the one a successful create_draft result names
 //     (assistant.ParseDraftResult, as the panel's Open Draft card).
 //     Without one the request failed (board.ReplyNoDraft). With one it is
@@ -161,9 +164,6 @@ type Controller struct {
 	Timeout time.Duration
 	// OnRefresh asks the board to list again (after a draft was linked).
 	OnRefresh func()
-	// Profile is the user's profile; a request gets the note of the
-	// case's account only. nil: none.
-	Profile func() assistant.Profile
 
 	caller    Caller
 	settings  assistantpanel.Settings
@@ -203,15 +203,6 @@ type Controller struct {
 
 // NewController builds the application's one suggested-reply request,
 // idle.
-
-// profileFor is the user's profile with the note of the account only.
-func (c *Controller) profileFor(accountID string) assistant.Profile {
-	if c.Profile == nil {
-		return assistant.Profile{}
-	}
-	return c.Profile().For(accountID)
-}
-
 func NewController(cfg Config) *Controller {
 	c := &Controller{
 		Timeout:    assistant.SuggestReplyTimeout,
@@ -488,21 +479,25 @@ func (c *Controller) gotCase(my int, id board.CaseID, instruction string, r api.
 		}
 		return
 	}
-	others := make([]string, len(r.Messages))
-	for i, m := range r.Messages {
-		others[i] = string(m.ID)
+	// The case's members, oldest first; the daemon names the newest of
+	// them and takes at most api.MaxPromptMessageIDs.
+	msgs := r.Messages
+	if len(msgs) > api.MaxPromptMessageIDs {
+		msgs = msgs[len(msgs)-api.MaxPromptMessageIDs:]
 	}
-	message := assistant.SuggestReplyMessage(string(r.Case.AccountID), string(r.Case.ReplyMessageID), others, instruction)
+	others := make([]api.MessageID, len(msgs))
+	for i, m := range msgs {
+		others[i] = m.ID
+	}
 	c.request.StartCall(assistantpanel.Call{
-		// A case waiting on the other side gets a follow-up on the user's
-		// own last message.
-		SystemPrompt: assistant.WithProfile(assistant.SuggestReplySystemPromptFor(board.IsFollowUpWire(r.Case, c.annotated)), c.profileFor(string(r.Case.AccountID))),
-		Message:      message,
-		Tools: &assistantpanel.Tools{
-			Bridge: c.bridge, Socket: c.socket,
-			BridgeArgs: assistant.SuggestReplyBridgeArgs(string(r.Case.ReplyMessageID)),
-			Allowed:    assistant.SuggestReplyTools,
-		},
+		Purpose: api.PurposeReply,
+		Input: api.PromptInput{Reply: &api.ReplyInput{
+			AccountID: r.Case.AccountID, MessageID: r.Case.ReplyMessageID, Others: others, Instruction: instruction,
+			// A case waiting on the other side gets a follow-up on the
+			// user's own last message.
+			FollowUp: board.IsFollowUpWire(r.Case, c.annotated),
+		}},
+		Tools:   &assistantpanel.Tools{Bridge: c.bridge, Socket: c.socket},
 		Timeout: c.Timeout + 10*time.Second,
 		// The assistant's model (assistant-model), not the board's triage
 		// model: the user asked for this reply and waits for it, as for

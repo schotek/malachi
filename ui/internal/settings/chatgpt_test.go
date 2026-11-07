@@ -32,3 +32,33 @@ func TestProviderConsentsNeverAuthorizeAnotherService(t *testing.T) {
 		t.Fatal("invalid provider accepted")
 	}
 }
+
+// assistant-provider is a string of three forms (docs/plans/ai-api.md
+// D14): claude, chatgpt or the id of an AI provider account.
+func TestAssistantProviderForms(t *testing.T) {
+	s := NewMemory()
+	if s.AssistantProvider() != "claude" {
+		t.Fatalf("default %q, want claude", s.AssistantProvider())
+	}
+	const acc = "acc_0123456789abcdef0123456789abcdef"
+	s.SetAssistantProvider(acc)
+	if s.AssistantProvider() != acc {
+		t.Fatalf("account id not kept: %q", s.AssistantProvider())
+	}
+	for _, bad := range []string{"", "acc_", "Claude", "codex"} {
+		s.SetAssistantProvider(bad)
+		if s.AssistantProvider() != acc {
+			t.Fatalf("%q accepted: %q", bad, s.AssistantProvider())
+		}
+	}
+	s.SetAssistantProvider("claude")
+	if s.AssistantProvider() != "claude" {
+		t.Fatalf("claude not kept: %q", s.AssistantProvider())
+	}
+	// A stored value from before the account form, or an emptied one,
+	// reads as claude.
+	s.set(KeyAssistantProvider, "")
+	if s.AssistantProvider() != "claude" {
+		t.Fatalf("empty reads as %q", s.AssistantProvider())
+	}
+}

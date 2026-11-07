@@ -73,10 +73,7 @@ func TestSummarizeRunsATurn(t *testing.T) {
 	if got, want := fake.prompts(), []string{mustPrompt(t, assistant.Summarize, one.Selection)}; !slices.Equal(got, want) {
 		t.Errorf("prompts %q, want %q", got, want)
 	}
-	wantArgs := assistant.Args(assistant.Options{
-		Bridge: testBridge, Socket: "/tmp/malachi-test.sock", Model: assistant.Sonnet,
-		SystemPrompt: assistant.SystemPrompt("Czech", "2026-09-29"),
-	})
+	wantArgs := panelArgs(testBridge, "/tmp/malachi-test.sock", assistant.Sonnet)
 	if got := fake.args(); !slices.Equal(got, wantArgs) {
 		t.Errorf("args\n got %q\nwant %q", got, wantArgs)
 	}
@@ -1190,5 +1187,13 @@ func TestANewProcessIsToldTheContextAgain(t *testing.T) {
 		"Context: the user has also selected message m2 in account a; questions from now on may be about it too.\n\nOnce more"
 	if fake.starts() != 2 || fake.lastPrompt() != want {
 		t.Errorf("starts %d, prompt %q", fake.starts(), fake.lastPrompt())
+	}
+	// Two untold contexts: the daemon was asked once per context for
+	// that turn (composeTurn), the first as the conversation's, the
+	// second as an added one.
+	calls := h.prompter.Calls()
+	if n := len(calls); n < 2 || calls[n-2].Input.Context == nil || calls[n-2].Input.Context.Added || calls[n-2].Input.Text != "Once more" ||
+		calls[n-1].Input.Context == nil || !calls[n-1].Input.Context.Added || calls[n-1].Input.Context.MessageIDs[0] != "m2" {
+		t.Errorf("prompter calls %+v", calls)
 	}
 }

@@ -14,14 +14,19 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 	"github.com/schotek/malachi/ui/internal/board"
 )
 
-// The board's triage run (Controller) against the fake daemon and the
-// stand-in claude (macOS BoardTriageControllerTests). No real Claude Code,
-// daemon or bridge is ever run: the bridge's path is only passed on.
+// The board's triage run (Controller) against the fake daemon, the
+// stand-in claude and the fake daemon's prompts (prompttest; macOS
+// BoardTriageControllerTests). No real Claude Code, daemon or bridge is
+// ever run: the bridge's path is only passed on.
 
 const testBridge = "/b/malachi-mcp"
+
+// testLanguage is the UI language of the tests, as a BCP 47 tag.
+const testLanguage = "cs"
 
 // flagLocator is the application's locator with a switch for "found".
 type flagLocator struct {
@@ -56,6 +61,7 @@ type harness struct {
 	daemon    *fakeDaemon
 	fake      *fakeClaude
 	settings  *memSettings
+	prompter  *prompttest.Prompter
 	found     bool
 	available bool
 	prefs     *Preferences
@@ -72,24 +78,22 @@ func newHarness(t *testing.T, fake *fakeClaude, o options) *harness {
 	if o.prefs != nil {
 		prefs = *o.prefs
 	}
-	h := &harness{t: t, loop: newTestLoop(), daemon: newFakeDaemon(prefs), fake: fake, found: true, available: true}
+	h := &harness{t: t, loop: newTestLoop(), daemon: newFakeDaemon(prefs), fake: fake, prompter: &prompttest.Prompter{}, found: true, available: true}
 	// The panel's model and the board's apart: the run takes the board's.
 	h.settings = &memSettings{
 		model: assistant.Haiku, triageModel: assistant.Opus, consent: !o.noConsent, triageConsent: !o.noConsent,
 		claudePath: fake.path,
 	}
 	real := assistantpanel.NewLocator(h.settings, []string{"HOME=" + fake.dir}, h.loop, "", discardLog())
-	request := assistantpanel.NewRequest(assistantpanel.RequestConfig{
+	cfg := assistantpanel.RequestConfig{
 		Settings: h.settings, Locator: real, Loop: h.loop, Log: discardLog(), Directory: filepath.Join(fake.dir, "work"),
+		Prompter: h.prompter, Language: func() string { return testLanguage },
 		Env: []string{"HOME=" + fake.dir}, KillGrace: 300 * time.Millisecond,
-	})
-	if o.provider != nil {
-		request = assistantpanel.NewRequest(assistantpanel.RequestConfig{
-			Settings: h.settings, Locator: real, Loop: h.loop, Log: discardLog(), Directory: filepath.Join(fake.dir, "work"),
-			Env: []string{"HOME=" + fake.dir}, KillGrace: 300 * time.Millisecond,
-			Provider: func() assistantpanel.Provider { return o.provider },
-		})
 	}
+	if o.provider != nil {
+		cfg.Provider = func() assistantpanel.Provider { return o.provider }
+	}
+	request := assistantpanel.NewRequest(cfg)
 	request.Timeout = 10 * time.Second
 	h.prefs = newPrefs(h.daemon, h.loop)
 	bridge := testBridge
@@ -105,7 +109,6 @@ func newHarness(t *testing.T, fake *fakeClaude, o options) *harness {
 		Available: func() bool { return h.available }, Location: time.UTC,
 	})
 	h.c.Now = func() time.Time { return t0 }
-	h.c.Language = func() string { return "Czech" }
 	h.c.Today = func() string { return "2026-10-01" }
 	h.c.Timeout = 10 * time.Second
 	h.c.OnRefresh = func() { h.refreshes++ }
@@ -190,13 +193,24 @@ func (h *harness) hasState(want State) bool {
 	return slices.ContainsFunc(h.states, want.Equal)
 }
 
-// The triage's command line for run id with limit and its tools.
-func triageArgs(id string, limit int, drafts bool) []string {
-	return assistant.Args(assistant.Options{
-		Bridge: testBridge, Socket: "/s.sock", Model: assistant.Opus,
-		SystemPrompt: assistant.TriageSystemPrompt("Czech", "2026-10-01"),
-		BridgeArgs:   assistant.TriageBridgeArgs(id, limit), Tools: assistant.TriageToolsWith(drafts),
-	})
+// triageParams are the Prompter's parameters of a run started by t for
+// run id with limit (drafts as the trigger allows).
+func triageParams(t Trigger, id string, limit int) api.AssistantPromptParams {
+	return api.AssistantPromptParams{
+		Purpose: api.PurposeTriage, Language: testLanguage, Trigger: Wire(t), RunID: id,
+		Input: &api.PromptInput{Triage: &api.TriageInput{MaxCases: limit, Drafts: assistant.TriageDrafts(t)}},
+	}
+}
+
+// triageArgs is the triage's command line for a run of t with id and
+// limit: the fake daemon's prompt, its bridge arguments and its tools.
+func triageArgs(t Trigger, id string, limit int) []string {
+	return assistant.Args(assistant.Options{Bridge: testBridge, Socket: "/s.sock", Model: assistant.Opus, Prompt: prompttest.Must(triageParams(t, id, limit))})
+}
+
+// triageMessage is the fake daemon's message of a run of t with limit.
+func triageMessage(t Trigger, limit int) string {
+	return prompttest.Must(triageParams(t, "run_1", limit)).Message
 }
 
 // A run
@@ -233,14 +247,21 @@ func TestManualRun(t *testing.T) {
 	}
 	// The command line: the bridge for this run and its limit, the
 	// triage's tools with create_draft.
-	if got := fake.args(); !slices.Equal(got, triageArgs("run_1", 40, true)) {
-		t.Errorf("args\n%q\nwant\n%q", got, triageArgs("run_1", 40, true))
+	if got := fake.args(); !slices.Equal(got, triageArgs(Manual, "run_1", 40)) {
+		t.Errorf("args\n%q\nwant\n%q", got, triageArgs(Manual, "run_1", 40))
 	}
-	if !strings.Contains(strings.Join(fake.args(), " "), "mcp__malachi__create_draft") {
-		t.Error("no create_draft for a manual run")
+	if all := strings.Join(fake.args(), " "); !strings.Contains(all, "mcp__malachi__create_draft") ||
+		!strings.Contains(all, `"--in-app","--allow-triage","--triage-run","run_1","--triage-max","40"`) {
+		t.Errorf("no create_draft or the bridge's arguments for a manual run: %s", all)
 	}
-	if !slices.Equal(fake.prompts(), []string{assistant.TriageMessage(40, true)}) {
+	if !slices.Equal(fake.prompts(), []string{triageMessage(Manual, 40)}) {
 		t.Errorf("prompts %q", fake.prompts())
+	}
+	// The daemon built the run's prompt: manual, with drafts, for run_1.
+	if calls := h.prompter.Calls(); len(calls) != 1 || calls[0].Purpose != api.PurposeTriage || calls[0].Trigger != api.TriggerManual ||
+		calls[0].RunID != "run_1" || calls[0].Language != testLanguage || calls[0].Input == nil || calls[0].Input.Triage == nil ||
+		*calls[0].Input.Triage != (api.TriageInput{MaxCases: 40, Drafts: true}) {
+		t.Errorf("prompter calls %+v", calls)
 	}
 	if h.c.SignedIn() != (assistantpanel.SignIn{Known: true, SignedIn: true}) {
 		t.Errorf("signed in %+v", h.c.SignedIn())
@@ -269,11 +290,14 @@ func TestAutomaticRun(t *testing.T) {
 	if got := h.daemon.starts(); !slices.Equal(got, []api.BoardRunStartParams{{Trigger: api.TriggerAuto, Source: "claude-code"}}) {
 		t.Errorf("runStart %+v", got)
 	}
-	if !slices.Equal(fake.prompts(), []string{assistant.TriageMessage(5, false)}) {
+	if !slices.Equal(fake.prompts(), []string{triageMessage(Automatic, 5)}) {
 		t.Errorf("prompts %q", fake.prompts())
 	}
-	if got := fake.args(); !slices.Equal(got, triageArgs("run_1", 5, false)) || strings.Contains(strings.Join(got, " "), "create_draft") {
+	if got := fake.args(); !slices.Equal(got, triageArgs(Automatic, "run_1", 5)) || strings.Contains(strings.Join(got, " "), "create_draft") {
 		t.Errorf("args %q", got)
+	}
+	if last, ok := h.prompter.Last(); !ok || last.Trigger != api.TriggerAuto || last.Input.Triage.Drafts || last.Input.Triage.MaxCases != 5 {
+		t.Errorf("prompter %+v", last)
 	}
 }
 
@@ -747,7 +771,7 @@ func TestScheduledRun(t *testing.T) {
 	if got := h.daemon.starts(); !slices.Equal(got, []api.BoardRunStartParams{{Trigger: api.TriggerAuto, Source: "claude-code"}}) {
 		t.Errorf("runStart %+v", got)
 	}
-	if !slices.Equal(fake.prompts(), []string{assistant.TriageMessage(40, false)}) {
+	if !slices.Equal(fake.prompts(), []string{triageMessage(Automatic, 40)}) {
 		t.Errorf("prompts %q", fake.prompts())
 	}
 	if !s.LastAttempt().Equal(t0) || s.Failures() != 0 {

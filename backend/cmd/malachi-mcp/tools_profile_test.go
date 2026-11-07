@@ -25,6 +25,27 @@ type fakeAssistant struct {
 	fail      *api.Error
 }
 
+// The daemon's own assistant (docs/api.md §4.18) is nothing the bridge
+// calls: its methods stay unimplemented here.
+func (*fakeAssistant) Prompt(context.Context, api.AssistantPromptParams) (*api.PromptResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (*fakeAssistant) SessionStart(context.Context, api.AssistantSessionStartParams) (*api.AssistantSessionStartResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (*fakeAssistant) SessionSend(context.Context, api.AssistantSessionSendParams) (*api.AssistantSessionSendResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (*fakeAssistant) SessionStop(context.Context, api.AssistantSessionStopParams) (*api.AssistantSessionStopResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (*fakeAssistant) ProviderModels(context.Context, api.AssistantProviderModelsParams) (*api.AssistantProviderModelsResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (*fakeAssistant) Usage(context.Context, api.AssistantUsageParams) (*api.AssistantUsageResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
 func (f *fakeAssistant) ProfileGet(context.Context, api.AssistantProfileGetParams) (*api.AssistantProfileGetResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

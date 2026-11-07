@@ -232,6 +232,7 @@ can read the key file.
 | 1110 | contactNotFound | no stored contact with that id (deleted, its address book gone or its account's contacts switched off; §4.19) |
 | 1111 | addressBookNotFound | no address book with that id (§4.19) |
 | 1112 | ruleNotFound | no mail rule with that id (§4.21) |
+| 1113 | assistantSessionNotFound | no open assistant session with that id on this connection: it ended, timed out, or belongs to another connection (§4.18) |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
@@ -239,6 +240,7 @@ can read the key file.
 | 1204 | calendarConsentRequired | the account's sign-in does not allow calendar access (Microsoft scope missing, consent withdrawn, GOA calendar disabled); `data` = `{ "accountId", "signIn": bool }` — `signIn` true when `account.oauthStart` with `calendar: true` can fix it (source `daemon`), false for GOA (the desktop's Online Accounts settings) |
 | 1205 | crmSignInUnsupported | the CRM instance cannot be signed in to by this version: `data` = `{ "reason": "microsoft" \| "plan" }` — `microsoft`: it signs in through Microsoft Entra; `plan`: its plan has no API access (§4.17) |
 | 1206 | contactsConsentRequired | the account's sign-in does not allow contacts access (Microsoft scope `Contacts.ReadWrite` missing, consent withdrawn, GOA contacts disabled); `data` = `{ "accountId", "signIn": bool }` — `signIn` true when `account.oauthStart` with `contacts: true` can fix it (source `daemon`), false for GOA (§4.19) |
+| 1207 | assistantConsentRequired | the `ai` account's user has not accepted the current consent text (`AIConfig.consent` below `api.AssistantConsentVersion`), so no session starts (§4.18) |
 | 1300 | offline | daemon is in offline mode |
 | 1301 | networkError | connection failed |
 | 1302 | serverError | IMAP/SMTP server returned an error |
@@ -261,6 +263,9 @@ can read the key file.
 | 1508 | recurrenceUnsupported | the event's recurrence rule is outside what the daemon expands or edits; the event shows its first instance only and may be edited with scope `all` only |
 | 1509 | addressBookReadOnly | the address book or contact cannot be changed by the user: the recent book, a server's read-only collection or folder (§4.19) |
 | 1510 | revocationFailed | `message.signatureRevocation` got no answer it trusts from the certificate's OCSP responder or CRL; `data` = `{ "reason": "network" \| "timeout" \| "server" \| "response" \| "address" }` (§4.22); `message` is not for display |
+| 1511 | assistantUnavailable | an assistant session could not start: the MCP bridge could not be started or answered no tools, or the daemon has its limit of open sessions (§4.18) |
+| 1512 | assistantSessionBusy | `assistant.sessionSend` while the session's previous turn is still running (§4.18) |
+| 1513 | assistantToolsUnsupported | the `ai` account's model cannot call tools, which the purpose needs; the one-shot purposes without tools still work (§4.18) |
 
 `offline`, `networkError`, `serverError`, `serverTimeout`, `tlsError` (with
 `TLSErrorData` for CalDAV endpoints too), `authRequired`, `authFailed` and
@@ -659,13 +664,14 @@ Account { "id": "acc_1", "config": AccountConfig, "enabled": true, "state": Sync
           "capabilities": ["compose", "reply", "replyAll", "forward", "move", "delete"] }
 AccountConfig {
   "name": "Work", "email": "me@example.org", "displayName": "Me" (opt),
-  "kind": "imap|graph|jira|caldav|eway" (opt, default imap),
+  "kind": "imap|graph|jira|caldav|eway|ai" (opt, default imap),
   "imap": ServerConfig (imap only), "smtp": ServerConfig (imap only),
   "oauth2": OAuth2Config (opt; imap, or graph with source daemon),
   "graph": GraphConfig (graph only),
   "jira": JiraConfig (jira only),
   "caldav": CalDAVConfig (caldav only),
   "eway": EwayConfig (eway only),
+  "ai": AIConfig (ai only),
   "calendar": CalendarConfig (opt; graph and caldav),
   "syncIntervalSeconds": 300 (opt)
 }
@@ -708,6 +714,14 @@ EwayConfig {
   "username": "jan",
   "userGuid": "GUID" (opt),                                  // set by the daemon at account.add; clients keep it
   "followThreads": bool                                      // save later messages of saved conversations (§4.17)
+}
+AIConfig {
+  "provider": "anthropic|openai|openaiCompatible",
+  "baseUrl": "http://192.168.1.20:11434/v1" (openaiCompatible only; normalised),
+  "model": "claude-opus-5-5",                                 // the assistant's model id
+  "boardModel": "claude-haiku-5-5" (opt),                    // the board's triage; absent = model
+  "consent": { "version": 1, "acceptedAt": Time (set by the daemon) } (opt),   // §4.18; absent = no session starts
+  "certificateSha256": "64 hex digits" (opt)                 // the pin of baseUrl's host, https only, as ServerConfig
 }
 CalendarConfig {
   "sync": bool,                       // graph: synchronise the calendars (default false); caldav: true, false only with caldav.contacts (no calendars)
@@ -896,6 +910,57 @@ own `serviceUrl`). Rules, checked by `account.add`, `account.update` and
   clears a refused sign-in. Pausing the account (`account.setEnabled`)
   signs it out, and `crm.*` naming it answer `unavailable`.
 
+`ai` is an AI provider account: a model API the daemon's own assistant
+runs over (§4.18; the design is `docs/plans/ai-api.md`). It has no mail,
+like a `caldav` account — `folder.list` answers `{ "folders": [] }`,
+every message method `invalidArgument`, and **clients never show it in
+Mail** (nor in the board's triage accounts, nor does it get a profile
+note); its only capability is `assistant`. It synchronises nothing; its
+`SyncState` is `idle`, `disabled` when paused, `authRequired` after the
+provider refused the key (the last `account.test` or session, until
+the account is edited), `error` after another failure. The API key is
+`credentials.password` (the keyring keeps it; it is sent only to the
+host of the account's base URL, as a bearer token or Anthropic's
+`x-api-key`). Rules, checked by `account.add`, `account.update` and
+`account.test`:
+
+- `kind: ai` has `ai` and no `imap`, `smtp`, `oauth2`, `graph`, `jira`,
+  `caldav`, `eway` or `calendar`; `email` is empty (the address of an
+  `ai` account is never used; a given one must be valid); `name` is
+  required.
+- `provider`: one of the three. `anthropic` is the Anthropic Messages
+  API at `https://api.anthropic.com`, `openai` the OpenAI Responses API
+  at `https://api.openai.com/v1`, both with an empty `baseUrl`;
+  `openaiCompatible` is any server with the OpenAI chat completions
+  interface (Ollama, llama.cpp, LM Studio, vLLM, a gateway) at `baseUrl`.
+- `baseUrl` (`openaiCompatible` only, required): `http` or `https`
+  (the user's choice; a client warns of `http` outside a loopback
+  address, because the key and the mail then travel unencrypted), no
+  user info, query or fragment dropped, host lower case, no trailing
+  slash, ≤ 2048 bytes. The account's realm is `ai:` + the lower-case
+  host[:port] + path of the effective base URL + `#` + the account's id,
+  so two `ai` accounts of one provider (two keys, two servers at one
+  address, told apart by `name`) can exist beside each other: the
+  uniqueness rule of `account.add` never refuses an `ai` account.
+- `credentials.password` is required on add for `anthropic` and
+  `openai`, optional for `openaiCompatible` (a local server without a
+  key); `account.add` lists the provider's models once with it (a
+  refused key is `authFailed`) and does not store an account the
+  provider refused. `account.update` that changes `provider` or the
+  host of `baseUrl` needs `credentials.password` again (the stored one
+  is never sent elsewhere); an update without credentials keeps it.
+- `model`: required, ≤ 256 bytes, no control characters (an id the
+  provider listed, or one typed by the user); `boardModel` the same,
+  optional.
+- `consent`: a client sends `{ "version": n }` when the user accepted
+  the consent text of version `n` (`api.AssistantConsentVersion`, 1);
+  the daemon sets `acceptedAt`, and an update that carries a lower
+  version than the stored one, or none, keeps the stored consent.
+  Without a current consent no session starts
+  (`assistantConsentRequired`).
+- `certificateSha256`: as `ServerConfig`, `https` only; the only pin of
+  the daemon's HTTP clients beside CalDAV's.
+
 `capabilities` lists what a client may offer for the account's messages
 beyond reading them and setting flags; a client reads the list and never
 derives it from `kind`:
@@ -911,6 +976,7 @@ derives it from `kind`:
 | `calendar` | the account can have calendars (§4.14); it does not change with consent or sync state |
 | `crm` | messages of mail accounts can be saved to the account (§4.17) |
 | `contacts` | the account can have address books (§4.19): a `graph` account, a `caldav` account with `caldav.contacts`; it does not change with consent or sync state |
+| `assistant` | the daemon's assistant can run over the account (`assistant.session*`, §4.18) |
 
 `imap` and `graph` accounts have `["compose", "reply", "replyAll",
 "forward", "move", "delete"]`, a `graph` account `"calendar"` too; a
@@ -919,8 +985,8 @@ derives it from `kind`:
 alone when its contacts are on and `calendar.sync` is false (a
 CardDAV-only server: `account.add` sets it so when the signed-in listing
 finds no calendar home set); an `eway`
-account exactly `["crm"]`. A `graph` account has `"contacts"` too
-(address books, §4.19).
+account exactly `["crm"]`; an `ai` account exactly `["assistant"]`. A
+`graph` account has `"contacts"` too (address books, §4.19).
 Flags (`message.flag`) are always allowed, and so is `message.delete` of
 an account's outbox messages (cancelling a queued send or comment). Archiving and
 marking as junk still depend on folders with those roles, which a `jira`
@@ -968,14 +1034,16 @@ the backend. A `goa` account takes no credentials at all.
   site, so it may have the address of a mailbox), oauthClientMissing (source `daemon` and no
   client id for the provider); for an `eway` account also authFailed,
   crmSignInUnsupported, networkError, serverTimeout, tlsError and
-  serverError of its one sign-in
+  serverError of its one sign-in; for an `ai` account also authFailed,
+  networkError, serverTimeout, tlsError and serverError of its one
+  listing of the provider's models
 
 Validation (all failures are invalidArgument; free-text fields are trimmed):
 - `name` required, `displayName` optional; both valid UTF-8, no CR/LF/NUL,
   at most 256 bytes;
 - `email` a bare, syntactically valid address (no display name);
-- `kind` absent, `imap`, `graph`, `jira`, `caldav` or `eway` (the last two
-  as above);
+- `kind` absent, `imap`, `graph`, `jira`, `caldav`, `eway` or `ai` (the
+  last three as above);
 - for `imap`: `imap` and `smtp` required, `graph` and `jira` absent; `host` an IP
   literal or hostname of DNS labels (≤ 253 bytes), `port` 1–65535,
   `security` one of `tls|starttls|none` where `none` is accepted only for
@@ -1066,7 +1134,9 @@ accounts (`notificationMail: "hide"`) are shown again
 (`notify.messagesChanged`).
 The CRM records of §4.17 go with either account: an `eway` account's,
 and a mail account's records of its messages (the items in the CRM
-stay). An `eway` account is signed out.
+stay). An `eway` account is signed out. An `ai` account's open
+sessions end (`notify.assistantEvent` `failure` `stopped`) and its
+usage rows (§4.18) go with it.
 `deleteLocalData: true` also deletes the account's drafts and attachments
 (rows and files); `false` keeps them, orphaned, until a later phase defines
 what happens to local data of a removed account. Keyring secrets are
@@ -1202,7 +1272,7 @@ site.
   empty `credentials.password`, the stored password of that account is
   used; for source `daemon` the token of `credentials.oauthSession`
   (read, not consumed) or, with `accountId`, the stored sign-in
-- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph), "jira": EndpointTestResult (jira), "caldav": EndpointTestResult (caldav), "eway": EndpointTestResult (eway) }`
+- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph), "jira": EndpointTestResult (jira), "caldav": EndpointTestResult (caldav), "eway": EndpointTestResult (eway), "ai": AITestResult (ai) }`
 - errors: invalidArgument (also a `jira` account's `accountId` of another
   site); with `accountId` and `password` endpoints (or a `jira`
   account): accountNotFound, authRequired (no stored password),
@@ -1276,6 +1346,25 @@ otherwise) and signs out. `error.code` is `authFailed` (refused),
 `crmSignInUnsupported` (Microsoft sign-in, or no API access in the
 plan), `authRequired` (no password and no `accountId`), otherwise the
 network, TLS and server codes above; no `capabilities`.
+
+An AI provider probe lists the provider's models once (`GET /v1/models`
+of the effective base URL, with the key: `credentials.password`, or with
+`accountId` and an empty one the stored key, only for an `ai` account
+of the same provider and host: invalidArgument otherwise); the result
+is an `AITestResult` — an `EndpointTestResult` plus `models`, the
+listed `AIModel`s (`id`, `displayName` when the provider names one),
+cleaned and at most 500. `error.code` is `authFailed` (401),
+`serverError` with the status for 403 and 400 (a key that may not list
+models, a key without its workspace), `authRequired` (a named provider
+without a key and without `accountId`), otherwise the network, TLS and
+server codes above; no `capabilities`. A server that ignores the key
+(Ollama) answers `ok` whatever the key: the probe proves the address,
+not the credential.
+
+```jsonc
+AITestResult { "ok": true, "error": Error (opt), "latencyMs": 120, "models": [AIModel] (opt) }
+AIModel      { "id": "llama3.3", "displayName": "Llama 3.3" (opt) }
+```
 
 #### `account.linked`
 Lists accounts other desktop services are signed in to and that Malachi
@@ -4650,12 +4739,18 @@ found by the Message-ID alone is never deleted.
 
 ### 4.18 assistant
 
+Two things: the **assistant profile** (`assistant.profile*`), and the
+**daemon's own assistant** over `ai` accounts (`assistant.prompt`,
+`assistant.session*`, `assistant.providerModels`, `assistant.usage`,
+below).
+
 The assistant profile: what the user wrote about themselves for an
 assistant, the grammatical gender they write in, a note for each mail
 and Jira account, and the notes an assistant proposed for it. The
-clients put it into every prompt of their assistant; the MCP bridge
-gives it to MCP clients (`docs/mcp.md`, The user's profile). The design
-is `docs/plans/assistant-profile.md`; the daemon itself sends it nowhere.
+daemon appends it to every prompt it builds (`assistant.prompt`, a
+session of an `ai` account); the MCP bridge gives it to MCP clients
+(`docs/mcp.md`, The user's profile). The design is
+`docs/plans/assistant-profile.md`.
 
 ```jsonc
 AssistantProfile   { "text": "…", "gender": "unset|masculine|feminine|neutral",
@@ -4729,6 +4824,157 @@ Accepts or dismisses a pending proposal.
 Accepting appends the proposal's text — or `text`, the user's edit of
 it — to the profile's text (or the account's note) as a new line.
 Dismissing drops it. Either way `notify.assistantProfileChanged` follows.
+
+#### The daemon's assistant (`ai` accounts)
+
+The daemon runs the assistant of the apps itself when the user chose an
+`ai` account (§4.1) as its provider: it builds the prompts, calls the
+model's API, streams the answer to the connection that started the
+session, and runs the model's tool calls through the MCP bridge
+(`docs/mcp.md`, Sessions run by the daemon; `docs/security.md` §7.6 and
+§10.4; the design is `docs/plans/ai-api.md`). The apps that run Claude
+Code or Codex themselves take the same prompts from `assistant.prompt`,
+so every provider gets one text. The model's answer is untrusted text:
+clients show it as plain text (a Markdown subset turned into fonts,
+never HTML), as they show the bridge's.
+
+A **purpose** says what a session or prompt is for:
+
+| `purpose` | Tools | Turns | Input |
+|---|---|---|---|
+| `panel` | the panel's read tools, `create_draft`, the calendar's read tools, `get_user_profile`, `propose_profile_note` | a conversation | `text` and, for the first turn and a context added later, `context` |
+| `rewrite` | none | one | `rewrite` |
+| `write` | none | one | `write` |
+| `search` | none, a JSON schema | one | `search` |
+| `triage` | the panel's read tools, `create_draft` (manual only), `list_triage_queue`, `annotate_case`, `add_commitment` | one | `triage` |
+| `reply` | `read_message`, `list_messages`, `create_draft` | one | `reply` |
+
+The bridge is started with `--in-app` and, for `triage`, `--allow-triage
+--triage-run <runId> --triage-max <maxCases>`, for `reply`, `--reply-only
+<messageId>`; never `--allow-modify` or `--allow-send`. The tools the
+model gets are the purpose's set intersected with what the bridge
+registered.
+
+```jsonc
+PromptInput  { "text": "…" (opt),                                   // the user's message (panel)
+               "context": { "accountId", "messageIds": ["m_1"] (opt) | "folderId": "f_1" (opt), "added": bool (opt) } (opt),
+               "rewrite": { "preset": "politer|shorter|fix|english|custom", "instruction" (opt, with custom), "passage" } (opt),
+               "write":   { "mode": "new|reply|replyAll|forward|edit", "instruction" (opt), "subject" (opt), "own" (opt), "quote" (opt) } (opt),
+               "search":  { "words" } (opt),
+               "triage":  { "maxCases": 40, "drafts": bool } (opt),
+               "reply":   { "accountId", "messageId", "others": ["m_2"] (opt), "instruction" (opt), "followUp": bool (opt) } (opt) }
+PromptResult { "systemPrompt": "…", "message": "…" (opt, with an input),
+               "tools": ["list_accounts", …] (opt), "bridgeArgs": ["--in-app", …] (opt), "jsonSchema": {…} (opt; search) }
+AssistantEvent { "sessionId": "as_1", "kind": "init|textDelta|text|toolUse|toolResult|result|failure|usage",
+                 "text" (opt), "tools": [] (init), "tool", "id" (toolUse, toolResult), "isError": bool (toolResult),
+                 "result": { "success": bool, "structured": {…} (opt), "reason": "endTurn|maxTokens|refusal|…" (opt) } (result),
+                 "failure": { "class": AssistantFailureClass, "retryAfter": 30 (opt), "message": "…" (opt, not for display) } (failure),
+                 "usage": AssistantUsage (usage, result) }
+AssistantUsage { "inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens" }
+AssistantFailureClass = "auth|permission|rateLimit|overloaded|invalidRequest|toolsUnsupported|network|protocol|contextFull|bridge|timeout|limit|stopped"
+AIModel { "id", "displayName" (opt) }
+```
+
+Every free text of an input is cleaned (valid UTF-8, no control
+characters but `\n` and `\t`) and capped at `api.MaxPromptTextBytes`
+(64 KiB; invalidArgument beyond); `context.messageIds` and
+`reply.others` at `api.MaxPromptMessageIDs` (20). Ids are opaque: the
+daemon never puts a subject, a sender or mail text into a prompt of
+its own; the model reads mail through the tools, inside the bridge's
+fence.
+
+#### `assistant.prompt`
+Builds the prompt of a purpose for a client that runs the model itself
+(Claude Code, Codex).
+
+- params: `{ "purpose", "language": "cs", "accountId" (opt), "trigger": "manual|auto" (opt; triage), "runId": "run_1" (opt; triage: the board run the bridge arguments name), "input": PromptInput (opt) }`
+- result: `PromptResult`
+- errors: invalidArgument (an unknown purpose, an input of another
+  purpose, over a limit); accountNotFound
+
+`language` is the client's UI language (BCP 47) the model is told to
+answer in; `accountId` names the account whose profile note is appended
+to the system prompt (a mail or Jira account: a one-shot purpose of a
+compose window, a board case); `message` is built only with `input`.
+The user's profile is appended by the daemon.
+
+#### `assistant.sessionStart`
+Opens a session over an `ai` account on this connection.
+
+- params: `{ "accountId", "purpose", "language", "bridge": "/abs/path/malachi-mcp" (opt; purposes with tools), "noteAccountId" (opt; the mail or Jira account whose profile note is appended), "trigger" (opt), "runId" (opt; triage), "input": PromptInput (opt), "timeoutSeconds": 300 (opt) }`
+- result: `{ "sessionId": "as_1", "tools": ["list_accounts", …] (opt) }`
+- errors: accountNotFound; invalidArgument (not an `ai` account, a
+  paused one, an unknown purpose, a purpose with tools without
+  `bridge`, a `bridge` that is not an absolute path to an executable
+  file, a `runId` not matching `^[A-Za-z0-9._:-]{1,128}$`, a reply
+  without `input.reply`, more than `api.MaxAssistantSessionsPerConn`
+  open sessions on this connection); assistantConsentRequired;
+  authRequired (a named provider without a stored key); keyringError;
+  assistantUnavailable (the bridge could not be started or listed no
+  tool of the purpose, or `api.MaxAssistantSessions` are open);
+  assistantToolsUnsupported
+
+The session belongs to the connection: its events go to it alone, and
+it ends when the connection closes. The bridge (`bridge`, the app's
+bundled `malachi-mcp`; in a sandboxed app the copy that may be a child)
+is started by the daemon with its own socket, the purpose's arguments
+and a minimal environment; it connects back like any client. `input`,
+when given, is sent as the first turn at once (a one-shot purpose always
+gives it). `timeoutSeconds` bounds one turn: 0 is the purpose's default
+(5 minutes; `triage` 15), at most 15 minutes. A session nobody wrote to
+for 30 minutes ends (`failure` `stopped`).
+
+#### `assistant.sessionSend`
+Sends a turn; the answer comes as `notify.assistantEvent`s, ending with
+`result` or `failure`.
+
+- params: `{ "sessionId", "input": PromptInput }`
+- result: `{}`
+- errors: assistantSessionNotFound; assistantSessionBusy (the previous
+  turn still runs); invalidArgument (an input of another purpose, a
+  second turn of a one-shot purpose, over a limit)
+
+A turn: `init` with the tools, then `textDelta`s as the model writes,
+`text` for each finished block, `toolUse` and `toolResult` for each
+call (at most `api.MaxAssistantTurnTools`, 50, per turn; the result is
+the bridge's text verbatim, cut to `api.MaxAssistantToolResultBytes`,
+256 KiB), `usage` with the tokens so far, and `result`. A `failure`
+ends the turn; one of class `contextFull`, `bridge`, `auth`,
+`permission`, `toolsUnsupported` or `stopped` ends the session too.
+`result.structured` is the answer parsed as JSON when a schema was
+asked for (`search`); `result.reason` the provider's stop reason as a
+word. The history (prompt, turns, tool results) lives in the daemon's
+memory only and ends with the session; nothing of it is logged.
+
+#### `assistant.sessionStop`
+- params: `{ "sessionId" }`
+- result: `{}`
+- errors: assistantSessionNotFound
+
+Ends the session: a running turn gets `failure` `stopped`, the bridge
+is terminated. A triage session's `board.runEnd` is still the client's.
+
+#### `assistant.providerModels`
+Lists the models of an `ai` account's provider (`GET /v1/models` with
+the stored key), from the daemon's cache of an hour unless `refresh`.
+
+- params: `{ "accountId", "refresh": bool (opt) }`
+- result: `{ "models": [AIModel] }`
+- errors: accountNotFound; invalidArgument (not an `ai` account);
+  authRequired; keyringError; the network, TLS and server codes of §2
+
+#### `assistant.usage`
+The tokens the daemon's assistant used, per `ai` account and local
+day, summed over models (`assistant_usage` of the store; `notify.assistantUsageChanged`
+after every turn).
+
+- params: `{ "accountId" (opt; absent = every ai account), "days": 1 (opt; 0 = today, at most 400) }`
+- result: `{ "days": [{ "day": "2026-11-07", "accountId", "inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens", "sessions", "turns" }] }`
+- errors: accountNotFound; invalidArgument
+
+A triage session's usage is also written to its board run
+(`board.runEnd` without `usage` takes the daemon's count, §4.13). Rows
+older than 400 days are pruned.
 
 ### 4.19 addressBook and contact
 
@@ -5416,13 +5662,17 @@ is imported again.
 | `notify.eventAlert` | `{ "alert": EventAlert }` |
 | `notify.invitationsChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
 | `notify.assistantProfileChanged` | `{}` |
+| `notify.assistantEvent` | `AssistantEvent` (§4.18); only to the connection whose session it is |
+| `notify.assistantUsageChanged` | `{ "accountId" }` |
 | `notify.contactsChanged` | `{ "accountId" (opt; absent for the recent book), "bookIds": ["b_1"] (opt) }` |
 | `notify.updateChanged` | `{}` |
 | `notify.rulesChanged` | `{}` |
 | `notify.signaturesChanged` | `{}` |
 
 Notifications are sent only to connections that completed the handshake
-(§1.4).
+(§1.4). `notify.assistantEvent` is the one notification sent to a single
+connection, the one that started the session (§4.18); every other goes
+to every connection.
 
 `notify.accountsChanged` is sent after `account.add`, `account.remove`,
 `account.setEnabled` and `account.update` to every client, including the
@@ -6010,3 +6260,16 @@ some. Clients must be able to resynchronise their view via `sync.status`,
 - **2** (2026-11-03, compatible addition): `BoardMessage.signature`
   (`SignatureSummary`, §4.13) in `board.get`, so the board's conversation
   cards show the signature badge. `ProtocolVersion` stays 2.
+- **2** (2026-11-07, compatible addition: AI provider accounts and the
+  daemon's assistant, §4.1 and §4.18): account kind `ai` (`AIConfig`,
+  capability `assistant`, `account.test` result `ai`: `AITestResult`);
+  new methods `assistant.prompt`, `assistant.sessionStart`,
+  `assistant.sessionSend`, `assistant.sessionStop`,
+  `assistant.providerModels`, `assistant.usage`; the notifications
+  `notify.assistantEvent` (to one connection) and
+  `notify.assistantUsageChanged`; error codes 1113
+  `assistantSessionNotFound`, 1207 `assistantConsentRequired`, 1511
+  `assistantUnavailable`, 1512 `assistantSessionBusy`, 1513
+  `assistantToolsUnsupported`; limits `api.MaxAssistant*`,
+  `api.MaxPrompt*`, `api.AssistantConsentVersion`. `ProtocolVersion`
+  stays 2.

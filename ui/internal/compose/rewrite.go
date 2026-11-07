@@ -9,6 +9,7 @@ import (
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/editor"
@@ -22,16 +23,16 @@ import (
 // or the bar (its consent is the window's), and whether ChatGPT answers.
 type Assistant interface {
 	CanRunInApp() bool
-	UsesChatGPT() bool
+	// ProviderBrand names the provider in effect for the writing bar's
+	// heading (assistant.WriteBarTitleFor): a brand, or the name of an
+	// AI provider account.
+	ProviderBrand() string
 	OnChange(f func()) (remove func())
 	RefreshHandlers()
 	NewRequest() *assistantpanel.Request
 	EnsureAssistantConsent(gtk.Widgetter, func(bool))
 	AskAssistantConsent(gtk.Widgetter, func(bool))
 	RuntimeGeneration() int
-	// Profile is the user's profile; a request gets the note of the
-	// window's account only (assistant.Profile.For).
-	Profile() assistant.Profile
 }
 
 // assistantIcon is the Assistant's icon (window/assistant.go).
@@ -214,9 +215,8 @@ func (u *rewriteUI) rewriterFor() *assistantpanel.Rewriter {
 	req := u.w.m.Assistant.NewRequest()
 	req.Consent = func(done func(bool)) { u.w.m.Assistant.AskAssistantConsent(u.w, done) }
 	u.rewriter = assistantpanel.NewRewriter(i18n.Catalog{}, req)
-	u.rewriter.Profile = func() assistant.Profile {
-		return u.w.m.Assistant.Profile().For(string(u.w.pane.account().ID))
-	}
+	// The daemon appends the note of the window's account to the prompt.
+	u.rewriter.Account = func() api.AccountID { return u.w.pane.account().ID }
 	u.rewriter.OnState = func(assistantpanel.RewriteState) { u.render() }
 	return u.rewriter
 }

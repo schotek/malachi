@@ -1723,6 +1723,58 @@ address someone talked the user, or an agent, into adding.
   message's own sender (reply): nothing in a message decides where mail
   goes beyond who wrote it.
 
+### 7.6 Calls to a model API
+
+An `ai` account ([api.md §4.1](api.md#41-account); the design is
+`docs/plans/ai-api.md`) names a model API — Anthropic, OpenAI, or any
+server with the OpenAI-compatible chat completions interface (Ollama,
+llama.cpp, LM Studio, vLLM, a gateway) — over which the daemon runs its
+own assistant (§10.4). Its calls are the second kind of request the
+daemon makes that is not to a server of one of the user's mail accounts
+(the first is the update check, §7.4); they go to the host the user
+configured and nowhere else (`internal/llm`).
+
+- **What leaves**: a `POST` with the prompt (the fixed instructions, the
+  user's profile, the user's text and the ids it names), the session's
+  history, the results of the tools the model called — the mail it read,
+  inside the bridge's fence, and the drafts it wrote — and the
+  definitions of the tools; `User-Agent: MalachiMail/<version>` and the
+  key in the request's header (`x-api-key` for Anthropic, `Authorization:
+  Bearer` otherwise; none for a compatible server without one). Nothing
+  else of the store: no server setting, no token, no other account's key.
+  One `GET` of the provider's models for `account.test` and
+  `assistant.providerModels`.
+- **To whom**: the fixed base URL of a named provider
+  (`api.anthropic.com`, `api.openai.com`), else the account's `baseUrl`
+  as stored (normalised, no user info, query or fragment). The client
+  follows no redirect (a 3xx is a protocol failure), so the key reaches
+  that host only. The user may choose plain `http` (a server at home, a
+  container); the clients warn of it outside a loopback address, because
+  the key and the mail then travel unencrypted on that network (D8 of
+  the design); over `https` the leaf certificate may be pinned
+  (`certificateSha256`), the only pin of the daemon's HTTP clients beside
+  CalDAV's, with the same `transport.EndpointTLSConfig`.
+- **What is trusted**: nothing of the answer. Text is streamed to the
+  session's client as text (§10.4); a tool call is executed only when
+  its name is in the session's allow-list and its arguments are a JSON
+  object, and only through the bridge, with the bridge's own checks; a
+  JSON answer asked for by schema is parsed as that JSON and otherwise
+  ignored.
+- **Bounds**: a line of the event stream 1 MiB, an event 4 MiB, a whole
+  answer 32 MiB, an error body 64 KiB, a listing of models 8 MiB and 500
+  models; 15 s to connect, 60 s to the response headers, a turn 5
+  minutes (a triage 15); one retry after `Retry-After` of at most 30 s on
+  429, 503 and 529, and one without the structured-output field when a
+  compatible server refuses it; nothing else is retried by the daemon.
+- **Log**: the failure class and the HTTP status, never a body, a URL
+  with credentials, the key, the prompt or the answer. The provider's
+  own short error message is kept in the failure's technical `message`,
+  cleaned and cut to 200 bytes, and is not for display.
+- **The key** is `credentials.password` of the account (§6): in the
+  keyring, write-only in the API, deleted with the account, read into
+  the memory of a session or a test only; `account.add` lists the models
+  once with it, so that a refused key stores nothing.
+
 ## 8. Local storage
 
 - One daemon per store: before it touches the store or the socket, the
@@ -2171,8 +2223,9 @@ while the bridge is registered in a Claude client:
   destination; a draft is offered from the bridge's own result line and
   opened only after `draft.list` has it. The first question asks whether
   mail may be sent to Claude (`assistant-consent`). The app never reads,
-  stores or asks for a credential: it asks `claude auth status --json` for
-  `loggedIn` only, and *Sign In…* runs Claude Code's own `claude auth
+  stores or asks for a credential of Claude Code (the key of an `ai`
+  account is the daemon's, §10.4): it asks `claude auth status --json`
+  for `loggedIn` only, and *Sign In…* runs Claude Code's own `claude auth
   login`, which opens the browser and stores the sign-in itself; the app
   waits for the process to end and neither shows nor logs what it prints
   (the address it names belongs to the sign-in's session). *Get Claude
@@ -2512,6 +2565,64 @@ never overrides them; the bridge does the same in its instructions.
   from.
 - Anyone who can write to the daemon's socket can change the profile,
   as they can change everything else (§8).
+
+### 10.4 The daemon's own assistant
+
+With an `ai` account chosen as the assistant's provider, the daemon runs
+the assistant that the apps otherwise run through the user's Claude Code
+or Codex ([api.md §4.18](api.md#418-assistant), [mcp.md](mcp.md),
+*Sessions run by the daemon*; the design is `docs/plans/ai-api.md`). It
+puts the pieces of §10.1 together itself: a session is one conversation
+in the daemon's memory, bound to the RPC connection that started it, over
+a client of the model API (§7.6) and over the bridge, which the daemon
+starts as a child process and which connects back to the daemon as any
+client does (`internal/agent`).
+
+- **The bridge is the only tool**, with the tiers of this section:
+  `--in-app` and, for a triage run, `--allow-triage --triage-run <runId>
+  --triage-max <n>`, for a suggested reply `--reply-only <messageId>`;
+  never `--allow-modify` or `--allow-send`. The model sees the tools of
+  the session's purpose (the panel's read tools and `create_draft`, the
+  triage tools, the reply's three) and no other; the daemon refuses a
+  call outside that list without asking the bridge, and the bridge's
+  own confinement (one reply, the run's cases) stands behind it. The
+  bridge runs in a minimal environment (no `MALACHI_*` variable; it is
+  told the socket) and ends with the session.
+- **The prompts are the daemon's** (`internal/assistant`: the same texts
+  the apps composed themselves until now, which they still get from
+  `assistant.prompt` for Claude Code and Codex): a client sends a
+  purpose and an input — the user's text, ids, a passage, the typed
+  words — never a prompt of its own, so a client on the socket cannot
+  give the model other instructions than the user's; the input's free
+  text is cleaned and capped, the ids checked. The user's profile is
+  appended as in §10.3.
+- **The answer is untrusted text**, as in §10.1: the daemon streams it
+  to the client unchanged and the client shows it as plain text through
+  its Markdown subset; a draft is a `create_draft` result the client
+  confirms with `draft.list`; a JSON answer is parsed only when the
+  purpose asked for a schema (the search) and only as that JSON.
+- **Consent first**: no session starts for an account whose user has
+  not accepted the current consent text (`AIConfig.consent`,
+  `assistantConsentRequired`): the clients ask, the daemon decides. What
+  the consent covers is what §7.6 lists; the clients' text names the
+  provider's terms or the user's own server.
+- **Bounds**: at most 16 sessions, 4 per connection; a turn 50 tool
+  rounds, a tool result 256 KiB, a history 1 MiB (then the session
+  ends); an untouched session ends after 30 minutes, every session when
+  its connection closes or the daemon stops. Events go to the session's
+  connection only (`notify.assistantEvent`); the usage of every turn is
+  counted per account and local day (`assistant.usage`), so that the
+  user sees what they pay for.
+- **Log**: session ids, purposes, providers, counts and failure classes;
+  never the prompt, the user's text, a tool result or the answer.
+
+Not defended: the model following instructions in mail with the tools it
+has (as in §10.1); what the provider does with the content, which goes
+under the user's key and the provider's terms, or, for a server of the
+user's own, wherever that server sends it; a server the user chose to
+reach over plain `http`; and anyone who can write to the daemon's
+socket, who can start a session over the user's key as they can read
+the mail (§8).
 
 ## 11. Reporting
 

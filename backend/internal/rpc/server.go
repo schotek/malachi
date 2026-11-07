@@ -48,6 +48,9 @@ const (
 	// acceptBackoffMax, as in net/http, instead of spinning.
 	acceptBackoffMin = 5 * time.Millisecond
 	acceptBackoffMax = time.Second
+	// notifyWriteTimeout is how long a notification's write may take
+	// before the connection is given up.
+	notifyWriteTimeout = 10 * time.Second
 )
 
 // Server accepts connections on a unix socket, authenticates each one
@@ -82,6 +85,12 @@ type Server struct {
 	conns    map[*conn]struct{}
 	pending  int // connections in the handshake (conn.pending)
 	closed   bool
+
+	// connSeq numbers the connections (conn.id, api.ConnID); observer,
+	// when the backend is an api.ConnObserver, hears of each authenticated
+	// connection that ended.
+	connSeq  atomic.Uint64
+	observer api.ConnObserver
 }
 
 // NewServer wires a Backend implementation to the method table.
@@ -93,6 +102,9 @@ func NewServer(backend api.Backend, log *slog.Logger) *Server {
 		maxPending:     maxPendingConns,
 		preAuthTimeout: preAuthTimeout,
 		newNonce:       api.NewAuthNonce,
+	}
+	if o, ok := backend.(api.ConnObserver); ok {
+		s.observer = o
 	}
 	s.registerTransport()
 	s.registerBackend(backend)
@@ -352,6 +364,41 @@ func (s *Server) removeConn(c *conn) {
 	delete(s.conns, c)
 	s.releaseLocked(c)
 	s.mu.Unlock()
+	// After the read loop and its in-flight calls (serve waits for them
+	// before this runs): the backend can drop what it kept for the
+	// connection.
+	if c.authed.Load() && s.observer != nil {
+		s.observer.ConnClosed(c.id)
+	}
+}
+
+// NotifyConn sends a notification to the one authenticated connection id
+// names; false when there is no such connection (it ended, or is still
+// in the handshake) or the write failed.
+func (s *Server) NotifyConn(id api.ConnID, method string, params any) bool {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		s.log.Error("marshal notification", "method", method, "err", err)
+		return false
+	}
+	n := api.Notification{JSONRPC: api.JSONRPCVersion, Method: method, Params: raw}
+	s.mu.Lock()
+	var target *conn
+	for c := range s.conns {
+		if c.id == id {
+			target = c
+			break
+		}
+	}
+	s.mu.Unlock()
+	if target == nil || !target.authed.Load() {
+		return false
+	}
+	if err := target.notify(n); err != nil {
+		s.log.Debug("notification dropped", "method", method, "err", err)
+		return false
+	}
+	return true
 }
 
 // releasePending gives c's handshake slot back, once.
@@ -431,6 +478,18 @@ func (s *Server) AssistantProfileChanged(n api.AssistantProfileChangedNotificati
 	s.broadcast(api.NotifyAssistantProfileChanged, n)
 }
 
+// Server also implements the optional api.AssistantEventNotifier: an
+// assistant event goes to the session's connection alone.
+var _ api.AssistantEventNotifier = (*Server)(nil)
+
+func (s *Server) AssistantEvent(conn api.ConnID, n api.AssistantEvent) bool {
+	return s.NotifyConn(conn, api.NotifyAssistantEvent, n)
+}
+
+func (s *Server) AssistantUsageChanged(n api.AssistantUsageChangedNotification) {
+	s.broadcast(api.NotifyAssistantUsageChanged, n)
+}
+
 // --- connection ----------------------------------------------------------
 
 type conn struct {
@@ -438,6 +497,7 @@ type conn struct {
 	nc       net.Conn
 	key      secretKey
 	accepted time.Time
+	id       api.ConnID // the daemon-wide identity of the connection (api.WithConn)
 
 	pending bool // guarded by srv.mu: the connection holds a handshake slot
 
@@ -450,7 +510,8 @@ type conn struct {
 }
 
 func newConn(s *Server, nc net.Conn, key secretKey, accepted time.Time) *conn {
-	return &conn{srv: s, nc: nc, key: key, accepted: accepted, enc: json.NewEncoder(nc)}
+	return &conn{srv: s, nc: nc, key: key, accepted: accepted, enc: json.NewEncoder(nc),
+		id: api.ConnID(fmt.Sprintf("c_%d", s.connSeq.Add(1)))}
 }
 
 func (c *conn) serve(ctx context.Context) {
@@ -597,7 +658,7 @@ func (c *conn) handle(ctx context.Context, req api.Request) {
 	}
 
 	start := time.Now()
-	result, err := h(ctx, req.Params)
+	result, err := h(api.WithConn(ctx, c.id), req.Params)
 	if err != nil {
 		resp.Error = toAPIError(err)
 		if resp.Error.Code == api.CodeInternalError {
@@ -635,7 +696,16 @@ func (c *conn) notify(v any) error {
 	}
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
-	return c.enc.Encode(v)
+	// A client that does not take the write holds every notifier; after
+	// notifyWriteTimeout the connection is closed instead (a half-written
+	// line could not be continued anyway).
+	_ = c.nc.SetWriteDeadline(time.Now().Add(notifyWriteTimeout))
+	err := c.enc.Encode(v)
+	_ = c.nc.SetWriteDeadline(time.Time{})
+	if err != nil {
+		c.close()
+	}
+	return err
 }
 
 func (c *conn) close() {

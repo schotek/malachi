@@ -278,7 +278,7 @@ func (b *Backend) triageAccounts(ctx context.Context, p api.BoardPreferences) (m
 	}
 	out := map[string]store.Account{}
 	for _, a := range list {
-		if !a.Enabled || isCalendarOnlyAccount(a) || isCrmAccount(a) {
+		if !a.Enabled || isCalendarOnlyAccount(a) || isCrmAccount(a) || isAIAccount(a) {
 			continue
 		}
 		if len(named) == 0 && isIssueAccount(a) {
@@ -1347,6 +1347,14 @@ func (s *boardService) RunEnd(ctx context.Context, p api.BoardRunEndParams) (*ap
 	}
 	if p.Usage != nil && !p.Usage.Valid() {
 		return nil, boardInvalid("usage counters must not be negative")
+	}
+	if p.Usage == nil {
+		// A run the daemon's own assistant triaged: its tokens are the
+		// daemon's count (docs/plans/ai-api.md D19).
+		if u, ok := s.b.assist.takeRunUsage(string(p.RunID)); ok {
+			p.Usage = &api.BoardUsage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens,
+				CacheCreationInputTokens: u.CacheCreationInputTokens, CacheReadInputTokens: u.CacheReadInputTokens}
+		}
 	}
 	err := s.b.store.EndBoardRun(ctx, string(p.RunID), p.Error, p.Usage, s.b.boardNow())
 	switch {

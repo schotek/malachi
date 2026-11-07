@@ -1102,6 +1102,9 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		w.loadAccounts()
 		w.loadSyncStatus()
 		w.rulesRefresh()
+		if w.assist != nil {
+			w.assist.AccountsChanged()
+		}
 		// The compose windows' accounts, and whether New Message is on
 		// (an issue tracker alone writes no mail), may have changed with
 		// the daemon.
@@ -1111,6 +1114,10 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		// A daemon of another protocol version does run (the status line
 		// names it): the banner saying that none does would be wrong.
 		w.banner.SetRevealed(w.conn.Mismatch == 0)
+		// The sessions of the daemon's assistant went with the connection.
+		if w.assist != nil {
+			w.assist.disconnected()
+		}
 		// Late replies of in-flight calls are dropped; what is shown stays
 		// until the reconnect reloads it. A conversation waiting for its
 		// members folds back, so no spinner outlives its reply.

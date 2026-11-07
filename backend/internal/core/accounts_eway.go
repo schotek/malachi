@@ -63,10 +63,10 @@ func validateEway(c *api.AccountConfig) error {
 // isCrmAccount: an account of kind eway (no mail, no folders, no board).
 func isCrmAccount(a store.Account) bool { return a.Config.Protocol() == api.AccountEway }
 
-// hasNoMail: an account of a kind without mail (caldav, eway).
+// hasNoMail: an account of a kind without mail (caldav, eway, ai).
 func hasNoMail(c api.AccountConfig) bool {
 	k := c.Protocol()
-	return k == api.AccountCalDAV || k == api.AccountEway
+	return k == api.AccountCalDAV || k == api.AccountEway || k == api.AccountAI
 }
 
 // sameEwayLogin: the same instance (realm) and user name.

@@ -5,11 +5,14 @@ package assistantpanel
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 )
 
 type fakeProvider struct {
@@ -19,12 +22,13 @@ type fakeProvider struct {
 	gate     chan struct{}
 }
 
+func (p *fakeProvider) Name() string     { return "Fixture Provider" }
 func (p *fakeProvider) Model() string    { return "fixture-model" }
 func (p *fakeProvider) HasConsent() bool { return p.consent }
 func (p *fakeProvider) AcceptConsent()   { p.consent = true }
 func (p *fakeProvider) Open(ctx context.Context, spec SessionSpec) (Session, error) {
 	p.specs <- spec
-	s := &fakeSession{done: make(chan struct{}), sent: make(chan string, 1)}
+	s := &fakeSession{done: make(chan struct{}), sent: make(chan api.PromptInput, 1)}
 	p.sessions <- s
 	if p.gate != nil {
 		select {
@@ -44,12 +48,15 @@ type fakeSession struct {
 	events func([]assistant.Event)
 	exit   func(Exit)
 	done   chan struct{}
-	sent   chan string
+	sent   chan api.PromptInput
 	ended  bool
 }
 
-func (s *fakeSession) Running() bool                                  { s.mu.Lock(); defer s.mu.Unlock(); return !s.ended }
-func (s *fakeSession) Submit(_ context.Context, message string) error { s.sent <- message; return nil }
+func (s *fakeSession) Running() bool { s.mu.Lock(); defer s.mu.Unlock(); return !s.ended }
+func (s *fakeSession) Submit(_ context.Context, input api.PromptInput) error {
+	s.sent <- input
+	return nil
+}
 func (s *fakeSession) SetHandlers(events func([]assistant.Event), exit func(Exit)) {
 	s.mu.Lock()
 	s.events, s.exit = events, exit
@@ -75,10 +82,10 @@ func (s *fakeSession) emit(e assistant.Event) {
 func TestProviderRequestCallbacksAndCancellation(t *testing.T) {
 	loop := newTestLoop()
 	provider := newFakeProvider()
-	r := NewRequest(RequestConfig{Provider: func() Provider { return provider }, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
+	r := NewRequest(RequestConfig{Provider: func() Provider { return provider }, Prompter: &prompttest.Prompter{}, Language: func() string { return testLanguage }, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
 	calls := 0
 	gotText := ""
-	r.StartCall(Call{SystemPrompt: "fixture", Message: "input", ModelID: "board-model", OnText: func(text string) { gotText = text }}, func(o Outcome) {
+	r.StartCall(Call{Purpose: api.PurposeRewrite, Input: rewriteInput("input"), NoteAccountID: "acc_1", ModelID: "board-model", OnText: func(text string) { gotText = text }}, func(o Outcome) {
 		calls++
 		if o.Kind != OutcomeAnswered || o.Text != "answer" {
 			t.Fatal(o)
@@ -87,8 +94,13 @@ func TestProviderRequestCallbacksAndCancellation(t *testing.T) {
 	loop.runUntil(t, func() bool { return r.providerSession != nil })
 	s := <-provider.sessions
 	spec := <-provider.specs
-	if spec.ModelID != "board-model" || spec.Tools != nil {
+	// The spec names the purpose and carries the daemon's prompt resolved.
+	if spec.ModelID != "board-model" || spec.Tools != nil || spec.Purpose != api.PurposeRewrite || spec.Language != testLanguage ||
+		spec.NoteAccountID != "acc_1" || spec.SystemPrompt != "SYS rewrite cs note:acc_1" || spec.JSONSchema != "" {
 		t.Fatal(spec)
+	}
+	if sent := <-s.sent; sent.Rewrite == nil || sent.Rewrite.Passage != "input" {
+		t.Fatalf("submitted %+v", sent)
 	}
 	go s.emit(assistant.Event{Kind: assistant.EventTextDelta, Text: "answer"})
 	loop.runUntil(t, func() bool { return gotText == "answer" })
@@ -100,7 +112,7 @@ func TestProviderRequestCallbacksAndCancellation(t *testing.T) {
 	if s.Running() {
 		t.Fatal("oneshot profile retained")
 	}
-	r.Start("fixture", "input2", "", nil, func(Outcome) { calls++ })
+	r.Start(api.PurposeRewrite, rewriteInput("input2"), "", nil, func(Outcome) { calls++ })
 	loop.runUntil(t, func() bool { return r.providerSession != nil })
 	s = <-provider.sessions
 	s.mu.Lock()
@@ -120,17 +132,16 @@ func TestProviderRequestPolicySnapshotBeforeConsent(t *testing.T) {
 	selected := provider
 	other := newFakeProvider()
 	other.consent = false
-	r := NewRequest(RequestConfig{Provider: func() Provider { return selected }, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
+	r := NewRequest(RequestConfig{Provider: func() Provider { return selected }, Prompter: &prompttest.Prompter{}, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
 	var answer func(bool)
 	r.Consent = func(done func(bool)) { answer = done }
-	tools := &Tools{BridgeArgs: []string{"--reply-only", "m_1"}, Allowed: append([]string{}, assistant.SuggestReplyTools...)}
-	r.StartCall(Call{SystemPrompt: "fixture", Tools: tools}, func(Outcome) {})
+	tools := &Tools{Bridge: "/b/malachi-mcp"}
+	r.StartCall(Call{Purpose: api.PurposeReply, Input: api.PromptInput{Reply: &api.ReplyInput{AccountID: "acc_1", MessageID: "m_1"}}, Tools: tools}, func(Outcome) {})
 	loop.runUntil(t, func() bool { return answer != nil })
-	tools.BridgeArgs[0] = "--allow-send"
-	tools.Allowed[0] = "mcp__malachi__send_message"
+	tools.Bridge = "/evil"
 	oldAnswer := answer
 	selected = other
-	r.Start("next", "text", "", nil, func(Outcome) {})
+	r.Start(api.PurposeRewrite, rewriteInput("text"), "", nil, func(Outcome) {})
 	oldAnswer(true)
 	if !provider.consent || other.consent {
 		t.Fatal("late consent leaked to changed provider")
@@ -140,13 +151,24 @@ func TestProviderRequestPolicySnapshotBeforeConsent(t *testing.T) {
 func TestProviderChangedEndsPanelAndStaleEvents(t *testing.T) {
 	loop := newTestLoop()
 	provider := newFakeProvider()
-	c := New(Config{Provider: func() Provider { return provider }, Translator: tr, Settings: &memSettings{}, Loop: loop, Log: discardLog(), Bridge: "/fixture/malachi-mcp"})
+	c := New(Config{Provider: func() Provider { return provider }, Prompter: &prompttest.Prompter{}, Language: func() string { return testLanguage }, Translator: tr, Settings: &memSettings{}, Loop: loop, Log: discardLog(), Bridge: "/fixture/malachi-mcp"})
 	defer c.Close()
 	if !c.Submit("input") {
 		t.Fatal("submission refused")
 	}
 	loop.runUntil(t, func() bool { return c.providerSession != nil })
 	s := <-provider.sessions
+	// The panel's session: the daemon's panel prompt and tools, the
+	// bridge's path, and the turn's input as the panel composed it.
+	spec := <-provider.specs
+	if spec.Purpose != api.PurposePanel || spec.Language != testLanguage || spec.BridgePath != "/fixture/malachi-mcp" ||
+		spec.SystemPrompt != "SYS panel cs" || spec.Tools == nil || spec.Tools.Bridge != "/fixture/malachi-mcp" ||
+		!slices.Equal(spec.Tools.Allowed, assistant.PrefixTools(prompttest.PanelTools)) || !slices.Equal(spec.Tools.BridgeArgs, []string{"--in-app"}) {
+		t.Fatalf("spec %+v", spec)
+	}
+	if sent := <-s.sent; sent.Text != "input" || sent.Context != nil {
+		t.Fatalf("submitted %+v", sent)
+	}
 	s.mu.Lock()
 	stale := s.events
 	s.mu.Unlock()
@@ -166,9 +188,9 @@ func TestProviderOpenCanceledBeforeDelivery(t *testing.T) {
 	loop := newTestLoop()
 	provider := newFakeProvider()
 	provider.gate = make(chan struct{})
-	r := NewRequest(RequestConfig{Provider: func() Provider { return provider }, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
+	r := NewRequest(RequestConfig{Provider: func() Provider { return provider }, Prompter: &prompttest.Prompter{}, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
 	completed := false
-	r.Start("fixture", "input", "", nil, func(Outcome) { completed = true })
+	r.Start(api.PurposeRewrite, rewriteInput("input"), "", nil, func(Outcome) { completed = true })
 	loop.runUntil(t, func() bool { return len(provider.sessions) > 0 })
 	s := <-provider.sessions
 	r.Cancel()
@@ -183,9 +205,9 @@ func TestProviderOpenCanceledBeforeDelivery(t *testing.T) {
 func TestSubtitleFollowsProviderBeforeFirstQuestion(t *testing.T) {
 	provider := newFakeProvider()
 	var selected Provider = provider
-	c := New(Config{Provider: func() Provider { return selected }, Translator: tr, Settings: &memSettings{}, Loop: newTestLoop(), Log: discardLog()})
+	c := New(Config{Provider: func() Provider { return selected }, Prompter: &prompttest.Prompter{}, Translator: tr, Settings: &memSettings{}, Loop: newTestLoop(), Log: discardLog()})
 	defer c.Close()
-	if got := c.Subtitle(); got != "ChatGPT (Codex, experimental) · fixture-model" {
+	if got := c.Subtitle(); got != "Fixture Provider · fixture-model" {
 		t.Fatal(got)
 	}
 	selected = nil
@@ -216,6 +238,17 @@ func TestProviderFailureClasses(t *testing.T) {
 		{"codex_session_ended", FailureStopped},
 		{"chatgpt_usage_limit ", FailureStopped},
 		{"", FailureStopped},
+		// The daemon's assistant over an ai account (apiassistant).
+		{"api_consent_required", FailureNotSignedIn},
+		{"api_auth", FailureNotSignedIn},
+		{"api_rateLimit", FailureLimit},
+		{"api_overloaded", FailureLimit},
+		{"api_toolsUnsupported", FailureToolsMissing},
+		{"api_bridge", FailureToolsMissing},
+		{"api_permission", FailureStopped},
+		{"api_network", FailureStopped},
+		{"api_contextFull", FailureStopped},
+		{"api_stopped", FailureStopped},
 	}
 	for _, tt := range tests {
 		if got := ProviderFailure(tt.reason); got.Kind != tt.want || got.Reason != tt.reason {
@@ -231,9 +264,9 @@ func TestProviderRequestFailureClasses(t *testing.T) {
 		t.Helper()
 		loop := newTestLoop()
 		provider := newFakeProvider()
-		r := NewRequest(RequestConfig{Provider: func() Provider { return provider }, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
+		r := NewRequest(RequestConfig{Provider: func() Provider { return provider }, Prompter: &prompttest.Prompter{}, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
 		var got *Outcome
-		r.StartCall(Call{SystemPrompt: "fixture", Message: "input"}, func(o Outcome) { got = &o })
+		r.StartCall(Call{Purpose: api.PurposeRewrite, Input: rewriteInput("input")}, func(o Outcome) { got = &o })
 		loop.runUntil(t, func() bool { return r.providerSession != nil })
 		s := <-provider.sessions
 		<-s.sent

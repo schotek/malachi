@@ -70,22 +70,24 @@ func assistantDirectory() string {
 	return filepath.Join(glib.GetUserCacheDir(), "malachi", "assistant")
 }
 
-// catalogLanguages are the English names of the languages po/LINGUAS
-// ships, for the system prompt; a language added there belongs here too.
-var catalogLanguages = map[string]string{"cs": "Czech"}
+// catalogLanguages are the languages po/LINGUAS ships, as BCP 47 tags; a
+// language added there belongs here too. The daemon turns the tag into
+// the English name its prompts say (assistant.prompt's language).
+var catalogLanguages = map[string]bool{"cs": true}
 
-// uiLanguage is the English name of the language the UI shows: the first
-// of the user's languages with a catalog, "" (English) otherwise.
-func uiLanguage() string {
+// uiLanguageTag is the language the UI shows as a BCP 47 tag for the
+// daemon's prompts: the first of the user's languages with a catalog,
+// "en" otherwise.
+func uiLanguageTag() string {
 	for _, l := range glib.GetLanguageNames() {
-		if name, ok := catalogLanguages[l]; ok {
-			return name
+		if catalogLanguages[l] {
+			return l
 		}
 		if l == "C" || l == "en" || strings.HasPrefix(l, "en_") {
-			return ""
+			return "en"
 		}
 	}
-	return ""
+	return "en"
 }
 
 // transcriptRow is the widget of one item and how it follows its content.
@@ -175,10 +177,8 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	p.ctl = assistantpanel.New(assistantpanel.Config{
 		Translator: tr, Settings: w.settings, Locator: as.locator, Loop: glibLoop{}, Log: w.log,
 		Bridge: as.bridge, Socket: w.client.Socket, Directory: assistantDirectory(), Env: os.Environ(),
-		Provider: as.Provider,
+		Provider: as.Provider, Prompter: as.prompter(), Language: uiLanguageTag,
 	})
-	p.ctl.Language = uiLanguage
-	p.ctl.Profile = as.Profile
 	p.ctl.Consent = p.askConsent
 	p.ctl.ResolveContext = p.resolve
 	p.ctl.OpenDraft = w.openSavedDraft
@@ -253,9 +253,13 @@ func (p *assistantPanel) syncShown() {
 		p.runtimeGeneration = now
 		p.ctl.ProviderChanged()
 	}
-	if p.w.assist.usesChatGPT() {
+	switch a := p.w.assist; a.source() {
+	case assistant.SourceChatGPT:
 		p.footer.SetText(assistant.ChatGPTText(tr).Footer)
-	} else {
+	case assistant.SourceAccount:
+		acc, _ := a.apiAccount()
+		p.footer.SetText(apiFooter(acc))
+	default:
 		p.footer.SetText(assistant.PanelTexts(tr).Footer)
 	}
 	if !p.w.assist.panelShown() {

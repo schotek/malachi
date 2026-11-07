@@ -165,6 +165,24 @@ func (stubAssistant) ProfilePropose(context.Context, api.AssistantProfilePropose
 func (stubAssistant) ProfileResolve(context.Context, api.AssistantProfileResolveParams) (*api.AssistantProfileResolveResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubAssistant) Prompt(context.Context, api.AssistantPromptParams) (*api.PromptResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) SessionStart(context.Context, api.AssistantSessionStartParams) (*api.AssistantSessionStartResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) SessionSend(context.Context, api.AssistantSessionSendParams) (*api.AssistantSessionSendResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) SessionStop(context.Context, api.AssistantSessionStopParams) (*api.AssistantSessionStopResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) ProviderModels(context.Context, api.AssistantProviderModelsParams) (*api.AssistantProviderModelsResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) Usage(context.Context, api.AssistantUsageParams) (*api.AssistantUsageResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubCrm struct{}
 

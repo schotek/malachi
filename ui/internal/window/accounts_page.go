@@ -246,6 +246,10 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, l *accountList, a ap
 	}
 	row.remove.ConnectClicked(func() { d.removeAccount(c, row) })
 	d.addRowReorder(c, row)
+	if spec.Kind == api.AccountAI {
+		// The tokens used today, once the row is in its list (ai_editors.go).
+		glib.IdleAdd(func() { d.refreshUsage(c, a.ID) })
+	}
 	return row
 }
 
@@ -312,6 +316,8 @@ func (d *PreferencesDialog) editAccount(c *client.Client, row *accountRow) {
 		d.presentEdit(c, accountwizard.NewEdit(c, d.log, row.account))
 	case integrations.EditorEway:
 		d.editEwayAccount(c, row.account)
+	case integrations.EditorAI:
+		d.editAIAccount(c, row.account)
 	}
 }
 
@@ -385,6 +391,8 @@ const (
 	editorJira
 	// editorEway: the eWay-CRM assistant in its edit mode.
 	editorEway
+	// editorAI: an AI provider account's dialog (ui/internal/aiaccount).
+	editorAI
 )
 
 // accountEditor is the editorKind of account a, by its kind.
@@ -394,6 +402,8 @@ func accountEditor(a api.Account) editorKind {
 		return editorJira
 	case a.Config.Protocol() == api.AccountEway:
 		return editorEway
+	case a.Config.Protocol() == api.AccountAI:
+		return editorAI
 	}
 	return editorMailWizard
 }

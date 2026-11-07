@@ -8,6 +8,10 @@ ui/internal/accountwizard/oauth.go
 ui/internal/accountwizard/results.go
 ui/internal/accountwizard/trust.go
 ui/internal/accountwizard/wizard.go
+ui/internal/aiaccount/dialog.go
+ui/internal/aiaccount/text.go
+ui/internal/assistant/api.go
+ui/internal/assistant/apitext.go
 ui/internal/assistant/assistant.go
 ui/internal/assistant/calendar_actions.go
 ui/internal/assistant/chatgpt.go
@@ -78,6 +82,7 @@ ui/internal/widget/message_row.go
 ui/internal/widget/rpc.go
 ui/internal/widget/uri.go
 ui/internal/window/accounts_page.go
+ui/internal/window/ai_editors.go
 ui/internal/window/accounts_reorder.go
 ui/internal/window/actions.go
 ui/internal/window/addresses.go
@@ -93,6 +98,7 @@ ui/internal/window/drafts.go
 ui/internal/window/embedded.go
 ui/internal/window/favourites.go
 ui/internal/window/folders.go
+ui/internal/window/integrations_page.go
 ui/internal/window/jira_editors.go
 ui/internal/window/message_view.go
 ui/internal/window/message_window.go
@@ -101,6 +107,8 @@ ui/internal/window/notify.go
 ui/internal/window/outbox.go
 ui/internal/window/preferences.go
 ui/internal/window/preferences_chatgpt.go
+ui/internal/window/claude_integration.go
+ui/internal/window/chatgpt_integration.go
 ui/internal/window/quick_reply_bar.go
 ui/internal/window/remote.go
 ui/internal/window/search.go

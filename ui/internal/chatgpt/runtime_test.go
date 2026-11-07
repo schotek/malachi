@@ -16,8 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
+	"github.com/schotek/malachi/ui/internal/assistantpanel/prompttest"
 )
 
 // Native compatibility canaries use synthetic HTTP and a fake MCP only. No
@@ -83,12 +85,14 @@ func TestNativeCodexCanary(t *testing.T) {
 					return &http.Response{StatusCode: 200, Header: header, Body: io.NopCloser(strings.NewReader(response))}, nil
 				})}
 				root := filepath.Join(t.TempDir(), "runtime")
-				p := NewProvider(Options{Executable: func() string { return exe }, Directory: root, Env: []string{"OPENAI_API_KEY=must-not-inherit", "MALACHI_MCP_ALLOW_SEND=1"}, Model: func() string { return model }, HasConsent: func() bool { return true }, HTTPClient: client}, fixtureTokens{})
+				p := NewProvider(Options{Executable: func() string { return exe }, Directory: root, Env: []string{"OPENAI_API_KEY=must-not-inherit", "MALACHI_MCP_ALLOW_SEND=1"}, Model: func() string { return model }, HasConsent: func() bool { return true }, HTTPClient: client, Prompter: &prompttest.Prompter{}}, fixtureTokens{})
 				ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 				defer cancel()
-				spec := assistantpanel.SessionSpec{SystemPrompt: "Answer the fixture"}
+				// A panel session: the fake daemon's message of a turn
+				// without a context is its text.
+				spec := assistantpanel.SessionSpec{Purpose: api.PurposePanel, SystemPrompt: "Answer the fixture"}
 				if withTools {
-					spec.Tools = &assistantpanel.Tools{Bridge: bridge, Allowed: assistant.AllowedTools}
+					spec.Tools = &assistantpanel.Tools{Bridge: bridge, BridgeArgs: []string{"--in-app"}, Allowed: assistant.PrefixTools(prompttest.PanelTools)}
 				}
 				session, err := p.Open(ctx, spec)
 				if err != nil {
@@ -119,7 +123,7 @@ func TestNativeCodexCanary(t *testing.T) {
 					default:
 					}
 				})
-				if err = session.Submit(ctx, "CANARY INPUT"); err != nil {
+				if err = session.Submit(ctx, api.PromptInput{Text: "CANARY INPUT"}); err != nil {
 					t.Fatal(err)
 				}
 				var answer assistant.Event
