@@ -105,6 +105,9 @@ func TestOpenAIErrors(t *testing.T) {
 		{"529", llmtest.Turn{Status: 529, RetryAfter: "40"}, api.FailureOverloaded, 40},
 		{"400", llmtest.Turn{Status: 400}, api.FailureInvalidRequest, 0},
 		{"400 tools", llmtest.Turn{Status: 400, Body: `{"error":{"message":"The model gpt-6-luna does not support function calling","type":"invalid_request_error"}}`}, api.FailureToolsUnsupported, 0},
+		// An account without quota answers 429 insufficient_quota: quota,
+		// not rateLimit, and the one retry of a 429 is not made.
+		{"429 quota", llmtest.Turn{Status: 429, RetryAfter: "1", Body: `{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","code":"insufficient_quota"}}`}, api.FailureQuota, 0},
 		{"404", llmtest.Turn{Status: 404}, api.FailureInvalidRequest, 0},
 		{"502", llmtest.Turn{Status: 502}, api.FailureProtocol, 0},
 	}
@@ -116,6 +119,9 @@ func TestOpenAIErrors(t *testing.T) {
 			e := wantClass(t, err, c.class)
 			if e.Status != c.turn.Status || e.RetryAfter != c.retry {
 				t.Errorf("error = %+v", e)
+			}
+			if n := len(srv.Requests()); c.class == api.FailureQuota && n != 1 {
+				t.Errorf("%d requests for a quota failure, want 1", n)
 			}
 		})
 	}

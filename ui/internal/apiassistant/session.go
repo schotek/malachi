@@ -36,9 +36,9 @@ import (
 //     bridge, stopped) ends it here too: Exit with that reason, and
 //     Completion closes.
 //
-// Terminate is assistant.sessionStop (in the background), an Exit of
-// "api_stopped" and Completion closed; Disconnected (the connection went)
-// the same without the call. Handlers may run on the dispatcher's
+// Terminate is assistant.sessionStop (in the background; Sessions.Wait
+// waits for it), an Exit of "api_stopped" and Completion closed;
+// Disconnected (the connection went) the same without the call. Handlers may run on the dispatcher's
 // goroutine; the controllers marshal them through their Loop.
 type Session struct {
 	p     *Provider
@@ -126,7 +126,15 @@ func (s *Session) end(reason string, stop bool) {
 		s.p.sessions.remove(s)
 	}
 	if stop {
+		var stops *sync.WaitGroup
+		if s.p.sessions != nil {
+			stops = &s.p.sessions.stops
+			stops.Add(1)
+		}
 		go func() {
+			if stops != nil {
+				defer stops.Done()
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 			defer cancel()
 			var res api.AssistantSessionStopResult

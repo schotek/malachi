@@ -16,6 +16,9 @@ type APIFailureStrings struct {
 	Auth, Permission string
 	// RateLimit: too many requests; Overloaded: the provider is busy.
 	RateLimit, Overloaded string
+	// Quota: the account at the provider has no credit or used up its
+	// quota (the key tests fine: listing the models costs nothing).
+	Quota string
 	// InvalidRequest: the provider refused the request.
 	InvalidRequest string
 	// ToolsUnsupported: the model cannot call tools; Bridge: the Malachi
@@ -49,6 +52,8 @@ func APIFailureTexts(tr Translator) APIFailureStrings {
 		Overloaded: tr.T("The provider is busy right now. Try again in a moment."),
 		// TRANSLATORS: An error line of the assistant: the provider rejected the request.
 		InvalidRequest: tr.T("The provider refused the request."),
+		// TRANSLATORS: An error line of the assistant: the account at the AI provider has no credit (prepaid) or used up its quota; the user tops it up on the provider's website, not in Malachi Mail.
+		Quota: tr.T("The account at the provider has no credit or has used up its quota. Top it up with the provider, then try again."),
 		// TRANSLATORS: An error line of the assistant: the chosen model cannot call tools, which the assistant needs to read mail.
 		ToolsUnsupported: tr.T("This model cannot use the Malachi Mail tools. Choose another model under AI in the preferences."),
 		// TRANSLATORS: An error line of the assistant: the MCP bridge (the Malachi Mail tools) could not be started.
@@ -93,6 +98,8 @@ func APIFailureText(tr Translator, reason string) (string, bool) {
 		return t.Overloaded, true
 	case "invalidRequest":
 		return t.InvalidRequest, true
+	case "quota":
+		return t.Quota, true
 	case "toolsUnsupported":
 		return t.ToolsUnsupported, true
 	case "bridge":

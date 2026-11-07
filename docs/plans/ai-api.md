@@ -364,8 +364,11 @@ type Event interface{}                                         // TextDelta | To
   chybu, žádné vlastní opakování kromě jednoho pokusu při 429/529 s
   pauzou do 30 s.
 - Mapování chyb na třídy: `auth` (401), `permission` (403),
-  `rateLimit` (429), `overloaded` (529/503), `invalidRequest` (400;
-  podtřída `toolsUnsupported` podle textu Ollamy/LM Studia),
+  `rateLimit` (429), `overloaded` (529/503), `quota` (účet bez kreditu
+  nebo s vyčerpaným limitem: Anthropic `billing_error` nebo 400
+  `invalid_request_error` s větou o kreditu, OpenAI 429
+  `insufficient_quota`; bez opakování; doplněno po B2), `invalidRequest`
+  (400; podtřída `toolsUnsupported` podle textu Ollamy/LM Studia),
   `network`, `protocol` (neplatné SSE/JSON). Do logu jen třída
   a stavový kód; nikdy tělo požadavku ani odpovědi, nikdy klíč,
   nikdy `baseUrl` s uživatelskými údaji.
@@ -988,7 +991,32 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   klíči a serveru se počítá jako připojený (připojil se při přidání),
   Nahradit klíč… nebo jiný server spojení vezmou zpět do nového Testu.
   (4) Integrace: lokální řádky, kapsle a jedna skupina katalogu
-  (výše).
-- **Neověřeno**: zbytek B2 (účet Ollama nebo klíč, model, souhlas,
-  panel, přepis, hledání, triage, Navrhnout odpověď), skutečný
-  `agent.StartBridge`, živá API.
+  (výše). (5) Vlastník přidal účet Anthropic (Test bez modelu, výběr,
+  souhlas, Uložit prošly; most jako podproces démona nastartoval se 14
+  nástroji — první ověření skutečného `agent.StartBridge`), ale tah
+  panelu padal třídou `invalidRequest`: Anthropic odpovídá klíči bez
+  kreditu 400 `invalid_request_error` „Your credit balance is too low…“,
+  zatímco `GET /v1/models` (Test) bez kreditu projde, takže uživatel
+  z třídy nepoznal, že má dobít. Rozhodnutí vlastníka (podle
+  doporučení): nová třída `quota` (`api.FailureQuota`): Anthropic
+  `billing_error` nebo 400/429 s větou o kreditu či kvótě
+  (`llm.mentionsQuota`), OpenAI a kompatibilní servery 429
+  `insufficient_quota` (zjemnění běží i u 429, ne jen u 400); jediné
+  opakování 429 se u ní nedělá; `ToAPIError` → `serverError`; stav účtu
+  `error` jako u `invalidRequest`; relaci neukončuje. Klient: věta
+  „The account at the provider has no credit or has used up its quota.
+  Top it up with the provider, then try again.“ (`APIFailureStrings.Quota`,
+  `api_quota` je v panelu `FailureLimit` jako `api_rateLimit`, tedy
+  s nabídkou Zkusit znovu); věta poskytovatele se v UI neukazuje
+  (cizí text). (6) Dvě drobnosti z téhož běhu: klient posílal
+  `assistant.sessionStop` až po zavření spojení (démon relaci ukončí
+  sám, jen log hlásil „use of closed network connection“) —
+  `apiassistant.Sessions.Wait` počítá rozběhnuté `sessionStop` a
+  `Assistant.WaitAPISessions` (main.go, před `rpc.Close()`, nejvýš 2 s)
+  je nechá dojít; a po tahu bez tokenů (odmítnutém před odpovědí modelu)
+  démon zapisoval řádek spotřeby a posílal `notify.assistantUsageChanged`
+  — teď nic nezapíše ani neoznámí, relace se do počtu relací dostane
+  s prvním tahem, který tokeny měl (`sessionInfo.counted`).
+- **Neověřeno**: zbytek B2 (model, panel s kreditem, přepis, hledání,
+  triage, Navrhnout odpověď), živá API Anthropicu a OpenAI s kreditem
+  (zatím jen odmítnutí 400 bez kreditu).

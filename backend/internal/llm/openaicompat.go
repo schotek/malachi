@@ -152,7 +152,7 @@ func (o *openaiCompat) body(req Request, withFormat bool) ([]byte, error) {
 func (o *openaiCompat) classify(resp *http.Response, body []byte) *Error {
 	typ, msg := providerError(body)
 	e := httpError(resp, typ, msg)
-	if e.Class == api.FailureInvalidRequest {
+	if e.Class == api.FailureInvalidRequest || e.Class == api.FailureRateLimit {
 		if c, ok := openaiClass(typ); ok {
 			e.Class = c
 		}

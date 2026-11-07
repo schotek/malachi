@@ -61,6 +61,9 @@ type sessionInfo struct {
 	runID   string
 	turns   int
 	usage   api.AssistantUsage // recorded so far
+	// counted: the session is in the store's session count (the first
+	// turn with tokens wrote it).
+	counted bool
 }
 
 type modelsEntry struct {
@@ -285,14 +288,13 @@ func (b *Backend) startBridge(ctx context.Context, path string, args, wanted []s
 func (b *Backend) beginTurn(sess *agent.Session, info *sessionInfo, message string) error {
 	b.assist.mu.Lock()
 	info.turns++
-	first := info.turns == 1
 	b.assist.mu.Unlock()
 	err := sess.Begin(context.Background(), message, func(err error) {
-		b.recordUsage(sess, info, first)
+		b.recordUsage(sess, info)
 		switch llm.ClassOf(err) {
 		case api.FailureAuth:
 			b.assist.setStatus(info.account, api.SyncAuthRequired)
-		case api.FailurePermission, api.FailureProtocol, api.FailureNetwork, api.FailureInvalidRequest:
+		case api.FailurePermission, api.FailureProtocol, api.FailureNetwork, api.FailureInvalidRequest, api.FailureQuota:
 			b.assist.setStatus(info.account, api.SyncError)
 		default:
 			if err == nil {

@@ -51,7 +51,7 @@ func TestFailureTextsOfProviders(t *testing.T) {
 	texts := assistant.APIFailureTexts(tr)
 	for reason, want := range map[string]string{
 		"api_consent_required": texts.ConsentRequired, "api_auth": texts.Auth, "api_permission": texts.Permission,
-		"api_rateLimit": texts.RateLimit, "api_overloaded": texts.Overloaded, "api_toolsUnsupported": texts.ToolsUnsupported,
+		"api_rateLimit": texts.RateLimit, "api_overloaded": texts.Overloaded, "api_quota": texts.Quota, "api_toolsUnsupported": texts.ToolsUnsupported,
 		"api_bridge": texts.Bridge, "api_network": texts.Network, "api_contextFull": texts.ContextFull, "api_stopped": texts.Stopped,
 	} {
 		f := ProviderFailure(reason)

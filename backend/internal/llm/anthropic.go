@@ -126,7 +126,9 @@ func anthropicClass(typ string) (api.AssistantFailureClass, bool) {
 		return api.FailureAuth, true
 	case "permission_error":
 		return api.FailurePermission, true
-	case "invalid_request_error", "not_found_error", "request_too_large", "billing_error":
+	case "billing_error":
+		return api.FailureQuota, true
+	case "invalid_request_error", "not_found_error", "request_too_large":
 		return api.FailureInvalidRequest, true
 	}
 	return "", false

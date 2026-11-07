@@ -410,6 +410,7 @@ const (
 	FailurePermission       AssistantFailureClass = "permission"       // the key may not use this (403)
 	FailureRateLimit        AssistantFailureClass = "rateLimit"        // too many requests (429); RetryAfter when known
 	FailureOverloaded       AssistantFailureClass = "overloaded"       // the provider is busy (529, 503)
+	FailureQuota            AssistantFailureClass = "quota"            // the account has no credit or used up its quota (Anthropic billing, OpenAI insufficient_quota); never retried
 	FailureInvalidRequest   AssistantFailureClass = "invalidRequest"   // the provider refused the request (400)
 	FailureToolsUnsupported AssistantFailureClass = "toolsUnsupported" // the model cannot call tools
 	FailureNetwork          AssistantFailureClass = "network"          // no connection, timeout, TLS

@@ -49,11 +49,11 @@ func ClassOf(err error) api.AssistantFailureClass {
 
 // ToAPIError maps err to the contract's codes for account.test and
 // assistant.providerModels: a refused key is authFailed, a key without
-// the permission or a refused request serverError (with the status in
-// the message), a rate limit or an overloaded provider serverTimeout, a
-// TLS failure tlsError with its data, no connection networkError, a
-// deadline serverTimeout, a cancelled context cancelled. An *api.Error
-// passes through.
+// the permission, a refused request or an account without credit
+// serverError (with the status in the message), a rate limit or an
+// overloaded provider serverTimeout, a TLS failure tlsError with its
+// data, no connection networkError, a deadline serverTimeout, a
+// cancelled context cancelled. An *api.Error passes through.
 func ToAPIError(err error) *api.Error {
 	var ae *api.Error
 	if errors.As(err, &ae) {
@@ -66,6 +66,8 @@ func ToAPIError(err error) *api.Error {
 			return api.NewError(api.CodeAuthFailed, "the provider refused the key")
 		case api.FailureRateLimit, api.FailureOverloaded:
 			return api.NewError(api.CodeServerTimeout, "the provider is busy (HTTP %d)", e.Status)
+		case api.FailureQuota:
+			return api.NewError(api.CodeServerError, "the provider's account has no credit or quota (HTTP %d)", e.Status)
 		case api.FailureNetwork:
 			return api.NewError(api.CodeNetworkError, "%s", e.Message)
 		case api.FailureTimeout:

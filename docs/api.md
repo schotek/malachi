@@ -4872,7 +4872,7 @@ AssistantEvent { "sessionId": "as_1", "kind": "init|textDelta|text|toolUse|toolR
                  "failure": { "class": AssistantFailureClass, "retryAfter": 30 (opt), "message": "…" (opt, not for display) } (failure),
                  "usage": AssistantUsage (usage, result) }
 AssistantUsage { "inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens" }
-AssistantFailureClass = "auth|permission|rateLimit|overloaded|invalidRequest|toolsUnsupported|network|protocol|contextFull|bridge|timeout|limit|stopped"
+AssistantFailureClass = "auth|permission|rateLimit|overloaded|quota|invalidRequest|toolsUnsupported|network|protocol|contextFull|bridge|timeout|limit|stopped"
 AIModel { "id", "displayName" (opt) }
 ```
 
@@ -4942,6 +4942,13 @@ the bridge's text verbatim, cut to `api.MaxAssistantToolResultBytes`,
 256 KiB), `usage` with the tokens so far, and `result`. A `failure`
 ends the turn; one of class `contextFull`, `bridge`, `auth`,
 `permission`, `toolsUnsupported` or `stopped` ends the session too.
+`quota` is an account that cannot pay for the turn: Anthropic's
+`billing_error`, or its 400 `invalid_request_error` naming the credit
+balance (a key without credit still lists the models, so
+`account.test` passes), OpenAI's 429 `insufficient_quota`; the daemon
+does not retry it (a 429 of class `rateLimit` is retried once), and
+the client tells the user to top the account up with the provider.
+`invalidRequest` is any other refused request.
 `result.structured` is the answer parsed as JSON when a schema was
 asked for (`search`); `result.reason` the provider's stop reason as a
 word. The history (prompt, turns, tool results) lives in the daemon's
@@ -4966,8 +4973,11 @@ the stored key), from the daemon's cache of an hour unless `refresh`.
 
 #### `assistant.usage`
 The tokens the daemon's assistant used, per `ai` account and local
-day, summed over models (`assistant_usage` of the store; `notify.assistantUsageChanged`
-after every turn).
+day, summed over models (`assistant_usage` of the store;
+`notify.assistantUsageChanged` after every turn that used tokens: a
+turn the provider refused before the model answered adds nothing, is
+not counted and is not announced, and a session enters `sessions`
+with its first turn that used tokens).
 
 - params: `{ "accountId" (opt; absent = every ai account), "days": 1 (opt; 0 = today, at most 400) }`
 - result: `{ "days": [{ "day": "2026-11-07", "accountId", "inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens", "sessions", "turns" }] }`

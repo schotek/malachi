@@ -161,7 +161,8 @@ func (c *client) newRequest(ctx context.Context, method, path string, body []byt
 
 // send performs one request, retrying once after a 429, 503 or 529
 // (Retry-After, defaultRetryAfter without one, never beyond
-// MaxRetryAfter and never past ctx's deadline). build makes a fresh
+// MaxRetryAfter and never past ctx's deadline; never after a
+// FailureQuota, which waiting does not mend). build makes a fresh
 // request for each attempt (the body is re-sent). A transport failure is
 // a *connError (ctx.Err() when ctx ended); an HTTP error status is an
 // *Error through the dialect's classification; the response of a 2xx is
@@ -182,7 +183,7 @@ func (c *client) send(ctx context.Context, build func() (*http.Request, error), 
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, MaxErrorBytes))
 		resp.Body.Close()
 		e := classify(resp, body)
-		if attempt == 0 && retryable(resp.StatusCode) {
+		if attempt == 0 && retryable(resp.StatusCode) && e.Class != api.FailureQuota {
 			if wait, ok := retryDelay(ctx, resp.Header.Get("Retry-After")); ok {
 				if err := sleep(ctx, wait); err != nil {
 					return nil, err
@@ -313,6 +314,8 @@ func httpError(resp *http.Response, typ, msg string) *Error {
 		e.Class = api.FailureAuth
 	case resp.StatusCode == http.StatusForbidden:
 		e.Class = api.FailurePermission
+	case resp.StatusCode == http.StatusTooManyRequests && mentionsQuota(msg):
+		e.Class = api.FailureQuota
 	case resp.StatusCode == http.StatusTooManyRequests:
 		e.Class = api.FailureRateLimit
 		e.RetryAfter = retryAfterOf(resp)
@@ -321,6 +324,8 @@ func httpError(resp *http.Response, typ, msg string) *Error {
 		e.RetryAfter = retryAfterOf(resp)
 	case resp.StatusCode == http.StatusBadRequest && mentionsToolsUnsupported(msg):
 		e.Class = api.FailureToolsUnsupported
+	case resp.StatusCode == http.StatusBadRequest && mentionsQuota(msg):
+		e.Class = api.FailureQuota
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		e.Class = api.FailureInvalidRequest
 	default:
@@ -333,6 +338,24 @@ func httpError(resp *http.Response, typ, msg string) *Error {
 		}
 	}
 	return e
+}
+
+// mentionsQuota recognises an error of an account that cannot pay for the
+// request: Anthropic answers 400 invalid_request_error "Your credit
+// balance is too low to access the Anthropic API. Please go to Plans &
+// Billing to upgrade or purchase credits." to a key without credit (its
+// GET /v1/models still passes, so the key tests fine), OpenAI 429
+// insufficient_quota "You exceeded your current quota, please check your
+// plan and billing details.". The dialects refine the class by the error
+// type too (billing_error, insufficient_quota); this reads the message.
+func mentionsQuota(msg string) bool {
+	m := strings.ToLower(msg)
+	for _, s := range []string{"credit balance", "insufficient credit", "purchase credits", "insufficient_quota", "exceeded your current quota", "billing"} {
+		if strings.Contains(m, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // mentionsToolsUnsupported recognises the 400 of a server whose model

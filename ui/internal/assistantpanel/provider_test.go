@@ -243,6 +243,7 @@ func TestProviderFailureClasses(t *testing.T) {
 		{"api_auth", FailureNotSignedIn},
 		{"api_rateLimit", FailureLimit},
 		{"api_overloaded", FailureLimit},
+		{"api_quota", FailureLimit},
 		{"api_toolsUnsupported", FailureToolsMissing},
 		{"api_bridge", FailureToolsMissing},
 		{"api_permission", FailureStopped},

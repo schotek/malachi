@@ -255,8 +255,11 @@ func TestPanelConversation(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no completion")
 	}
-	stop := d.waitFor(t, api.MethodAssistantSessionStop).(api.AssistantSessionStopParams)
-	if stop.SessionID != id || s.Running() || reg.Len() != 0 || len(rec.exits) != 1 || rec.exits[0].Reason != "api_stopped" {
+	if !reg.Wait(5 * time.Second) {
+		t.Fatal("the sessionStop call did not end")
+	}
+	stop, ok := d.last(api.MethodAssistantSessionStop)
+	if !ok || stop.(api.AssistantSessionStopParams).SessionID != id || s.Running() || reg.Len() != 0 || len(rec.exits) != 1 || rec.exits[0].Reason != "api_stopped" {
 		t.Errorf("after Terminate: stop %+v, running %v, open %d, exits %+v", stop, s.Running(), reg.Len(), rec.exits)
 	}
 	s.Terminate() // once
@@ -358,7 +361,7 @@ func TestFailures(t *testing.T) {
 	for class, ends := range map[api.AssistantFailureClass]bool{
 		api.FailureAuth: true, api.FailurePermission: true, api.FailureToolsUnsupported: true, api.FailureContextFull: true,
 		api.FailureBridge: true, api.FailureStopped: true,
-		api.FailureRateLimit: false, api.FailureOverloaded: false, api.FailureInvalidRequest: false, api.FailureNetwork: false,
+		api.FailureRateLimit: false, api.FailureOverloaded: false, api.FailureQuota: false, api.FailureInvalidRequest: false, api.FailureNetwork: false,
 		api.FailureProtocol: false, api.FailureTimeout: false, api.FailureLimit: false,
 	} {
 		if endsSession(class) != ends {

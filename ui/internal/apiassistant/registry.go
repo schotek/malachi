@@ -6,6 +6,7 @@ package apiassistant
 import (
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -18,6 +19,10 @@ import (
 type Sessions struct {
 	mu   sync.Mutex
 	open map[string]*Session
+	// stops counts the assistant.sessionStop calls under way (Terminate
+	// sends them in the background); Wait lets the application send them
+	// before it closes the connection.
+	stops sync.WaitGroup
 }
 
 // NewSessions is an empty registry.
@@ -37,6 +42,26 @@ func (r *Sessions) remove(s *Session) {
 		delete(r.open, s.id)
 	}
 	r.mu.Unlock()
+}
+
+// Wait waits for the sessionStop calls under way (Terminate sends them
+// in the background), at most d: true when all are through. The
+// application calls it as it quits, after it ended the panel's and the
+// requests' sessions and before it closes the connection, so that the
+// daemon gets each stop (it would end the sessions with the connection
+// anyway; the call then just fails on the closed connection).
+func (r *Sessions) Wait(d time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		r.stops.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(d):
+		return false
+	}
 }
 
 // Len is the number of open sessions.

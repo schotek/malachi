@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-07 13:43+0000\n"
+"POT-Creation-Date: 2026-11-07 15:24+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:299
+#: ui/main.go:302
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -688,74 +688,81 @@ msgid "%s tokens today"
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the user has not allowed sending mail to the AI account's provider yet.
-#: ui/internal/assistant/apitext.go:41
+#: ui/internal/assistant/apitext.go:44
 msgid "Allow sending mail to this provider under AI in the preferences first."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the provider refused the API key.
-#: ui/internal/assistant/apitext.go:43
+#: ui/internal/assistant/apitext.go:46
 msgid "The provider refused the API key. Check it under AI in the preferences."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the API key may not use this model.
-#: ui/internal/assistant/apitext.go:45
+#: ui/internal/assistant/apitext.go:48
 msgid "The API key may not use this model."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the provider's rate limit was reached.
-#: ui/internal/assistant/apitext.go:47
+#: ui/internal/assistant/apitext.go:50
 msgid "The provider is receiving too many requests. Try again in a moment."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the provider is overloaded.
-#: ui/internal/assistant/apitext.go:49
+#: ui/internal/assistant/apitext.go:52
 msgid "The provider is busy right now. Try again in a moment."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the provider rejected the request.
-#: ui/internal/assistant/apitext.go:51
+#: ui/internal/assistant/apitext.go:54
 msgid "The provider refused the request."
 msgstr ""
 
+#. TRANSLATORS: An error line of the assistant: the account at the AI provider has no credit (prepaid) or used up its quota; the user tops it up on the provider's website, not in Malachi Mail.
+#: ui/internal/assistant/apitext.go:56
+msgid ""
+"The account at the provider has no credit or has used up its quota. Top it "
+"up with the provider, then try again."
+msgstr ""
+
 #. TRANSLATORS: An error line of the assistant: the chosen model cannot call tools, which the assistant needs to read mail.
-#: ui/internal/assistant/apitext.go:53
+#: ui/internal/assistant/apitext.go:58
 msgid ""
 "This model cannot use the Malachi Mail tools. Choose another model under AI "
 "in the preferences."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the MCP bridge (the Malachi Mail tools) could not be started.
-#: ui/internal/assistant/apitext.go:55
+#: ui/internal/assistant/apitext.go:60
 msgid "The Malachi Mail tools could not be started."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the provider could not be reached.
-#: ui/internal/assistant/apitext.go:57
+#: ui/internal/assistant/apitext.go:62
 msgid "The provider could not be reached."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the provider's answer could not be read.
-#: ui/internal/assistant/apitext.go:59
+#: ui/internal/assistant/apitext.go:64
 msgid "The provider's answer could not be read."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the conversation grew too long for the model.
-#: ui/internal/assistant/apitext.go:61
+#: ui/internal/assistant/apitext.go:66
 msgid "The conversation is too long for the model. Start a new one."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the model did not answer in time.
-#: ui/internal/assistant/apitext.go:63
+#: ui/internal/assistant/apitext.go:68
 msgid "The model did not answer in time."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the model called too many tools in one turn.
-#: ui/internal/assistant/apitext.go:65
+#: ui/internal/assistant/apitext.go:70
 msgid "The model made too many tool calls in one turn."
 msgstr ""
 
 #. TRANSLATORS: An error line of the assistant: the session ended.
-#: ui/internal/assistant/apitext.go:67
+#: ui/internal/assistant/apitext.go:72
 msgid "The assistant's session ended."
 msgstr ""
 

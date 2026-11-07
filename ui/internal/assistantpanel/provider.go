@@ -129,7 +129,7 @@ func ProviderFailure(reason string) Failure {
 		"chatgpt_permission_denied", "chatgpt_identity_mismatch",
 		"api_consent_required", "api_auth":
 		return Failure{Kind: FailureNotSignedIn, Reason: reason}
-	case "chatgpt_usage_limit", "api_rateLimit", "api_overloaded":
+	case "chatgpt_usage_limit", "api_rateLimit", "api_overloaded", "api_quota":
 		return Failure{Kind: FailureLimit, Reason: reason}
 	case "api_toolsUnsupported", "api_bridge":
 		return Failure{Kind: FailureToolsMissing, Reason: reason}

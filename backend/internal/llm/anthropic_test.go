@@ -108,6 +108,11 @@ func TestAnthropicErrors(t *testing.T) {
 		{"404", llmtest.Turn{Status: 404}, api.FailureInvalidRequest, 0, "scripted error"},
 		{"500", llmtest.Turn{Status: 500}, api.FailureProtocol, 0, "scripted error"},
 		{"400 overloaded type", llmtest.Turn{Status: 400, Body: `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`}, api.FailureOverloaded, 0, "Overloaded"},
+		// A key without credit: GET /v1/models passes, the turn is a 400
+		// invalid_request_error naming the credit balance (seen live
+		// 2026-11-07); quota, not invalidRequest.
+		{"400 no credit", llmtest.Turn{Status: 400, Body: `{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}`}, api.FailureQuota, 0, "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."},
+		{"400 billing type", llmtest.Turn{Status: 400, Body: `{"type":"error","error":{"type":"billing_error","message":"Billing"}}`}, api.FailureQuota, 0, "Billing"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -200,6 +200,9 @@ func main() {
 			assist.StopBoardReply()
 			assist.StopBoardTriage()
 			assist.CloseChatGPT()
+			// The daemon's assistant gets the sessionStop of every session
+			// ended above while the connection still stands.
+			assist.WaitAPISessions()
 		}
 		rpc.Close()
 		// Quitting the application quits the daemon it started; "Run in

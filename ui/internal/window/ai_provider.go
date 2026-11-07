@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -304,6 +305,21 @@ func sameAIAccountConfig(x, y api.Account) bool {
 	p.Consent, q.Consent = nil, nil
 	return p == q
 }
+
+// WaitAPISessions lets the sessionStop calls of the daemon's assistant
+// reach the daemon as the application quits: main.go calls it after the
+// panel, the requests and the board ended their sessions and before it
+// closes the connection; it blocks the main loop at most
+// apiSessionStopWait.
+func (a *Assistant) WaitAPISessions() {
+	if a.apiSessions != nil {
+		a.apiSessions.Wait(apiSessionStopWait)
+	}
+}
+
+// apiSessionStopWait bounds WaitAPISessions (a sessionStop answers in
+// milliseconds; a daemon that does not answer is not waited for).
+const apiSessionStopWait = 2 * time.Second
 
 // disconnected: the connection to the daemon went: every session of the
 // daemon's assistant with it.

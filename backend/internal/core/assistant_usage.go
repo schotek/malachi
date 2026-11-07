@@ -16,8 +16,12 @@ import (
 // and model), summed for a triage session's board run (D19), and read by
 // assistant.usage.
 
-// recordUsage writes what a turn added to the session's usage.
-func (b *Backend) recordUsage(sess *agent.Session, info *sessionInfo, newSession bool) {
+// recordUsage writes what a turn added to the session's usage. A turn
+// that used no tokens (refused before the model answered: no credit, a
+// bad request, no connection) writes nothing and tells nobody; the
+// session enters the store's session count with its first turn that
+// did.
+func (b *Backend) recordUsage(sess *agent.Session, info *sessionInfo) {
 	total := sess.Usage()
 	b.assist.mu.Lock()
 	delta := api.AssistantUsage{
@@ -27,6 +31,12 @@ func (b *Backend) recordUsage(sess *agent.Session, info *sessionInfo, newSession
 		CacheCreationInputTokens: total.CacheCreationInputTokens - info.usage.CacheCreationInputTokens,
 	}
 	info.usage = total
+	if delta == (api.AssistantUsage{}) {
+		b.assist.mu.Unlock()
+		return
+	}
+	newSession := !info.counted
+	info.counted = true
 	if info.runID != "" {
 		b.assist.runUsage[info.runID] = b.assist.runUsage[info.runID].Add(delta)
 	}

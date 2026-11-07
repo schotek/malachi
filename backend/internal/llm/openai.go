@@ -115,7 +115,7 @@ func (o *openai) body(req Request) ([]byte, error) {
 func (o *openai) classify(resp *http.Response, body []byte) *Error {
 	typ, msg := providerError(body)
 	e := httpError(resp, typ, msg)
-	if e.Class == api.FailureInvalidRequest {
+	if e.Class == api.FailureInvalidRequest || e.Class == api.FailureRateLimit {
 		if c, ok := openaiClass(typ); ok {
 			e.Class = c
 		}
@@ -129,7 +129,9 @@ func openaiClass(typ string) (api.AssistantFailureClass, bool) {
 	switch typ {
 	case "invalid_api_key", "authentication_error":
 		return api.FailureAuth, true
-	case "insufficient_quota", "rate_limit_exceeded", "rate_limit_error":
+	case "insufficient_quota":
+		return api.FailureQuota, true
+	case "rate_limit_exceeded", "rate_limit_error":
 		return api.FailureRateLimit, true
 	case "server_error", "overloaded_error":
 		return api.FailureOverloaded, true

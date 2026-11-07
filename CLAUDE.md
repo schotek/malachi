@@ -602,12 +602,18 @@ kapsli „This computer“ / „API key“ (`integrations.Badges`)) a
 řádek účtu `ai` se spotřebou a touž kapslí; Předvolby → AI jen „Asistent používá“,
 nabídka, cíl, model, Nástěnka, O mně. Ověřeno: celá sada backendu, celá
 sada `ui/` v kontejneru, GTK smoke testy, `make po`, `make lint`.
-Neověřeno: vlastník na obrazovce (B2: `make run-gtk-live` nad kopií dat
-s Ollamou nebo klíčem), skutečný most spuštěný démonem jako podproces,
-živá API (názvy událostí OpenAI Responses jen z dokumentace); Windows
-`build.ps1 lint` do E3 padá (90 msgidů v exclusions, změněný popis
-Integrací). Odchylka: řádek spotřeby ukazuje tokeny za dnešek (účtování
-po místních dnech), ne za 24 h.
+B2 vlastníka (Fedora přes linuxového agenta nad kopií dat) prošlo
+do přidání účtu Anthropic a startu mostu jako podprocesu démona (14
+nástrojů); tah bez kreditu dal třídu `quota` (`api.FailureQuota`:
+Anthropic `billing_error` nebo 400 s větou o kreditu, OpenAI 429
+`insufficient_quota`, bez opakování; klient radí dobít u poskytovatele),
+klient před `rpc.Close()` nechá dojít `sessionStop`
+(`Sessions.Wait`), tah bez tokenů spotřebu nezapisuje ani neoznamuje.
+Neověřeno: panel s kreditem, přepis, hledání, triage, Navrhnout
+odpověď, živá API s kreditem (názvy událostí OpenAI Responses jen
+z dokumentace); Windows `build.ps1 lint` do E3 padá (91 msgidů
+v exclusions, změněný popis Integrací). Odchylka: řádek spotřeby
+ukazuje tokeny za dnešek (účtování po místních dnech), ne za 24 h.
 
 Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
 U1–U4 v `docs/plans/unified-inbox.md`). Položka je od 2026-11-03 první

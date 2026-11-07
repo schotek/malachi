@@ -145,6 +145,7 @@ func TestCompatErrors(t *testing.T) {
 		{"400 lm studio tools", llmtest.Turn{Status: 400, Body: `{"error":"This model does not support tool calling"}`}, api.FailureToolsUnsupported, "This model does not support tool calling"},
 		{"404 ollama model", llmtest.Turn{Status: 404, Body: `{"error":{"message":"model \"nope\" not found, try pulling it first","type":"api_error","param":null,"code":null}}`}, api.FailureInvalidRequest, `model "nope" not found, try pulling it first`},
 		{"404 html", llmtest.Turn{Status: 404, Body: `<html>Not Found</html>`}, api.FailureInvalidRequest, "HTTP 404"},
+		{"429 quota", llmtest.Turn{Status: 429, Body: `{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","code":"insufficient_quota"}}`}, api.FailureQuota, "You exceeded your current quota, please check your plan and billing details."},
 		{"500", llmtest.Turn{Status: 500}, api.FailureProtocol, "scripted error"},
 	}
 	for _, c := range cases {
