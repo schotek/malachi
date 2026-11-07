@@ -108,6 +108,12 @@ func TestOpenAIErrors(t *testing.T) {
 		// An account without quota answers 429 insufficient_quota: quota,
 		// not rateLimit, and the one retry of a 429 is not made.
 		{"429 quota", llmtest.Turn{Status: 429, RetryAfter: "1", Body: `{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","code":"insufficient_quota"}}`}, api.FailureQuota, 0},
+		// An account without credit (seen 2026-11-07): the message names
+		// the credit, whatever the 4xx; a 402 is quota whatever it says.
+		{"402 no credits", llmtest.Turn{Status: 402, Body: `{"error":{"message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.","type":"invalid_request_error","code":null}}`}, api.FailureQuota, 0},
+		{"400 no credits", llmtest.Turn{Status: 400, Body: `{"error":{"message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.","type":"invalid_request_error","code":null}}`}, api.FailureQuota, 0},
+		{"402 bare", llmtest.Turn{Status: 402}, api.FailureQuota, 0},
+		{"403 billing word", llmtest.Turn{Status: 403, Body: `{"error":{"message":"Your organization's billing admin must grant this project access.","type":"permission_error"}}`}, api.FailurePermission, 0},
 		{"404", llmtest.Turn{Status: 404}, api.FailureInvalidRequest, 0},
 		{"502", llmtest.Turn{Status: 502}, api.FailureProtocol, 0},
 	}

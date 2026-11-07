@@ -605,8 +605,9 @@ sada `ui/` v kontejneru, GTK smoke testy, `make po`, `make lint`.
 B2 vlastníka (Fedora přes linuxového agenta nad kopií dat) prošlo
 do přidání účtu Anthropic a startu mostu jako podprocesu démona (14
 nástrojů); tah bez kreditu dal třídu `quota` (`api.FailureQuota`:
-Anthropic `billing_error` nebo 400 s větou o kreditu, OpenAI 429
-`insufficient_quota`, bez opakování; klient radí dobít u poskytovatele),
+402, Anthropic `billing_error`, OpenAI 429 `insufficient_quota` nebo
+jiné 4xx mimo 401/403 s větou o kreditu, bez opakování; klient radí
+dobít u poskytovatele),
 klient před `rpc.Close()` nechá dojít `sessionStop`
 (`Sessions.Wait`), tah bez tokenů spotřebu nezapisuje ani neoznamuje;
 stav účtu `ai` je jen `authRequired` po odmítnutém klíči (nikdy

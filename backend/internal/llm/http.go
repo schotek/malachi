@@ -316,6 +316,8 @@ func httpError(resp *http.Response, typ, msg string) *Error {
 		e.Class = api.FailureAuth
 	case resp.StatusCode == http.StatusForbidden:
 		e.Class = api.FailurePermission
+	case resp.StatusCode == http.StatusPaymentRequired:
+		e.Class = api.FailureQuota
 	case resp.StatusCode == http.StatusTooManyRequests && mentionsQuota(msg):
 		e.Class = api.FailureQuota
 	case resp.StatusCode == http.StatusTooManyRequests:
@@ -326,7 +328,7 @@ func httpError(resp *http.Response, typ, msg string) *Error {
 		e.RetryAfter = retryAfterOf(resp)
 	case resp.StatusCode == http.StatusBadRequest && mentionsToolsUnsupported(msg):
 		e.Class = api.FailureToolsUnsupported
-	case resp.StatusCode == http.StatusBadRequest && mentionsQuota(msg):
+	case resp.StatusCode >= 400 && resp.StatusCode < 500 && mentionsQuota(msg):
 		e.Class = api.FailureQuota
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		e.Class = api.FailureInvalidRequest
@@ -348,11 +350,15 @@ func httpError(resp *http.Response, typ, msg string) *Error {
 // Billing to upgrade or purchase credits." to a key without credit (its
 // GET /v1/models still passes, so the key tests fine), OpenAI 429
 // insufficient_quota "You exceeded your current quota, please check your
-// plan and billing details.". The dialects refine the class by the error
-// type too (billing_error, insufficient_quota); this reads the message.
+// plan and billing details." to one over its quota and a 4xx "You have
+// no credits remaining. Add credits to continue using the API at …" to
+// one without credit (seen 2026-11-07 in B2; a 402 is the class whatever
+// it says). The dialects refine the class by the error type too
+// (billing_error, insufficient_quota); this reads the message of any
+// other 4xx but 401 and 403.
 func mentionsQuota(msg string) bool {
 	m := strings.ToLower(msg)
-	for _, s := range []string{"credit balance", "insufficient credit", "purchase credits", "insufficient_quota", "exceeded your current quota", "billing"} {
+	for _, s := range []string{"credit balance", "insufficient credit", "purchase credits", "no credits", "add credits", "insufficient_quota", "exceeded your current quota", "billing"} {
 		if strings.Contains(m, s) {
 			return true
 		}

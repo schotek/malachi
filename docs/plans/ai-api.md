@@ -1046,7 +1046,16 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   dialektech (test `TestToolSchemasAlwaysHaveProperties`); strop
   technické zprávy selhání `maxMessageBytes` zvednutý z 200 na 1000 B,
   aby výpis validátoru nekončil za první položkou (zpráva se nikdy
-  neukazuje, jen jde klientům jako technický text).
+  neukazuje, jen jde klientům jako technický text). Agent pak panel
+  nad LM Studiem prošel sondou i s voláním nástroje a vlastník na
+  obrazovce. (9) OpenAI (`gpt-5-mini`) bez kreditu: Test prošel (96
+  modelů), tah padl `invalidRequest` s větou „You have no credits
+  remaining. Add credits to continue using the API at …“ — stavový kód
+  není 400 ani 429 (zřejmě 402), takže věta o kreditu do `quota`
+  nespadla. Oprava: 402 je `quota` vždy, věta o kreditu či kvótě
+  (`mentionsQuota`, nově i „no credits“ / „add credits“) u každého
+  jiného 4xx mimo 401 a 403; log démona „assistant turn failed“ nese
+  i `status`, aby diagnóza nestála na odvození.
 - **Neověřeno**: zbytek B2 (model, panel s kreditem, přepis, hledání,
   triage, Navrhnout odpověď), živá API Anthropicu a OpenAI s kreditem
   (zatím jen odmítnutí 400 bez kreditu).

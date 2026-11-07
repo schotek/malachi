@@ -294,7 +294,7 @@ func (s *Session) run(ctx context.Context, message string) error {
 			return nil
 		}
 		if round >= s.cfg.MaxRounds {
-			return s.failClass(api.FailureLimit, 0, "the turn exceeded its tool rounds", turnUsage)
+			return s.failClass(api.FailureLimit, 0, 0, "the turn exceeded its tool rounds", turnUsage)
 		}
 		results := make([]llm.Block, 0, len(calls))
 		for _, c := range calls {
@@ -303,14 +303,14 @@ func (s *Session) run(ctx context.Context, message string) error {
 				return s.fail(ctx.Err(), turnUsage)
 			}
 			if down {
-				return s.failClass(api.FailureBridge, 0, "the bridge failed", turnUsage)
+				return s.failClass(api.FailureBridge, 0, 0, "the bridge failed", turnUsage)
 			}
 			s.emit(api.AssistantEvent{Kind: api.EventToolResult, Tool: c.Name, ID: c.ID, Text: text, IsError: isErr})
 			results = append(results, llm.Block{Kind: llm.BlockToolResult, ID: c.ID, Text: text, IsError: isErr})
 		}
 		s.append(llm.Message{Role: llm.RoleUser, Blocks: results})
 		if s.histBytes > s.cfg.MaxHistory {
-			return s.failClass(api.FailureContextFull, 0, "the conversation is too long", turnUsage)
+			return s.failClass(api.FailureContextFull, 0, 0, "the conversation is too long", turnUsage)
 		}
 	}
 }
@@ -341,20 +341,23 @@ func (s *Session) call(ctx context.Context, c llm.ToolCall) (text string, isErr,
 // fail turns a provider or context error into the failure event.
 func (s *Session) fail(err error, turnUsage api.AssistantUsage) error {
 	class := llm.ClassOf(err)
-	retry := 0
+	retry, status := 0, 0
 	msg := ""
 	var le *llm.Error
 	if errors.As(err, &le) {
-		retry = le.RetryAfter
+		retry, status = le.RetryAfter, le.Status
 		msg = le.Message
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		msg = "the turn timed out"
 	}
-	return s.failClass(class, retry, msg, turnUsage)
+	return s.failClass(class, retry, status, msg, turnUsage)
 }
 
-func (s *Session) failClass(class api.AssistantFailureClass, retry int, msg string, turnUsage api.AssistantUsage) error {
+// failClass ends the turn with a failure of class; status is the
+// provider's HTTP status when it answered (logged with the class, so
+// that a class read from the status is not a guess; never the message).
+func (s *Session) failClass(class api.AssistantFailureClass, retry, status int, msg string, turnUsage api.AssistantUsage) error {
 	s.emit(api.AssistantEvent{Kind: api.EventFailure, Failure: &api.AssistantFailure{Class: class, RetryAfter: retry, Message: msg},
 		Usage: usagePtr(turnUsage)})
 	if fatal[class] {
@@ -366,8 +369,12 @@ func (s *Session) failClass(class api.AssistantFailureClass, retry int, msg stri
 			_ = s.cfg.Tools.Close()
 		}
 	}
-	s.cfg.Log.Info("assistant turn failed", "session", s.cfg.ID, "class", class)
-	return &llm.Error{Class: class, RetryAfter: retry, Message: msg}
+	if status != 0 {
+		s.cfg.Log.Info("assistant turn failed", "session", s.cfg.ID, "class", class, "status", status)
+	} else {
+		s.cfg.Log.Info("assistant turn failed", "session", s.cfg.ID, "class", class)
+	}
+	return &llm.Error{Class: class, Status: status, RetryAfter: retry, Message: msg}
 }
 
 func (s *Session) emit(ev api.AssistantEvent) {

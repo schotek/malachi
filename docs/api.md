@@ -4944,12 +4944,14 @@ the bridge's text verbatim, cut to `api.MaxAssistantToolResultBytes`,
 256 KiB), `usage` with the tokens so far, and `result`. A `failure`
 ends the turn; one of class `contextFull`, `bridge`, `auth`,
 `permission`, `toolsUnsupported` or `stopped` ends the session too.
-`quota` is an account that cannot pay for the turn: Anthropic's
-`billing_error`, or its 400 `invalid_request_error` naming the credit
-balance (a key without credit still lists the models, so
-`account.test` passes), OpenAI's 429 `insufficient_quota`; the daemon
-does not retry it (a 429 of class `rateLimit` is retried once), and
-the client tells the user to top the account up with the provider.
+`quota` is an account that cannot pay for the turn: a 402, Anthropic's
+`billing_error`, OpenAI's 429 `insufficient_quota`, or any other 4xx
+but 401 and 403 whose message names the credit or the quota (Anthropic
+"Your credit balance is too low…", OpenAI "You have no credits
+remaining…"; a key without credit still lists the models, so
+`account.test` passes); the daemon does not retry it (a 429 of class
+`rateLimit` is retried once), and the client tells the user to top the
+account up with the provider.
 `invalidRequest` is any other refused request.
 `result.structured` is the answer parsed as JSON when a schema was
 asked for (`search`); `result.reason` the provider's stop reason as a
