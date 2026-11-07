@@ -4948,7 +4948,8 @@ ends the turn; one of class `contextFull`, `bridge`, `auth`,
 `billing_error`, OpenAI's 429 `insufficient_quota`, or any other 4xx
 but 401 and 403 whose message names the credit or the quota (Anthropic
 "Your credit balance is too low…", OpenAI "You have no credits
-remaining…"; a key without credit still lists the models, so
+remaining…", which OpenAI sends as an error event inside a 200
+stream; a key without credit still lists the models, so
 `account.test` passes); the daemon does not retry it (a 429 of class
 `rateLimit` is retried once), and the client tells the user to top the
 account up with the provider.

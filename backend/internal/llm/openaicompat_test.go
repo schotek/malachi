@@ -190,7 +190,17 @@ func TestCompatStreamedError(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = run(t, p, llm.Request{Model: "m", Messages: history()[:1]})
-	wantClass(t, err, api.FailureToolsUnsupported)
+	if e := wantClass(t, err, api.FailureToolsUnsupported); e.Code != "invalid_request_error" {
+		t.Errorf("code %q", e.Code)
+	}
+	// A gateway relaying an account without credit inside the stream.
+	srv = newRawServer(t, "text/event-stream", "data: {\"error\":{\"message\":\"You have no credits remaining. Add credits to continue.\",\"type\":\"invalid_request_error\"}}\n\n")
+	p, err = llm.New(llm.Config{Provider: api.AIOpenAICompatible, BaseURL: srv.URL + "/v1", UserAgent: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = run(t, p, llm.Request{Model: "m", Messages: history()[:1]})
+	wantClass(t, err, api.FailureQuota)
 }
 
 func TestCompatModels(t *testing.T) {

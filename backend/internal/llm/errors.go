@@ -12,20 +12,28 @@ import (
 )
 
 // Error is a failed call: its class (what a client words), the HTTP
-// status when the provider answered, RetryAfter in seconds when it said
-// so (429, 529), and a technical message that never carries the key,
-// the request or the answer's text beyond the provider's own error
-// message, cleaned and cut.
+// status when the provider answered with one (0 for an error inside a
+// 200 stream), Code the provider's own error type or code when it gave
+// one (a short technical word, logged with the class), RetryAfter in
+// seconds when it said so (429, 529), and a technical message that
+// never carries the key, the request or the answer's text beyond the
+// provider's own error message, cleaned and cut.
 type Error struct {
 	Class      api.AssistantFailureClass
 	Status     int
+	Code       string
 	RetryAfter int
 	Message    string
 }
 
 func (e *Error) Error() string {
-	if e.Status != 0 {
+	switch {
+	case e.Status != 0 && e.Code != "":
+		return fmt.Sprintf("llm: %s (HTTP %d %s): %s", e.Class, e.Status, e.Code, e.Message)
+	case e.Status != 0:
 		return fmt.Sprintf("llm: %s (HTTP %d): %s", e.Class, e.Status, e.Message)
+	case e.Code != "":
+		return fmt.Sprintf("llm: %s (%s): %s", e.Class, e.Code, e.Message)
 	}
 	return fmt.Sprintf("llm: %s: %s", e.Class, e.Message)
 }

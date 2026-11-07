@@ -308,14 +308,7 @@ func (s *compatStream) event(_, data string) error {
 // chunkError is an error object a server put into the stream.
 func (s *compatStream) chunkError(raw json.RawMessage) error {
 	typ, msg := providerError([]byte(`{"error":` + string(raw) + `}`))
-	c, ok := openaiClass(typ)
-	if !ok {
-		c = api.FailureInvalidRequest
-	}
-	if mentionsToolsUnsupported(msg) {
-		c = api.FailureToolsUnsupported
-	}
-	return &Error{Class: c, Message: cleanMessage(msg)}
+	return streamError(typ, msg)
 }
 
 // delta applies one choice delta.

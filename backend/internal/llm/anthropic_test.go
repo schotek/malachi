@@ -164,6 +164,17 @@ func TestAnthropicStreamErrorEvent(t *testing.T) {
 	if len(events) != 1 || events[0].Kind != llm.EventTextDelta || events[0].Text != "Hi" {
 		t.Errorf("events = %+v", events)
 	}
+	if e.Code != "overloaded_error" {
+		t.Errorf("code %q", e.Code)
+	}
+	// An error event naming the credit is quota, as the 400 is.
+	srv = newRawServer(t, "text/event-stream", "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API.\"}}\n\n")
+	p, err = llm.New(llm.Config{Provider: api.AIAnthropic, BaseURL: srv.URL, Key: testKey, UserAgent: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = run(t, p, llm.Request{Model: "m", Messages: history()[:1]})
+	wantClass(t, err, api.FailureQuota)
 }
 
 func TestAnthropicStopReasons(t *testing.T) {

@@ -144,8 +144,38 @@ func TestOpenAIFailedEvent(t *testing.T) {
 	}
 	events, err := run(t, p, llm.Request{Model: "m", Messages: history()[:1]})
 	e := wantClass(t, err, api.FailureRateLimit)
-	if e.Message != "Rate limit" || len(events) != 1 || events[0].Text != "Hi" {
+	if e.Message != "Rate limit" || e.Code != "rate_limit_exceeded" || e.Status != 0 || len(events) != 1 || events[0].Text != "Hi" {
 		t.Errorf("error = %+v, events = %+v", e, events)
+	}
+}
+
+// OpenAI answers a key without credit with a 200 and an error event in
+// the stream (no HTTP status; seen 2026-11-07): the message makes it
+// quota, with the event's code kept; a model without tools the same way
+// is toolsUnsupported; an unknown code with another message is
+// invalidRequest.
+func TestOpenAIErrorEventByMessage(t *testing.T) {
+	for _, c := range []struct {
+		data  string
+		class api.AssistantFailureClass
+		code  string
+	}{
+		{`{"type":"error","code":"server_error","message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}`, api.FailureOverloaded, "server_error"},
+		{`{"type":"error","error":{"code":null,"message":"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."}}`, api.FailureQuota, ""},
+		{`{"type":"error","code":"invalid_request_error","message":"The model gpt-6-luna does not support function calling"}`, api.FailureToolsUnsupported, "invalid_request_error"},
+		{`{"type":"error","code":"invalid_prompt","message":"Invalid prompt"}`, api.FailureInvalidRequest, "invalid_prompt"},
+		{`{"type":"response.failed","response":{"id":"r","status":"failed","error":{"code":"","message":"Your credit balance is too low."}}}`, api.FailureQuota, ""},
+	} {
+		srv := newRawServer(t, "text/event-stream", "event: error\ndata: "+c.data+"\n\n")
+		p, err := llm.New(llm.Config{Provider: api.AIOpenAI, BaseURL: srv.URL + "/v1", Key: testKey, UserAgent: "t"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = run(t, p, llm.Request{Model: "m", Messages: history()[:1]})
+		e := wantClass(t, err, c.class)
+		if e.Code != c.code || e.Status != 0 {
+			t.Errorf("%s: error %+v", c.data, e)
+		}
 	}
 }
 

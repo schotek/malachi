@@ -31,7 +31,9 @@ import (
 // models (a gateway's list runs to megabytes of descriptions).
 const (
 	maxMessageBytes = 1000
-	maxModelsBytes  = 8 << 20
+	// maxCodeBytes bounds Error.Code, a provider's error type or code.
+	maxCodeBytes   = 64
+	maxModelsBytes = 8 << 20
 	// defaultRetryAfter is waited when a 429, 503 or 529 names no
 	// Retry-After.
 	defaultRetryAfter = time.Second
@@ -307,7 +309,7 @@ func readError(ctx context.Context, err error) error {
 // from the body (either may be empty). The message never carries more
 // than the provider's cleaned message.
 func httpError(resp *http.Response, typ, msg string) *Error {
-	e := &Error{Status: resp.StatusCode, Message: cleanMessage(msg)}
+	e := &Error{Status: resp.StatusCode, Code: cleanCode(typ), Message: cleanMessage(msg)}
 	switch {
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
 		e.Class = api.FailureProtocol
@@ -342,6 +344,33 @@ func httpError(resp *http.Response, typ, msg string) *Error {
 		}
 	}
 	return e
+}
+
+// streamError classifies an error a dialect of the OpenAI family sent
+// inside its event stream (HTTP 200, then "error" / "response.failed",
+// or a chunk with "error"): the error's code or type where it says more
+// (openaiClass), else the message (a model without tools, an account
+// without credit: OpenAI answers a key without credit this way, "You
+// have no credits remaining…" with no HTTP status at all, seen
+// 2026-11-07 in B2), else invalidRequest.
+func streamError(code, msg string) *Error {
+	c, ok := openaiClass(code)
+	switch {
+	case ok:
+	case mentionsToolsUnsupported(msg):
+		c = api.FailureToolsUnsupported
+	case mentionsQuota(msg):
+		c = api.FailureQuota
+	default:
+		c = api.FailureInvalidRequest
+	}
+	return &Error{Class: c, Code: cleanCode(code), Message: cleanMessage(msg)}
+}
+
+// cleanCode is a provider's error type or code as Error.Code keeps it:
+// cleaned and short.
+func cleanCode(code string) string {
+	return cleanText(code, maxCodeBytes)
 }
 
 // mentionsQuota recognises an error of an account that cannot pay for the

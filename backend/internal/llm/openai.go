@@ -317,11 +317,7 @@ func (s *openaiStream) event(name, data string) error {
 		s.stopped = true
 		return s.emit(Event{Kind: EventStop, Stop: s.stop(ev)})
 	case "response.failed":
-		c, ok := openaiClass(ev.Response.Error.Code)
-		if !ok {
-			c = api.FailureInvalidRequest
-		}
-		return &Error{Class: c, Message: cleanMessage(ev.Response.Error.Message)}
+		return streamError(ev.Response.Error.Code, ev.Response.Error.Message)
 	case "error":
 		code, msg := ev.Error.Code, ev.Error.Message
 		if code == "" {
@@ -330,11 +326,7 @@ func (s *openaiStream) event(name, data string) error {
 		if msg == "" {
 			msg = ev.Message
 		}
-		c, ok := openaiClass(code)
-		if !ok {
-			c = api.FailureInvalidRequest
-		}
-		return &Error{Class: c, Message: cleanMessage(msg)}
+		return streamError(code, msg)
 	}
 	return nil
 }

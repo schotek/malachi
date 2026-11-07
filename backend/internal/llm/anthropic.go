@@ -297,10 +297,13 @@ func (s *anthropicStream) event(name, data string) error {
 		return s.emit(Event{Kind: EventStop, Stop: stop})
 	case "error":
 		c, ok := anthropicClass(ev.Error.Type)
-		if !ok {
+		switch {
+		case ok && c == api.FailureInvalidRequest && mentionsQuota(ev.Error.Message):
+			c = api.FailureQuota
+		case !ok:
 			c = api.FailureProtocol
 		}
-		return &Error{Class: c, Message: cleanMessage(ev.Error.Message)}
+		return &Error{Class: c, Code: cleanCode(ev.Error.Type), Message: cleanMessage(ev.Error.Message)}
 	case "ping":
 	}
 	return nil

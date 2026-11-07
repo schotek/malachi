@@ -1055,7 +1055,15 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   nespadla. Oprava: 402 je `quota` vždy, věta o kreditu či kvótě
   (`mentionsQuota`, nově i „no credits“ / „add credits“) u každého
   jiného 4xx mimo 401 a 403; log démona „assistant turn failed“ nese
-  i `status`, aby diagnóza nestála na odvození.
+  i `status`, aby diagnóza nestála na odvození. To nestačilo: OpenAI
+  tuhle chybu neposílá jako 4xx, ale jako událost `error` uvnitř
+  proudu za HTTP 200 (agent dokázal z chybějícího `status` v logu), a
+  větev chyb ze streamu třídu brala jen z kódu OpenAI. Teď
+  `llm.streamError` (OpenAI `error` / `response.failed`, chunk `error`
+  Chat Completions) čte po kódu i zprávu (`toolsUnsupported`, `quota`),
+  Anthropic totéž u své události `error`; `llm.Error.Code` nese kód
+  či typ chyby poskytovatele (do 64 B) a log „assistant turn failed“
+  ho vypíše jako `code=`.
 - **Neověřeno**: zbytek B2 (model, panel s kreditem, přepis, hledání,
   triage, Navrhnout odpověď), živá API Anthropicu a OpenAI s kreditem
   (zatím jen odmítnutí 400 bez kreditu).
