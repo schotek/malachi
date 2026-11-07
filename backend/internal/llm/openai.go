@@ -106,7 +106,7 @@ func (o *openai) body(req Request) ([]byte, error) {
 		}
 	}
 	for _, t := range req.Tools {
-		w.Tools = append(w.Tools, openaiTool{Type: "function", Name: t.Name, Description: t.Description, Parameters: schemaOr(t.InputSchema, `{"type":"object"}`), Strict: false})
+		w.Tools = append(w.Tools, openaiTool{Type: "function", Name: t.Name, Description: t.Description, Parameters: toolSchema(t.InputSchema), Strict: false})
 	}
 	return encodeJSON(w)
 }

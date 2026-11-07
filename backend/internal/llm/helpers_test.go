@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -223,4 +225,61 @@ func toolTurn() llmtest.Turn {
 		{ID: "call_1", Name: "read_message", Input: `{"id":"m1"}`},
 		{ID: "call_2", Name: "list_folders", Input: `{"account":`},
 	}, Usage: usage}
+}
+
+// Every dialect sends an object schema with a "properties" member: a
+// tool without arguments comes from the bridge without one, and LM
+// Studio refuses such a request (B2, 2026-11-07); a schema that is not
+// an object schema is sent as it is.
+func TestToolSchemasAlwaysHaveProperties(t *testing.T) {
+	in := []llm.Tool{
+		{Name: "with", InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}`)},
+		{Name: "bare", InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`)},
+		{Name: "empty"},
+		{Name: "untyped", InputSchema: json.RawMessage(`{"additionalProperties":false}`)},
+		{Name: "odd", InputSchema: json.RawMessage(`{"type":"string"}`)},
+	}
+	for _, d := range []llmtest.Dialect{llmtest.Anthropic, llmtest.OpenAI, llmtest.Compat} {
+		srv := llmtest.New(t, d, llmtest.Turn{Text: "ok"})
+		p := newProvider(t, srv, testKey)
+		if _, err := run(t, p, llm.Request{Model: "m", Messages: history()[:1], Tools: in}); err != nil {
+			t.Fatal(err)
+		}
+		b := srv.Requests()[0].Body
+		schema := func(i int) map[string]any {
+			t.Helper()
+			var v any
+			switch d {
+			case llmtest.Anthropic:
+				v = field(t, b, "tools."+strconv.Itoa(i)+".input_schema")
+			case llmtest.OpenAI:
+				v = field(t, b, "tools."+strconv.Itoa(i)+".parameters")
+			default:
+				v = field(t, b, "tools."+strconv.Itoa(i)+".function.parameters")
+			}
+			m, _ := v.(map[string]any)
+			return m
+		}
+		for i, want := range []struct {
+			props    bool
+			keepsAdd bool
+		}{{true, false}, {true, true}, {true, false}, {true, true}, {false, false}} {
+			s := schema(i)
+			if s == nil {
+				t.Fatalf("dialect %d %s: schema %v", d, in[i].Name, field(t, b, "tools"))
+			}
+			if _, ok := s["properties"]; ok != want.props {
+				t.Errorf("dialect %d %s: properties present %v, want %v: %v", d, in[i].Name, ok, want.props, s)
+			}
+			if _, ok := s["additionalProperties"]; ok != want.keepsAdd {
+				t.Errorf("dialect %d %s: additionalProperties kept %v, want %v: %v", d, in[i].Name, ok, want.keepsAdd, s)
+			}
+		}
+		if s := schema(0); fmt.Sprint(s["required"]) != "[id]" {
+			t.Errorf("dialect %d: the schema with properties changed: %v", d, s)
+		}
+		if s := schema(4); s["type"] != "string" {
+			t.Errorf("dialect %d: a non-object schema changed: %v", d, s)
+		}
+	}
 }

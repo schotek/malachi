@@ -143,7 +143,7 @@ func (o *openaiCompat) body(req Request, withFormat bool) ([]byte, error) {
 		w.Messages = []compatMessage{}
 	}
 	for _, t := range req.Tools {
-		w.Tools = append(w.Tools, compatTool{Type: "function", Function: compatFunctionDef{Name: t.Name, Description: t.Description, Parameters: schemaOr(t.InputSchema, `{"type":"object"}`)}})
+		w.Tools = append(w.Tools, compatTool{Type: "function", Function: compatFunctionDef{Name: t.Name, Description: t.Description, Parameters: toolSchema(t.InputSchema)}})
 	}
 	return encodeJSON(w)
 }

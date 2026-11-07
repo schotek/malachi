@@ -25,10 +25,12 @@ import (
 )
 
 // maxMessageBytes bounds the provider's error message kept in an
-// Error.Message; maxModelsBytes one listing of models (a gateway's list
-// runs to megabytes of descriptions).
+// Error.Message (a validator's listing of what it refused runs to
+// several items; the message is never shown, only passed to a client
+// as the failure's technical message); maxModelsBytes one listing of
+// models (a gateway's list runs to megabytes of descriptions).
 const (
-	maxMessageBytes = 200
+	maxMessageBytes = 1000
 	maxModelsBytes  = 8 << 20
 	// defaultRetryAfter is waited when a 429, 503 or 529 names no
 	// Retry-After.
@@ -501,6 +503,36 @@ func schemaOr(schema json.RawMessage, def string) json.RawMessage {
 		return json.RawMessage(def)
 	}
 	return schema
+}
+
+// toolSchema is a tool's input schema as every dialect sends it: an
+// object schema always with a "properties" member, an empty one for a
+// tool without arguments (the bridge's get_user_profile, list_accounts
+// and list_rules come as {"type":"object","additionalProperties":false};
+// OpenAI and Anthropic take that, LM Studio's validator refuses the
+// whole request as "Required" at parameters.properties, seen 2026-11-07
+// in B2). An empty schema is the empty object schema; a schema that is
+// not a JSON object, or has a type other than object, is sent as it is.
+func toolSchema(schema json.RawMessage) json.RawMessage {
+	if len(bytes.TrimSpace(schema)) == 0 {
+		return json.RawMessage(`{"type":"object","properties":{}}`)
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(schema, &obj); err != nil || obj == nil {
+		return schema
+	}
+	if _, ok := obj["properties"]; ok {
+		return schema
+	}
+	if typ, ok := obj["type"]; ok && string(bytes.TrimSpace(typ)) != `"object"` {
+		return schema
+	}
+	obj["properties"] = json.RawMessage(`{}`)
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return schema
+	}
+	return out
 }
 
 // parseToolInput validates the arguments a model assembled: valid JSON

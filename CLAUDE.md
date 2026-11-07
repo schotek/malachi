@@ -611,7 +611,8 @@ klient před `rpc.Close()` nechá dojít `sessionStop`
 (`Sessions.Wait`), tah bez tokenů spotřebu nezapisuje ani neoznamuje;
 stav účtu `ai` je jen `authRequired` po odmítnutém klíči (nikdy
 `error`) a stavový pruh i nabídka synchronizace ho jinak vynechají
-(`inStatusLine`; E2/E3 totéž).
+(`inStatusLine`; E2/E3 totéž); nástroje bez argumentů dostanou
+`"properties": {}` (`llm.toolSchema`), jinak je LM Studio odmítne.
 Neověřeno: panel s kreditem, přepis, hledání, triage, Navrhnout
 odpověď, živá API s kreditem (názvy událostí OpenAI Responses jen
 z dokumentace); Windows `build.ps1 lint` do E3 padá (91 msgidů

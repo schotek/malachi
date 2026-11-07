@@ -96,7 +96,7 @@ func (a *anthropic) body(req Request) ([]byte, error) {
 		w.Messages = append(w.Messages, anthropicMessage{Role: string(m.Role), Content: blocks})
 	}
 	for _, t := range req.Tools {
-		w.Tools = append(w.Tools, anthropicTool{Name: t.Name, Description: t.Description, InputSchema: schemaOr(t.InputSchema, `{"type":"object"}`)})
+		w.Tools = append(w.Tools, anthropicTool{Name: t.Name, Description: t.Description, InputSchema: toolSchema(t.InputSchema)})
 	}
 	return encodeJSON(w)
 }

@@ -1032,7 +1032,21 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   přebírají v E2/E3 (jejich stavový pruh a nabídka synchronizace).
   Body (5) a (6) agent ověřil nad `fe89d973` sondou i s vlastníkem
   na obrazovce (třída `quota`, `sessionStop` před zavřením spojení,
-  spotřeba beze změny).
+  spotřeba beze změny); bod (7) vlastník schválil na obrazovce nad
+  `b2b9d13d`. (8) LM Studio (`google/gemma-4-e2b`, OpenAI-kompatibilní
+  účet přes http): Test prošel, každý tah panelu padl 400
+  `invalidRequest`; agent sondou zjistil, že validátor LM Studia
+  vyžaduje u každé funkce `parameters.properties`, a tři nástroje
+  mostu bez argumentů (`get_user_profile`, `list_accounts`,
+  `list_rules`) mají schéma `{"type":"object","additionalProperties":false}`
+  (SDK MCP ho tak generuje; OpenAI i Anthropic ho berou). Jednorázové
+  účely bez nástrojů (přepis, hledání vlastními slovy) s touž Gemmou
+  fungovaly. Oprava v démonu: `llm.toolSchema` doplní objektovému
+  schématu bez `properties` prázdné `"properties": {}` ve všech třech
+  dialektech (test `TestToolSchemasAlwaysHaveProperties`); strop
+  technické zprávy selhání `maxMessageBytes` zvednutý z 200 na 1000 B,
+  aby výpis validátoru nekončil za první položkou (zpráva se nikdy
+  neukazuje, jen jde klientům jako technický text).
 - **Neověřeno**: zbytek B2 (model, panel s kreditem, přepis, hledání,
   triage, Navrhnout odpověď), živá API Anthropicu a OpenAI s kreditem
   (zatím jen odmítnutí 400 bez kreditu).
