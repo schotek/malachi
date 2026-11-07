@@ -38,6 +38,7 @@ type accountRow struct {
 	handle    *gtk.Image   // drag handle; the whole row is the drop target
 	status    *gtk.Label
 	signIn    *gtk.Button
+	badge     *gtk.Label  // integrations.Row.Badge, hidden when empty
 	toggle    *gtk.Switch // nil without integrations.Row.OffersSwitch
 	edit      *gtk.Button // nil with integrations.EditorNone
 	remove    *gtk.Button
@@ -196,6 +197,10 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, l *accountList, a ap
 	// the handle goes in after the account icon to end up before it.
 	row.AddPrefix(gtk.NewImageFromIconName(accountIcon(a)))
 	row.AddPrefix(row.handle)
+
+	// The capsule of an AI provider account ("API key"), before its status.
+	row.badge = widget.NewSourcePill(spec.Badge)
+	row.AddSuffix(row.badge)
 
 	row.status = gtk.NewLabel("")
 	row.status.AddCSSClass("caption")

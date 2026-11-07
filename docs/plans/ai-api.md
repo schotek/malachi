@@ -542,7 +542,11 @@ eWay).
   Lokální integrace je vždy jen na jednom místě (rozhodnutí vlastníka
   2026-11-07 po B2): v katalogu AI s Přidat…, dokud není registrovaná
   / připojená, pak jako řádek v Připojených a z katalogu zmizí
-  (`integrations.LocalConnected`, `Offered`).
+  (`integrations.LocalConnected`, `Offered`). Položky AI nesou kapsli
+  (`integrations.Badges`, totéž co kapsle druhu účtu v postranním
+  panelu): lokální „This computer“ (Tento počítač), účty přes API
+  „API key“ (Klíč API), i na řádku v Připojených; služby kapsli nemají
+  (rozhodnutí vlastníka 2026-11-07).
 - Odebrání účtu `ai`: věta podle druhu („…a jeho klíč“).
 
 ### 7.3 Předvolby → AI
@@ -933,7 +937,9 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   widget na druh skrytý a skupinu i zástupný řádek „Zatím žádné
   integrace“ podle toho; původně byly oba řádky vždy a zároveň
   v katalogu, vlastník to 2026-11-07 shledal matoucím; msgid „Not
-  registered“ zmizel; dialogy `claude_integration.blp`,
+  registered“ zmizel; kapsle „This computer“ / „API key“ (`Service.Badge`,
+  `Row.Badge`, `LocalRow.Badge`, GTK `widget.NewSourcePill` ve stylu
+  neutrální pilulky); dialogy `claude_integration.blp`,
   `chatgpt_integration.blp` přesunuté z AI záložky, Odebrat
   = odregistrovat / odpojit s potvrzením);
   řádek účtu `ai` ukazuje „%s tokens today“ (účtování po místních dnech,

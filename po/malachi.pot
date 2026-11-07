@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-07 13:04+0000\n"
+"POT-Creation-Date: 2026-11-07 13:22+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -25,10 +25,10 @@ msgstr ""
 #: ui/internal/accountwizard/jira_flow.go:216
 #: ui/internal/accountwizard/wizard.go:249
 #: ui/internal/accountwizard/wizard.go:250 ui/internal/aiaccount/text.go:58
-#: ui/internal/integrations/integrations.go:358
-#: ui/internal/integrations/integrations.go:362
-#: ui/internal/integrations/integrations.go:371
-#: ui/internal/integrations/integrations.go:375 ui/internal/crm/text.go:422
+#: ui/internal/integrations/integrations.go:380
+#: ui/internal/integrations/integrations.go:384
+#: ui/internal/integrations/integrations.go:393
+#: ui/internal/integrations/integrations.go:397 ui/internal/crm/text.go:422
 msgid "Edit Account"
 msgstr ""
 
@@ -1239,7 +1239,7 @@ msgid ""
 msgstr ""
 
 #: ui/internal/assistant/assistant.go:930 ui/internal/calendar/text.go:116
-#: ui/internal/window/accounts_page.go:208
+#: ui/internal/window/accounts_page.go:213
 msgid "Sign In…"
 msgstr ""
 
@@ -3054,31 +3054,41 @@ msgstr ""
 msgid "The status could not be changed: %s"
 msgstr ""
 
+#. TRANSLATORS: capsule on an AI integration that uses the apps installed on this computer (Claude Code, Claude Desktop, Codex).
+#: ui/internal/integrations/integrations.go:206
+msgid "This computer"
+msgstr ""
+
+#. TRANSLATORS: capsule on an AI provider account that uses an API key.
+#: ui/internal/integrations/integrations.go:208
+msgid "API key"
+msgstr ""
+
 #. TRANSLATORS: Preferences → Integrations: what the Claude apps on this computer bring.
-#: ui/internal/integrations/integrations.go:225
+#: ui/internal/integrations/integrations.go:246
 msgid ""
 "Hand mail to Claude Desktop or Claude Code, and run the assistant in the app "
 "with Claude Code"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: what ChatGPT (Codex) brings.
-#: ui/internal/integrations/integrations.go:231
+#: ui/internal/integrations/integrations.go:252
 msgid "Run the assistant in the app through Codex, using your ChatGPT plan"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: what an Anthropic API account brings.
-#: ui/internal/integrations/integrations.go:237
+#: ui/internal/integrations/integrations.go:258
 msgid ""
 "Run the assistant in the app over the Anthropic API with your own API key"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: what an OpenAI API account brings.
-#: ui/internal/integrations/integrations.go:243
+#: ui/internal/integrations/integrations.go:264
 msgid "Run the assistant in the app over the OpenAI API with your own API key"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: what an OpenAI-compatible server brings; the product names stay as they are.
-#: ui/internal/integrations/integrations.go:249
+#: ui/internal/integrations/integrations.go:270
 msgid ""
 "Ollama, llama.cpp, LM Studio, vLLM and gateways such as OpenRouter: a model "
 "on your computer or a server of your choice"
@@ -3086,35 +3096,35 @@ msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: what a Jira
 #. account brings ("issues" as in Jira's own word).
-#: ui/internal/integrations/integrations.go:262
+#: ui/internal/integrations/integrations.go:283
 msgid "Issues read as mail, comments and status changes"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: the name of the
 #. service in the list of services that can be added.
-#: ui/internal/integrations/integrations.go:269
+#: ui/internal/integrations/integrations.go:290
 msgid "CalDAV Calendar"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:270
+#: ui/internal/integrations/integrations.go:291
 msgid "Nextcloud, iCloud, Fastmail and other CalDAV servers"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: what an eWay-CRM
 #. account brings ("deals" as eWay-CRM's sales opportunities).
-#: ui/internal/integrations/integrations.go:277
+#: ui/internal/integrations/integrations.go:298
 msgid "Save messages to your CRM with their contacts, companies and deals"
 msgstr ""
 
 #. TRANSLATORS: %s is the account's e-mail address.
-#: ui/internal/integrations/integrations.go:360
+#: ui/internal/integrations/integrations.go:382
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Mail on the server is not affected."
 msgstr ""
 
 #. TRANSLATORS: %s is the account's name (or its site's host).
-#: ui/internal/integrations/integrations.go:364
+#: ui/internal/integrations/integrations.go:386
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Issues on the Jira site are not "
@@ -3122,7 +3132,7 @@ msgid ""
 msgstr ""
 
 #. TRANSLATORS: %s is the calendar account's name.
-#: ui/internal/integrations/integrations.go:369
+#: ui/internal/integrations/integrations.go:391
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Calendars on the server are not "
@@ -3130,117 +3140,117 @@ msgid ""
 msgstr ""
 
 #. TRANSLATORS: %s is the eWay-CRM account's name.
-#: ui/internal/integrations/integrations.go:373
+#: ui/internal/integrations/integrations.go:395
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Messages saved in eWay-CRM stay there."
 msgstr ""
 
 #. TRANSLATORS: %s is the AI provider account's name; its API key leaves the keyring with it.
-#: ui/internal/integrations/integrations.go:381
+#: ui/internal/integrations/integrations.go:404
 #, c-format
 msgid "%s will be removed from Malachi Mail, and its API key with it."
 msgstr ""
 
 #. TRANSLATORS: %s is the account's name.
-#: ui/internal/integrations/integrations.go:385
+#: ui/internal/integrations/integrations.go:408
 #, c-format
 msgid "%s will be removed from Malachi Mail."
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations, the Claude row: the bridge is registered in both Claude apps.
-#: ui/internal/integrations/integrations.go:536
+#: ui/internal/integrations/integrations.go:562
 msgid "Registered in Claude Desktop and Claude Code"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:539
+#: ui/internal/integrations/integrations.go:565
 msgid "Claude Code not found"
 msgstr ""
 
 #. TRANSLATORS: %s is the version of Claude Code found on this computer.
-#: ui/internal/integrations/integrations.go:542
+#: ui/internal/integrations/integrations.go:568
 #, c-format
 msgid "Claude Code %s"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations, the Claude row: Claude Code is signed in (lower case, after " · ").
-#: ui/internal/integrations/integrations.go:549
+#: ui/internal/integrations/integrations.go:575
 msgid "signed in"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations, the Claude row: Claude Code is not signed in (lower case, after " · ").
-#: ui/internal/integrations/integrations.go:552
+#: ui/internal/integrations/integrations.go:578
 msgid "not signed in"
 msgstr ""
 
 #. TRANSLATORS: the Remove button of the Claude row in Preferences → Integrations: it unregisters the bridge from the Claude apps.
-#: ui/internal/integrations/integrations.go:559
+#: ui/internal/integrations/integrations.go:585
 msgid "Unregister"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:565
+#: ui/internal/integrations/integrations.go:591
 msgid "Codex not found"
 msgstr ""
 
 #. TRANSLATORS: a page of the preferences: services beside the
 #. mail, such as Jira, CalDAV calendars, eWay-CRM and AI.
-#: ui/internal/integrations/integrations.go:598
+#: ui/internal/integrations/integrations.go:624
 msgid "Integrations"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:599
+#: ui/internal/integrations/integrations.go:625
 msgid "Services beside your mail: issue trackers, calendars, CRM and AI"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:600
+#: ui/internal/integrations/integrations.go:626
 msgid "Connected Services"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:601
+#: ui/internal/integrations/integrations.go:627
 msgid "Available Services"
 msgstr ""
 
 #. TRANSLATORS: the AI section of the catalogue in Preferences → Integrations.
-#: ui/internal/integrations/integrations.go:603 ui/data/ui/preferences.ui:583
+#: ui/internal/integrations/integrations.go:629 ui/data/ui/preferences.ui:583
 msgid "AI"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:604
+#: ui/internal/integrations/integrations.go:630
 msgid "No integrations yet"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:605
+#: ui/internal/integrations/integrations.go:631
 msgid "Add one from the list below"
 msgstr ""
 
 #. TRANSLATORS: the button of a service in Preferences →
 #. Integrations → Available Services.
-#: ui/internal/integrations/integrations.go:608
+#: ui/internal/integrations/integrations.go:634
 msgid "Add…"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Edit button of a local integration (Claude, ChatGPT) in Preferences → Integrations.
-#: ui/internal/integrations/integrations.go:610
+#: ui/internal/integrations/integrations.go:636
 msgid "Settings"
 msgstr ""
 
 #. TRANSLATORS: confirmation of the Claude row's Unregister in Preferences → Integrations.
-#: ui/internal/integrations/integrations.go:613
+#: ui/internal/integrations/integrations.go:639
 msgid "Unregister from Claude?"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:614
+#: ui/internal/integrations/integrations.go:640
 msgid ""
 "Claude Desktop and Claude Code will no longer read your mail through Malachi "
 "Mail. The assistant in the app keeps working."
 msgstr ""
 
 #. TRANSLATORS: confirmation of the ChatGPT row's Disconnect in Preferences → Integrations.
-#: ui/internal/integrations/integrations.go:616
+#: ui/internal/integrations/integrations.go:642
 msgid "Disconnect ChatGPT?"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:617
+#: ui/internal/integrations/integrations.go:643
 msgid ""
 "Malachi Mail signs out of ChatGPT on this computer. You can connect it again "
 "any time."
@@ -3248,7 +3258,7 @@ msgstr ""
 
 #. TRANSLATORS: tooltip of a CalDAV account's Edit button in
 #. Preferences → Integrations; it opens the Calendar page.
-#: ui/internal/integrations/integrations.go:625
+#: ui/internal/integrations/integrations.go:651
 msgid "Calendar Settings"
 msgstr ""
 
@@ -3402,7 +3412,7 @@ msgid ""
 "The message in Malachi Mail stays."
 msgstr ""
 
-#: ui/internal/crm/text.go:296 ui/internal/window/accounts_page.go:346
+#: ui/internal/crm/text.go:296 ui/internal/window/accounts_page.go:351
 #: ui/internal/window/preferences_calendar.go:460
 #: ui/internal/signature/text.go:430
 msgid "_Remove"
@@ -6324,7 +6334,7 @@ msgid ""
 msgstr ""
 
 #: ui/internal/calendar/preferences.go:137
-#: ui/internal/window/accounts_page.go:231
+#: ui/internal/window/accounts_page.go:236
 msgid "Remove Account"
 msgstr ""
 
@@ -7481,88 +7491,88 @@ msgid "The link could not be opened: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is the new account's e-mail address.
-#: ui/internal/window/accounts_page.go:106 ui/internal/window/ai_editors.go:54
+#: ui/internal/window/accounts_page.go:107 ui/internal/window/ai_editors.go:54
 #: ui/internal/window/jira_editors.go:54
 #, c-format
 msgid "Added %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:140
+#: ui/internal/window/accounts_page.go:141
 msgid "Loading accounts"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:193
+#: ui/internal/window/accounts_page.go:194
 #: ui/internal/window/preferences_rules.go:240
 msgid "Drag to reorder, or press Ctrl+Up and Ctrl+Down"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:215
+#: ui/internal/window/accounts_page.go:220
 msgid "Enabled"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:276
+#: ui/internal/window/accounts_page.go:281
 msgid "Pausing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:278
+#: ui/internal/window/accounts_page.go:283
 msgid "Resuming the account"
 msgstr ""
 
 #. TRANSLATORS: %s is the edited account's e-mail address.
-#: ui/internal/window/accounts_page.go:336 ui/internal/window/ai_editors.go:69
+#: ui/internal/window/accounts_page.go:341 ui/internal/window/ai_editors.go:69
 #: ui/internal/window/jira_editors.go:70
 #, c-format
 msgid "Saved %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:344
+#: ui/internal/window/accounts_page.go:349
 #: ui/internal/window/preferences_calendar.go:457
 msgid "Also delete _drafts and downloaded data"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:346
+#: ui/internal/window/accounts_page.go:351
 #: ui/internal/window/preferences_calendar.go:460
 msgid "Remove this account?"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:362
+#: ui/internal/window/accounts_page.go:367
 #: ui/internal/window/preferences_calendar.go:473
 msgid "Removing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:443 ui/internal/window/status.go:78
+#: ui/internal/window/accounts_page.go:448 ui/internal/window/status.go:78
 #: ui/internal/window/sync.go:220
 msgid "Paused"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:445 ui/internal/window/status.go:114
+#: ui/internal/window/accounts_page.go:450 ui/internal/window/status.go:114
 msgid "Syncing…"
 msgstr ""
 
 #. TRANSLATORS: account status in Settings → Accounts; %s says why.
 #. TRANSLATORS: status line of an account that cannot reach its
 #. server and keeps trying; %s is an account name.
-#: ui/internal/window/accounts_page.go:449 ui/internal/window/sync.go:254
+#: ui/internal/window/accounts_page.go:454 ui/internal/window/sync.go:254
 #, c-format
 msgid "Offline: %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:451
+#: ui/internal/window/accounts_page.go:456
 msgid "Offline"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:453 ui/internal/window/status.go:122
+#: ui/internal/window/accounts_page.go:458 ui/internal/window/status.go:122
 #: ui/internal/window/sync.go:235
 msgid "Sign-in required"
 msgstr ""
 
 #. TRANSLATORS: account status in Settings → Accounts; %s says why.
-#: ui/internal/window/accounts_page.go:457
+#: ui/internal/window/accounts_page.go:462
 #, c-format
 msgid "Error: %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:459
+#: ui/internal/window/accounts_page.go:464
 msgid "Error"
 msgstr ""
 
@@ -7940,7 +7950,7 @@ msgid "Folders appear after the first synchronisation."
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/integrations_page.go:306
+#: ui/internal/window/integrations_page.go:310
 #: ui/internal/window/claude_integration.go:239
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"

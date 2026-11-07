@@ -64,6 +64,17 @@ func SetInternalPill(l *gtk.Label, text string) {
 	l.SetVisible(text != "")
 }
 
+// NewSourcePill is the neutral capsule after an AI integration's name in
+// Preferences → Integrations ("This computer", "API key";
+// integrations.Badges), hidden while text is empty.
+func NewSourcePill(text string) *gtk.Label {
+	l := NewPill()
+	l.AddCSSClass("bulk-pill")
+	l.SetText(text)
+	l.SetVisible(text != "")
+	return l
+}
+
 // NewKindBadge is the capsule after an account's name in the sidebar
 // ("JIRA", jira.KindBadge; a brand name, never translated); hidden while
 // text is empty.

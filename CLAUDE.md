@@ -596,8 +596,9 @@ výběrem modelu, pinem a souhlasem; Předvolby → Integrace mají katalog AI
 přesunutými z AI záložky — v katalogu s Přidat…, dokud nejsou
 registrované / připojené, pak jen jako řádek v Připojených
 (`integrations.LocalRowFor`, `Offered`; rozhodnutí vlastníka 2026-11-07) —,
-Anthropic API, OpenAI API, OpenAI-kompatibilní server) a
-řádek účtu `ai` se spotřebou; Předvolby → AI jen „Asistent používá“,
+Anthropic API, OpenAI API, OpenAI-kompatibilní server; položky AI nesou
+kapsli „This computer“ / „API key“ (`integrations.Badges`)) a
+řádek účtu `ai` se spotřebou a touž kapslí; Předvolby → AI jen „Asistent používá“,
 nabídka, cíl, model, Nástěnka, O mně. Ověřeno: celá sada backendu, celá
 sada `ui/` v kontejneru, GTK smoke testy, `make po`, `make lint`.
 Neověřeno: vlastník na obrazovce (B2: `make run-gtk-live` nad kopií dat

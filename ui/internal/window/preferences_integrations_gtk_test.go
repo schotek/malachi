@@ -69,6 +69,9 @@ func TestPreferencesIntegrationsGTKSmoke(t *testing.T) {
 		if r.Title() != spec.Title || r.settings.TooltipText() != tx.Settings || r.Visible() || r.offer != d.localOffers[kind] || !r.offer.Visible() {
 			t.Errorf("local row %q: tooltip %q, visible %v, offer %v", r.Title(), r.settings.TooltipText(), r.Visible(), r.offer.Visible())
 		}
+		if badges := integrations.Badges(i18n.Tr); r.badge.Text() != badges.ThisComputer || !r.badge.Visible() {
+			t.Errorf("local row %q: badge %q", r.Title(), r.badge.Text())
+		}
 	}
 	if d.integrationsLocal.Visible() {
 		t.Error("the local group is hidden while nothing is connected")
@@ -106,8 +109,12 @@ func TestPreferencesIntegrationsGTKSmoke(t *testing.T) {
 	if rows[1].edit == nil || rows[1].edit.TooltipText() != tx.CalendarSettings {
 		t.Error("the CalDAV row's Edit")
 	}
-	if spec := integrations.RowFor(ai, i18n.Tr); rows[2].Title() != "Work key" || rows[2].Subtitle() != spec.Subtitle || rows[2].edit == nil {
-		t.Errorf("the AI row: %q / %q", rows[2].Title(), rows[2].Subtitle())
+	if spec := integrations.RowFor(ai, i18n.Tr); rows[2].Title() != "Work key" || rows[2].Subtitle() != spec.Subtitle || rows[2].edit == nil ||
+		rows[2].badge.Text() != integrations.Badges(i18n.Tr).APIKey || !rows[2].badge.Visible() {
+		t.Errorf("the AI row: %q / %q / %q", rows[2].Title(), rows[2].Subtitle(), rows[2].badge.Text())
+	}
+	if rows[0].badge.Visible() || rows[1].badge.Visible() {
+		t.Error("Jira and CalDAV rows have no capsule")
 	}
 	rows[2].showUsage(12345)
 	if rows[2].Subtitle() != integrations.RowFor(ai, i18n.Tr).Subtitle+" · "+usageLine(12345) {

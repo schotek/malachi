@@ -84,6 +84,7 @@ func (d *PreferencesDialog) newServiceRow(c *client.Client, s integrations.Servi
 	row.SetTitle(s.Name)
 	row.SetSubtitle(s.Description)
 	row.AddPrefix(gtk.NewImageFromIconName(s.Icon))
+	row.AddSuffix(widget.NewSourcePill(s.Badge))
 	button := gtk.NewButtonWithLabel(add)
 	button.SetVAlign(gtk.AlignCenter)
 	row.AddSuffix(button)
@@ -125,6 +126,7 @@ func (d *PreferencesDialog) addService(c *client.Client, s integrations.Service)
 type localRow struct {
 	*adw.ActionRow
 	spec     integrations.LocalRow
+	badge    *gtk.Label
 	settings *gtk.Button
 	remove   *gtk.Button
 	offer    *adw.ActionRow
@@ -142,6 +144,8 @@ func (d *PreferencesDialog) bindLocalRows(tx integrations.PageTexts) (unbind fun
 		row.SetUseMarkup(false)
 		row.AddCSSClass("account-row")
 		row.AddPrefix(gtk.NewImageFromIconName(spec.Icon))
+		row.badge = widget.NewSourcePill(spec.Badge)
+		row.AddSuffix(row.badge)
 		row.settings = gtk.NewButtonFromIconName("emblem-system-symbolic")
 		row.settings.SetVAlign(gtk.AlignCenter)
 		row.settings.AddCSSClass("flat")

@@ -169,7 +169,7 @@ func TestRowForAI(t *testing.T) {
 	a := aiAccount("acc_1", "Work", api.AIAnthropic, "claude-opus-5-5")
 	r := RowFor(a, tr)
 	if r.ID != "acc_1" || r.Kind != api.AccountAI || r.Title != "Work" || r.Subtitle != "Anthropic API · claude-opus-5-5" ||
-		!r.OffersSwitch || r.Editor != EditorAI || r.EditLabel != "Edit Account" || r.Icon != AIIcon {
+		!r.OffersSwitch || r.Editor != EditorAI || r.EditLabel != "Edit Account" || r.Icon != AIIcon || r.Badge != "API key" {
 		t.Errorf("anthropic %+v", r)
 	}
 	if r.RemoveBody != "Work will be removed from Malachi Mail, and its API key with it." {
@@ -218,15 +218,25 @@ func TestLocalRows(t *testing.T) {
 		if !Offered(s, ClaudeState{}, ChatGPTState{}) {
 			t.Errorf("%s not offered while nothing is connected", s.Name)
 		}
+		// The capsule: the local ones use this computer's apps, the
+		// provider kinds an API key.
+		if want := map[bool]string{true: "This computer", false: "API key"}[s.Local != LocalNone]; s.Badge != want {
+			t.Errorf("%s: badge %q, want %q", s.Name, s.Badge, want)
+		}
+	}
+	for _, s := range CatalogSection(tr, SectionServices) {
+		if s.Badge != "" {
+			t.Errorf("%s: badge %q", s.Name, s.Badge)
+		}
 	}
 	// The row of an unconnected integration exists for a view that keeps a
 	// widget per kind, hidden, without Remove.
 	if r, shown := LocalRowFor(LocalClaude, ClaudeState{Present: true, Version: "2.1.284"}, ChatGPTState{}, tr); shown || r.CanRemove ||
-		r.Title != "Claude Code / Claude Desktop" || r.Editor != EditorClaude || r.Icon != AIIcon || r.RemoveLabel != "Unregister" {
+		r.Title != "Claude Code / Claude Desktop" || r.Editor != EditorClaude || r.Icon != AIIcon || r.RemoveLabel != "Unregister" || r.Badge != "This computer" {
 		t.Errorf("claude unconnected %+v shown %v", r, shown)
 	}
 	if r, shown := LocalRowFor(LocalChatGPT, ClaudeState{}, ChatGPTState{CodexFound: true}, tr); shown || r.CanRemove ||
-		r.Title != "ChatGPT (Codex)" || r.Editor != EditorChatGPT || r.Icon != AIIcon || r.RemoveLabel != "Disconnect" {
+		r.Title != "ChatGPT (Codex)" || r.Editor != EditorChatGPT || r.Icon != AIIcon || r.RemoveLabel != "Disconnect" || r.Badge != "This computer" {
 		t.Errorf("chatgpt unconnected %+v shown %v", r, shown)
 	}
 	if _, shown := LocalRowFor(LocalNone, ClaudeState{Registered: true}, ChatGPTState{Connected: true}, tr); shown {
@@ -314,7 +324,7 @@ func TestRowForByKind(t *testing.T) {
 	mail.Config.Name = "Work"
 	r := RowFor(mail, tr)
 	if r.ID != "m" || r.Kind != api.AccountIMAP || r.Title != "Work" || r.Subtitle != "m@example.invalid" ||
-		!r.OffersSwitch || r.Editor != EditorMailWizard || r.EditLabel != "Edit Account" || r.Icon != MailIcon {
+		!r.OffersSwitch || r.Editor != EditorMailWizard || r.EditLabel != "Edit Account" || r.Icon != MailIcon || r.Badge != "" {
 		t.Errorf("mail %+v", r)
 	}
 	if !strings.Contains(r.RemoveBody, "Mail on the server") || !strings.HasPrefix(r.RemoveBody, "m@example.invalid ") {

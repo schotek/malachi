@@ -187,6 +187,26 @@ type Service struct {
 	Name        string         // the service's name; Jira, eWay-CRM, Claude and ChatGPT are brands, not translated
 	Description string
 	Icon        string // GTK symbolic icon name
+	Badge       string // the capsule after the name (Badges); empty for none
+}
+
+// BadgeTexts are the capsules that tell the AI integrations apart (owner's
+// decision 2026-11-07): the local ones use apps installed on this
+// computer, the provider accounts an API key over the network. The same
+// capsule is on the row of Connected Services.
+type BadgeTexts struct {
+	ThisComputer string
+	APIKey       string
+}
+
+// Badges are the capsules' texts.
+func Badges(tr Translator) BadgeTexts {
+	return BadgeTexts{
+		// TRANSLATORS: capsule on an AI integration that uses the apps installed on this computer (Claude Code, Claude Desktop, Codex).
+		ThisComputer: tr.T("This computer"),
+		// TRANSLATORS: capsule on an AI provider account that uses an API key.
+		APIKey: tr.T("API key"),
+	}
 }
 
 // Catalog is the services that can be added, in the order the page
@@ -218,36 +238,37 @@ func Offered(s Service, c ClaudeState, g ChatGPTState) bool {
 // §7.2): the two local integrations, then the three provider kinds.
 func aiServices(tr Translator) []Service {
 	names := assistant.APIText(plural{tr})
+	badges := Badges(tr)
 	return []Service{
 		{
 			Section: SectionAI, Local: LocalClaude, Name: claudeName,
 			// TRANSLATORS: Preferences → Integrations: what the Claude apps on this computer bring.
 			Description: tr.T("Hand mail to Claude Desktop or Claude Code, and run the assistant in the app with Claude Code"),
-			Icon:        AIIcon,
+			Icon:        AIIcon, Badge: badges.ThisComputer,
 		},
 		{
 			Section: SectionAI, Local: LocalChatGPT, Name: chatGPTName,
 			// TRANSLATORS: Preferences → Integrations: what ChatGPT (Codex) brings.
 			Description: tr.T("Run the assistant in the app through Codex, using your ChatGPT plan"),
-			Icon:        AIIcon,
+			Icon:        AIIcon, Badge: badges.ThisComputer,
 		},
 		{
 			Section: SectionAI, Kind: api.AccountAI, Provider: api.AIAnthropic, Name: names.Anthropic,
 			// TRANSLATORS: Preferences → Integrations: what an Anthropic API account brings.
 			Description: tr.T("Run the assistant in the app over the Anthropic API with your own API key"),
-			Icon:        AIIcon,
+			Icon:        AIIcon, Badge: badges.APIKey,
 		},
 		{
 			Section: SectionAI, Kind: api.AccountAI, Provider: api.AIOpenAI, Name: names.OpenAI,
 			// TRANSLATORS: Preferences → Integrations: what an OpenAI API account brings.
 			Description: tr.T("Run the assistant in the app over the OpenAI API with your own API key"),
-			Icon:        AIIcon,
+			Icon:        AIIcon, Badge: badges.APIKey,
 		},
 		{
 			Section: SectionAI, Kind: api.AccountAI, Provider: api.AIOpenAICompatible, Name: names.OpenAICompatible,
 			// TRANSLATORS: Preferences → Integrations: what an OpenAI-compatible server brings; the product names stay as they are.
 			Description: tr.T("Ollama, llama.cpp, LM Studio, vLLM and gateways such as OpenRouter: a model on your computer or a server of your choice"),
-			Icon:        AIIcon,
+			Icon:        AIIcon, Badge: badges.APIKey,
 		},
 	}
 }
@@ -321,17 +342,18 @@ const (
 )
 
 // Row is what an account's row on either page shows besides its status:
-// plain texts (nothing is markup), the icon, whether it has the Enabled
-// switch (account.setEnabled pauses the sync, or an eWay-CRM account's
-// saving; CalDAV has no pause), what
-// its Edit button opens and is called, and the body of its remove
-// confirmation.
+// plain texts (nothing is markup), the icon, the capsule after the name
+// (an AI provider account's "API key"; empty for none), whether it has
+// the Enabled switch (account.setEnabled pauses the sync, or an eWay-CRM
+// account's saving; CalDAV has no pause), what its Edit button opens and
+// is called, and the body of its remove confirmation.
 type Row struct {
 	ID           api.AccountID
 	Kind         api.AccountKind
 	Title        string
 	Subtitle     string
 	Icon         string
+	Badge        string
 	OffersSwitch bool
 	Editor       Editor
 	EditLabel    string // the Edit button's tooltip
@@ -377,6 +399,7 @@ func RowFor(a api.Account, tr Translator) Row {
 			r.Title = aiProvider(a, tr)
 		}
 		r.Subtitle = aiSubtitle(a, tr)
+		r.Badge = Badges(tr).APIKey
 		// TRANSLATORS: %s is the AI provider account's name; its API key leaves the keyring with it.
 		r.RemoveBody = fmt.Sprintf(tr.T("%s will be removed from Malachi Mail, and its API key with it."), r.Title)
 	default:
@@ -478,14 +501,16 @@ type ChatGPTState struct {
 
 // LocalRow is the row of a local integration on the Integrations page,
 // shown after the daemon's accounts: plain texts (nothing is markup), the
-// icon, what its Edit button opens, and whether it has a Remove button
-// (unregister, disconnect) and what that is called.
+// icon, the "This computer" capsule, what its Edit button opens, and
+// whether it has a Remove button (unregister, disconnect) and what that
+// is called.
 type LocalRow struct {
 	Kind        LocalKind
 	Title       string
 	Subtitle    string
 	Editor      Editor
 	Icon        string
+	Badge       string
 	CanRemove   bool
 	RemoveLabel string
 }
@@ -529,6 +554,7 @@ func LocalRows(c ClaudeState, g ChatGPTState, tr Translator) []LocalRow {
 // Unregister and Disconnect; CanRemove is the row's being shown.
 func LocalRowFor(kind LocalKind, c ClaudeState, g ChatGPTState, tr Translator) (LocalRow, bool) {
 	shown := LocalConnected(kind, c, g)
+	badge := Badges(tr).ThisComputer
 	switch kind {
 	case LocalClaude:
 		var claude []string
@@ -554,7 +580,7 @@ func LocalRowFor(kind LocalKind, c ClaudeState, g ChatGPTState, tr Translator) (
 		}
 		return LocalRow{
 			Kind: LocalClaude, Title: claudeName, Subtitle: strings.Join(claude, " · "),
-			Editor: EditorClaude, Icon: AIIcon, CanRemove: shown,
+			Editor: EditorClaude, Icon: AIIcon, Badge: badge, CanRemove: shown,
 			// TRANSLATORS: the Remove button of the Claude row in Preferences → Integrations: it unregisters the bridge from the Claude apps.
 			RemoveLabel: tr.T("Unregister"),
 		}, shown
@@ -566,7 +592,7 @@ func LocalRowFor(kind LocalKind, c ClaudeState, g ChatGPTState, tr Translator) (
 		}
 		return LocalRow{
 			Kind: LocalChatGPT, Title: chatGPTName, Subtitle: strings.Join(chatgpt, " · "),
-			Editor: EditorChatGPT, Icon: AIIcon, CanRemove: shown,
+			Editor: EditorChatGPT, Icon: AIIcon, Badge: badge, CanRemove: shown,
 			RemoveLabel: labels.Disconnect,
 		}, shown
 	}
