@@ -100,19 +100,34 @@ func (st *assistantState) aiStatus(id api.AccountID) api.SyncStatus {
 	return st.status[id]
 }
 
-// aiOutcome turns a failed call's class into the account's status.
-func aiOutcome(err error) api.SyncStatus {
-	switch {
-	case err == nil:
-		return ""
-	case llm.ClassOf(err) == api.FailureAuth:
-		return api.SyncAuthRequired
+// aiOutcome says what a test or turn of an ai account tells about the
+// account's state: a refused key (401, authFailed) is authRequired, any
+// other answer of the provider clears it (the key was accepted; a turn
+// that failed otherwise is reported where it happened, never as the
+// state of an account that synchronises nothing), and a failure before
+// the provider answered (no connection, a timeout, TLS, the bridge, a
+// stop) says nothing about it (known false).
+func aiOutcome(err error) (status api.SyncStatus, known bool) {
+	if err == nil {
+		return "", true
 	}
 	var ae *api.Error
-	if errors.As(err, &ae) && ae.Code == api.CodeAuthFailed {
-		return api.SyncAuthRequired
+	if errors.As(err, &ae) {
+		switch ae.Code {
+		case api.CodeAuthFailed:
+			return api.SyncAuthRequired, true
+		case api.CodeNetworkError, api.CodeServerTimeout, api.CodeTLSError, api.CodeCancelled:
+			return "", false
+		}
+		return "", true
 	}
-	return api.SyncError
+	switch llm.ClassOf(err) {
+	case api.FailureAuth:
+		return api.SyncAuthRequired, true
+	case api.FailureNetwork, api.FailureTimeout, api.FailureStopped, api.FailureProtocol, api.FailureBridge:
+		return "", false
+	}
+	return "", true
 }
 
 func (st *assistantState) put(id string, info *sessionInfo) {
@@ -291,15 +306,8 @@ func (b *Backend) beginTurn(sess *agent.Session, info *sessionInfo, message stri
 	b.assist.mu.Unlock()
 	err := sess.Begin(context.Background(), message, func(err error) {
 		b.recordUsage(sess, info)
-		switch llm.ClassOf(err) {
-		case api.FailureAuth:
-			b.assist.setStatus(info.account, api.SyncAuthRequired)
-		case api.FailurePermission, api.FailureProtocol, api.FailureNetwork, api.FailureInvalidRequest, api.FailureQuota:
-			b.assist.setStatus(info.account, api.SyncError)
-		default:
-			if err == nil {
-				b.assist.setStatus(info.account, "")
-			}
+		if s, ok := aiOutcome(err); ok {
+			b.assist.setStatus(info.account, s)
 		}
 		if sess.Ended() {
 			b.endSession(info.conn, sess.ID(), sess)

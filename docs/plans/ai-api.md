@@ -1017,6 +1017,22 @@ lint`); čisté balíčky i na Macu. Nikdo to zatím neviděl na obrazovce
   démon zapisoval řádek spotřeby a posílal `notify.assistantUsageChanged`
   — teď nic nezapíše ani neoznámí, relace se do počtu relací dostane
   s prvním tahem, který tokeny měl (`sessionInfo.counted`).
+  (7) Po tahu bez kreditu stál ve stavovém pruhu „Sync error: claude!“
+  a v nabídce synchronizace řádek účtu AI s Try Again (kontrola pošty),
+  v klidu by tam měl „Up to date“ s tlačítkem kontroly. Rozhodnutí
+  vlastníka (podle doporučení): stav účtu `ai` je jen `authRequired`
+  po odmítnutém klíči (401 z testu nebo tahu), jiná odpověď
+  poskytovatele ho vrátí na `idle` (klíč prošel), selhání před
+  odpovědí (síť, timeout, TLS, most, stop) stav nemění; `error` se
+  u účtu `ai` nenastavuje nikdy (`aiOutcome` vrací i `known`;
+  `docs/api.md` §4.1). Klient: stavový pruh a nabídka synchronizace
+  účet `ai` vynechají, dokud není `authRequired` (`inStatusLine`;
+  Přihlásit se → editor s Nahradit klíč…), pozastavený nikdy; řádek
+  v Integracích dál ukazuje Vyžaduje přihlášení. macOS a Windows to
+  přebírají v E2/E3 (jejich stavový pruh a nabídka synchronizace).
+  Body (5) a (6) agent ověřil nad `fe89d973` sondou i s vlastníkem
+  na obrazovce (třída `quota`, `sessionStop` před zavřením spojení,
+  spotřeba beze změny).
 - **Neověřeno**: zbytek B2 (model, panel s kreditem, přepis, hledání,
   triage, Navrhnout odpověď), živá API Anthropicu a OpenAI s kreditem
   (zatím jen odmítnutí 400 bez kreditu).

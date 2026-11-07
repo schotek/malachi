@@ -917,8 +917,10 @@ every message method `invalidArgument`, and **clients never show it in
 Mail** (nor in the board's triage accounts, nor does it get a profile
 note); its only capability is `assistant`. It synchronises nothing; its
 `SyncState` is `idle`, `disabled` when paused, `authRequired` after the
-provider refused the key (the last `account.test` or session, until
-the account is edited), `error` after another failure. The API key is
+provider refused the key (the last `account.test` or session turn,
+until the provider accepts it again or the account is edited); never
+`error`, `offline` or `syncing`: a turn that failed otherwise is
+reported by its `failure` event, and a test by its result. The API key is
 `credentials.password` (the keyring keeps it; it is sent only to the
 host of the account's base URL, as a bearer token or Anthropic's
 `x-api-key`). Rules, checked by `account.add`, `account.update` and

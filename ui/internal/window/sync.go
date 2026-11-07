@@ -136,8 +136,18 @@ func (w *Window) syncFolderName(acc api.AccountID, id api.FolderID) string {
 	return folderTitle(f)
 }
 
+// inStatusLine says whether an account counts in the status line and
+// the status popover: an ai account (docs/api.md §4.1) synchronises
+// nothing, so it is left out unless its key was refused (authRequired,
+// where Sign In opens its settings to replace the key); every other
+// account counts.
+func inStatusLine(a api.Account, s api.SyncState) bool {
+	return a.Config.Protocol() != api.AccountAI || s.Status == api.SyncAuthRequired
+}
+
 // syncStatusText is the sidebar status line for the given states. Only
-// enabled accounts count; an account missing from states uses the state
+// enabled accounts count (an ai account only with a refused key,
+// inStatusLine); an account missing from states uses the state
 // embedded in its account.list entry. The most pressing state wins:
 // syncing (with the folder or account name and the progress when known),
 // then sign-in required, a changed server certificate, a refused one
@@ -162,20 +172,25 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 		certChanged  bool
 		syncError    []api.Account
 		offline      []api.Account
+		listed       int // accounts the line speaks for: ai ones only with a refused key
 		enabled      int
 		pending      int
 		failed       int
 		lastSync     time.Time
 	)
 	for _, a := range accounts {
-		if !a.Enabled {
-			continue
-		}
-		enabled++
 		s, ok := states[a.ID]
 		if !ok {
 			s = a.State
 		}
+		if a.Config.Protocol() == api.AccountAI && (!a.Enabled || !inStatusLine(a, s)) {
+			continue
+		}
+		listed++
+		if !a.Enabled {
+			continue
+		}
+		enabled++
 		pending += s.PendingOutbox
 		failed += s.FailedOutbox
 		if s.LastSync != nil && s.LastSync.After(lastSync) {
@@ -216,7 +231,7 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 		return accountRowTitle(in[0]), true
 	}
 	switch {
-	case enabled == 0 && len(accounts) > 0:
+	case enabled == 0 && listed > 0:
 		return i18n.T("Paused"), false
 	case enabled == 0:
 		return "", false

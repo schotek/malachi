@@ -98,8 +98,15 @@ func TestAccountStatusesAccounts(t *testing.T) {
 		{ID: "a5", Config: api.AccountConfig{Name: "GOA", Kind: api.AccountGraph, Graph: &api.GraphConfig{Source: api.GraphSourceGOA}}, Enabled: true},
 		{ID: "a6", Config: api.AccountConfig{Name: "Home"}, Enabled: true},
 		{ID: "a7", Config: api.AccountConfig{Name: "Away"}, Enabled: true},
+		// ai accounts synchronise nothing: no row unless the key was
+		// refused (a8 idle, a9 refused, a10 paused).
+		{ID: "a8", Config: api.AccountConfig{Name: "Claude", Kind: api.AccountAI}, Enabled: true},
+		{ID: "a9", Config: api.AccountConfig{Name: "OpenAI", Kind: api.AccountAI}, Enabled: true},
+		{ID: "a10", Config: api.AccountConfig{Name: "Ollama", Kind: api.AccountAI}, Enabled: false},
 	}
 	states := map[api.AccountID]api.SyncState{
+		"a9":  {AccountID: "a9", Status: api.SyncAuthRequired},
+		"a10": {AccountID: "a10", Status: api.SyncDisabled},
 		// a1 has no cached state: account.list's is used.
 		// a2 was paused while in error; the state from before the pause
 		// is stale and must not show.
@@ -125,6 +132,7 @@ func TestAccountStatusesAccounts(t *testing.T) {
 		{Account: "a5", Title: "GOA", Detail: "Sign-in required", Action: statusActionSignIn, SignIn: signin.GOA},
 		{Account: "a6", Title: "Home", Detail: "Sign-in required", Action: statusActionSignIn, SignIn: signin.Password, Reason: api.CodeAuthFailed},
 		{Account: "a7", Title: "Away", Detail: "The server could not be reached", Action: statusActionRetry, SignIn: signin.Password},
+		{Account: "a9", Title: "OpenAI", Detail: "Sign-in required", Action: statusActionSignIn, SignIn: signin.Password},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d rows, want %d: %+v", len(got), len(want), got)

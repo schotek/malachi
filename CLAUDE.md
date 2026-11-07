@@ -608,7 +608,10 @@ nástrojů); tah bez kreditu dal třídu `quota` (`api.FailureQuota`:
 Anthropic `billing_error` nebo 400 s větou o kreditu, OpenAI 429
 `insufficient_quota`, bez opakování; klient radí dobít u poskytovatele),
 klient před `rpc.Close()` nechá dojít `sessionStop`
-(`Sessions.Wait`), tah bez tokenů spotřebu nezapisuje ani neoznamuje.
+(`Sessions.Wait`), tah bez tokenů spotřebu nezapisuje ani neoznamuje;
+stav účtu `ai` je jen `authRequired` po odmítnutém klíči (nikdy
+`error`) a stavový pruh i nabídka synchronizace ho jinak vynechají
+(`inStatusLine`; E2/E3 totéž).
 Neověřeno: panel s kreditem, přepis, hledání, triage, Navrhnout
 odpověď, živá API s kreditem (názvy událostí OpenAI Responses jen
 z dokumentace); Windows `build.ps1 lint` do E3 padá (91 msgidů

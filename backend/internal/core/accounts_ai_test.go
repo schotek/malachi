@@ -122,6 +122,26 @@ func TestAIAccount(t *testing.T) {
 	if list.Accounts[0].State.Status != api.SyncAuthRequired {
 		t.Fatalf("state after a refused key: %s", list.Accounts[0].State.Status)
 	}
+	// A failure before the provider answered says nothing about the key:
+	// the state stays; any other answer of the provider (no credit, a
+	// refused request) means the key was accepted: idle, never error.
+	f.err = &llm.Error{Class: api.FailureNetwork, Message: "no route"}
+	if tr, err := svc.Test(ctx, api.AccountTestParams{Config: a.Config, AccountID: id}); err != nil || tr.AI.OK {
+		t.Fatalf("unreachable test: %+v %v", tr, err)
+	}
+	list, _ = svc.List(ctx, api.AccountListParams{})
+	if list.Accounts[0].State.Status != api.SyncAuthRequired {
+		t.Fatalf("state after an unreachable provider: %s", list.Accounts[0].State.Status)
+	}
+	f.err = &llm.Error{Class: api.FailureQuota, Status: 400, Message: "credit balance"}
+	if tr, err := svc.Test(ctx, api.AccountTestParams{Config: a.Config, AccountID: id}); err != nil || tr.AI.OK {
+		t.Fatalf("test without credit: %+v %v", tr, err)
+	}
+	f.err = nil
+	list, _ = svc.List(ctx, api.AccountListParams{})
+	if list.Accounts[0].State.Status != api.SyncIdle {
+		t.Fatalf("state after a refusal that is not the key's: %s", list.Accounts[0].State.Status)
+	}
 	if _, err := svc.Test(ctx, api.AccountTestParams{Config: a.Config, AccountID: id}); err != nil {
 		t.Fatal(err)
 	}

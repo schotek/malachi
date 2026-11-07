@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-07 15:24+0000\n"
+"POT-Creation-Date: 2026-11-07 15:35+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -84,7 +84,7 @@ msgstr ""
 "Tato adresa patří k účtu %s. Přidejte ho v Nastavení → Účty online a pak se "
 "sem vraťte."
 
-#: ui/internal/accountwizard/linked.go:177 ui/internal/window/sync.go:499
+#: ui/internal/accountwizard/linked.go:177 ui/internal/window/sync.go:514
 msgid "Could not open Online Accounts; open GNOME Settings yourself"
 msgstr "Účty online se nepodařilo otevřít; otevřete Nastavení GNOME ručně"
 
@@ -109,7 +109,7 @@ msgid "_Sign In with %s"
 msgstr "_Přihlásit se přes %s"
 
 #. TRANSLATORS: progressive form for the RPC error text
-#: ui/internal/accountwizard/oauth.go:140 ui/internal/window/sync.go:527
+#: ui/internal/accountwizard/oauth.go:140 ui/internal/window/sync.go:542
 #: ui/internal/window/contacts_consent.go:32
 msgid "Starting the sign-in"
 msgstr "Zahájení přihlášení"
@@ -2281,7 +2281,7 @@ msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
 #: ui/internal/contextmenu/text.go:98 ui/internal/toolbar/text.go:140
-#: ui/internal/window/status.go:270 ui/data/ui/preferences.ui:260
+#: ui/internal/window/status.go:277 ui/data/ui/preferences.ui:260
 #: ui/data/ui/window.ui:171
 msgid "Check for New Mail"
 msgstr "Kontrolovat novou poštu"
@@ -4448,7 +4448,7 @@ msgid "The conversation could not be loaded."
 msgstr "Konverzaci se nepodařilo načíst."
 
 #: ui/internal/board/text.go:766 ui/internal/window/assistant_panel.go:711
-#: ui/internal/window/status.go:323 ui/data/ui/window.ui:367
+#: ui/internal/window/status.go:330 ui/data/ui/window.ui:367
 msgid "Try Again"
 msgstr "Zkusit znovu"
 
@@ -5309,7 +5309,7 @@ msgstr ""
 "Přidejte kalendář CalDAV, nebo v Předvolbách → Kalendář synchronizujte "
 "kalendáře účtu Microsoft 365."
 
-#: ui/internal/calendar/text.go:196 ui/internal/window/sync.go:580
+#: ui/internal/calendar/text.go:196 ui/internal/window/sync.go:595
 #: ui/data/ui/window.ui:254
 msgid "Open Preferences"
 msgstr "Otevřít předvolby"
@@ -7869,19 +7869,19 @@ msgstr "Odebrat tento účet?"
 msgid "Removing the account"
 msgstr "Odebrání účtu"
 
-#: ui/internal/window/accounts_page.go:448 ui/internal/window/status.go:78
-#: ui/internal/window/sync.go:220
+#: ui/internal/window/accounts_page.go:448 ui/internal/window/status.go:82
+#: ui/internal/window/sync.go:235
 msgid "Paused"
 msgstr "Pozastaveno"
 
-#: ui/internal/window/accounts_page.go:450 ui/internal/window/status.go:114
+#: ui/internal/window/accounts_page.go:450 ui/internal/window/status.go:121
 msgid "Syncing…"
 msgstr "Synchronizuje se…"
 
 #. TRANSLATORS: account status in Settings → Accounts; %s says why.
 #. TRANSLATORS: status line of an account that cannot reach its
 #. server and keeps trying; %s is an account name.
-#: ui/internal/window/accounts_page.go:454 ui/internal/window/sync.go:254
+#: ui/internal/window/accounts_page.go:454 ui/internal/window/sync.go:269
 #, c-format
 msgid "Offline: %s"
 msgstr "Offline: %s"
@@ -7890,8 +7890,8 @@ msgstr "Offline: %s"
 msgid "Offline"
 msgstr "Offline"
 
-#: ui/internal/window/accounts_page.go:458 ui/internal/window/status.go:122
-#: ui/internal/window/sync.go:235
+#: ui/internal/window/accounts_page.go:458 ui/internal/window/status.go:129
+#: ui/internal/window/sync.go:250
 msgid "Sign-in required"
 msgstr "Vyžaduje přihlášení"
 
@@ -8649,90 +8649,90 @@ msgstr ""
 "je vyberete jako složku."
 
 #. TRANSLATORS: %s is a folder or account name, %d the progress in percent.
-#: ui/internal/window/status.go:117 ui/internal/window/sync.go:226
+#: ui/internal/window/status.go:124 ui/internal/window/sync.go:241
 #, c-format
 msgid "Syncing %s… %d %%"
 msgstr "Synchronizuje se %s… %d %%"
 
 #. TRANSLATORS: %s is a folder or account name.
-#: ui/internal/window/status.go:120 ui/internal/window/sync.go:229
+#: ui/internal/window/status.go:127 ui/internal/window/sync.go:244
 #, c-format
 msgid "Syncing %s…"
 msgstr "Synchronizuje se %s…"
 
-#: ui/internal/window/status.go:135 ui/internal/window/sync.go:249
+#: ui/internal/window/status.go:142 ui/internal/window/sync.go:264
 msgid "Sync error"
 msgstr "Chyba synchronizace"
 
-#: ui/internal/window/status.go:140 ui/internal/window/sync.go:256
+#: ui/internal/window/status.go:147 ui/internal/window/sync.go:271
 msgid "Offline, retrying"
 msgstr "Offline, zkusí se to znovu"
 
 #. TRANSLATORS: state of an account; %s is the time of its last
 #. check for new mail, e.g. "15:04", or its date when that was
 #. before today.
-#: ui/internal/window/status.go:146
+#: ui/internal/window/status.go:153
 #, c-format
 msgid "Last synced %s"
 msgstr "Naposledy synchronizováno %s"
 
-#: ui/internal/window/status.go:148 ui/internal/window/sync.go:263
+#: ui/internal/window/status.go:155 ui/internal/window/sync.go:278
 msgid "Up to date"
 msgstr "Aktuální"
 
-#: ui/internal/window/status.go:185
+#: ui/internal/window/status.go:192
 msgid "Connecting to backend…"
 msgstr "Připojování k démonu…"
 
-#: ui/internal/window/status.go:187
+#: ui/internal/window/status.go:194
 msgid "Backend unavailable"
 msgstr "Démon není dostupný"
 
-#: ui/internal/window/status.go:191
+#: ui/internal/window/status.go:198
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr "Neshoda protokolu: UI %d, démon %d"
 
-#: ui/internal/window/status.go:197
+#: ui/internal/window/status.go:204
 msgid "Not syncing"
 msgstr "Nesynchronizuje se"
 
-#: ui/internal/window/status.go:203
+#: ui/internal/window/status.go:210
 msgid "Connected, but system.info failed"
 msgstr "Připojeno, ale volání system.info selhalo"
 
-#: ui/internal/window/status.go:205
+#: ui/internal/window/status.go:212
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr "Připojeno k malachid %s (pid %d)"
 
 #. TRANSLATORS: banner button
-#: ui/internal/window/status.go:327 ui/internal/window/sync.go:578
+#: ui/internal/window/status.go:334 ui/internal/window/sync.go:593
 #: ui/data/ui/window.ui:260
 msgid "_Edit Account…"
 msgstr "_Upravit účet…"
 
 #. TRANSLATORS: status line; %s is an account name.
-#: ui/internal/window/sync.go:233
+#: ui/internal/window/sync.go:248
 #, c-format
 msgid "Sign-in required: %s"
 msgstr "Vyžaduje přihlášení: %s"
 
 #. TRANSLATORS: status line; %s is an account name.
-#: ui/internal/window/sync.go:247
+#: ui/internal/window/sync.go:262
 #, c-format
 msgid "Sync error: %s"
 msgstr "Chyba synchronizace: %s"
 
 #. TRANSLATORS: status line; %s is the time of the last check for
 #. new mail, e.g. "15:04", or its date when that was before today.
-#: ui/internal/window/sync.go:261
+#: ui/internal/window/sync.go:276
 #, c-format
 msgid "Up to date · %s"
 msgstr "Aktuální · %s"
 
 #. TRANSLATORS: %d is the number of messages waiting in the outbox.
-#: ui/internal/window/sync.go:270
+#: ui/internal/window/sync.go:285
 #, c-format
 msgid "Sending %d message…"
 msgid_plural "Sending %d messages…"
@@ -8742,7 +8742,7 @@ msgstr[2] "Odesílá se %d zpráv…"
 
 #. TRANSLATORS: status line; %d is the number of messages in the outbox
 #. whose sending failed.
-#: ui/internal/window/sync.go:278
+#: ui/internal/window/sync.go:293
 #, c-format
 msgid "%d message not sent"
 msgid_plural "%d messages not sent"
@@ -8751,84 +8751,84 @@ msgstr[1] "%d zprávy neodeslány"
 msgstr[2] "%d zpráv neodesláno"
 
 #. TRANSLATORS: account status (sidebar, Settings → Accounts)
-#: ui/internal/window/sync.go:286
+#: ui/internal/window/sync.go:301
 msgid "Certificate changed"
 msgstr "Certifikát se změnil"
 
 #. TRANSLATORS: account status (sidebar, Settings → Accounts)
-#: ui/internal/window/sync.go:289
+#: ui/internal/window/sync.go:304
 msgid "Certificate problem"
 msgstr "Problém s certifikátem"
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:334
+#: ui/internal/window/sync.go:349
 #, c-format
 msgid "The certificate of %s has changed"
 msgstr "Certifikát účtu %s se změnil"
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:337
+#: ui/internal/window/sync.go:352
 #, c-format
 msgid "The certificate of %s is not trusted"
 msgstr "Certifikát účtu %s není důvěryhodný"
 
-#: ui/internal/window/sync.go:390
+#: ui/internal/window/sync.go:405
 msgid "Checking for new mail…"
 msgstr "Kontroluje se nová pošta…"
 
-#: ui/internal/window/sync.go:406
+#: ui/internal/window/sync.go:421
 msgid "Checking for new mail"
 msgstr "Ověření nové pošty"
 
 #
-#: ui/internal/window/sync.go:572 ui/data/ui/account_wizard.ui:308
+#: ui/internal/window/sync.go:587 ui/data/ui/account_wizard.ui:308
 msgid "Open Online Accounts"
 msgstr "Otevřít Účty online"
 
 #. TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
-#: ui/internal/window/sync.go:575
+#: ui/internal/window/sync.go:590
 msgctxt "button"
 msgid "Sign In"
 msgstr "Přihlásit se"
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:600
+#: ui/internal/window/sync.go:615
 #, c-format
 msgid "Sign in to %s again in your browser"
 msgstr "Přihlaste se znovu k účtu %s v prohlížeči"
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:608
+#: ui/internal/window/sync.go:623
 #, c-format
 msgid "GNOME Online Accounts is not available; %s cannot sign in"
 msgstr "Účty online GNOME nejsou dostupné; účet %s se nemůže přihlásit"
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:611
+#: ui/internal/window/sync.go:626
 #, c-format
 msgid "Sign in to %s again in Settings → Online Accounts"
 msgstr "Přihlaste se znovu k účtu %s v Nastavení → Účty online"
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:620
+#: ui/internal/window/sync.go:635
 #, c-format
 msgid "No password is stored for %s"
 msgstr "Pro účet %s není uložené heslo"
 
 #. TRANSLATORS: banner; %s is an account name.
-#: ui/internal/window/sync.go:623
+#: ui/internal/window/sync.go:638
 #, c-format
 msgid "The server rejected the password of %s"
 msgstr "Server odmítl heslo účtu %s"
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:626
+#: ui/internal/window/sync.go:641
 #, c-format
 msgid "The system keyring is unavailable; %s cannot sign in"
 msgstr "Systémová klíčenka není dostupná; účet %s se nemůže přihlásit"
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:629
+#: ui/internal/window/sync.go:644
 #, c-format
 msgid "%s needs attention"
 msgstr "Účet %s vyžaduje pozornost"

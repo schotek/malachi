@@ -269,7 +269,9 @@ func (s *accountService) testAI(ctx context.Context, p api.AccountTestParams) (*
 	}
 	if p.AccountID != "" && p.Credentials.Password == "" {
 		// A test with the stored key says what the account's state is.
-		s.b.assist.setStatus(p.AccountID, aiOutcome(err))
+		if st, ok := aiOutcome(err); ok {
+			s.b.assist.setStatus(p.AccountID, st)
+		}
 	}
 	code := ""
 	if res.Error != nil {

@@ -228,3 +228,36 @@ func TestAuthBannerTitleByKind(t *testing.T) {
 		}
 	}
 }
+
+// An ai account synchronises nothing: the status line leaves it out
+// (its failed turns are the panel's), unless its key was refused, when
+// it is a sign-in required like any account's.
+func TestSyncStatusTextLeavesAIAccountsOut(t *testing.T) {
+	now := time.Date(2026, time.September, 2, 15, 30, 0, 0, time.Local)
+	last := now.Add(-time.Minute)
+	accounts := []api.Account{
+		{ID: "a1", Config: api.AccountConfig{Name: "Work"}, Enabled: true, State: api.SyncState{AccountID: "a1", Status: api.SyncIdle, LastSync: &last}},
+		{ID: "ai", Config: api.AccountConfig{Name: "Claude", Kind: api.AccountAI}, Enabled: true},
+	}
+	for _, c := range []struct {
+		status api.SyncStatus
+		want   string
+	}{
+		{api.SyncIdle, "Up to date · 15:29"},
+		{api.SyncError, "Up to date · 15:29"},
+		{api.SyncAuthRequired, "Sign-in required: Claude"},
+	} {
+		states := map[api.AccountID]api.SyncState{"ai": {AccountID: "ai", Status: c.status}}
+		if got, _ := syncStatusText(states, accounts, nil, now); got != c.want {
+			t.Errorf("ai %s: %q, want %q", c.status, got, c.want)
+		}
+	}
+	// An ai account alone: nothing to say until its key is refused.
+	alone := accounts[1:]
+	if got, _ := syncStatusText(nil, alone, nil, now); got != "" {
+		t.Errorf("an ai account alone: %q", got)
+	}
+	if got, _ := syncStatusText(map[api.AccountID]api.SyncState{"ai": {AccountID: "ai", Status: api.SyncAuthRequired}}, alone, nil, now); got != "Sign-in required" {
+		t.Errorf("an ai account alone with a refused key: %q", got)
+	}
+}
