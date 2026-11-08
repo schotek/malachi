@@ -150,8 +150,8 @@ func Step(v View, anchor time.Time, dir int, loc *time.Location) time.Time {
 
 // SwitchAnchor is the anchor after switching from view from to view to:
 // switching to the Agenda starts it at today (the midnight of today in
-// loc), whatever day the other view showed (the owner's decision of
-// 2026-10-16); the Agenda moves only with ‹ ›, Today or a date the user
+// loc), whatever day the other view showed; the Agenda moves only
+// with ‹ ›, Today or a date the user
 // picks while it shows. Switching from the Agenda keeps its anchor (today
 // unless the user stepped), and every other switch keeps the anchor.
 func SwitchAnchor(from, to View, anchor, today time.Time, loc *time.Location) time.Time {

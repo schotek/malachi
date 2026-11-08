@@ -108,6 +108,9 @@ public static class IconGlyphs
         ["preferences-system"] = G(0xE713),
         // The strip of an automated message (bulk mail): the same gear.
         ["applications-system"] = G(0xE713),
+        // The Settings button of a local integration's row in Integrations
+        // (Claude Code, ChatGPT; GTK integrations_page.go): the same gear.
+        ["emblem-system"] = G(0xE713),
         ["applications-graphics"] = G(0xE790),
         ["applications-science"] = G(0xF196),
         // The Assistant (ui/internal/assistant): its own sparkle is

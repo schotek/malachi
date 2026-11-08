@@ -5,15 +5,18 @@ package main
 
 // The setup subcommands (status, install, uninstall) register this binary
 // in the user-level MCP configuration of the Claude apps, so the desktop
-// clients can offer one "Register with Claude" switch without editing
-// JSON themselves. They touch nothing but the two files the report names,
+// clients can offer a "Register with Claude" switch per app without
+// editing JSON themselves (install and uninstall act on every present app,
+// or with --client only on the named ones). They touch nothing but the two files the report names,
 // never create the apps' directories (an app that is not installed is
 // reported, not configured), and write the read-only tier: no --allow-*
-// flag ever lands in a file. Two flags let a desktop client supply what
-// the bridge cannot find by itself (a Claude Desktop packaged where
-// os.UserConfigDir does not lead, a launcher path to register); the
-// knowledge of any platform's packaging stays in that client. See
-// docs/mcp.md.
+// flag ever lands in a file. Flags let a desktop client supply what the
+// bridge cannot find by itself (a Claude Desktop packaged where
+// os.UserConfigDir does not lead, a launcher path to register, the
+// configuration files when $HOME is not the user's home, a socket the
+// registered bridge must use, a file for the report when nothing reads
+// stdout); the knowledge of any platform's packaging stays in that
+// client. See docs/mcp.md.
 
 import (
 	"bytes"
@@ -23,8 +26,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"strings"
 )
 
 // mcpServerName is the key under mcpServers in both apps' files.
@@ -35,13 +41,21 @@ const mcpServerName = "malachi"
 type setupEnv struct {
 	home          string // ~/.claude.json and ~/.claude/
 	desktopConfig string // Claude Desktop's configuration file
+	codeConfig    string // Claude Code's ~/.claude.json
 	command       string // what install writes and status compares against
+	socket        string // MALACHI_SOCKET of the entry; "" for none
 }
 
 // setupFlags are the flags that replace a lookup; empty means not given.
 type setupFlags struct {
 	desktopConfig string // --claude-desktop-config
+	codeConfig    string // --claude-code-config
 	command       string // --command
+	socket        string // --socket
+	output        string // --output
+	// clients are the ids --client named (install and uninstall), each
+	// once, in the order given; none means every client.
+	clients []string
 }
 
 // setupLookups asks the machine for what no flag gave. It is a variable
@@ -56,11 +70,18 @@ var setupLookups = struct {
 // directory only without --claude-desktop-config and this executable only
 // without --command, so a lookup a flag replaces cannot fail the command.
 func locateSetupEnv(given setupFlags) (setupEnv, error) {
-	home, err := setupLookups.homeDir()
-	if err != nil {
-		return setupEnv{}, fmt.Errorf("home directory: %w", err)
+	env := setupEnv{desktopConfig: given.desktopConfig, codeConfig: given.codeConfig, command: given.command, socket: given.socket}
+	if env.codeConfig != "" {
+		// Claude Code's directory lies beside its file.
+		env.home = filepath.Dir(env.codeConfig)
+	} else {
+		home, err := setupLookups.homeDir()
+		if err != nil {
+			return setupEnv{}, fmt.Errorf("home directory: %w", err)
+		}
+		env.home = home
+		env.codeConfig = filepath.Join(home, ".claude.json")
 	}
-	env := setupEnv{home: home, desktopConfig: given.desktopConfig, command: given.command}
 	if env.desktopConfig == "" {
 		configDir, err := setupLookups.configDir()
 		if err != nil {
@@ -108,16 +129,54 @@ type clientSpec struct {
 	present  bool
 }
 
-// clients lists the apps in the order the report shows them.
+// The client ids, as the report gives them.
+const (
+	clientDesktop = "claude-desktop"
+	clientCode    = "claude-code"
+)
+
+// clientIDs are the ids --client takes, in the order of the report.
+var clientIDs = []string{clientDesktop, clientCode}
+
+// clientFlag parses --client into dst: one of clientIDs, each kept once.
+func clientFlag(dst *[]string) func(string) error {
+	return func(v string) error {
+		if !slices.Contains(clientIDs, v) {
+			return fmt.Errorf("unknown client %q (%s)", v, strings.Join(clientIDs, ", "))
+		}
+		if !slices.Contains(*dst, v) {
+			*dst = append(*dst, v)
+		}
+		return nil
+	}
+}
+
+// clientsNamed is clients limited to the ids named, in the report's
+// order; nil or empty names every client.
+func (e setupEnv) clientsNamed(ids []string) []clientSpec {
+	all := e.clients()
+	if len(ids) == 0 {
+		return all
+	}
+	var out []clientSpec
+	for _, c := range all {
+		if slices.Contains(ids, c.id) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// clients lists every app in the order the report shows them.
 func (e setupEnv) clients() []clientSpec {
-	code := filepath.Join(e.home, ".claude.json")
+	code := e.codeConfig
 	return []clientSpec{
 		{
-			id: "claude-desktop", name: "Claude Desktop", path: e.desktopConfig,
+			id: clientDesktop, name: "Claude Desktop", path: e.desktopConfig,
 			present: isDir(filepath.Dir(e.desktopConfig)),
 		},
 		{
-			id: "claude-code", name: "Claude Code", path: code,
+			id: clientCode, name: "Claude Code", path: code,
 			present: isFile(code) || isDir(filepath.Join(e.home, ".claude")),
 		},
 	}
@@ -190,8 +249,24 @@ func runSetup(sub string, args []string, stdout, stderr io.Writer) error {
 	fs.Func("command",
 		"register `PATH` (absolute, symlinks not resolved) and compare against it instead of this executable",
 		absPathFlag(&given.command))
+	fs.Func("claude-code-config",
+		"use `PATH` (absolute) as Claude Code's configuration file instead of ~/.claude.json; Claude Code is present when it exists or a .claude directory lies beside it",
+		absPathFlag(&given.codeConfig))
+	fs.Func("socket",
+		"register the bridge with MALACHI_SOCKET=`PATH` (absolute) in its environment, for a daemon whose socket is not at the default path",
+		absPathFlag(&given.socket))
+	fs.Func("output",
+		"write the report as JSON to `PATH` (absolute) instead of stdout, and a failure as {\"error\": …} there too, for a caller that cannot read stdout",
+		absPathFlag(&given.output))
+	clientUsage := ""
+	if sub != "status" {
+		fs.Func("client",
+			"act only on the Claude app `ID` ("+strings.Join(clientIDs, " or ")+"); repeatable; without it every present app",
+			clientFlag(&given.clients))
+		clientUsage = " [--client ID]..."
+	}
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: malachi-mcp %s [--json] [--claude-desktop-config PATH] [--command PATH]\n", sub)
+		fmt.Fprintf(stderr, "Usage: malachi-mcp %s [--json]%s [--claude-desktop-config PATH] [--claude-code-config PATH] [--command PATH] [--socket PATH] [--output PATH]\n", sub, clientUsage)
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -203,20 +278,10 @@ func runSetup(sub string, args []string, stdout, stderr io.Writer) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("%s takes no arguments", sub)
 	}
-	env, err := locateSetupEnv(given)
-	if err != nil {
-		return err
+	st, err := runSetupOn(sub, given)
+	if given.output != "" {
+		return writeReport(given.output, st, err)
 	}
-	switch sub {
-	case "install":
-		err = env.install()
-	case "uninstall":
-		err = env.uninstall()
-	}
-	if err != nil {
-		return err
-	}
-	st, err := env.status()
 	if err != nil {
 		return err
 	}
@@ -232,6 +297,123 @@ func runSetup(sub string, args []string, stdout, stderr io.Writer) error {
 // status reads every present app's file. An unparsable file is an error
 // rather than "not registered": the UI shows the reason and install
 // would refuse the same file.
+// setupRequestEnv names a file holding a setup command line, for a caller
+// that can start the bridge but not pass it arguments: the Mac App Store
+// build starts its sandboxed bridge through LaunchServices, which drops
+// the arguments of a sandboxed caller, so the bridge's bundle sets this
+// variable (LSEnvironment) and the app writes the request
+// (docs/plans/mac-app-store.md). A leading "~/" is the user's home from
+// the account database, not $HOME, which a sandbox points elsewhere.
+// Claude starts the same executable directly, without it, as the server.
+const setupRequestEnv = "MALACHI_MCP_SETUP_REQUEST"
+
+// maxSetupRequest bounds the request file.
+const maxSetupRequest = 64 << 10
+
+// setupRequest is the request file: one command line, as it would be given.
+type setupRequest struct {
+	Args []string `json:"args"`
+}
+
+// runSetupRequest reads the request at path, removes it so it runs once,
+// and runs it. The request must name --output: nothing reads stdout.
+func runSetupRequest(path string) error {
+	path, err := expandHome(path)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("setup request: %w", err)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxSetupRequest+1))
+	_ = f.Close()
+	_ = os.Remove(path)
+	if err != nil {
+		return fmt.Errorf("setup request: %w", err)
+	}
+	if len(data) > maxSetupRequest {
+		return errors.New("setup request: too large")
+	}
+	var req setupRequest
+	if err := json.Unmarshal(data, &req); err != nil {
+		return fmt.Errorf("setup request: %w", err)
+	}
+	if len(req.Args) == 0 || !hasOutputFlag(req.Args[1:]) {
+		return errors.New("setup request: a subcommand with --output is required")
+	}
+	return runSetup(req.Args[0], req.Args[1:], io.Discard, io.Discard)
+}
+
+// hasOutputFlag reports whether args name --output (either spelling).
+func hasOutputFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--output" || a == "-output" || strings.HasPrefix(a, "--output=") || strings.HasPrefix(a, "-output=") {
+			return true
+		}
+	}
+	return false
+}
+
+// expandHome replaces a leading "~/" with the user's home directory from
+// the account database.
+func expandHome(path string) (string, error) {
+	if !strings.HasPrefix(path, "~/") {
+		return path, nil
+	}
+	u, err := user.Current()
+	if err != nil {
+		return "", fmt.Errorf("setup request: home directory: %w", err)
+	}
+	return filepath.Join(u.HomeDir, path[2:]), nil
+}
+
+// runSetupOn does sub with the given flags and returns the report.
+func runSetupOn(sub string, given setupFlags) (setupStatus, error) {
+	env, err := locateSetupEnv(given)
+	if err != nil {
+		return setupStatus{}, err
+	}
+	switch sub {
+	case "install":
+		err = env.install(given.clients)
+	case "uninstall":
+		err = env.uninstall(given.clients)
+	}
+	if err != nil {
+		return setupStatus{}, err
+	}
+	return env.status()
+}
+
+// setupFailure is the report --output writes for a failure.
+type setupFailure struct {
+	Error string `json:"error"`
+}
+
+// writeReport writes the report, or the failure, as JSON to path through a
+// file beside it and a rename, so a caller polling for it never reads half
+// of one; the command still fails with err.
+func writeReport(path string, st setupStatus, err error) error {
+	var v any = st
+	if err != nil {
+		v = setupFailure{Error: err.Error()}
+	}
+	data, jerr := json.MarshalIndent(v, "", "  ")
+	if jerr != nil {
+		return fmt.Errorf("%s: encode: %w", path, jerr)
+	}
+	tmp := path + ".tmp"
+	if werr := os.WriteFile(tmp, append(data, '\n'), 0o600); werr != nil {
+		return fmt.Errorf("%s: cannot write: %w", path, werr)
+	}
+	if rerr := os.Rename(tmp, path); rerr != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("%s: cannot write: %w", path, rerr)
+	}
+	return err
+}
+
 func (e setupEnv) status() (setupStatus, error) {
 	st := setupStatus{Command: e.command, Clients: []setupClient{}}
 	for _, c := range e.clients() {
@@ -241,7 +423,7 @@ func (e setupEnv) status() (setupStatus, error) {
 			if err != nil {
 				return setupStatus{}, err
 			}
-			sc.Registered, sc.Other = cfg.registration(e.command)
+			sc.Registered, sc.Other = cfg.registration(e.command, e.socket)
 		}
 		st.Clients = append(st.Clients, sc)
 	}
@@ -249,8 +431,10 @@ func (e setupEnv) status() (setupStatus, error) {
 }
 
 // loadPresent parses the files of every present app before anything is
-// written, so a broken file leaves every file untouched.
-func (e setupEnv) loadPresent() ([]*mcpConfig, error) {
+// written, so a broken file leaves every file untouched (the report after
+// the change reads them all too), and returns those of the apps ids names
+// (every app without ids).
+func (e setupEnv) loadPresent(ids []string) ([]*mcpConfig, error) {
 	var cfgs []*mcpConfig
 	for _, c := range e.clients() {
 		if !c.present {
@@ -260,23 +444,49 @@ func (e setupEnv) loadPresent() ([]*mcpConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		cfgs = append(cfgs, cfg)
+		if len(ids) == 0 || slices.Contains(ids, c.id) {
+			cfgs = append(cfgs, cfg)
+		}
 	}
 	return cfgs, nil
 }
 
-// install sets the malachi entry in every present app's file, creating
-// the file when only the directory exists.
-func (e setupEnv) install() error {
-	cfgs, err := e.loadPresent()
+// missingNamed is the names of the apps among ids that are not present,
+// in the report's order; none without ids.
+func (e setupEnv) missingNamed(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	var names []string
+	for _, c := range e.clientsNamed(ids) {
+		if !c.present {
+			names = append(names, c.name)
+		}
+	}
+	return names
+}
+
+// noClientPrefix starts the error of an install with no app to register
+// in; the desktop clients map it (part of the setup contract, docs/mcp.md).
+const noClientPrefix = "no Claude app found"
+
+// install sets the malachi entry in the file of every present app, or of
+// the apps ids names, creating the file when only the directory exists.
+// A named app that is not present fails the whole install before any file
+// is written, as no app at all does.
+func (e setupEnv) install(ids []string) error {
+	if missing := e.missingNamed(ids); len(missing) > 0 {
+		return fmt.Errorf("%s (%s)", noClientPrefix, strings.Join(missing, " or "))
+	}
+	cfgs, err := e.loadPresent(ids)
 	if err != nil {
 		return err
 	}
 	if len(cfgs) == 0 {
-		return errors.New("no Claude app found (Claude Desktop or Claude Code)")
+		return errors.New(noClientPrefix + " (Claude Desktop or Claude Code)")
 	}
 	for _, cfg := range cfgs {
-		if !cfg.setEntry(e.command) {
+		if !cfg.setEntry(e.command, e.socket) {
 			continue
 		}
 		if err := cfg.write(); err != nil {
@@ -286,10 +496,11 @@ func (e setupEnv) install() error {
 	return nil
 }
 
-// uninstall removes the malachi entry wherever it is; a missing file or
-// entry is nothing to do.
-func (e setupEnv) uninstall() error {
-	cfgs, err := e.loadPresent()
+// uninstall removes the malachi entry wherever it is, in every app or in
+// the apps ids names; a missing file or entry, or a named app that is not
+// present, is nothing to do.
+func (e setupEnv) uninstall(ids []string) error {
+	cfgs, err := e.loadPresent(ids)
 	if err != nil {
 		return err
 	}
@@ -367,31 +578,46 @@ func (c *mcpConfig) entry() (map[string]any, bool) {
 	return m, true
 }
 
-// registration reports whether the malachi entry runs command; other is
-// the command it runs instead, when the entry exists and names one.
-func (c *mcpConfig) registration(command string) (registered bool, other string) {
+// registration reports whether the malachi entry runs command with
+// MALACHI_SOCKET socket ("" for an entry without it); other is the
+// command it runs instead, when the entry exists and names one. An entry
+// that runs command with another socket is not registered and has no
+// other: install rewrites it.
+func (c *mcpConfig) registration(command, socket string) (registered bool, other string) {
 	e, ok := c.entry()
 	if !ok {
 		return false, ""
 	}
 	cmd, _ := e["command"].(string)
-	if cmd == command {
-		return true, ""
+	if cmd != command {
+		return false, cmd
 	}
-	return false, cmd
+	return entrySocket(e) == socket, ""
 }
 
-// wantEntry is what install writes: the read-only tier, no flags.
-func wantEntry(command string) map[string]any {
-	return map[string]any{"type": "stdio", "command": command, "args": []any{}}
+// entrySocket is the MALACHI_SOCKET in the entry's env, "" without one.
+func entrySocket(e map[string]any) string {
+	env, _ := e["env"].(map[string]any)
+	s, _ := env["MALACHI_SOCKET"].(string)
+	return s
+}
+
+// wantEntry is what install writes: the read-only tier, no flags, and
+// MALACHI_SOCKET only when a socket was given.
+func wantEntry(command, socket string) map[string]any {
+	e := map[string]any{"type": "stdio", "command": command, "args": []any{}}
+	if socket != "" {
+		e["env"] = map[string]any{"MALACHI_SOCKET": socket}
+	}
+	return e
 }
 
 // setEntry sets the malachi entry and reports whether the file changed.
 // An entry that already says exactly this is left alone, so the file is
 // not rewritten (Claude Code keeps its own state in the same file and
 // writes it while running).
-func (c *mcpConfig) setEntry(command string) (changed bool) {
-	want := wantEntry(command)
+func (c *mcpConfig) setEntry(command, socket string) (changed bool) {
+	want := wantEntry(command, socket)
 	if have, ok := c.entry(); ok && reflect.DeepEqual(have, want) {
 		return false
 	}
@@ -422,7 +648,17 @@ func (c *mcpConfig) removeEntry() (changed bool) {
 // file in the same directory, which is then renamed over the original, so
 // a crash or a concurrent reader never sees a half-written file. The mode
 // of an existing file is kept, a new one is private; a symlinked file is
-// replaced at its target, not turned into a regular file.
+// replaced at its target, not turned into a regular file. The temporary
+// file has a fixed name (tempName), so a sandbox that lets the bridge
+// write only named paths can name it too (the Mac App Store build, which
+// may write ~/.claude.json and this file beside it, docs/plans/mac-app-store.md);
+// one left behind by a crash is replaced.
+// tempName is the temporary file write uses for target: a hidden file
+// beside it, "." + its name + ".malachi-mcp.tmp".
+func tempName(target string) string {
+	return filepath.Join(filepath.Dir(target), "."+filepath.Base(target)+".malachi-mcp.tmp")
+}
+
 func (c *mcpConfig) write() error {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -437,11 +673,17 @@ func (c *mcpConfig) write() error {
 			target = resolved
 		}
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".*")
+	tmpName := tempName(target)
+	tmp, err := os.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		// Left by an install that did not finish: nobody else writes it.
+		if err = os.Remove(tmpName); err == nil {
+			tmp, err = os.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("%s: cannot write: %w", c.path, err)
 	}
-	tmpName := tmp.Name()
 	fail := func(err error) error {
 		_ = tmp.Close()
 		_ = os.Remove(tmpName)

@@ -196,7 +196,7 @@ func (s *updateService) Check(ctx context.Context, p api.UpdateCheckParams) (*ap
 	b.updLoad(ctx)
 	enabled := b.upd.prefs.enabled()
 	// Asking by hand ends a "later": the user wants to see what there is
-	// (the owner's decision, 2026-11-02). A skipped version stays skipped.
+	// now. A skipped version stays skipped.
 	putOff := b.upd.prefs.Later != nil
 	if putOff {
 		b.upd.prefs.Later = nil

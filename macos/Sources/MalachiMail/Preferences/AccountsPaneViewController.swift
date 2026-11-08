@@ -42,8 +42,15 @@ class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewData
     var onAccountsChanged: (() -> Void)?
     /// Accounts whose call is in flight: their rows are insensitive.
     private var pending: Set<AccountID> = []
-    /// The window closed: late replies are dropped.
-    var closed = false
+    /// The window closed: late replies are dropped; a subclass lets go of
+    /// what it follows (`closing`).
+    var closed = false {
+        didSet {
+            if closed, !oldValue {
+                closing()
+            }
+        }
+    }
 
     init(
         page: Integrations.Page = .accounts,
@@ -112,6 +119,20 @@ class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewData
     /// What a subclass shows below the accounts' group.
     func addTrailingGroups() {}
 
+    /// Whether the placeholder row shows: no account listed (a subclass
+    /// with rows of its own counts them too).
+    var showsEmptyRow: Bool { accounts.isEmpty }
+
+    /// The rows were replaced (`setAccounts`).
+    func didSetAccounts() {}
+
+    /// The window closed.
+    func closing() {}
+
+    /// A second line of an account's row (an AI provider account's tokens
+    /// used today); nil for none.
+    func rowUsage(_ id: AccountID) -> String? { nil }
+
     /// The page lists `a`.
     private func lists(_ a: Account) -> Bool {
         page == .accounts ? Integrations.showsInAccounts(a) : Integrations.showsInIntegrations(a)
@@ -150,14 +171,20 @@ class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewData
         tableHeight?.constant = CGFloat(list.count) * AccountsTableView.rowHeight
         table.reloadData()
         group.setRow(tableScroll, hidden: list.isEmpty)
-        group.setRow(emptyRow, hidden: !list.isEmpty)
+        refreshEmptyRow()
+        didSetAccounts()
+    }
+
+    /// The placeholder row by `showsEmptyRow`.
+    func refreshEmptyRow() {
+        group.setRow(emptyRow, hidden: !showsEmptyRow)
     }
 
     private func index(of id: AccountID) -> Int? {
         accounts.firstIndex { $0.id == id }
     }
 
-    private func reloadRow(_ id: AccountID) {
+    func reloadRow(_ id: AccountID) {
         guard let i = index(of: id) else { return }
         table.reloadData(forRowIndexes: IndexSet(integer: i), columnIndexes: IndexSet(integer: 0))
     }
@@ -224,7 +251,7 @@ class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewData
             guard let self, !self.closed else { return }
             self.loadAccounts()
             // TRANSLATORS: %s is the edited account's e-mail address.
-            self.toast(L10n.T("Saved %s", cfg.email))
+            self.toast(L10n.T("Saved %s", cfg.email.isEmpty ? cfg.name : cfg.email))
         }
         switch Integrations.rowFor(accounts[i]).editor {
         case .jira:
@@ -243,7 +270,19 @@ class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewData
                 }
                 saved(id, named)
             }
-        case .none:
+        case .ai:
+            // Sign In… of an `ai` account whose key the provider refused
+            // opens the dialog on Replace Key… (ai_editors.go).
+            AIAccountSheetController.present(
+                from: window, client: client, provider: .openaiCompatible, editing: accounts[i], replaceKey: signIn,
+                confirmTrust: confirmTrust
+            ) { [weak self] id, cfg in
+                saved(id, cfg)
+                self?.onAccountsChanged?()
+            }
+        case .none, .claudeDesktop, .claudeCode, .chatgpt:
+            // The local integrations are not accounts: their rows are the
+            // Integrations page's own (`LocalIntegrationRowView`).
             break
         }
     }
@@ -398,7 +437,7 @@ class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewData
         let account = accounts[row]
         let cell = (tableView.makeView(withIdentifier: AccountRowCell.reuseIdentifier, owner: nil) as? AccountRowCell)
             ?? AccountRowCell(frame: .zero)
-        cell.apply(account)
+        cell.apply(account, usage: rowUsage(account.id))
         cell.setRowEnabled(!pending.contains(account.id))
         cell.setGroupEnabled(group.isEnabled)
         let id = account.id

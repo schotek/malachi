@@ -98,9 +98,9 @@ final class AssistantProposalView: NSView, AssistantItemView {
             return
         }
         text.stringValue = q.text
-        if let acc = q.accountId,
-           let note = store?.profile.accounts.first(where: { $0.accountID == acc.rawValue }) ?? nil {
-            detail.stringValue = L10n.format(t.accountProposal, [note.name.isEmpty ? note.email : note.name])
+        if let acc = q.accountId, let account = store?.accounts.first(where: { $0.id == acc }) {
+            let name = account.config.name
+            detail.stringValue = L10n.format(t.accountProposal, [name.isEmpty ? account.config.email : name])
             detail.isHidden = false
         } else if let acc = q.accountId {
             detail.stringValue = L10n.format(t.accountProposal, [acc.rawValue])

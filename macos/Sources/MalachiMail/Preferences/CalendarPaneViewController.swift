@@ -4,7 +4,7 @@
 import AppKit
 import MalachiCore
 
-/// The Calendar page of the settings (the owner's decision of 2026-10-16;
+/// The Calendar page of the settings (a page of its own;
 /// ui/internal/calendar/preferences.go `PreferencesLayout`), one scrolling
 /// pane: the group Display (the daemon's calendar.preferences through
 /// `CalendarPreferencesController`), a section per account with the

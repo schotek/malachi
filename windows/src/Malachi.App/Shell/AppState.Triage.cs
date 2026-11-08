@@ -68,23 +68,41 @@ public sealed partial class AppState
 
     /// <summary>
     /// "Let the Assistant Triage the Board?" on <paramref name="window"/> (the
-    /// ChatGPT provider's own heading and body), with the panel's Allow and
+    /// ChatGPT provider's own heading and body; over an ai account the
+    /// board's heading with the sentence naming where the mail goes,
+    /// AssistantController.ApiBoardConsentBody), with the panel's Allow and
     /// Cancel; true allows. A provider switched while it was up allows nothing.
-    /// The manual run asks on the main window, Preferences → AI on its own.
+    /// The manual run asks on the main window, Preferences → AI on its own;
+    /// the triage records an account's consent through the provider.
     /// </summary>
     public async Task<bool> ConfirmTriageConsentAsync(Window? window)
     {
         var provider = Settings.AssistantProvider;
+        var generation = Assistant.ProviderGeneration;
         var runtime = InAppProvider;
-        var chatGpt = provider == AssistantProviderID.ChatGpt;
         var texts = Core.Assistants.Assistant.PanelTexts();
-        var allowed = await Alerts.ConfirmAsync(
-            window,
-            chatGpt ? ChatGptBoardText.BoardConsentHeading : Core.Boards.Board.Text.TriageConsentHeading,
-            chatGpt ? ChatGptBoardText.BoardConsentBody : Core.Boards.Board.Text.TriageConsentBody,
-            texts.Allow,
-            Core.I18n.L10n.T("_Cancel"));
-        return allowed && !triageStopped && Settings.AssistantProvider == provider && ReferenceEquals(runtime, InAppProvider);
+        string heading;
+        string body;
+        switch (Assistant.Source)
+        {
+            case AssistantProviderSource.ChatGpt:
+                heading = ChatGptBoardText.BoardConsentHeading;
+                body = ChatGptBoardText.BoardConsentBody;
+                break;
+            case AssistantProviderSource.Account:
+                heading = Core.Boards.Board.Text.TriageConsentHeading;
+                body = Assistant.ApiAccount is { } acc
+                    ? AssistantController.ApiBoardConsentBody(acc)
+                    : Core.I18n.GettextFormat.Format(Core.Assistants.Assistant.ApiText().BoardConsentBody, [Assistant.ApiBrand]);
+                break;
+            default:
+                heading = Core.Boards.Board.Text.TriageConsentHeading;
+                body = Core.Boards.Board.Text.TriageConsentBody;
+                break;
+        }
+        var allowed = await Alerts.ConfirmAsync(window, heading, body, texts.Allow, Core.I18n.L10n.T("_Cancel"));
+        return allowed && !triageStopped && Settings.AssistantProvider == provider
+            && generation == Assistant.ProviderGeneration && ReferenceEquals(runtime, InAppProvider);
     }
 
     /// <summary>

@@ -12,7 +12,7 @@ import MalachiCore
 /// Integrations, the row's Edit) opens on the sign-in with the address
 /// fixed. The flow, the texts and the calls live in the controller; this
 /// only shows what it delivers and feeds the fields back. Opened only from
-/// Settings → Integrations (the owner kept the other entry points as they
+/// Settings → Integrations (the other entry points stay as they
 /// are).
 @MainActor
 final class EWayWizardWindowController: NSWindowController {

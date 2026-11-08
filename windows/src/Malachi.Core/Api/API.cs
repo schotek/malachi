@@ -5,7 +5,8 @@
 // macos/Sources/MalachiCore/Transport/JSONRPC.swift); Go:
 // backend/pkg/api/methods.go (Method*, Notify*, AllMethods,
 // AllNotifications), backend/pkg/api/types.go (the limits); contract:
-// docs/api.md §4, §5. The board methods (board.go, §4.13) have no Swift
+// docs/api.md §4, §5 (the assistant's methods of ai.go, §4.18, follow the
+// profile's). The board methods (board.go, §4.13) have no Swift
 // descriptors yet; the calendar's (calendar.go, §4.1, §4.14 to §4.16) are
 // the Windows mirror written beside the Swift one.
 //
@@ -595,6 +596,32 @@ public static class API
     public static readonly RpcMethod<AssistantProfileResolveParams, AssistantProfileResolveResult> AssistantProfileResolve =
         new("assistant.profileResolve", RpcTimeouts.Default, Wire.AssistantProfileResolveParams, Wire.AssistantProfileResolveResult);
 
+    // The daemon's assistant over ai accounts (docs/api.md §4.18; Ai.cs)
+
+    /// <summary><c>assistant.prompt</c>: builds the prompt of a purpose for a client that runs the model itself (Claude Code, Codex).</summary>
+    public static readonly RpcMethod<AssistantPromptParams, PromptResult> AssistantPrompt =
+        new("assistant.prompt", RpcTimeouts.AssistantPrompt, Wire.AssistantPromptParams, Wire.PromptResult);
+
+    /// <summary><c>assistant.sessionStart</c>: opens a session over an ai account on this connection; the daemon starts the bridge and may send the first turn at once.</summary>
+    public static readonly RpcMethod<AssistantSessionStartParams, AssistantSessionStartResult> AssistantSessionStart =
+        new("assistant.sessionStart", RpcTimeouts.AssistantSessionStart, Wire.AssistantSessionStartParams, Wire.AssistantSessionStartResult);
+
+    /// <summary><c>assistant.sessionSend</c>: sends a turn; the answer comes as <c>notify.assistantEvent</c>s.</summary>
+    public static readonly RpcMethod<AssistantSessionSendParams, EmptyResult> AssistantSessionSend =
+        new("assistant.sessionSend", RpcTimeouts.Default, Wire.AssistantSessionSendParams, Wire.EmptyResult);
+
+    /// <summary><c>assistant.sessionStop</c>: ends a session.</summary>
+    public static readonly RpcMethod<AssistantSessionStopParams, EmptyResult> AssistantSessionStop =
+        new("assistant.sessionStop", RpcTimeouts.Default, Wire.AssistantSessionStopParams, Wire.EmptyResult);
+
+    /// <summary><c>assistant.providerModels</c>: the models of an ai account's provider, from the daemon's cache of an hour unless refreshed.</summary>
+    public static readonly RpcMethod<AssistantProviderModelsParams, AssistantProviderModelsResult> AssistantProviderModels =
+        new("assistant.providerModels", RpcTimeouts.AssistantModels, Wire.AssistantProviderModelsParams, Wire.AssistantProviderModelsResult);
+
+    /// <summary><c>assistant.usage</c>: the tokens the daemon's assistant used, per ai account and local day.</summary>
+    public static readonly RpcMethod<AssistantUsageParams, AssistantUsageResult> AssistantUsage =
+        new("assistant.usage", RpcTimeouts.Default, Wire.AssistantUsageParams, Wire.AssistantUsageResult);
+
     // Address books and contacts (docs/api.md §4.19; ContactsBook.cs)
 
     /// <summary><c>addressBook.list</c>: the books (hidden ones too); with an account, its books or contactsConsentRequired.</summary>
@@ -753,6 +780,8 @@ public static class API
         AccountDetectEway,
         CrmLookup, CrmSearch, CrmSave, CrmRemove,
         AssistantProfileGet, AssistantProfileSet, AssistantProfilePropose, AssistantProfileResolve,
+        AssistantPrompt, AssistantSessionStart, AssistantSessionSend, AssistantSessionStop,
+        AssistantProviderModels, AssistantUsage,
         AddressBookList, AddressBookSet,
         ContactList, ContactGet, ContactLookup,
         ContactCreate, ContactUpdate, ContactDelete,
@@ -806,6 +835,20 @@ public static class API
         public const string AssistantProfileChanged = "notify.assistantProfileChanged";
 
         /// <summary>
+        /// api.NotifyAssistantEvent (<see cref="global::Malachi.Core.Api.AssistantEvent"/>): an event of
+        /// a session of the daemon's assistant, sent to the session's
+        /// connection only.
+        /// </summary>
+        public const string AssistantEvent = "notify.assistantEvent";
+
+        /// <summary>
+        /// api.NotifyAssistantUsageChanged (<see cref="AssistantUsageChangedNotification"/>):
+        /// an ai account's usage of today changed; the application runs
+        /// <c>assistant.usage</c> again.
+        /// </summary>
+        public const string AssistantUsageChanged = "notify.assistantUsageChanged";
+
+        /// <summary>
         /// api.NotifyContactsChanged (<see cref="ContactsChangedNotification"/>):
         /// the contacts of these books changed; the Contacts window,
         /// Preferences → Contacts and the address chips' lookup read them again.
@@ -832,7 +875,7 @@ public static class API
         Notify.NewMessage, Notify.SyncState, Notify.AuthRequired, Notify.AccountsChanged, Notify.MessagesChanged,
         Notify.BoardChanged, Notify.DraftsChanged,
         Notify.CalendarChanged, Notify.CalendarState, Notify.EventAlert, Notify.InvitationsChanged,
-        Notify.AssistantProfileChanged,
+        Notify.AssistantProfileChanged, Notify.AssistantEvent, Notify.AssistantUsageChanged,
         Notify.ContactsChanged,
         Notify.UpdateChanged,
         Notify.RulesChanged,
@@ -1090,6 +1133,43 @@ public static class API
 
         /// <summary>api.MaxProfileProposals: the pending proposals; the oldest goes.</summary>
         public const int MaxProfileProposals = 20;
+
+        // ai.go (docs/api.md §4.18); exceeding an input limit is
+        // invalidArgument. Its durations are AssistantLimits.
+
+        /// <summary>
+        /// api.AssistantConsentVersion: the version of the consent text an ai
+        /// account's user accepted (<see cref="AiConsent.Version"/>); a session
+        /// starts only with this version or a later one.
+        /// </summary>
+        public const int AssistantConsentVersion = 1;
+
+        /// <summary>api.MaxAssistantSessionsPerConn: open sessions of one connection.</summary>
+        public const int MaxAssistantSessionsPerConn = 4;
+
+        /// <summary>api.MaxAssistantSessions: open sessions of the daemon.</summary>
+        public const int MaxAssistantSessions = 16;
+
+        /// <summary>api.MaxAssistantTurnTools: tool rounds of one turn.</summary>
+        public const int MaxAssistantTurnTools = 50;
+
+        /// <summary>api.MaxAssistantToolResultBytes: a tool result kept in the history.</summary>
+        public const int MaxAssistantToolResultBytes = 256 << 10;
+
+        /// <summary>api.MaxAssistantHistoryBytes: the session's history; beyond it the session ends.</summary>
+        public const int MaxAssistantHistoryBytes = 1 << 20;
+
+        /// <summary>api.MaxPromptTextBytes: <see cref="PromptInput.Text"/> and every free text of an input.</summary>
+        public const int MaxPromptTextBytes = 64 << 10;
+
+        /// <summary>api.MaxPromptMessageIDs: <see cref="PromptContext.MessageIds"/>, <see cref="ReplyInput.Others"/>.</summary>
+        public const int MaxPromptMessageIDs = 20;
+
+        /// <summary>api.MaxAssistantRunIDBytes: <see cref="AssistantSessionStartParams.RunId"/>.</summary>
+        public const int MaxAssistantRunIDBytes = 128;
+
+        /// <summary>api.MaxAssistantUsageDays: <see cref="AssistantUsageParams.Days"/>.</summary>
+        public const int MaxAssistantUsageDays = 400;
 
         // contacts_book.go (docs/plans/address-book.md §4.2); exceeding an
         // input limit is invalidArgument.

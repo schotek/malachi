@@ -16,9 +16,9 @@ Template for the bundle's Info.plist; macos/Makefile substitutes the
 	<key>CFBundleIconFile</key>
 	<string>Malachi</string>
 	<key>CFBundleName</key>
-	<string>Malachi Mail</string>
+	<string>@BUNDLE_NAME@</string>
 	<key>CFBundleDisplayName</key>
-	<string>Malachi Mail</string>
+	<string>@BUNDLE_NAME@</string>
 	<key>CFBundleExecutable</key>
 	<string>@EXECUTABLE@</string>
 	<key>CFBundlePackageType</key>
@@ -28,9 +28,25 @@ Template for the bundle's Info.plist; macos/Makefile substitutes the
 	<key>CFBundleShortVersionString</key>
 	<string>@VERSION@</string>
 	<key>CFBundleVersion</key>
-	<string>@VERSION@</string>
+	<string>@BUILD@</string>
 	<key>MalachiVersion</key>
 	<string>@FULL_VERSION@</string>
+	<!-- direct (the DMG, every development build) or appstore; MalachiCore's
+	     Distribution reads it at run time. -->
+	<key>MalachiDistribution</key>
+	<string>@DISTRIBUTION@</string>
+	<!-- The stable app's bundle identifier in a test build (macos/Makefile
+	     VARIANT=dev), empty in every other build; MalachiCore's TestBuild
+	     reads it at run time. -->
+	<key>MalachiStableBundleIdentifier</key>
+	<string>@STABLE_ID@</string>
+	<!-- The export compliance answer of App Store Connect, so it is not
+	     asked for every build: the app encrypts only connections (TLS) and
+	     checks signatures, with standard algorithms, which is exempt
+	     (docs/plans/mac-app-store.md §8.5). Outside the
+	     App Store nothing reads it. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSApplicationCategoryType</key>

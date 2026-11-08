@@ -8,8 +8,18 @@ import Foundation
 // state; these only mirror the last sync.status / notify.syncState per
 // account into text.
 
+/// Whether an account counts in the status line and the status popover
+/// (sync.go `inStatusLine`): an `ai` account (docs/api.md §4.1)
+/// synchronises nothing, so it is left out unless its key was refused
+/// (authRequired, where Sign In opens its settings to replace the key);
+/// every other account counts.
+public func inStatusLine(_ a: Account, _ s: SyncState) -> Bool {
+    a.config.protocolKind != .ai || s.status == .authRequired
+}
+
 /// The status line for the given states (sync.go `syncStatusText`). Only
-/// enabled accounts count; an account missing from `states` uses the state
+/// enabled accounts count (an `ai` account only with a refused key,
+/// `inStatusLine`); an account missing from `states` uses the state
 /// embedded in its account.list entry. The most pressing state wins:
 /// syncing (with the folder or account name and the progress when known),
 /// then sign-in required, a changed certificate, a certificate problem
@@ -37,13 +47,20 @@ public func syncStatusText(
     var certProblem = false
     var syncError: [Account] = []
     var offline: [Account] = []
+    /// The accounts the line speaks for: `ai` ones only with a refused key.
+    var listed = 0
     var enabled = 0
     var pending = 0
     var failed = 0
     var lastSync: Date?
-    for a in accounts where a.enabled {
-        enabled += 1
+    for a in accounts {
         let s = states[a.id] ?? a.state
+        if a.config.protocolKind == .ai, !a.enabled || !inStatusLine(a, s) {
+            continue
+        }
+        listed += 1
+        guard a.enabled else { continue }
+        enabled += 1
         pending += s.pendingOutbox
         failed += s.failedOutbox
         if let t = s.lastSync, !t.isGoZero, lastSync.map({ t > $0 }) ?? true {
@@ -83,7 +100,7 @@ public func syncStatusText(
         return accountRowTitle(list[0])
     }
     if enabled == 0 {
-        return accounts.isEmpty ? ("", false) : (L10n.T("Paused"), false)
+        return listed == 0 ? ("", false) : (L10n.T("Paused"), false)
     }
     if let syncing {
         if syncing.progress >= 0 {
@@ -201,7 +218,8 @@ public struct AccountStatus: Sendable, Equatable {
 }
 
 /// The status popover's content (status.go `accountStatuses`): one entry
-/// per account, in account.list order, paused accounts included. Whether an
+/// per account, in account.list order, paused accounts included (an `ai`
+/// account only with a refused key, `inStatusLine`). Whether an
 /// account is paused is decided by `enabled`, not by `states`: pausing
 /// sends no notify.syncState, so `states` keeps what the account said
 /// before. A state that came afterwards (an outbox change of the paused
@@ -218,6 +236,9 @@ public func accountStatuses(
     for a in accounts {
         var st = AccountStatus(account: a.id, title: accountRowTitle(a), detail: "", signIn: signInKind(a.config))
         if !a.enabled {
+            if a.config.protocolKind == .ai {
+                continue
+            }
             var s = a.state
             if let cached = states[a.id], cached.status == .disabled {
                 s = cached
@@ -228,6 +249,9 @@ public func accountStatuses(
             continue
         }
         let s = states[a.id] ?? a.state
+        if !inStatusLine(a, s) {
+            continue
+        }
         let d = accountDetail(a.id, s, folderName: folderName, now: now)
         st.detail = d.detail
         st.action = d.action

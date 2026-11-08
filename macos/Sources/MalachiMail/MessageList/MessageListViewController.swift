@@ -324,7 +324,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         switch state {
         case .unavailable, .stopping:
             backendBanner.reveal(true)
-        case .connected, .protocolMismatch, .infoFailed:
+        case .connected, .protocolMismatch, .otherDaemon, .infoFailed:
             backendBanner.reveal(false)
         case .connecting:
             break

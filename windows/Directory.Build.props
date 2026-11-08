@@ -18,7 +18,7 @@ It also passes MalachiBuildDir when -BuildDir moves the output elsewhere.
     <MalachiRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</MalachiRoot>
     <MalachiBuildDir Condition="'$(MalachiBuildDir)' == ''">$(MalachiRoot)build</MalachiBuildDir>
     <MalachiBuildPath>$([MSBuild]::NormalizeDirectory('$(MalachiBuildDir)'))</MalachiBuildPath>
-    <!-- Rendered from docs\malachi_icon.png by the MalachiIcons target
+    <!-- Rendered from data\icons\malachi_icon.png by the MalachiIcons target
          (Directory.Build.targets) or build.ps1 icons; one file for every
          configuration and architecture. -->
     <MalachiIconFile>$(MalachiBuildPath)windows\artifacts\obj\Malachi.App\Malachi.ico</MalachiIconFile>

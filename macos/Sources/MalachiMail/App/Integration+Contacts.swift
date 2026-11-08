@@ -12,8 +12,8 @@ import MalachiCore
 /// Contacts window, and the ways out of it into the rest of the
 /// application: Write Email (a compose window), Show Mail (the main
 /// window's search), Allow… (the re-sign-in with the contacts scope) and
-/// Settings → Contacts. The window has no keyboard shortcut (the owner's
-/// answer 5): Window ▸ Contacts and the chips' Show Contact open it.
+/// Settings → Contacts. The window has no keyboard shortcut:
+/// Window ▸ Contacts and the chips' Show Contact open it.
 @MainActor
 final class AppContacts {
     unowned let state: AppState

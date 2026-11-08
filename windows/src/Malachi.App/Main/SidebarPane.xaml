@@ -75,7 +75,7 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                     <!-- window.blp primary_menu, the same as the Board's and the
                          Calendar's "…" (BoardPage.xaml, CalendarPage.xaml): no
                          modes (the title bar's switch) and no Add Account
-                         (Preferences), the owner's decision of 2026-11-04. -->
+                         (Preferences). -->
                     <MenuFlyout x:Name="PrimaryMenu" Placement="BottomEdgeAlignedRight">
                         <!-- Windows-only strings: the key names beside the items. -->
                         <MenuFlyoutItem

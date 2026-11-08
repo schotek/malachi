@@ -184,7 +184,7 @@ public final class Settings {
             Key.favouriteFolders.rawValue: [String](),
             Key.unifiedInbox.rawValue: true,
             Key.assistantMenu.rawValue: true,
-            Key.assistantTarget.rawValue: Assistant.Target.desktop.rawValue,
+            Key.assistantTarget.rawValue: Assistant.Target.app.rawValue,
             Key.assistantModel.rawValue: Assistant.Model.sonnet.rawValue,
             Key.assistantClaudePath.rawValue: "",
             Key.assistantConsent.rawValue: false,
@@ -238,11 +238,15 @@ public final class Settings {
     }
 
     public let defaults: UserDefaults
+    /// The build's distribution: in the App Store build the keys of the
+    /// local agents read as off (`assistantTarget`, `assistantProvider`).
+    public let distribution: Distribution
     private let hub: ChangeHub
     private let observer: DefaultsObserver
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard, distribution: Distribution = .current) {
         self.defaults = defaults
+        self.distribution = distribution
         Settings.register(defaults: defaults)
         let hub = ChangeHub()
         self.hub = hub
@@ -418,9 +422,30 @@ public final class Settings {
     /// Where the Assistant menu opens Claude: the gschema enum
     /// AssistantTarget's nicks, read with `Assistant.parseTarget` (an
     /// unknown nick is Claude Desktop).
+    ///
+    /// In the App Store build In App reads as Claude Desktop and is never
+    /// written: a value the DMG stored (carried over by the container
+    /// migration) stays for a return to the DMG
+    /// (`Distribution.allowsLocalAgents`). With an AI provider account as
+    /// the provider In App exists there too (`assistantTargets`): the
+    /// daemon runs the assistant, not a local agent.
     public var assistantTarget: Assistant.Target {
-        get { Assistant.parseTarget(string(.assistantTarget)) }
-        set { set(.assistantTarget, Assistant.parseTarget(newValue.rawValue).rawValue) }
+        get {
+            let t = Assistant.parseTarget(string(.assistantTarget))
+            return t == .app && !assistantTargets.contains(.app) ? .desktop : t
+        }
+        set {
+            let t = Assistant.parseTarget(newValue.rawValue)
+            if t == .app && !assistantTargets.contains(.app) { return }
+            set(.assistantTarget, t.rawValue)
+        }
+    }
+
+    /// The targets this build offers with the provider chosen
+    /// (`Assistant.targets(for:provider:)`): In App in the DMG, and in the
+    /// App Store build while `assistantProvider` names an `ai` account.
+    public var assistantTargets: [Assistant.Target] {
+        Assistant.targets(for: distribution, provider: assistantProvider)
     }
 
     /// The model of the assistant panel: the gschema enum AssistantModel's
@@ -563,9 +588,23 @@ public final class Settings {
         Board.startMode(start: string(.boardStartMode), last: string(.boardLastMode), boardEnabled: boardEnabled)
     }
 
-    public var assistantProvider: AssistantProviderID {
-        get { AssistantProviderID(rawValue: string(.assistantProvider)) ?? .claude }
-        set { set(.assistantProvider, newValue.rawValue) }
+    /// The In App assistant's provider (docs/plans/ai-api.md D14):
+    /// `Assistant.providerClaude`, `Assistant.providerChatGPT` or the id of
+    /// an `ai` account, normalised (`Assistant.normalizeProvider`: an
+    /// unknown value is Claude). In the App Store build the local agents
+    /// read as Claude whatever was stored and are never written there; an
+    /// account id passes.
+    public var assistantProvider: String {
+        get {
+            let stored = Assistant.normalizeProvider(string(.assistantProvider))
+            guard distribution.allowsLocalAgents || Assistant.isAccountProvider(stored) else { return Assistant.providerClaude }
+            return stored
+        }
+        set {
+            let value = Assistant.normalizeProvider(newValue)
+            guard distribution.allowsLocalAgents || Assistant.isAccountProvider(value) || value == Assistant.providerClaude else { return }
+            set(.assistantProvider, value)
+        }
     }
     public var assistantCodexPath: String {
         get { string(.assistantCodexPath) }
@@ -587,13 +626,46 @@ public final class Settings {
         get { integer(.boardTriageChatGPTConsentVersion) }
         set { set(.boardTriageChatGPTConsentVersion, newValue) }
     }
+    /// The consent of the provider in effect for the panel, the compose
+    /// window and the suggested reply: Claude Code's `assistant-consent`,
+    /// ChatGPT's version key. An AI provider account keeps its consent in
+    /// the daemon (`AIConfig.consent`, `AssistantProvider.hasConsent` /
+    /// `acceptConsent`), so here it reads false and writes nothing: no
+    /// gschema key is ever set for an account (docs/plans/ai-api.md §14).
     public var selectedAssistantConsent: Bool {
-        get { assistantProvider == .chatgpt ? assistantChatGPTConsentVersion == 1 : assistantConsent }
-        set { if assistantProvider == .chatgpt { assistantChatGPTConsentVersion = newValue ? 1 : 0 } else { assistantConsent = newValue } }
+        get {
+            switch Assistant.sourceOf(assistantProvider) {
+            case .chatgpt: return assistantChatGPTConsentVersion == 1
+            case .account: return false
+            case .claude: return assistantConsent
+            }
+        }
+        set {
+            switch Assistant.sourceOf(assistantProvider) {
+            case .chatgpt: assistantChatGPTConsentVersion = newValue ? 1 : 0
+            case .account: break
+            case .claude: assistantConsent = newValue
+            }
+        }
     }
+    /// The board's consent of the provider in effect; over an AI provider
+    /// account the board's consent is the account's (one consent for the
+    /// panel and the board), kept in the daemon: false here, no key.
     public var selectedBoardConsent: Bool {
-        get { assistantProvider == .chatgpt ? boardTriageChatGPTConsentVersion == 1 : boardTriageConsent }
-        set { if assistantProvider == .chatgpt { boardTriageChatGPTConsentVersion = newValue ? 1 : 0 } else { boardTriageConsent = newValue } }
+        get {
+            switch Assistant.sourceOf(assistantProvider) {
+            case .chatgpt: return boardTriageChatGPTConsentVersion == 1
+            case .account: return false
+            case .claude: return boardTriageConsent
+            }
+        }
+        set {
+            switch Assistant.sourceOf(assistantProvider) {
+            case .chatgpt: boardTriageChatGPTConsentVersion = newValue ? 1 : 0
+            case .account: break
+            case .claude: boardTriageConsent = newValue
+            }
+        }
     }
 
     // MARK: Change notification

@@ -5,23 +5,29 @@ package assistantpanel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/board"
 )
 
 // The one-shot requests of the In App target (ui/internal/assistant
-// rewrite.go and search.go): the compose window's rewrite (Rewriter) and
-// the search in the user's own words (Searcher), each one question to the
-// user's Claude Code that reads no mail (Request), and the board's triage
-// run (ui/internal/boardtriage), which reads it through the bridge
-// (Request.StartCall with Tools). The macOS client leads (MalachiCore
-// AssistantRequest, ComposeRewriteController, SearchConversion); this is
-// its port.
+// rewrite.go and search.go): the compose window's rewrite (Rewriter), its
+// writing bar (Writer) and the search in the user's own words (Searcher),
+// each one question to the user's Claude Code that reads no mail
+// (Request), and the board's triage run (ui/internal/boardtriage) and
+// suggested reply (ui/internal/boardreply), which read it through the
+// bridge (Request.StartCall with Tools). Every prompt is the daemon's
+// (Prompter, assistant.prompt): a request names its purpose and input
+// (api.PromptInput) and gets the system prompt, the tools, the bridge's
+// arguments, the schema and the message back. The macOS client leads
+// (MalachiCore AssistantRequest, ComposeRewriteController,
+// SearchConversion); this is its port.
 
 // FailureKind is why a request brought no answer.
 type FailureKind int
@@ -67,10 +73,12 @@ func (f Failure) Text(tr assistant.Translator) string {
 	return assistant.StoppedText(tr, f.Reason)
 }
 
-// providerText is what a failure ProviderFailure made of a ChatGPT
-// provider's reason says, in that provider's words: Codex not found, or
-// the ChatGPT connection to make again. False for any other failure (and
-// for Claude Code's, whose reasons are never these codes).
+// providerText is what a failure ProviderFailure made of a provider's
+// reason says, in that provider's words: Codex not found, the ChatGPT
+// connection to make again, or the sentence of a session's failure class
+// of the daemon's assistant (assistant.APIFailureText). False for any
+// other failure (and for Claude Code's, whose reasons are never these
+// codes).
 func (f Failure) providerText(tr assistant.Translator) (string, bool) {
 	words := assistant.ChatGPTText(tr)
 	switch {
@@ -78,6 +86,10 @@ func (f Failure) providerText(tr assistant.Translator) (string, bool) {
 		return words.NativeMissingCodex, true
 	case f.Kind == FailureNotSignedIn && strings.HasPrefix(f.Reason, "chatgpt_"):
 		return words.Reconnect, true
+	case apiFailure(f.Reason):
+		if t, ok := assistant.APIFailureText(tr, f.Reason); ok {
+			return t, true
+		}
 	}
 	return "", false
 }
@@ -154,6 +166,12 @@ const timedOut = "no answer in time"
 type RequestConfig struct {
 	// Provider selects the runtime; nil retains Claude.
 	Provider func() Provider
+	// Prompter builds the prompts (the daemon's assistant.prompt);
+	// required.
+	Prompter Prompter
+	// Language is the UI language as a BCP 47 tag ("cs"), which the model
+	// answers in; nil or "" is English.
+	Language func() string
 	Settings Settings
 	Locator  *Locator
 	Loop     Loop
@@ -171,22 +189,27 @@ type RequestConfig struct {
 // Request is one question to the user's Claude Code (macOS
 // AssistantRequest). It runs the panel's protocol once: the command line of
 // assistant.Args without the bridge (no MCP server, no tool), or with the
-// bridge, its extra arguments and the tools of Tools when the caller
-// passes them (StartCall), with --json-schema when the answer has a shape,
-// in the panel's private directory and with assistant.ChildEnv; one
-// assistant.UserMessage on stdin, which is then closed; the answer is the
-// result event. The steps, each of which may end it:
+// bridge, its arguments and the tools the daemon's prompt names when the
+// caller passes Tools (StartCall), with --json-schema when the answer has
+// a shape, in the panel's private directory and with assistant.ChildEnv;
+// one assistant.UserMessage on stdin, which is then closed; the answer is
+// the result event. The steps, each of which may end it:
 //
 //  1. The first request ever asks for consent (Consent, the panel's "Send
 //     Mail to Claude?" on the window that asks; the answer is the shared
 //     assistant-consent, kept even when the request was cancelled
 //     meanwhile). Declined: OutcomeDeclined, nothing is sent.
-//  2. Claude Code is located (none: FailureNotFound) and must not say it is
+//  2. The prompt is built by the daemon (Prompter, assistant.prompt with
+//     the call's purpose and input): the system prompt with the user's
+//     profile, the tools, the bridge's arguments, the schema and the
+//     message. A refused input (empty, too long, the daemon away) is
+//     FailureStopped with the daemon's reason.
+//  3. Claude Code is located (none: FailureNotFound) and must not say it is
 //     signed out (Locator.SignedIn, asked afresh: FailureNotSignedIn; not
 //     known counts as signed in, and the process then says what is wrong:
 //     a turn the API refused for its sign-in, assistant.EventFailure, is
 //     FailureNotSignedIn too).
-//  3. The process starts; text deltas stream to onText (a whole text block
+//  4. The process starts; text deltas stream to onText (a whole text block
 //     replaces the deltas before it), the result ends it: a success is
 //     OutcomeAnswered with the result's text and structured_output,
 //     anything else FailureStopped with the result's text or subtype. The
@@ -210,13 +233,15 @@ type Request struct {
 	// Timeout is how long the answer is waited for.
 	Timeout time.Duration
 
-	settings  Settings
-	locator   *Locator
-	loop      Loop
-	log       *slog.Logger
-	directory string
-	env       []string
-	killGrace time.Duration
+	settings   Settings
+	locator    *Locator
+	prompter   Prompter
+	languageFn func() string
+	loop       Loop
+	log        *slog.Logger
+	directory  string
+	env        []string
+	killGrace  time.Duration
 
 	running bool
 	// gen is bumped by every Start and Cancel: the steps of an older
@@ -243,6 +268,8 @@ func NewRequest(cfg RequestConfig) *Request {
 		Timeout:         DefaultRequestTimeout,
 		settings:        cfg.Settings,
 		providerFactory: cfg.Provider,
+		prompter:        cfg.Prompter,
+		languageFn:      cfg.Language,
 		locator:         cfg.Locator,
 		loop:            cfg.Loop,
 		log:             cfg.Log,
@@ -255,28 +282,50 @@ func NewRequest(cfg RequestConfig) *Request {
 // Running says whether a request is under way.
 func (r *Request) Running() bool { return r.running }
 
+// language is the UI language for the prompts ("" is English).
+func (r *Request) language() string {
+	if r.languageFn == nil {
+		return ""
+	}
+	return r.languageFn()
+}
+
+// errNoPrompter is the failure of a request without a Prompter.
+var errNoPrompter = errors.New("the assistant has no prompter")
+
 // Tools are the bridge a request gives Claude Code, and what of it may
-// run.
+// run. A caller sets Bridge and Socket; the request fills BridgeArgs and
+// Allowed from the daemon's prompt of the purpose.
 type Tools struct {
 	// Bridge is the path of malachi-mcp; Socket the daemon's socket
 	// (--socket), "" for the bridge's default.
 	Bridge, Socket string
-	// BridgeArgs are the bridge's further arguments
-	// (assistant.TriageBridgeArgs).
+	// BridgeArgs are the bridge's further arguments after --socket
+	// (api.PromptResult.BridgeArgs: --in-app first, then the triage's or
+	// the suggested reply's).
 	BridgeArgs []string
-	// Allowed is --allowedTools (assistant.TriageToolsFor).
+	// Allowed is --allowedTools, prefixed (assistant.PrefixTools of
+	// api.PromptResult.Tools).
 	Allowed []string
 }
 
 // Call is what one StartCall asks for.
 type Call struct {
+	// Purpose is what the daemon builds the prompt for, and Input the
+	// turn's input (exactly the field of Purpose set, api.PromptInput).
+	Purpose api.PromptPurpose
+	Input   api.PromptInput
+	// NoteAccountID is the account whose profile note is appended (the
+	// compose window's account for a rewrite or the writing bar); "" for
+	// none.
+	NoteAccountID api.AccountID
+	// Trigger and RunID are a triage's trigger and board run.
+	Trigger api.BoardTrigger
+	RunID   string
 	// ModelID overrides the selected provider model for this call.
 	ModelID string
-	// SystemPrompt and Message are the system prompt and the one turn.
-	SystemPrompt, Message string
-	// JSONSchema, when set, is the answer's shape.
-	JSONSchema string
-	// Tools gives Claude Code the bridge; nil: no tool at all.
+	// Tools gives Claude Code the bridge (its Bridge and Socket); nil: no
+	// tool at all.
 	Tools *Tools
 	// Timeout replaces the request's own for this call when above 0.
 	Timeout time.Duration
@@ -295,13 +344,15 @@ type Call struct {
 	OnUsage func(assistant.Event)
 }
 
-// Start asks Claude Code once: message as the one turn under systemPrompt,
-// with the model of assistant-model and, when jsonSchema is set, that shape
-// of answer. A request under way is cancelled first. onText (may be nil)
-// gets the answer's text as it streams, all of it so far; completion is
-// called once with the outcome, unless the request is cancelled.
-func (r *Request) Start(systemPrompt, message, jsonSchema string, onText func(string), completion func(Outcome)) {
-	r.StartCall(Call{SystemPrompt: systemPrompt, Message: message, JSONSchema: jsonSchema, OnText: onText}, completion)
+// Start asks the assistant once without the bridge: input as the one
+// turn of purpose (a rewrite, the writing bar, the search), with the
+// note of noteAccountID ("" for none) in the system prompt and the model
+// of assistant-model. A request under way is cancelled first. onText (may
+// be nil) gets the answer's text as it streams, all of it so far;
+// completion is called once with the outcome, unless the request is
+// cancelled.
+func (r *Request) Start(purpose api.PromptPurpose, input api.PromptInput, noteAccountID api.AccountID, onText func(string), completion func(Outcome)) {
+	r.StartCall(Call{Purpose: purpose, Input: input, NoteAccountID: noteAccountID, OnText: onText}, completion)
 }
 
 // StartCall asks Claude Code once as c says (see Call); a request under
@@ -310,10 +361,7 @@ func (r *Request) Start(systemPrompt, message, jsonSchema string, onText func(st
 func (r *Request) StartCall(c Call, completion func(Outcome)) {
 	r.Cancel()
 	if c.Tools != nil {
-		cp := *c.Tools
-		cp.Allowed = append([]string{}, c.Tools.Allowed...)
-		cp.BridgeArgs = append([]string{}, c.Tools.BridgeArgs...)
-		c.Tools = &cp
+		c.Tools = &Tools{Bridge: c.Tools.Bridge, Socket: c.Tools.Socket}
 	}
 	r.gen++
 	my := r.gen
@@ -343,7 +391,7 @@ func (r *Request) askConsent(my int, c Call, completion func(Outcome)) {
 		return
 	}
 	if (provider != nil && provider.HasConsent()) || (provider == nil && r.settings.AssistantConsent()) {
-		r.locate(my, c, completion)
+		r.compose(my, c, completion)
 		return
 	}
 	answer := func(allowed bool) {
@@ -361,7 +409,7 @@ func (r *Request) askConsent(my int, c Call, completion func(Outcome)) {
 			r.finish(my, Outcome{Kind: OutcomeDeclined}, completion)
 			return
 		}
-		r.locate(my, c, completion)
+		r.compose(my, c, completion)
 	}
 	if r.Consent == nil {
 		answer(false)
@@ -370,10 +418,54 @@ func (r *Request) askConsent(my int, c Call, completion func(Outcome)) {
 	r.Consent(answer)
 }
 
-// locate is step 2: Claude Code, signed in; then step 3.
-func (r *Request) locate(my int, c Call, completion func(Outcome)) {
+// promptParams are the Prompter's parameters of c.
+func (r *Request) promptParams(c Call) api.AssistantPromptParams {
+	in := c.Input
+	return api.AssistantPromptParams{
+		Purpose: c.Purpose, Language: r.language(), AccountID: c.NoteAccountID,
+		Trigger: c.Trigger, RunID: c.RunID, Input: &in,
+	}
+}
+
+// compose is step 2: the daemon's prompt of the call; then step 3.
+func (r *Request) compose(my int, c Call, completion func(Outcome)) {
+	prompter := r.prompter
+	if prompter == nil {
+		r.finish(my, failed(FailureStopped, errNoPrompter.Error()), completion)
+		return
+	}
+	params := r.promptParams(c)
+	go func() {
+		res, err := prompter.Prompt(context.Background(), params)
+		r.loop.Post(func() {
+			if my != r.gen || !r.running {
+				return
+			}
+			if err != nil {
+				r.log.Warn("assistant request: prompt", "err", err)
+				r.finish(my, failed(FailureStopped, promptReason(err)), completion)
+				return
+			}
+			r.locate(my, c, res, completion)
+		})
+	}()
+}
+
+// promptReason is a Prompter's error as a reason to show: the daemon's
+// message of an api.Error (its code is nothing to the user), else the
+// error as it is.
+func promptReason(err error) string {
+	var e *api.Error
+	if errors.As(err, &e) {
+		return e.Message
+	}
+	return err.Error()
+}
+
+// locate is step 3: Claude Code, signed in; then step 4.
+func (r *Request) locate(my int, c Call, res api.PromptResult, completion func(Outcome)) {
 	if r.selectedProvider != nil {
-		r.launchProvider(my, c, completion)
+		r.launchProvider(my, c, res, completion)
 		return
 	}
 	path := r.locator.Locate()
@@ -390,14 +482,14 @@ func (r *Request) locate(my int, c Call, completion func(Outcome)) {
 			r.finish(my, failed(FailureNotSignedIn, ""), completion)
 			return
 		}
-		p, err := r.launch(my, path, c, completion)
+		p, err := r.launch(my, path, c, res, completion)
 		if err != nil {
 			r.log.Warn("assistant request", "err", err)
 			r.finish(my, failed(FailureStopped, err.Error()), completion)
 			return
 		}
 		r.process = p
-		if !p.Send(assistant.UserMessage(c.Message)) {
+		if !p.Send(assistant.UserMessage(res.Message)) {
 			r.finish(my, failed(FailureStopped, "claude is not running"), completion)
 			return
 		}
@@ -419,8 +511,9 @@ func failed(kind FailureKind, reason string) Outcome {
 	return Outcome{Kind: OutcomeFailed, Failure: Failure{Kind: kind, Reason: reason}}
 }
 
-// launch is step 3: the process.
-func (r *Request) launch(my int, path string, c Call, completion func(Outcome)) (*Process, error) {
+// launch is step 4: the process, with the daemon's prompt res on its
+// command line.
+func (r *Request) launch(my int, path string, c Call, res api.PromptResult, completion func(Outcome)) (*Process, error) {
 	if err := ensureDirectory(r.directory); err != nil {
 		return nil, fmt.Errorf("the assistant's directory: %w", err)
 	}
@@ -428,12 +521,9 @@ func (r *Request) launch(my int, path string, c Call, completion func(Outcome)) 
 	if model == "" {
 		model = r.settings.AssistantModel()
 	}
-	opts := assistant.Options{Model: model, SystemPrompt: c.SystemPrompt, JSONSchema: c.JSONSchema}
+	opts := assistant.Options{Model: model, Prompt: res}
 	if c.Tools != nil {
 		opts.Bridge, opts.Socket = c.Tools.Bridge, c.Tools.Socket
-		opts.BridgeArgs = c.Tools.BridgeArgs
-		// Never nil with Tools: nil would be the panel's tools.
-		opts.Tools = append([]string{}, c.Tools.Allowed...)
 	}
 	args := assistant.Args(opts)
 	onText := c.OnText
@@ -566,21 +656,21 @@ type RewriteState struct {
 
 // Rewriter is the compose window's rewrite without its popover (macOS
 // ComposeRewriteController): a passage of the message, the selection or
-// the user's own text, goes to the user's Claude Code with a preset or the
-// user's own instruction (assistant.RewriteMessage under
-// assistant.RewriteSystemPrompt, one Request), and the answer, cleaned
+// the user's own text, goes to the user's assistant with a preset or the
+// user's own instruction (the daemon's prompt of purpose rewrite,
+// api.RewriteInput, one Request), and the answer, cleaned
 // (assistant.CleanRewrite), is offered for Replace or Insert Below, which
 // the window does as plain text. Failures are lines to show: Claude Code
 // not found or not signed in (the panel's texts), "The assistant stopped:
-// …" otherwise, an empty answer included. A new rewrite cancels the one
-// under way; Cancel (the popover or the window closed) ends it and goes
-// back to idle.
+// …" otherwise (a passage the daemon refuses as too long included), an
+// empty answer included. A new rewrite cancels the one under way; Cancel
+// (the popover or the window closed) ends it and goes back to idle.
 type Rewriter struct {
 	// OnState: the state changed.
 	OnState func(RewriteState)
-	// Profile is the user's profile with the note of the account the
-	// window writes from (assistant.Profile.For); nil: none.
-	Profile func() assistant.Profile
+	// Account is the account the window writes from, whose profile note
+	// the daemon appends to the system prompt; nil: none.
+	Account func() api.AccountID
 
 	tr      assistant.Translator
 	request *Request
@@ -613,20 +703,15 @@ func (w *Rewriter) set(s RewriteState) {
 
 // Start asks for rewrite r of passage (custom: the user's own instruction,
 // for assistant.Custom). False, and nothing changes, when there is nothing
-// to ask: an empty passage, or Custom without words. A passage that is too
-// long (or a rewrite that does not exist) fails at once.
+// to ask: an empty passage, or Custom without words. A passage the daemon
+// refuses (too long) fails with its reason.
 func (w *Rewriter) Start(r assistant.Rewrite, custom, passage string) bool {
 	if strings.TrimSpace(passage) == "" || (r == assistant.Custom && strings.TrimSpace(custom) == "") {
 		return false
 	}
-	message, err := assistant.RewriteMessage(r, custom, passage)
-	if err != nil {
-		w.request.Cancel()
-		w.set(RewriteState{Kind: RewriteFailed, Text: assistant.StoppedText(w.tr, err.Error())})
-		return true
-	}
 	w.set(RewriteState{Kind: RewriteRunning})
-	w.request.Start(assistant.WithProfile(assistant.RewriteSystemPrompt(), profileOf(w.Profile)), message, "", func(text string) {
+	input := api.PromptInput{Rewrite: &api.RewriteInput{Preset: r.Preset(), Instruction: custom, Passage: passage}}
+	w.request.Start(api.PurposeRewrite, input, accountOf(w.Account), func(text string) {
 		if w.Running() {
 			w.set(RewriteState{Kind: RewriteRunning, Text: assistant.CleanRewrite(text)})
 		}
@@ -645,10 +730,10 @@ func (w *Rewriter) finished(o Outcome) {
 	w.set(answerState(w.tr, o))
 }
 
-// profileOf is the profile f returns, none for nil.
-func profileOf(f func() assistant.Profile) assistant.Profile {
+// accountOf is the account f names, "" for nil.
+func accountOf(f func() api.AccountID) api.AccountID {
 	if f == nil {
-		return assistant.Profile{}
+		return ""
 	}
 	return f()
 }
@@ -691,29 +776,23 @@ type SearchOutcome struct {
 }
 
 // Searcher is the search in the user's own words without the search field
-// (macOS SearchConversion): the typed words go to the user's Claude Code
-// (assistant.SearchMessage under assistant.SearchSystemPrompt, the answer
-// shaped by assistant.SearchSchema, one Request), and the query of its
-// answer (assistant.ParseSearchQuery of the result's structured_output, or
-// of its text when Claude Code gave none) is what the field then searches
-// for. A failure is the toast "The search could not be converted: %s"
+// (macOS SearchConversion): the typed words go to the user's assistant
+// (the daemon's prompt of purpose search, api.SearchInput, the answer
+// shaped by its schema, one Request), and the query of its answer
+// (assistant.ParseSearchQuery of the result's structured_output, or of its
+// text when Claude Code gave none) is what the field then searches for. A
+// failure is the toast "The search could not be converted: %s"
 // (assistant.SearchFailedText); the caller keeps the typed words. A new
 // conversion cancels the one under way; Cancel ends it, and its completion
 // is not called.
 type Searcher struct {
-	// Today is the date for the system prompt, YYYY-MM-DD.
-	Today func() string
-	// Profile is the user's profile; the search gets it without account
-	// notes (assistant.Profile.Global). nil: none.
-	Profile func() assistant.Profile
-
 	tr      assistant.Translator
 	request *Request
 }
 
 // NewSearcher converts through request.
 func NewSearcher(tr assistant.Translator, request *Request) *Searcher {
-	return &Searcher{Today: func() string { return time.Now().Format("2006-01-02") }, tr: tr, request: request}
+	return &Searcher{tr: tr, request: request}
 }
 
 // Request is the conversion's request (its consent hook is the window's).
@@ -724,19 +803,13 @@ func (s *Searcher) Running() bool { return s.request.Running() }
 
 // Convert asks for the query of words. False, and nothing happens, when
 // there are no words; otherwise completion is called once, later (also for
-// words that are too long), unless the conversion is cancelled.
+// words the daemon refuses as too long), unless the conversion is
+// cancelled.
 func (s *Searcher) Convert(words string, completion func(SearchOutcome)) bool {
 	if strings.TrimSpace(words) == "" {
 		return false
 	}
-	message, err := assistant.SearchMessage(words)
-	if err != nil {
-		s.request.Cancel()
-		text := assistant.SearchFailedText(s.tr, err.Error())
-		s.request.loop.Post(func() { completion(SearchOutcome{Kind: SearchFailed, Text: text}) })
-		return true
-	}
-	s.request.Start(assistant.WithProfile(assistant.SearchSystemPrompt(s.Today()), profileOf(s.Profile).Global()), message, assistant.SearchSchema, nil, func(o Outcome) {
+	s.request.Start(api.PurposeSearch, api.PromptInput{Search: &api.SearchInput{Words: words}}, "", nil, func(o Outcome) {
 		completion(searchOutcome(s.tr, o))
 	})
 	return true

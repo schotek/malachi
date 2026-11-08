@@ -11,7 +11,7 @@ import (
 )
 
 // Notes and notice texts are plain text that reaches a user. The contract
-// (docs/services.md §2.3) lets the daemon clean them; the owner's tool
+// (docs/services.md §2.3) lets the daemon clean them; the signing tool
 // refuses what cleaning would change, so the daemon does too: a text is
 // accepted only when it is already clean, and a manifest with one that
 // is not is discarded whole. Clean means valid UTF-8 in NFC with "\n" as

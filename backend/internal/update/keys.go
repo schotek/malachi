@@ -10,7 +10,7 @@ import (
 
 // Keys are the public keys a manifest may be signed with, by keyId
 // (docs/services.md §2.2). They are compiled in and never read from the
-// configuration. A new key is added a release before the owner signs with
+// configuration. A new key is added a release before a manifest is signed with
 // it; an old one goes only when no supported version needs it. The test
 // key of backend/testdata/update ("test-1") is never here.
 var Keys = map[string]ed25519.PublicKey{

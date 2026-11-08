@@ -48,7 +48,12 @@ const accountColumns = `id, email, realm, name, enabled, config, position, creat
 // A calendar account (caldav, migration 0020) has the same form of its
 // CalDAVConfig.ServerURL: "cloud.example.org/remote.php/dav". A CRM
 // account (eway, migration 0021) that of EwayConfig.ServiceURL:
-// "hosting.eway-crm.com/company".
+// "hosting.eway-crm.com/company". An AI provider account (ai, no
+// migration) "ai:" and that of its effective base URL
+// ("ai:api.anthropic.com", "ai:192.168.1.20:11434/v1"); the stored
+// realm of such an account carries its id as well (accountRealm), so
+// that several ai accounts of one provider can exist beside each other:
+// RealmOf alone names the endpoint, which core compares.
 func RealmOf(cfg api.AccountConfig) string {
 	var site string
 	switch {
@@ -58,6 +63,11 @@ func RealmOf(cfg api.AccountConfig) string {
 		site = cfg.CalDAV.ServerURL
 	case cfg.Protocol() == api.AccountEway && cfg.Eway != nil:
 		site = cfg.Eway.ServiceURL
+	case cfg.Protocol() == api.AccountAI && cfg.AI != nil:
+		if r := siteRealm(cfg.AI.EffectiveBaseURL()); r != "" {
+			return "ai:" + r
+		}
+		return ""
 	default:
 		return ""
 	}
@@ -95,7 +105,24 @@ func accountRealm(a *Account) error {
 	if a.Realm == "" && a.Config.Protocol() == api.AccountEway {
 		return fmt.Errorf("eway account without a service URL")
 	}
+	if a.Config.Protocol() == api.AccountAI {
+		if a.Realm == "" {
+			return fmt.Errorf("ai account without a base URL")
+		}
+		// Two keys of one provider, two servers at one address: told
+		// apart by the account, not the endpoint (the accounts table
+		// keeps (email, realm) unique).
+		a.Realm += "#" + a.ID
+	}
 	return nil
+}
+
+// noAddress reports a kind without an address: an eway account (its user
+// may have none in the CRM) and an ai account (a model API has none);
+// their realm alone tells them apart.
+func noAddress(cfg api.AccountConfig) bool {
+	k := cfg.Protocol()
+	return k == api.AccountEway || k == api.AccountAI
 }
 
 // CheckAccountID reports an account id that cannot name the account's
@@ -138,9 +165,7 @@ func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	if a.Email == "" {
 		a.Email = NormalizeAddress(a.Config.Email)
 	}
-	// An eway account is the only kind without an address (its user may
-	// have none in the CRM; the realm alone tells it apart).
-	if a.Email == "" && a.Config.Protocol() != api.AccountEway {
+	if a.Email == "" && !noAddress(a.Config) {
 		return fmt.Errorf("add account: empty e-mail")
 	}
 	if err := accountRealm(a); err != nil {
@@ -251,7 +276,7 @@ func (s *Store) UpdateAccount(ctx context.Context, a *Account) error {
 	if a.Email == "" {
 		a.Email = NormalizeAddress(a.Config.Email)
 	}
-	if a.Email == "" && a.Config.Protocol() != api.AccountEway {
+	if a.Email == "" && !noAddress(a.Config) {
 		return fmt.Errorf("update account: empty e-mail")
 	}
 	if err := accountRealm(a); err != nil {
@@ -460,6 +485,11 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	// Its CRM links (migration 0021), as the CRM account or the mail one.
 	if err := deleteCrmLinksTx(ctx, tx, id); err != nil {
 		return err
+	}
+	// The assistant's usage of an ai account (migration 0027; the foreign
+	// key cascades too, this keeps it explicit).
+	if _, err := tx.ExecContext(ctx, `DELETE FROM assistant_usage WHERE account_id = ?`, id); err != nil {
+		return fmt.Errorf("delete account assistant usage: %w", err)
 	}
 	// Its mail rules with their ledgers (migration 0025).
 	if err := deleteRulesOfAccountTx(ctx, tx, id); err != nil {

@@ -37,7 +37,13 @@
 // account wizard, a Jira account's settings (where its token is replaced
 // too, jira_editors.go editJiraAccount), or for a CalDAV account the
 // Calendar page of the Preferences, which has its server, password,
-// certificate and calendars (integrations_page.go showCalendarPage).
+// certificate and calendars (integrations_page.go showCalendarPage), or for
+// an AI provider account its dialog (AiAccountWindow; ai_editors.go
+// editAIAccount), which its Sign In opens on Replace Key… while the provider
+// refuses the key. The page around the list gives an AI provider account's
+// row its usage line (SetUsage) and says whether rows of its own stand
+// beside the list (OtherRowsShown: the Integrations page's local rows), so
+// that the empty row shows only while there is no row at all.
 
 using System;
 using System.Collections.Generic;
@@ -84,6 +90,12 @@ public sealed partial class AccountListSection : UserControl
     // The daemon's notifications the list follows.
     private readonly List<IDisposable> subscriptions = [];
 
+    // The usage line of each AI provider account's row, as the page gave it.
+    private readonly Dictionary<AccountId, string> usage = [];
+
+    // The page shows rows of its own beside the list.
+    private bool otherRows;
+
     /// <summary>
     /// The list of <paramref name="page"/>'s accounts in the preferences
     /// window <paramref name="window"/>: <paramref name="listId"/> and
@@ -121,6 +133,10 @@ public sealed partial class AccountListSection : UserControl
             {
                 Apply(Controller.Rows);
             }
+            else if (e.PropertyName == nameof(AccountsPageController.IsEmpty))
+            {
+                UpdateEmptyRow();
+            }
         };
         AccountList.AddHandler(PointerPressedEvent, new PointerEventHandler(OnListPointerPressed), handledEventsToo: true);
         // A ListView takes Ctrl+Up and Ctrl+Down for moving its focus before
@@ -129,6 +145,7 @@ public sealed partial class AccountListSection : UserControl
         subscriptions.Add(state.Notifications.AddAccountsChanged(Controller.HandleAccountsChanged));
         subscriptions.Add(state.Notifications.AddSyncState(Controller.HandleSyncState));
         Controller.Load();
+        UpdateEmptyRow();
     }
 
     /// <summary>The list's logic.</summary>
@@ -145,6 +162,34 @@ public sealed partial class AccountListSection : UserControl
 
     /// <summary>Moves the selected row by <paramref name="delta"/> (Ctrl+Up, Ctrl+Down).</summary>
     public void MoveSelected(int delta) => Controller.MoveSelected(delta);
+
+    /// <summary>
+    /// The page shows rows of its own beside the list (the Integrations
+    /// page's local rows): the empty row shows only while neither has one.
+    /// </summary>
+    internal bool OtherRowsShown
+    {
+        get => otherRows;
+        set
+        {
+            otherRows = value;
+            UpdateEmptyRow();
+        }
+    }
+
+    /// <summary>The line after the subtitle of account <paramref name="id"/>'s row ("" for none).</summary>
+    internal void SetUsage(AccountId id, string line)
+    {
+        if (usage.TryGetValue(id, out var shown) && shown == line)
+        {
+            return;
+        }
+        usage[id] = line;
+        if (Rows.FirstOrDefault(v => v.Id == id) is { } view && Controller.Rows.FirstOrDefault(r => r.Id == id) is { } row)
+        {
+            view.Update(row, Controller.IsEnabled, line);
+        }
+    }
 
     /// <summary>The window closed: the list's calls and notifications are dropped.</summary>
     public void Close()
@@ -165,8 +210,8 @@ public sealed partial class AccountListSection : UserControl
             var group = Controller.IsEnabled;
             KeyedListSync.Apply(
                 Rows, rows, r => r.Id, v => v.Id,
-                r => new AccountRowView(r, group),
-                (v, r) => v.Update(r, group));
+                r => new AccountRowView(r, group, UsageOf(r.Id)),
+                (v, r) => v.Update(r, group, UsageOf(r.Id)));
             // The key is the truth: a moved row may have lost its selection.
             var selected = Controller.SelectedId is { } id ? Rows.FirstOrDefault(v => v.Id == id) : null;
             if (!ReferenceEquals(AccountList.SelectedItem, selected))
@@ -179,6 +224,11 @@ public sealed partial class AccountListSection : UserControl
             syncing = false;
         }
     }
+
+    private string UsageOf(AccountId id) => usage.TryGetValue(id, out var line) ? line : "";
+
+    private void UpdateEmptyRow() =>
+        EmptyRow.Visibility = Controller.IsEmpty && !otherRows ? Visibility.Visible : Visibility.Collapsed;
 
     // The moved row takes the focus again (accounts_reorder.go: holding
     // Ctrl+Down keeps walking it down), once the list has laid it out.
@@ -251,14 +301,42 @@ public sealed partial class AccountListSection : UserControl
         }
     }
 
-    // accounts_page.go signInAccount: the wizard's browser sign-in.
+    // accounts_page.go signInAccount: the wizard's browser sign-in; an AI
+    // provider account's dialog on Replace Key… (its key was refused).
     private void OnSignInClick(object sender, RoutedEventArgs e)
     {
-        if (RowAccount(sender) is { } account)
+        if (RowAccount(sender) is not { } account)
         {
-            AccountWizardWindow.Show(state, window, account, signIn: true, done: (_, config) => Controller.AccountSaved(config));
+            return;
         }
+        if (account.Config.ProtocolKind == AccountKind.Ai)
+        {
+            EditAiAccount(account, replaceKey: true);
+            return;
+        }
+        AccountWizardWindow.Show(state, window, account, signIn: true, done: (_, config) => Controller.AccountSaved(config));
     }
+
+    /// <summary>
+    /// ai_editors.go editAIAccount: the dialog of AI provider account
+    /// <paramref name="account"/> over this window, on Replace Key… for
+    /// <paramref name="replaceKey"/>; the page reloads once it saved and names it.
+    /// </summary>
+    internal void EditAiAccount(Account account, bool replaceKey) =>
+        AiAccountWindow.Show(state, window, account.Config.Ai?.Provider ?? AiProvider.OpenAiCompatible, account, replaceKey,
+            done: (_, config) => Controller.AccountSaved(AiNamed(config)));
+
+    /// <summary>
+    /// An AI provider account's configuration as the toasts name it: it has
+    /// no address, so its name, else its provider's (macOS addAIAccount).
+    /// </summary>
+    internal static AccountConfig AiNamed(AccountConfig config) =>
+        config with
+        {
+            Email = config.Name.Length > 0
+                ? config.Name
+                : Malachi.Core.Assistants.Assistant.ProviderName(config.Ai?.Provider ?? AiProvider.OpenAiCompatible),
+        };
 
     // accounts_page.go editAccount / presentEdit: what edits the row's kind,
     // over this window; once it saved, the page reloads and says so.
@@ -278,6 +356,9 @@ public sealed partial class AccountListSection : UserControl
                 break;
             case Integrations.Editor.MailWizard:
                 AccountWizardWindow.Show(state, window, account, done: (_, config) => Controller.AccountSaved(config));
+                break;
+            case Integrations.Editor.Ai:
+                EditAiAccount(account, replaceKey: false);
                 break;
             case Integrations.Editor.Eway:
                 // macOS editAccount .eway: an account without an address

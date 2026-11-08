@@ -212,7 +212,22 @@ public partial class App : Application
                 // did not link yet; past the point of no return only, so an
                 // abandoned Quit leaves it running.
                 EndBoardReply = () => s.BoardReply.CancelAndCleanUpAsync(),
-                StopDaemon = s.Connection.StopAsync,
+                // After the triage and the suggested reply: the panel's
+                // conversation ends and the daemon gets every sessionStop of
+                // its assistant (ai accounts) while the connection stands,
+                // at most 2 s (ui/main.go WaitAPISessions); then the
+                // connection closes and the daemon stops.
+                StopDaemon = async () =>
+                {
+                    try
+                    {
+                        await s.StopAssistantSessionsAsync();
+                    }
+                    finally
+                    {
+                        await s.Connection.StopAsync();
+                    }
+                },
                 Release = () =>
                 {
                     s.Dispose();

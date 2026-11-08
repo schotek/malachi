@@ -167,7 +167,7 @@ public sealed partial class MainWindow
         }
         var request = state.NewAssistantRequest();
         request.Consent = () => state.AskAssistantConsentAsync(this);
-        searcher = new SearchConversion(request) { Profile = () => state.CurrentProfile };
+        searcher = new SearchConversion(request);
         return searcher;
     }
 

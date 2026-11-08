@@ -4,9 +4,10 @@
 // Port of macos/Sources/MalachiCore/Controllers/MCPRegistrationController.swift
 // (MCPCallFailure, reason, toast(registering:)); GTK:
 // ui/internal/mcpsetup/mcpsetup.go (ExitError, ErrNoClient) and
-// ui/internal/window/preferences.go (bindMCP's toasts).
+// ui/internal/window/claude_integration.go (bindMCP's toasts).
 
 using Malachi.Core.I18n;
+using Malachi.Core.Model;
 
 namespace Malachi.Core.Controllers;
 
@@ -28,18 +29,31 @@ internal abstract record McpCallFailure
 
     /// <summary>
     /// The toast for a failed install (<paramref name="registering"/>) or
-    /// uninstall. The msgids are the GTK page's.
+    /// uninstall by a controller for <paramref name="client"/> (null: every
+    /// app). The msgids are the GTK dialog's: the app's own "not installed"
+    /// sentence when the app the call named is not there
+    /// (<see cref="Integrations.ClaudeAppTexts.NotInstalled"/>), else the
+    /// bridge's reason; GTK has no controller without a client, whose "no
+    /// Claude app found" is shown as that reason.
     /// </summary>
-    public string Toast(bool registering) => this switch
+    public string Toast(bool registering, string? client = null) => this switch
     {
-        NoClaudeApp => L10n.T("No Claude app was found on this computer"),
+        NoClaudeApp when Integrations.ClaudeAppText(KindOf(client)) is { } app => app.NotInstalled,
         // TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
         _ when registering => L10n.T("The MCP bridge could not be registered: %s", Reason),
         // TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
         _ => L10n.T("The MCP bridge could not be unregistered: %s", Reason),
     };
 
-    /// <summary><c>install</c> found neither Claude app.</summary>
+    // The local integration of the Claude app client names.
+    private static Integrations.LocalKind KindOf(string? client) => client switch
+    {
+        McpStatus.ClientDesktop => Integrations.LocalKind.ClaudeDesktop,
+        McpStatus.ClientCode => Integrations.LocalKind.ClaudeCode,
+        _ => Integrations.LocalKind.None,
+    };
+
+    /// <summary><c>install</c> found neither Claude app, or not the one <c>--client</c> named.</summary>
     public sealed record NoClaudeApp : McpCallFailure;
 
     /// <summary>

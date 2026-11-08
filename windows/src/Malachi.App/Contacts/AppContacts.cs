@@ -17,7 +17,7 @@
 // application: Write Email (a compose window), Show Mail (the main
 // window's search over every account), Allow… (the re-sign-in with the
 // contacts scope, in the browser) and Preferences → Contacts. The window
-// has no keyboard shortcut (the owner's answer 5): the "…" menus' Contacts
+// has no keyboard shortcut: the "…" menus' Contacts
 // and the chips' Show Contact open it. The contact photos of the avatars
 // (ContactPhotos, docs/plans/address-book.md §9) are made here too: one
 // ContactsPhotosController for the application, told every

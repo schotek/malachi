@@ -2,11 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Assistant/AssistantProfile.swift
-// (Assistant.Profile, Assistant.AccountNote); Go:
-// ui/internal/assistant/profile.go (Profile, AccountNote, ProfileFrom,
-// Empty, Global, For). Windows: Swift's Assistant.Profile is UserProfile,
-// a record of its own, because Assistant is a static class here; its
-// AccountNote is ProfileNote, to stay apart from Api.ProfileAccountNote.
+// (Assistant.Profile, Assistant.AccountNote) as it was before the prompts
+// moved to the daemon; Go: ui/internal/assistant/profile.go (Profile,
+// AccountNote, ProfileFrom, Empty). The daemon appends the profile to every
+// prompt it builds (docs/api.md §4.18 assistant.prompt), so this is no
+// longer for the prompts: it keeps the names and addresses of the notes'
+// accounts, which the panel's proposal cards and Preferences → AI → About
+// You show (Swift reads them from ProfileStore.accounts). Windows: Swift's
+// Assistant.Profile is UserProfile, a record of its own, because Assistant
+// is a static class here; its AccountNote is ProfileNote, to stay apart from
+// Api.ProfileAccountNote.
 
 using System;
 using System.Collections.Generic;
@@ -26,24 +31,15 @@ namespace Malachi.Core.Assistants;
 public sealed record ProfileNote(string AccountId, string Name, string Email, string Note);
 
 /// <summary>
-/// assistant.Profile: the user's profile with the names of its accounts, for
-/// the prompts (<see cref="Assistant.WithProfile"/>).
+/// assistant.Profile: the user's profile with the names of its accounts.
 /// </summary>
 /// <param name="Text">What the user wrote about themselves.</param>
 /// <param name="Gender">The gender they write in.</param>
 /// <param name="Accounts">The notes of the accounts, in the profile's order.</param>
 public sealed record UserProfile(string Text, ProfileGender Gender, IReadOnlyList<ProfileNote> Accounts)
 {
-    /// <summary>No profile: nothing goes into a prompt.</summary>
+    /// <summary>No profile.</summary>
     public static UserProfile Empty { get; } = new("", ProfileGender.Unset, []);
-
-    /// <summary>Profile.Empty: the profile adds nothing to a prompt.</summary>
-    public bool IsEmpty =>
-        Assistant.GoTrimSpace(Text).Length == 0 && Assistant.GenderSentence(Gender).Length == 0 && Notes.Count == 0;
-
-    /// <summary>The notes that are not blank.</summary>
-    internal IReadOnlyList<ProfileNote> Notes =>
-        [.. Accounts.Where(n => Assistant.GoTrimSpace(n.Note).Length > 0)];
 
     /// <summary>
     /// assistant.ProfileFrom: the daemon's profile with the names and
@@ -61,15 +57,5 @@ public sealed record UserProfile(string Text, ProfileGender Gender, IReadOnlyLis
             return new ProfileNote(n.AccountId.Value ?? "", a?.Config.Name ?? "", a?.Config.Email ?? "", n.Note);
         });
         return new UserProfile(p.Text, p.Gender, [.. notes]);
-    }
-
-    /// <summary>Profile.Global: without account notes.</summary>
-    public UserProfile Global() => this with { Accounts = [] };
-
-    /// <summary>Profile.For: the notes of the named accounts only, in the profile's order.</summary>
-    public UserProfile For(params string[] accountIds)
-    {
-        ArgumentNullException.ThrowIfNull(accountIds);
-        return this with { Accounts = [.. Accounts.Where(n => accountIds.Any(id => id.Length > 0 && id == n.AccountId))] };
     }
 }

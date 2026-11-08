@@ -188,7 +188,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
             pane.composeAssistantBar.show(text: "", running: false)
         }
         let available = state.assistant.canRunInApp
-        pane.composeAssistantBar.setProvider(chatGPT: state.settings.assistantProvider == .chatgpt)
+        pane.composeAssistantBar.setProvider(brand: assistantBrand)
         pane.composeAssistantBar.isHidden = !available || isComment
         if let toolbar = window?.toolbar {
             toolbarDelegate.setAssistant(visible: available, in: toolbar)
@@ -200,21 +200,24 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
         }
     }
 
-    /// The bar's Write: the instruction, the user's text and the original
-    /// to the assistant as data; the answer is previewed in the bar.
+    /// The brand the assistant bar names: the provider in effect
+    /// (`AssistantProvider.name`: ChatGPT, an `ai` account), else Claude.
+    private var assistantBrand: String {
+        guard let provider = state.selectedProvider else { return ComposeAssistantPrompt.claudeBrand }
+        return provider is CodexProvider ? ComposeAssistantPrompt.chatGPTBrand : provider.name
+    }
+
+    /// The bar's Write (GTK assistantpanel.Writer): the instruction, the
+    /// subject, the user's text and the prepared original go to the
+    /// assistant as the daemon's prompt of purpose write (`WriteInput`,
+    /// with the note of the account the window writes from), and the
+    /// answer, cleaned, is previewed in the bar. A request the daemon
+    /// refuses (nothing to work from, too long) fails with its reason.
     private func writeWithAssistant(_ instruction: String) {
         guard state.assistant.canRunInApp, !isComment, !closing, editor.isReady else { return }
         let bar = pane.composeAssistantBar
         pane.flushEditor { [weak self] in
             guard let self, !self.closing else { return }
-            let message: String
-            do {
-                message = try ComposeAssistantPrompt.message(kind: self.params.kind, instruction: instruction,
-                    subject: self.pane.subject, own: self.editor.text(), quote: self.pane.quotedText)
-            } catch {
-                bar.show(text: "", running: false, failure: Assistant.stoppedText(String(describing: error)))
-                return
-            }
             if self.writingRequest == nil {
                 let request = AssistantRequest(settings: self.state.settings, locator: self.state.claudeCode)
                 self.state.configureRequest(request)
@@ -222,21 +225,20 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
                 self.writingRequest = request
             }
             bar.show(text: "", running: true)
-            let system = Assistant.withProfile(
-                ComposeAssistantPrompt.system, self.state.profile.profile.for(self.pane.account.id.rawValue))
-            self.writingRequest?.start(systemPrompt: system, message: message,
+            let input = PromptInput(write: WriteInput(
+                mode: ComposeAssistantPrompt.writeMode(self.params.kind), instruction: instruction,
+                subject: self.pane.subject, own: self.editor.text(), quote: self.pane.quotedText))
+            self.writingRequest?.start(purpose: .write, input: input, noteAccountID: self.pane.account.id,
                 onText: { text in
                     bar.show(text: Assistant.cleanRewrite(text), running: true)
                 }, completion: { [weak self] outcome in
                     guard let self, !self.closing else { return }
-                    switch outcome {
-                    case .answered(let text, _):
-                        let answer = Assistant.cleanRewrite(text)
-                        bar.show(text: answer, running: false,
-                            failure: answer.isEmpty ? Assistant.stoppedText("the answer is empty") : "")
-                    case .failed(let failure):
-                        bar.show(text: "", running: false, failure: failure.text)
-                    case .declined:
+                    switch ComposeRewriteController.answerState(outcome) {
+                    case .done(let answer):
+                        bar.show(text: answer, running: false)
+                    case .failed(let line):
+                        bar.show(text: "", running: false, failure: line)
+                    case .idle, .running:
                         bar.show(text: "", running: false)
                     }
                 })
@@ -255,12 +257,14 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
         openingRewrite = true
         Task { @MainActor [weak self] in
             guard let self else { return }
-            if !self.state.settings.selectedAssistantConsent {
+            // The key for Claude Code and ChatGPT, the account's own
+            // consent for an `ai` account (`AppState.hasAssistantConsent`).
+            if !self.state.hasAssistantConsent {
                 guard await self.askConsent() else {
                     self.openingRewrite = false
                     return
                 }
-                self.state.settings.selectedAssistantConsent = true
+                self.state.recordAssistantConsent()
             }
             self.editor.rewriteTarget(attribution: self.params.attribution) { [weak self] target in
                 guard let self else { return }
@@ -287,10 +291,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
         let c = ComposeRewriteController(request: request)
         // The note of the account the window writes from, as it is when
         // the rewrite starts.
-        c.profile = { [weak self] in
-            guard let self else { return Assistant.Profile() }
-            return self.state.profile.profile.for(self.pane.account.id.rawValue)
-        }
+        c.account = { [weak self] in self?.pane.account.id }
         rewrite = c
         return c
     }

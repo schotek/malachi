@@ -2,18 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Controllers/SearchConversion.swift
-// (SearchConversion: today, running, convert, cancel, outcome); GTK:
-// ui/internal/assistantpanel/oneshot.go (Searcher, NewSearcher, Today,
-// Running, Convert, Cancel, searchOutcome). Swift's completion is an
-// Action parameter. Today's default is AssistantPanelController.LocalDate
-// (Swift's localDate) on the request's clock; the failure of words that
-// are too long is reported after the caller's turn, as Swift's Task does,
-// through the controller infrastructure (docs/windows-port.md §7.2).
-// Dispose (the window closed: Cancel, and that failure dropped) is Windows'
-// own.
+// (SearchConversion: running, convert, cancel, outcome); GTK:
+// ui/internal/assistantpanel/oneshot.go (Searcher, NewSearcher, Running,
+// Convert, Cancel, searchOutcome). Swift's completion is an Action
+// parameter. Dispose (the window closed: Cancel) is Windows' own.
 
 using System;
-using System.Threading.Tasks;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Controllers.Infrastructure;
 
@@ -21,10 +16,9 @@ namespace Malachi.Core.Controllers;
 
 /// <summary>
 /// The search in the user's own words (the In App target) without the
-/// search field: the typed words go to the user's Claude Code
-/// (<see cref="Assistant.SearchMessage"/> under
-/// <see cref="Assistant.SearchSystemPrompt"/>, the answer shaped by
-/// <see cref="Assistant.SearchSchema"/>, one <see cref="AssistantRequest"/>),
+/// search field: the typed words go to the user's assistant (the daemon's
+/// prompt of purpose search, <see cref="SearchInput"/>, the answer shaped by
+/// its schema, one <see cref="AssistantRequest"/>),
 /// and the query of its answer (<see cref="Assistant.ParseSearchQuery"/> of
 /// the result's <c>structured_output</c>, or of its text when Claude Code
 /// gave none) is what the field then searches for.
@@ -42,26 +36,16 @@ public sealed partial class SearchConversion : IDisposable
 
     /// <summary>A conversion through <paramref name="request"/> (its consent hook is the window's).</summary>
     /// <param name="request">The request that asks.</param>
-    /// <param name="pending">Counts the deferred failure of <see cref="Convert"/>; one of its own when null.</param>
+    /// <param name="pending">The controller's background work; one of its own when null.</param>
     public SearchConversion(AssistantRequest request, PendingWork? pending = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         Request = request;
         scope = new ControllerScope(pending);
-        Today = () => AssistantPanelController.LocalDate(request.Time);
     }
 
     /// <summary>The conversion's request.</summary>
     public AssistantRequest Request { get; }
-
-    /// <summary>The date for the system prompt, YYYY-MM-DD: <see cref="AssistantPanelController.LocalDate"/> on the request's clock by default.</summary>
-    public Func<string> Today { get; set; }
-
-    /// <summary>
-    /// The user's profile; the search gets it without account notes
-    /// (<see cref="UserProfile.Global"/>). Empty by default.
-    /// </summary>
-    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
 
     /// <summary>A conversion is under way.</summary>
     public bool Running => Request.Running;
@@ -92,40 +76,20 @@ public sealed partial class SearchConversion : IDisposable
     /// Asks for the query of <paramref name="words"/>. False, and nothing
     /// happens, when there are no words; otherwise
     /// <paramref name="completion"/> is called once, later (also for words
-    /// that are too long), unless the conversion is cancelled.
+    /// the daemon refuses as too long), unless the conversion is cancelled.
     /// </summary>
     public bool Convert(string words, Action<Outcome> completion)
     {
         ArgumentNullException.ThrowIfNull(words);
         ArgumentNullException.ThrowIfNull(completion);
-        string message;
-        try
-        {
-            message = Assistant.SearchMessage(words);
-        }
-        catch (AssistantException e) when (e.Kind == AssistantError.NoWords)
+        if (Assistant.TrimmedString(words).Length == 0)
         {
             return false;
         }
-        catch (AssistantException e)
-        {
-            Request.Cancel();
-            var failed = new Outcome.Failed(Assistant.SearchFailedText(e.Message));
-            scope.Run(_ =>
-            {
-                if (!scope.IsClosed)
-                {
-                    scope.Guard(() => completion(failed));
-                }
-                return Task.CompletedTask;
-            });
-            return true;
-        }
         Request.Start(
-            Assistant.WithProfile(Assistant.SearchSystemPrompt(Today()), Profile().Global()),
-            message,
-            outcome => completion(OutcomeOf(outcome)),
-            jsonSchema: Assistant.SearchSchema);
+            PromptPurpose.Search,
+            new PromptInput { Search = new SearchInput { Words = words } },
+            outcome => completion(OutcomeOf(outcome)));
         return true;
     }
 

@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Normalized session from docs/chatgpt-integration.md §3, reusing the event
-// semantics of ui/internal/assistant/events.go and MalachiCore/Assistant.
+// semantics of ui/internal/assistant/events.go and MalachiCore/Assistant;
+// a turn's input is the daemon's PromptInput, as in
+// macos/Sources/MalachiCore/ChatGPT/AssistantProvider.swift (AssistantSession)
+// and ui/internal/assistantpanel/provider.go (Session.Submit).
 
 using System;
 using System.Collections.Generic;
@@ -26,8 +29,12 @@ public interface IAssistantSession
     /// <summary>Whether another turn can be submitted.</summary>
     bool IsRunning { get; }
 
-    /// <summary>Submits exactly once; an active turn is an error, never replayed.</summary>
-    Task SubmitAsync(string input, CancellationToken cancellationToken);
+    /// <summary>
+    /// Sends one turn: the panel's text with its context, or the structured
+    /// input of a one-shot purpose. Submits exactly once; an active turn is
+    /// an error, never replayed.
+    /// </summary>
+    Task SubmitAsync(Api.PromptInput input, CancellationToken cancellationToken);
 
     /// <summary>Interrupts through the protocol, then ends the owned process tree.</summary>
     void Terminate();

@@ -37,12 +37,21 @@ const Timeout = 15 * time.Second
 const reasonLimit = 200
 
 // noClientPrefix starts the bridge's one-line reason when neither Claude
-// app is installed (part of the malachi-mcp install contract).
+// app is installed, or an app install --client named is not (part of the
+// malachi-mcp install contract).
 const noClientPrefix = "no Claude app found"
 
 // ErrNoClient reports that the bridge found neither Claude Desktop nor
-// Claude Code, so there is nothing to register with.
+// Claude Code, or not the app it was asked to register with, so there is
+// nothing to register with.
 var ErrNoClient = errors.New("no Claude app found")
+
+// The client ids of the bridge's report (Client.ID), which --client of
+// install and uninstall takes.
+const (
+	ClientDesktop = "claude-desktop"
+	ClientCode    = "claude-code"
+)
 
 // Client is one Claude app the bridge knows how to register with.
 type Client struct {
@@ -69,7 +78,7 @@ type Status struct {
 }
 
 // Registered says whether the bridge is registered with at least one
-// Claude app, which is what a single on/off switch shows.
+// Claude app: what the Assistant as a whole needs (assistant.Shown).
 func (s Status) Registered() bool {
 	for _, c := range s.Clients {
 		if c.Registered {
@@ -77,6 +86,25 @@ func (s Status) Registered() bool {
 		}
 	}
 	return false
+}
+
+// Client is the report's entry for client id (ClientDesktop,
+// ClientCode), and whether the report has one.
+func (s Status) Client(id string) (Client, bool) {
+	for _, c := range s.Clients {
+		if c.ID == id {
+			return c, true
+		}
+	}
+	return Client{}, false
+}
+
+// RegisteredIn says whether the bridge is registered with client id: what
+// that app's own Register switch shows. False for a client the report
+// does not list.
+func (s Status) RegisteredIn(id string) bool {
+	c, _ := s.Client(id)
+	return c.Registered
 }
 
 // ExitError is a bridge run that ended with a non-zero status. Error is the
@@ -129,16 +157,29 @@ func Query(ctx context.Context, bridge string) (Status, error) {
 	return run(ctx, bridge, "status")
 }
 
-// Install registers the bridge with every Claude app present and reports
-// the result. errors.Is(err, ErrNoClient) means none was found.
-func Install(ctx context.Context, bridge string) (Status, error) {
-	return run(ctx, bridge, "install")
+// Install registers the bridge with the Claude apps named by clients
+// (ClientDesktop, ClientCode; --client of the bridge), or with every
+// Claude app present when none is named, and reports the result (always
+// both apps). errors.Is(err, ErrNoClient) means none was found, or a named
+// one is not present.
+func Install(ctx context.Context, bridge string, clients ...string) (Status, error) {
+	return run(ctx, bridge, "install", clients...)
 }
 
-// Uninstall removes the bridge's registration from every Claude app and
-// reports the result.
-func Uninstall(ctx context.Context, bridge string) (Status, error) {
-	return run(ctx, bridge, "uninstall")
+// Uninstall removes the bridge's registration from the Claude apps named
+// by clients, or from every Claude app when none is named, and reports
+// the result.
+func Uninstall(ctx context.Context, bridge string, clients ...string) (Status, error) {
+	return run(ctx, bridge, "uninstall", clients...)
+}
+
+// Set registers the bridge with client (ClientDesktop, ClientCode), or
+// removes it there, and nowhere else: one app's Register switch.
+func Set(ctx context.Context, bridge, client string, registered bool) (Status, error) {
+	if registered {
+		return Install(ctx, bridge, client)
+	}
+	return Uninstall(ctx, bridge, client)
 }
 
 // waitDelay bounds the wait for the bridge's pipes after it was killed on
@@ -146,9 +187,14 @@ func Uninstall(ctx context.Context, bridge string) (Status, error) {
 // so the tests can shorten it.
 var waitDelay = 2 * time.Second
 
-// run executes one subcommand with --json and parses the report on stdout.
-func run(ctx context.Context, bridge, sub string) (Status, error) {
-	cmd := exec.CommandContext(ctx, bridge, sub, "--json")
+// run executes one subcommand with --json (and --client for each of
+// clients) and parses the report on stdout.
+func run(ctx context.Context, bridge, sub string, clients ...string) (Status, error) {
+	args := []string{sub, "--json"}
+	for _, c := range clients {
+		args = append(args, "--client", c)
+	}
+	cmd := exec.CommandContext(ctx, bridge, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

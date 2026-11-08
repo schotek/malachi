@@ -72,8 +72,17 @@ func New(log *slog.Logger) *Editor {
 	b := data.Builder("editor.ui")
 	e := &Editor{
 		WebView: b.GetObject("editor_view").Cast().(*webkit.WebView),
-		ucm:     b.GetObject("editor_ucm").Cast().(*webkit.UserContentManager),
 		log:     log.With("component", "editor"),
+	}
+	// The view's own manager, never the builder's object: they differ
+	// when GtkBuilder dropped the construct-only property (editor.blp
+	// says when), and a handler on the orphan never reaches the page.
+	e.ucm = e.WebView.UserContentManager()
+	if built, ok := b.GetObject("editor_ucm").Cast().(*webkit.UserContentManager); !ok || coreglib.InternObject(built).Native() != coreglib.InternObject(e.ucm).Native() {
+		e.log.Warn("editor.ui: the user content manager was not applied to the view; check the property order of editor.blp")
+	}
+	if s := e.WebView.NetworkSession(); s == nil || !s.IsEphemeral() {
+		e.log.Warn("editor.ui: the network session is not ephemeral; check the property order of editor.blp")
 	}
 
 	// Bridge: the handler must exist before the document loads.

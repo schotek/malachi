@@ -42,13 +42,14 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     private let toasts = WizardToastPresenter()
 
     /// Opens the settings, or brings the open window to the front.
-    /// `bridge` is the path of the bundled `malachi-mcp` for the AI page
-    /// (`Paths.mcpBridge`; nil when there is none beside the application),
-    /// `assistant` what the page's Assistant group reports on (nil leaves
-    /// the choice of the Claude app without its problem), `claudeDesktop`
-    /// and `confirmRestart` the offer to restart Claude Desktop around a
-    /// change of "Register with Claude" (nil: the change is written at
-    /// once, as in GTK).
+    /// `bridge` is the path of the bundled `malachi-mcp` for the
+    /// Integrations page's Claude Desktop and Claude Code sheets (`Paths.mcpBridge`; nil when there
+    /// is none beside the application), `assistant` what the AI page's
+    /// Assistant group and the Integrations page's local rows report on
+    /// (nil leaves the choice of the Claude app without its problem),
+    /// `claudeDesktop` and `confirmRestart` the offer to restart Claude
+    /// Desktop around a change of its "Register with Claude" (nil: the change
+    /// is written at once, as in GTK).
     /// `triage` is the board's triage for the AI page's Board group (nil:
     /// none) and `confirmTriage` its consent sheet.
     /// `confirmRemoval` renders the "Remove this account?" alert,
@@ -123,9 +124,12 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         }
         appearancePane.configure(settings: settings)
         aiPane.configure(
-            bridge: bridge, settings: settings, assistant: assistant, claudeDesktop: claudeDesktop,
-            confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage, client: client
+            settings: settings, assistant: assistant, triage: triage, confirmTriage: confirmTriage, client: client
         ) { text in toasts.show(text) }
+        // The Integrations page's local rows and their dialogs (Register
+        // with Claude, Claude Code, ChatGPT) work over the same state.
+        integrationsPane.configure(
+            bridge: bridge, settings: settings, assistant: assistant, claudeDesktop: claudeDesktop, confirmRestart: confirmRestart)
         _ = generalPane.view
         securityPane.toast = { text in toasts.show(text) }
 
@@ -224,7 +228,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
 /// toolbar-style tab view otherwise snaps to the page's preferred size).
 @MainActor
 final class PrefsTabViewController: NSTabViewController {
-    static let windowTitle = "Settings" // macOS-only string
+    static let windowTitle = L10n.T("Settings")
 
     override func tabView(_ tabView: NSTabView, willSelect tabViewItem: NSTabViewItem?) {
         // Only once the window shows: before that the bounds are the tab

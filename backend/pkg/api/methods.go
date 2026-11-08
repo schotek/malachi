@@ -157,6 +157,14 @@ const (
 	MethodAssistantProfilePropose = "assistant.profilePropose"
 	MethodAssistantProfileResolve = "assistant.profileResolve"
 
+	// The daemon's assistant over ai accounts (docs/api.md §4.18).
+	MethodAssistantPrompt         = "assistant.prompt"
+	MethodAssistantSessionStart   = "assistant.sessionStart"
+	MethodAssistantSessionSend    = "assistant.sessionSend"
+	MethodAssistantSessionStop    = "assistant.sessionStop"
+	MethodAssistantProviderModels = "assistant.providerModels"
+	MethodAssistantUsage          = "assistant.usage"
+
 	// Address books and contacts (docs/api.md §4.19).
 	MethodAddressBookList = "addressBook.list"
 	MethodAddressBookSet  = "addressBook.set"
@@ -208,6 +216,8 @@ const (
 	NotifyInvitationsChanged = "notify.invitationsChanged"
 
 	NotifyAssistantProfileChanged = "notify.assistantProfileChanged"
+	NotifyAssistantEvent          = "notify.assistantEvent"
+	NotifyAssistantUsageChanged   = "notify.assistantUsageChanged"
 
 	NotifyContactsChanged = "notify.contactsChanged"
 
@@ -253,6 +263,8 @@ var AllMethods = []string{
 	MethodAccountDetectEway,
 	MethodCrmLookup, MethodCrmSearch, MethodCrmSave, MethodCrmRemove,
 	MethodAssistantProfileGet, MethodAssistantProfileSet, MethodAssistantProfilePropose, MethodAssistantProfileResolve,
+	MethodAssistantPrompt, MethodAssistantSessionStart, MethodAssistantSessionSend, MethodAssistantSessionStop,
+	MethodAssistantProviderModels, MethodAssistantUsage,
 	MethodAddressBookList, MethodAddressBookSet,
 	MethodContactList, MethodContactGet, MethodContactLookup,
 	MethodContactCreate, MethodContactUpdate, MethodContactDelete,
@@ -269,7 +281,7 @@ var AllNotifications = []string{
 	NotifyNewMessage, NotifySyncState, NotifyAuthRequired, NotifyAccountsChanged, NotifyMessagesChanged,
 	NotifyBoardChanged, NotifyDraftsChanged,
 	NotifyCalendarChanged, NotifyCalendarState, NotifyEventAlert, NotifyInvitationsChanged,
-	NotifyAssistantProfileChanged,
+	NotifyAssistantProfileChanged, NotifyAssistantEvent, NotifyAssistantUsageChanged,
 	NotifyContactsChanged,
 	NotifyUpdateChanged,
 	NotifyRulesChanged,

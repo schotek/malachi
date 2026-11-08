@@ -8,6 +8,8 @@
 // contract: docs/api.md §5. notify.contactsChanged
 // (ContactsChangedNotification, ContactsBook.cs) is a case here, where Swift
 // decodes it beside DaemonNotification (ContactsChangedNotification.decode).
+// notify.assistantEvent and notify.assistantUsageChanged carry the records
+// of Ai.cs (ai.go).
 //
 // Notifications, daemon to client. Best-effort: a client that misses one
 // resynchronises through sync.status, folder.list and message.list.
@@ -183,6 +185,21 @@ public abstract record DaemonNotification
     public sealed record AssistantProfileChanged : DaemonNotification;
 
     /// <summary>
+    /// <c>notify.assistantEvent</c>: an event of a session of the daemon's
+    /// assistant (<see cref="global::Malachi.Core.Api.AssistantEvent"/>,
+    /// Ai.cs); only the connection whose session it is gets it.
+    /// </summary>
+    /// <param name="Payload">The event.</param>
+    public sealed record AssistantEvent(global::Malachi.Core.Api.AssistantEvent Payload) : DaemonNotification;
+
+    /// <summary>
+    /// <c>notify.assistantUsageChanged</c>: an ai account's usage of today
+    /// changed (<see cref="AssistantUsageChangedNotification"/>, Ai.cs).
+    /// </summary>
+    /// <param name="Payload">The account.</param>
+    public sealed record AssistantUsageChanged(AssistantUsageChangedNotification Payload) : DaemonNotification;
+
+    /// <summary>
     /// <c>notify.contactsChanged</c>: the contacts of some books changed
     /// (<see cref="ContactsChangedNotification"/>, ContactsBook.cs); absent
     /// params read as any book.
@@ -260,6 +277,8 @@ public abstract record DaemonNotification
             API.Notify.EventAlert => new EventAlert(Params(method, parameters, ApiJsonContext.Wire.EventAlertNotification)),
             API.Notify.InvitationsChanged => new InvitationsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.InvitationsChangedNotification)),
             API.Notify.AssistantProfileChanged => new AssistantProfileChanged(),
+            API.Notify.AssistantEvent => new AssistantEvent(Params(method, parameters, ApiJsonContext.Wire.AssistantEvent)),
+            API.Notify.AssistantUsageChanged => new AssistantUsageChanged(Params(method, parameters, ApiJsonContext.Wire.AssistantUsageChangedNotification)),
             API.Notify.ContactsChanged => new ContactsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.ContactsChangedNotification)),
             API.Notify.UpdateChanged => new UpdateChanged(),
             API.Notify.RulesChanged => new RulesChanged(),
@@ -271,7 +290,8 @@ public abstract record DaemonNotification
     private static bool HasParams(string method) =>
         method is API.Notify.NewMessage or API.Notify.SyncState or API.Notify.AuthRequired or API.Notify.MessagesChanged
             or API.Notify.BoardChanged or API.Notify.DraftsChanged or API.Notify.CalendarChanged or API.Notify.CalendarState
-            or API.Notify.EventAlert or API.Notify.InvitationsChanged or API.Notify.ContactsChanged;
+            or API.Notify.EventAlert or API.Notify.InvitationsChanged or API.Notify.ContactsChanged
+            or API.Notify.AssistantEvent or API.Notify.AssistantUsageChanged;
 
     // notify.boardChanged's params are all optional: absent or null = any account.
     private static BoardChangedNotification BoardChangedParams(string method, JsonElement? parameters) =>

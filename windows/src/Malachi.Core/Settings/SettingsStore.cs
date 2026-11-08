@@ -87,11 +87,11 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.MonospacePlainText, "monospace-plain-text", "b", false),
         new(SettingsKey.TextZoom, "text-zoom", "i", 100, minimum: TextZoomMin, maximum: TextZoomMax),
         new(SettingsKey.AssistantMenu, "assistant-menu", "b", true),
-        new(SettingsKey.AssistantTarget, "assistant-target", "s", "desktop", choices: Nicks<AssistantTarget>.All),
+        new(SettingsKey.AssistantTarget, "assistant-target", "s", "app", choices: Nicks<AssistantTarget>.All),
         new(SettingsKey.AssistantModel, "assistant-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
         new(SettingsKey.AssistantClaudePath, "assistant-claude-path", "s", ""),
         new(SettingsKey.AssistantConsent, "assistant-consent", "b", false),
-        new(SettingsKey.AssistantProvider, "assistant-provider", "s", "claude", choices: Nicks<AssistantProviderID>.All),
+        new(SettingsKey.AssistantProvider, "assistant-provider", "s", Assistant.ProviderClaude),
         new(SettingsKey.AssistantCodexPath, "assistant-codex-path", "s", ""),
         new(SettingsKey.AssistantChatGptModel, "assistant-chatgpt-model", "s", ""),
         new(SettingsKey.AssistantChatGptConsentVersion, "assistant-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
@@ -392,11 +392,27 @@ public sealed class SettingsStore : IDisposable
         set => SetBoolean(SettingsKey.AssistantConsent, value);
     }
 
-    /// <summary>The in-app provider; external Claude hand-offs keep their own target.</summary>
-    public AssistantProviderID AssistantProvider
+    /// <summary>
+    /// The provider of the assistant in the app (Go <c>AssistantProvider</c>,
+    /// Swift <c>assistantProvider</c>; a string since docs/plans/ai-api.md
+    /// D14): <see cref="Assistant.ProviderClaude"/>,
+    /// <see cref="Assistant.ProviderChatGpt"/> or the id of an AI provider
+    /// account ("acc_…"); an empty or unknown value reads as "claude"
+    /// (<see cref="Assistant.NormalizeProvider"/>), and setting anything else
+    /// is ignored (Go <c>SetAssistantProvider</c>).
+    /// <see cref="Assistant.SourceOf"/> says which form it is. External
+    /// Claude hand-offs keep their own target.
+    /// </summary>
+    public string AssistantProvider
     {
-        get => GetEnum<AssistantProviderID>(SettingsKey.AssistantProvider);
-        set => SetEnum(SettingsKey.AssistantProvider, value);
+        get => Assistant.NormalizeProvider(GetString(SettingsKey.AssistantProvider));
+        set
+        {
+            if (value is Assistant.ProviderClaude or Assistant.ProviderChatGpt || Assistant.IsAccountProvider(value))
+            {
+                SetString(SettingsKey.AssistantProvider, value);
+            }
+        }
     }
 
     /// <summary>The native Codex executable; empty uses discovery.</summary>
@@ -448,6 +464,69 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetInt32(SettingsKey.BoardChatGptConsentVersion);
         set => SetInt32(SettingsKey.BoardChatGptConsentVersion, value);
+    }
+
+    /// <summary>
+    /// The assistant's consent of the provider in effect (Swift
+    /// <c>selectedAssistantConsent</c>): Claude Code's
+    /// <see cref="AssistantConsent"/>, ChatGPT's current disclosure version;
+    /// an ai account's consent is the account's own in the daemon
+    /// (<see cref="IAssistantProvider.HasConsent"/>), so it reads false here
+    /// and a write changes nothing.
+    /// </summary>
+    public bool SelectedAssistantConsent
+    {
+        get => Assistant.SourceOf(AssistantProvider) switch
+        {
+            AssistantProviderSource.ChatGpt => AssistantChatGptConsentVersion == 1,
+            AssistantProviderSource.Account => false,
+            _ => AssistantConsent,
+        };
+        set
+        {
+            switch (Assistant.SourceOf(AssistantProvider))
+            {
+                case AssistantProviderSource.ChatGpt:
+                    AssistantChatGptConsentVersion = value ? 1 : 0;
+                    break;
+                case AssistantProviderSource.Account:
+                    break;
+                default:
+                    AssistantConsent = value;
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The board's consent of the provider in effect (Swift
+    /// <c>selectedBoardConsent</c>): Claude Code's <see cref="BoardTriageConsent"/>,
+    /// ChatGPT's board disclosure version; an ai account's is the account's
+    /// own consent in the daemon, so it reads false here and a write changes
+    /// nothing.
+    /// </summary>
+    public bool SelectedBoardConsent
+    {
+        get => Assistant.SourceOf(AssistantProvider) switch
+        {
+            AssistantProviderSource.ChatGpt => BoardChatGptConsentVersion == 1,
+            AssistantProviderSource.Account => false,
+            _ => BoardTriageConsent,
+        };
+        set
+        {
+            switch (Assistant.SourceOf(AssistantProvider))
+            {
+                case AssistantProviderSource.ChatGpt:
+                    BoardChatGptConsentVersion = value ? 1 : 0;
+                    break;
+                case AssistantProviderSource.Account:
+                    break;
+                default:
+                    BoardTriageConsent = value;
+                    break;
+            }
+        }
     }
 
     /// <summary>

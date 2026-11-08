@@ -132,6 +132,15 @@ public readonly record struct AccountKind(string Value) : IWireEnumeration<Accou
     /// </summary>
     public const string Eway = "eway";
 
+    /// <summary>
+    /// A model API the daemon's assistant runs over (the account's <c>ai</c>
+    /// block, <see cref="AiConfig"/>; the API key is
+    /// <see cref="Credentials.Password"/>): no mail, no folders; a client
+    /// never shows it in Mail, only on Preferences → Integrations. Its only
+    /// capability is <see cref="Capability.Assistant"/> (docs/api.md §4.18).
+    /// </summary>
+    public const string Ai = "ai";
+
     /// <summary>The value of a wire string.</summary>
     public static implicit operator AccountKind(string value) => new(value);
 
@@ -578,6 +587,13 @@ public readonly record struct Capability(string Value) : IWireEnumeration<Capabi
     /// contacts_book.go); it does not change with consent or sync state.
     /// </summary>
     public const string Contacts = "contacts";
+
+    /// <summary>
+    /// The daemon's assistant can run over this account
+    /// (<c>assistant.session*</c>, docs/api.md §4.18). An ai account has
+    /// exactly this one.
+    /// </summary>
+    public const string Assistant = "assistant";
 
     /// <summary>The value of a wire string.</summary>
     public static implicit operator Capability(string value) => new(value);

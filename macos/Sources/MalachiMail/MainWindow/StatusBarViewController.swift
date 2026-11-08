@@ -63,6 +63,7 @@ final class StatusBarViewController: NSViewController {
     private let noteLabel = NSTextField(labelWithString: "")
     /// Report an Issue at the trailing end.
     private let reportButton = NSButton(title: "", target: nil, action: nil)
+    /// More AI Features: only in the App Store build.
     private let content = StatusPopoverViewController()
     /// The popover's window: the Windows client's flyout, without an arrow
     /// (`StatusFlyout`).

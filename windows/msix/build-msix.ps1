@@ -14,7 +14,7 @@
 #       -OutDir build\windows\msix -Sign
 #
 # The app folder is copied into <OutDir>\stage-<arch>\, never changed in
-# place; the package's logos are rendered there from docs\malachi_icon.png
+# place; the package's logos are rendered there from data\icons\malachi_icon.png
 # (cut as make-icons.ps1 cuts it) and AppxManifest.xml filled in. makeappx
 # packs the stage.
 #
@@ -97,7 +97,7 @@ function Get-PackageVersion {
     return '{0}.{1}.{2}.{3}' -f $parts[0], $parts[1], $parts[2], $commits
 }
 
-# The rounded square of docs\malachi_icon.png at Size x Size pixels, as
+# The rounded square of data\icons\malachi_icon.png at Size x Size pixels, as
 # make-icons.ps1 cuts it (1126 px from x 65, y 64).
 function Save-Logo([System.Drawing.Image] $Source, [int] $Size, [string] $Path) {
     $frame = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -155,7 +155,7 @@ Copy-Item -Path (Join-Path $AppDir '*') -Destination $stage -Recurse
 
 $logos = Join-Path $stage 'Assets\Package'
 [System.IO.Directory]::CreateDirectory($logos) | Out-Null
-$icon = [System.Drawing.Image]::FromFile((Join-Path $Root 'docs\malachi_icon.png'))
+$icon = [System.Drawing.Image]::FromFile((Join-Path $Root 'data\icons\malachi_icon.png'))
 try {
     Save-Logo $icon 50 (Join-Path $logos 'StoreLogo.png')
     Save-Logo $icon 44 (Join-Path $logos 'Square44x44Logo.png')

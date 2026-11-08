@@ -6,12 +6,14 @@ package window
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/board"
@@ -100,6 +102,7 @@ func (a *Assistant) rebuildCodex() {
 		Model:         a.settings.AssistantChatGPTModel,
 		HasConsent:    func() bool { return a.settings.AssistantChatGPTConsentVersion() == 1 },
 		AcceptConsent: func() { a.settings.SetAssistantChatGPTConsentVersion(1) },
+		Prompter:      a.prompter(), Translator: tr,
 	}, a.chatGPT)
 	_ = a.codex.CleanAbandonedSessions()
 }
@@ -107,6 +110,7 @@ func (a *Assistant) rebuildCodex() {
 func (a *Assistant) runtimeChanged() {
 	a.runtimeGeneration++
 	a.rebuildCodex()
+	a.rebuildAPI()
 	if a.board != nil {
 		a.board.ctl.Cancel()
 		a.board.ctl.SettingsChanged()
@@ -122,19 +126,25 @@ func (a *Assistant) runtimeChanged() {
 	a.notify()
 }
 
-// Provider is the active in-app runtime; nil preserves Claude.
+// Provider is the active in-app runtime; nil preserves Claude. Over an
+// AI provider account it is the daemon's assistant (ai_provider.go), one
+// per runtime generation.
 func (a *Assistant) Provider() assistantpanel.Provider {
-	if a.usesChatGPT() {
+	switch a.source() {
+	case assistant.SourceChatGPT:
 		if a.codex != nil {
 			return a.codex
 		}
 		return unavailableChatGPT{}
+	case assistant.SourceAccount:
+		return a.apiProviderOrUnavailable()
 	}
 	return nil
 }
 
 type unavailableChatGPT struct{}
 
+func (unavailableChatGPT) Name() string     { return assistant.ChatGPTText(tr).Name }
 func (unavailableChatGPT) Model() string    { return "" }
 func (unavailableChatGPT) HasConsent() bool { return false }
 func (unavailableChatGPT) AcceptConsent()   {}
@@ -170,10 +180,13 @@ func (a *Assistant) EnsureAssistantConsent(parent gtk.Widgetter, done func(bool)
 func (a *Assistant) AskAssistantConsent(parent gtk.Widgetter, done func(bool)) {
 	generation := a.runtimeGeneration
 	finish := func(ok bool) { done(ok && generation == a.runtimeGeneration && !a.chatGPTClosed) }
-	if a.usesChatGPT() {
+	switch a.source() {
+	case assistant.SourceChatGPT:
 		t := assistant.ChatGPTText(tr)
 		widget.AskProviderConsent(parent, t.ConsentHeading, t.ConsentBody, finish)
-	} else {
+	case assistant.SourceAccount:
+		a.askAPIConsent(parent, finish)
+	default:
 		widget.AskAssistantConsent(parent, finish)
 	}
 }
@@ -181,10 +194,13 @@ func (a *Assistant) AskAssistantConsent(parent gtk.Widgetter, done func(bool)) {
 func (a *Assistant) askTriageConsent(parent gtk.Widgetter, done func(bool)) {
 	generation := a.runtimeGeneration
 	finish := func(ok bool) { done(ok && generation == a.runtimeGeneration && !a.chatGPTClosed) }
-	if a.usesChatGPT() {
+	switch a.source() {
+	case assistant.SourceChatGPT:
 		t := assistant.ChatGPTText(tr)
 		widget.AskProviderConsent(parent, t.BoardConsentHeading, t.BoardConsentBody, finish)
-	} else {
+	case assistant.SourceAccount:
+		a.askAPIBoardConsent(parent, finish)
+	default:
 		widget.AskTriageConsent(parent, finish)
 	}
 }
@@ -197,72 +213,115 @@ func (a *Assistant) CloseChatGPT() {
 	}
 }
 
-// Provider-specific settings adapt existing pure Board controllers.
+// Provider-specific settings adapt existing pure Board controllers. Over
+// an AI provider account both consents are the account's (its dialog
+// asked it; AcceptConsent writes a newer text's version to the daemon;
+// no gschema key), and withdrawing the board's consent leaves it: the
+// board's assistant preference in the daemon, which the controller turns
+// off with it, is what stops the triage.
 type providerSettings struct{ a *Assistant }
 
 func (s providerSettings) AssistantConsent() bool {
-	if s.a.usesChatGPT() {
+	switch s.a.source() {
+	case assistant.SourceChatGPT:
 		return s.a.settings.AssistantChatGPTConsentVersion() == 1
+	case assistant.SourceAccount:
+		return s.a.apiConsent()
 	}
 	return s.a.settings.AssistantConsent()
 }
 func (s providerSettings) SetAssistantConsent(ok bool) {
-	if s.a.usesChatGPT() {
+	switch s.a.source() {
+	case assistant.SourceChatGPT:
 		v := 0
 		if ok {
 			v = 1
 		}
 		s.a.settings.SetAssistantChatGPTConsentVersion(v)
-	} else {
+	case assistant.SourceAccount:
+		if ok {
+			s.a.acceptAPIConsent()
+		}
+	default:
 		s.a.settings.SetAssistantConsent(ok)
 	}
 }
 func (s providerSettings) AssistantClaudePath() string     { return s.a.settings.AssistantClaudePath() }
 func (s providerSettings) AssistantModel() assistant.Model { return s.a.settings.AssistantModel() }
 func (s providerSettings) BoardTriageConsent() bool {
-	if s.a.usesChatGPT() {
+	switch s.a.source() {
+	case assistant.SourceChatGPT:
 		return s.a.settings.BoardChatGPTConsentVersion() == 1
+	case assistant.SourceAccount:
+		return s.a.apiConsent()
 	}
 	return s.a.settings.BoardTriageConsent()
 }
 func (s providerSettings) SetBoardTriageConsent(ok bool) {
-	if s.a.usesChatGPT() {
+	switch s.a.source() {
+	case assistant.SourceChatGPT:
 		v := 0
 		if ok {
 			v = 1
 		}
 		s.a.settings.SetBoardChatGPTConsentVersion(v)
-	} else {
+	case assistant.SourceAccount:
+		if ok {
+			s.a.acceptAPIConsent()
+		}
+	default:
 		s.a.settings.SetBoardTriageConsent(ok)
 	}
 }
 func (s providerSettings) BoardTriageModel() assistant.Model { return s.a.settings.BoardTriageModel() }
 
+// providerLocator is the board's Locator over the provider in effect:
+// Claude Code on disk, Codex, or, for an AI provider account, "found"
+// while the account exists and is switched on and "signed in" while the
+// provider has not refused its key (ai_provider.go).
 type providerLocator struct{ a *Assistant }
 
 func (l providerLocator) Locate() string {
-	if l.a.usesChatGPT() {
+	switch l.a.source() {
+	case assistant.SourceChatGPT:
 		if l.a.codex == nil {
 			return ""
 		}
 		return chatgpt.Locate(l.a.settings.AssistantCodexPath())
+	case assistant.SourceAccount:
+		if acc, ok := l.a.apiAccount(); ok && acc.Enabled {
+			return string(acc.ID)
+		}
+		return ""
 	}
 	return l.a.locator.Locate()
 }
 func (l providerLocator) Refresh() {
-	if !l.a.usesChatGPT() {
+	switch l.a.source() {
+	case assistant.SourceChatGPT:
+	case assistant.SourceAccount:
+		l.a.refreshAIAccounts()
+	default:
 		l.a.locator.Refresh()
 	}
 }
 func (l providerLocator) SigningIn() bool {
-	if l.a.usesChatGPT() {
+	switch l.a.source() {
+	case assistant.SourceChatGPT:
 		return l.a.chatGPT != nil && l.a.chatGPT.Connection().Status == chatgpt.SigningIn
+	case assistant.SourceAccount:
+		return false
 	}
 	return l.a.locator.SigningIn()
 }
 func (l providerLocator) SignedIn(done func(assistantpanel.SignIn)) {
-	if l.a.usesChatGPT() {
+	switch l.a.source() {
+	case assistant.SourceChatGPT:
 		done(assistantpanel.SignIn{Known: true, SignedIn: l.a.chatGPTReady()})
+		return
+	case assistant.SourceAccount:
+		acc, ok := l.a.apiAccount()
+		done(assistantpanel.SignIn{Known: true, SignedIn: ok && acc.State.Status != api.SyncAuthRequired})
 		return
 	}
 	l.a.locator.SignedIn(done)
@@ -274,8 +333,14 @@ func (l providerLocator) OnSignInChange(f func()) func() {
 }
 
 // Board grants are separate from foreground panel/rewrite/search grants.
+// Over an AI provider account the board shares the panel's provider: the
+// consent is the account's, and the daemon picks the board's model
+// (AIConfig.BoardModel) by the session's purpose.
 func (a *Assistant) boardProvider() assistantpanel.Provider {
-	if !a.usesChatGPT() {
+	switch a.source() {
+	case assistant.SourceAccount:
+		return a.apiProviderOrUnavailable()
+	case assistant.SourceClaude:
 		return nil
 	}
 	if a.chatGPT == nil {
@@ -287,19 +352,20 @@ func (a *Assistant) boardProvider() assistantpanel.Provider {
 		Model:         a.settings.BoardChatGPTModel,
 		HasConsent:    func() bool { return a.settings.BoardChatGPTConsentVersion() == 1 },
 		AcceptConsent: func() { a.settings.SetBoardChatGPTConsentVersion(1) },
+		Prompter:      a.prompter(), Translator: tr,
 	}, a.chatGPT)
 }
 
 type boardProviderSettings struct{ providerSettings }
 
 func (s boardProviderSettings) AssistantConsent() bool {
-	if s.a.usesChatGPT() {
+	if s.a.source() == assistant.SourceChatGPT {
 		return s.a.settings.BoardChatGPTConsentVersion() == 1
 	}
 	return s.providerSettings.AssistantConsent()
 }
 func (s boardProviderSettings) SetAssistantConsent(ok bool) {
-	if !s.a.usesChatGPT() {
+	if s.a.source() != assistant.SourceChatGPT {
 		s.providerSettings.SetAssistantConsent(ok)
 	}
 }
@@ -349,6 +415,31 @@ type providerBoardTranslator struct {
 }
 
 func (t providerBoardTranslator) T(msgid string) string {
+	if t.a != nil && t.a.usesAPI() {
+		words := assistant.APIText(t.Translator)
+		if swap, ok := providerSwaps[msgid]; ok {
+			switch swap {
+			case board.SwapNotFound:
+				return words.BoardAccountOff
+			case board.SwapNotSignedIn:
+				return words.BoardKeyRefused
+			case board.SwapConsent:
+				acc, _ := t.a.apiAccount()
+				return fmt.Sprintf(words.BoardConsentBody, assistant.Destination(t.Translator, acc))
+			}
+		}
+		// The assistant's own texts of Claude Code's sign-in that the
+		// board's triage shows (assistant.SignInTexts, PanelTexts): over
+		// an account both buttons open its settings in Integrations.
+		switch msgid {
+		case "Claude Code was not found on this computer":
+			return words.BoardAccountOff
+		case "Claude Code is not signed in. Sign in under AI in the preferences.":
+			return words.BoardKeyRefused
+		case "Get Claude Code…", "Sign In…":
+			return words.SetUpInIntegrations
+		}
+	}
 	if t.a != nil && t.a.usesChatGPT() {
 		words := assistant.ChatGPTText(t.Translator)
 		if swap, ok := providerSwaps[msgid]; ok {
@@ -382,3 +473,16 @@ func (t providerBoardTranslator) T(msgid string) string {
 // UsesChatGPT says whether ChatGPT (Codex) is the provider in effect
 // (compose.Assistant: the compose window's assistant bar names it).
 func (a *Assistant) UsesChatGPT() bool { return a.usesChatGPT() }
+
+// ProviderBrand names the provider in effect for the compose window's
+// assistant bar (compose.Assistant, assistant.WriteBarTitleFor): Claude,
+// ChatGPT, or the AI provider account's name.
+func (a *Assistant) ProviderBrand() string {
+	switch a.source() {
+	case assistant.SourceChatGPT:
+		return assistant.ChatGPTBrand
+	case assistant.SourceAccount:
+		return a.apiBrand()
+	}
+	return assistant.ClaudeBrand
+}

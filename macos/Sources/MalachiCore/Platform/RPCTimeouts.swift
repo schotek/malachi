@@ -71,4 +71,13 @@ public enum RPCTimeouts {
     /// the CRL) is allowed 15 s (api.RevocationTimeout); the client waits
     /// 20 (docs/api.md §4.22).
     public static let revocation: Duration = .seconds(20)
+    /// `assistant.prompt`: the daemon builds a prompt from stored text
+    /// (assistantpanel `promptTimeout`).
+    public static let assistantPrompt: Duration = .seconds(15)
+    /// `assistant.sessionStart`: the daemon starts the bridge and may send
+    /// the first turn before it answers (apiassistant `startTimeout`).
+    public static let assistantSessionStart: Duration = .seconds(60)
+    /// `assistant.providerModels`: one request to the provider
+    /// (aiaccount `modelsTimeout`).
+    public static let assistantModels: Duration = .seconds(30)
 }

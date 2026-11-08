@@ -13,7 +13,7 @@
 // The Week and Day views. The views are rebuilt only when what they were
 // built from changes (the days, the occurrences, showDeclined, the
 // calendars' colours, the zone); a change of the selection only repaints
-// the blocks. The owner's findings of the live test (docs/calendar.md
+// the blocks. The rules of the views (docs/calendar.md
 // §5.3): the fills are opaque and lie above the hour lines and the day
 // separators; the now line lies above the blocks and moves each minute;
 // the first scroll (Cal.ScrollMinute × 60 − 10 DIP, the working hours'

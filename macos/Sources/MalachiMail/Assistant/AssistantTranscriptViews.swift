@@ -463,6 +463,7 @@ final class AssistantMessageLineView: NSView, AssistantItemView {
         case .signIn: return t.signIn
         case .install: return t.getClaudeCode
         case .reconnectProvider: return L10n.T("Reconnect to ChatGPT")
+        case .setUpInIntegrations: return Assistant.apiText().setUpInIntegrations
         case .none: return ""
         }
     }

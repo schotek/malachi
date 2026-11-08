@@ -9,6 +9,8 @@
 // testTimeout, addTimeout, oauthStartTimeout, oauthWaitCallTimeout),
 // accountwizard/jira_flow.go (detectSiteTimeout, listSpacesTimeout),
 // window/issue_actions.go (issueTimeout), window/bulk.go (unsubscribeTimeout),
+// assistantpanel/provider.go (promptTimeout), apiassistant/provider.go
+// (startTimeout), aiaccount/controller.go (modelsTimeout),
 // backend/pkg/api/auth.go
 // (HandshakeTimeout).
 
@@ -135,4 +137,22 @@ public static class RpcTimeouts
     /// (api.RevocationTimeout); the client waits 20 s (docs/api.md §4.22).
     /// </summary>
     public static readonly TimeSpan SignatureRevocation = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// <c>assistant.prompt</c>: the daemon builds a prompt from stored text
+    /// (assistantpanel <c>promptTimeout</c>).
+    /// </summary>
+    public static readonly TimeSpan AssistantPrompt = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// <c>assistant.sessionStart</c>: the daemon starts the bridge and may send
+    /// the first turn before it answers (apiassistant <c>startTimeout</c>).
+    /// </summary>
+    public static readonly TimeSpan AssistantSessionStart = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// <c>assistant.providerModels</c>: one request to the provider (aiaccount
+    /// <c>modelsTimeout</c>).
+    /// </summary>
+    public static readonly TimeSpan AssistantModels = TimeSpan.FromSeconds(30);
 }

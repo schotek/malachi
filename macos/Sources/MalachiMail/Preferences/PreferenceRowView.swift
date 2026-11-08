@@ -67,7 +67,13 @@ final class PreferenceRowView: NSView, PrefsGroupMember {
         }
     }
 
-    init(title: String, subtitle: String? = nil, prefix: NSView? = nil, trailing: NSView? = nil, trailingFills: Bool = false) {
+    /// `titleAccessory` sits after the title on its line (the capsule of an
+    /// AI integration, `prefsSourcePill`); it keeps its width, the title
+    /// truncates before it.
+    init(
+        title: String, subtitle: String? = nil, prefix: NSView? = nil, trailing: NSView? = nil, trailingFills: Bool = false,
+        titleAccessory: NSView? = nil
+    ) {
         titleLabel = NSTextField(labelWithString: title)
         titleLabel.font = .systemFont(ofSize: 13)
         titleLabel.lineBreakMode = .byTruncatingTail
@@ -83,7 +89,18 @@ final class PreferenceRowView: NSView, PrefsGroupMember {
         // The text column: its labels span its width; the column's width is
         // fixed by the constraints below, so the labels wrap or truncate.
         let textStack = prefsColumn(spacing: 2)
-        prefsAddFilling(titleLabel, to: textStack)
+        if let titleAccessory {
+            titleAccessory.setContentHuggingPriority(.required, for: .horizontal)
+            titleAccessory.setContentCompressionResistancePriority(.required, for: .horizontal)
+            let titleRow = NSStackView(views: [titleLabel, titleAccessory])
+            titleRow.orientation = .horizontal
+            titleRow.alignment = .centerY
+            titleRow.spacing = 6
+            titleRow.detachesHiddenViews = true
+            prefsAddFilling(titleRow, to: textStack)
+        } else {
+            prefsAddFilling(titleLabel, to: textStack)
+        }
         prefsAddFilling(subtitleLabel, to: textStack)
         // Who yields when the text and the control compete for width: the
         // text (it truncates and wraps), unless the control is the entry

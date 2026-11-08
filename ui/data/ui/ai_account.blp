@@ -1,0 +1,204 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The dialog that adds or edits an AI provider account (kind ai,
+// docs/plans/ai-api.md §7.2): one scrolling page under a header bar with
+// Cancel and Add Account / Save, the banner of a failed call under it.
+// Object IDs are looked up from ui/internal/aiaccount/dialog.go; keep them
+// in sync. Every text comes from ui/internal/aiaccount (Texts,
+// ConsentTexts) and is set from Go, so this file has no translatable
+// strings but the two header buttons; everything the provider answers
+// (the models) is plain text. The subtitle of window_title is the
+// progress of the call under way.
+Adw.Dialog ai_account_dialog {
+  content-width: 600;
+  content-height: 720;
+  focus-widget: name_row;
+  default-widget: save_button;
+
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      show-start-title-buttons: false;
+      show-end-title-buttons: false;
+
+      title-widget: Adw.WindowTitle window_title {};
+
+      [start]
+      Button cancel_button {
+        label: _("_Cancel");
+        use-underline: true;
+      }
+
+      [end]
+      Button save_button {
+        label: _("_Save");
+        use-underline: true;
+
+        styles [
+          "suggested-action",
+        ]
+      }
+
+      [end]
+      Adw.Spinner progress_spinner {
+        visible: false;
+      }
+    }
+
+    [top]
+    Adw.Banner banner {
+      revealed: false;
+      use-markup: false;
+    }
+
+    // Plain http to a server outside this computer (D8).
+    [top]
+    Adw.Banner http_banner {
+      revealed: false;
+      use-markup: false;
+    }
+
+    content: Adw.PreferencesPage {
+      Adw.PreferencesGroup account_group {
+        // The kind of provider, read only.
+        Adw.ActionRow provider_row {
+          use-markup: false;
+          subtitle-selectable: true;
+        }
+
+        Adw.EntryRow name_row {
+          activates-default: true;
+        }
+
+        // An OpenAI-compatible server only: its base URL, the hint with
+        // the examples under it.
+        Adw.EntryRow address_row {
+          visible: false;
+          activates-default: true;
+        }
+
+        Label address_hint {
+          visible: false;
+          xalign: 0;
+          wrap: true;
+          selectable: true;
+          margin-top: 6;
+          use-markup: false;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+      }
+
+      Adw.PreferencesGroup key_group {
+        // An existing account's key is in the keyring and never shown:
+        // "Key stored" with Replace Key…; the field otherwise (Keep the
+        // Stored Key takes a replacement back).
+        Adw.ActionRow key_stored_row {
+          visible: false;
+          use-markup: false;
+
+          [suffix]
+          Button key_button {
+            valign: center;
+          }
+        }
+
+        Adw.PasswordEntryRow key_row {
+          activates-default: true;
+
+          [suffix]
+          Button keep_key_button {
+            visible: false;
+            valign: center;
+          }
+        }
+
+        // The pinned certificate of an https server, with Forget.
+        Adw.ActionRow pin_row {
+          visible: false;
+          use-markup: false;
+          subtitle-selectable: true;
+
+          [suffix]
+          Button pin_forget_button {
+            valign: center;
+          }
+        }
+
+        // Test asks the provider for its models; the outcome stands to its
+        // left, and Trust Certificate… appears when the test refused an
+        // https certificate the user may trust.
+        Box {
+          spacing: 12;
+          margin-top: 6;
+
+          Label test_result_label {
+            hexpand: true;
+            xalign: 0;
+            wrap: true;
+            use-markup: false;
+
+            styles [
+              "caption",
+            ]
+          }
+
+          Button trust_button {
+            visible: false;
+            valign: center;
+          }
+
+          Button test_button {
+            valign: center;
+            use-underline: true;
+          }
+        }
+      }
+
+      Adw.PreferencesGroup model_group {
+        // The model as typed or picked: the arrow lists the provider's
+        // models (a popover built in Go).
+        Adw.EntryRow model_row {
+          activates-default: true;
+
+          [suffix]
+          MenuButton model_button {
+            valign: center;
+            icon-name: "pan-down-symbolic";
+
+            styles [
+              "flat",
+            ]
+          }
+        }
+
+        Adw.EntryRow board_model_row {
+          activates-default: true;
+
+          [suffix]
+          MenuButton board_model_button {
+            valign: center;
+            icon-name: "pan-down-symbolic";
+
+            styles [
+              "flat",
+            ]
+          }
+        }
+      }
+
+      // The consent (D7, Q17): the heading as the group's title, the two
+      // paragraphs as the switch's subtitle.
+      Adw.PreferencesGroup consent_group {
+        Adw.SwitchRow consent_row {
+          use-markup: false;
+        }
+      }
+    };
+  };
+}

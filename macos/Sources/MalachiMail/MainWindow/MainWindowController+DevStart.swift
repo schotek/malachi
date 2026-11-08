@@ -62,7 +62,10 @@ import MalachiCore
 //   MALACHI_CALENDAR_SAMPLES=1 the sample accounts' sections), dumps the
 //   Display group and each section, and closes Settings;
 //   `prefs-integrations` opens Settings → Integrations, dumps its
-//   connected rows and catalogue rows, and closes Settings.
+//   connected rows and catalogue rows, and closes Settings;
+//   `claude-desktop-integration` and `claude-code-integration` open the
+//   sheet of that Claude app over Settings → Integrations (as GTK's steps
+//   of the same names), dump it and close Settings.
 //   `quick-reply` shows the chat's quick-reply bar alone in a window over a
 //   made-up conversation (`DevelopmentQuickReply`); `quick-reply-message`
 //   has the main window's reading pane show a made-up single message with
@@ -356,6 +359,9 @@ extension MainWindowController {
             return
         }
         if DevelopmentRules.step(step, in: self) {
+            return
+        }
+        if DevelopmentMCP.step(step, in: self) {
             return
         }
         if DevelopmentSignature.step(step, in: self) {
@@ -1253,6 +1259,8 @@ enum DevelopmentCalendar {
         case "caldav-sheet": caldavSheet(main)
         case "prefs-calendar": prefsCalendar(main)
         case "prefs-integrations": prefsIntegrations(main)
+        case "claude-desktop-integration": claudeIntegration(.claudeDesktop, step, main)
+        case "claude-code-integration": claudeIntegration(.claudeCode, step, main)
         default: return false
         }
         return true
@@ -1598,6 +1606,44 @@ extension DevelopmentCalendar {
 }
 
 extension DevelopmentCalendar {
+    // MARK: claude-desktop-integration, claude-code-integration
+
+    /// The sheet of Claude app `kind` over Settings → Integrations, as its
+    /// row's Settings opens it; its frame and texts are printed, then
+    /// Settings closes.
+    static func claudeIntegration(_ kind: Integrations.LocalKind, _ step: String, _ main: MainWindowController) {
+        closeOpened()
+        let prefs = Integration.showPreferences(main.state)
+        prefs.select(.integrations)
+        guard let w = prefs.window else {
+            developmentPrint("LAYOUT: \(step) no Settings window")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            MainActor.assumeIsolated {
+                prefs.integrationsPane.openLocal(kind)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    MainActor.assumeIsolated {
+                        guard let sheet = w.attachedSheet else {
+                            developmentPrint("LAYOUT: \(step) no sheet")
+                            w.close()
+                            return
+                        }
+                        let t = Integrations.claudeAppText(kind)
+                        developmentPrint("LAYOUT: \(step) sheet \(sheet.windowNumber) frame \(NSStringFromRect(sheet.frame)) title '\(t.title)'")
+                        developmentPrint("LAYOUT: shot \(step) window \(w.windowNumber)")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            MainActor.assumeIsolated {
+                                w.endSheet(sheet)
+                                w.close()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: prefs-integrations
 
     static func prefsIntegrations(_ main: MainWindowController) {

@@ -121,7 +121,7 @@ extension Board {
 
     /// What `triageView` reads.
     public struct TriageViewInputs: Sendable, Equatable {
-        public var provider: AssistantProviderID = .claude
+        public var provider: String = Assistant.providerClaude
         /// The assistant is shown (Settings → AI, registered).
         public var shown: Bool
         public var claudeFound: Bool
@@ -166,7 +166,7 @@ extension Board {
             shown: Bool, claudeFound: Bool, bridge: Bool, signedIn: Bool?, needsConsent: Bool, assistantOn: Bool,
             state: TriageState, lastRun: Run?, autoTriage: Bool, pause: AutoTriagePause?, backendFailed: Bool = false,
             annotatedToday: Int? = nil, boardPhase: Phase? = nil, signingIn: Bool = false, usageKnown: Bool = false,
-            usage24h: BoardUsageTotal? = nil, queue: Int? = nil, locale: Locale = .current, now: Date, provider: AssistantProviderID = .claude
+            usage24h: BoardUsageTotal? = nil, queue: Int? = nil, locale: Locale = .current, now: Date, provider: String = Assistant.providerClaude
         ) {
             self.provider = provider
             self.shown = shown
@@ -193,7 +193,14 @@ extension Board {
 
     /// The Triage control and the status strip.
     public struct TriageView: Sendable, Equatable {
-        public var provider: AssistantProviderID = .claude
+        public var provider: String = Assistant.providerClaude
+        /// Over an AI provider account the `.getClaudeCode` and `.signIn`
+        /// controls read Set Up in Integrations… and open the account's
+        /// settings in Settings → Integrations instead of the installer
+        /// page or Claude Code's sign-in (GTK `providerBoardTranslator`).
+        public var opensIntegrations: Bool {
+            Assistant.sourceOf(provider) == .account && (control == .getClaudeCode || control == .signIn)
+        }
         /// `.hidden` exactly when triage is not offered: the toolbar item
         /// and Settings' Board group follow this one rule (`offered`).
         public var control: TriageControl
@@ -253,6 +260,41 @@ extension Board {
         public var offered: Bool { control != .hidden }
     }
 
+    /// What the triage says instead of Claude Code's missing executable
+    /// over the provider `provider` (GTK `providerBoardTranslator`): Codex's
+    /// own words, an AI provider account's "switched off"
+    /// (`Assistant.apiText().boardAccountOff`), else `claude`.
+    static func notFoundWords(_ provider: String, claude: String) -> String {
+        switch Assistant.sourceOf(provider) {
+        case .chatgpt: return L10n.T("Codex was not found. Choose a native Codex executable.")
+        case .account: return Assistant.apiText().boardAccountOff
+        case .claude: return claude
+        }
+    }
+
+    /// What the triage says instead of Claude Code's sign-in over the
+    /// provider `provider`: Codex's reconnect, an AI provider account's
+    /// "the key was refused" (`Assistant.apiText().boardKeyRefused`), else
+    /// `claude`.
+    static func notSignedInWords(_ provider: String, claude: String) -> String {
+        switch Assistant.sourceOf(provider) {
+        case .chatgpt: return L10n.T("Reconnect to ChatGPT")
+        case .account: return Assistant.apiText().boardKeyRefused
+        case .claude: return claude
+        }
+    }
+
+    /// The button beside those words: Get Codex… / Continue with ChatGPT,
+    /// an AI provider account's Set Up in Integrations… (both open the
+    /// account's settings), else `claude`.
+    static func providerButton(_ provider: String, chatgpt: String, claude: String) -> String {
+        switch Assistant.sourceOf(provider) {
+        case .chatgpt: return chatgpt
+        case .account: return Assistant.apiText().setUpInIntegrations
+        case .claude: return claude
+        }
+    }
+
     /// The Triage control and the status strip for `i`.
     public static func triageView(_ i: TriageViewInputs) -> TriageView {
         var v = TriageView(
@@ -276,8 +318,8 @@ extension Board {
             v.toolTip = Text.triageStopToolTip
         } else if !i.claudeFound {
             v.control = .getClaudeCode
-            v.title = i.provider == .chatgpt ? L10n.T("Get Codex…") : Assistant.signInTexts().getClaudeCode
-            v.toolTip = i.provider == .chatgpt ? L10n.T("Codex was not found. Choose a native Codex executable.") : Text.triageNeedsClaudeCode
+            v.title = providerButton(i.provider, chatgpt: L10n.T("Get Codex…"), claude: Assistant.signInTexts().getClaudeCode)
+            v.toolTip = notFoundWords(i.provider, claude: Text.triageNeedsClaudeCode)
         } else if !i.bridge {
             v.control = .unavailable
             v.enabled = false
@@ -292,14 +334,14 @@ extension Board {
             // One sign-in for the application: a click must not start a
             // second one (which would end the first as cancelled).
             v.control = .signIn
-            v.title = i.provider == .chatgpt ? L10n.T("Continue with ChatGPT") : Assistant.signInTexts().signIn
+            v.title = Assistant.sourceOf(i.provider) == .chatgpt ? L10n.T("Continue with ChatGPT") : Assistant.signInTexts().signIn
             v.enabled = false
-            v.toolTip = i.provider == .chatgpt ? L10n.T("Connecting…") : Assistant.signInTexts().waiting
+            v.toolTip = Assistant.sourceOf(i.provider) == .chatgpt ? L10n.T("Connecting…") : Assistant.signInTexts().waiting
             v.signingIn = true
         } else if i.signedIn == false {
             v.control = .signIn
-            v.title = i.provider == .chatgpt ? L10n.T("Continue with ChatGPT") : Assistant.signInTexts().signIn
-            v.toolTip = i.provider == .chatgpt ? L10n.T("Reconnect to ChatGPT") : Text.triageNeedsSignIn
+            v.title = providerButton(i.provider, chatgpt: L10n.T("Continue with ChatGPT"), claude: Assistant.signInTexts().signIn)
+            v.toolTip = notSignedInWords(i.provider, claude: Text.triageNeedsSignIn)
         }
         switch i.state {
         case .starting:
@@ -309,8 +351,8 @@ extension Board {
         case .finished(_, let n, let refused, _):
             v.result = Text.triageFinished(n, refused: refused)
         case .failed(_, let f, _):
-            if i.provider == .chatgpt, f == .notFound || f == .notSignedIn {
-                v.result = L10n.T("Triage failed: %s.", f == .notFound ? L10n.T("Codex was not found. Choose a native Codex executable.") : L10n.T("Reconnect to ChatGPT"))
+            if Assistant.sourceOf(i.provider) != .claude, f == .notFound || f == .notSignedIn {
+                v.result = L10n.T("Triage failed: %s.", f == .notFound ? notFoundWords(i.provider, claude: "") : notSignedInWords(i.provider, claude: ""))
             } else { v.result = f == .cancelled ? Text.triageStopped : Text.triageFailed(f) }
         case .idle:
             break
@@ -330,8 +372,8 @@ extension Board {
             }
         }
         if v.offered, i.autoTriage, !i.state.isActive, let p = i.pause {
-            v.paused = i.provider == .chatgpt && p == .signedOut
-                ? L10n.T("Automatic triage paused: %s", L10n.T("Reconnect to ChatGPT")) : Text.autoTriagePaused(p, now: i.now)
+            v.paused = Assistant.sourceOf(i.provider) != .claude && p == .signedOut
+                ? L10n.T("Automatic triage paused: %s", notSignedInWords(i.provider, claude: "")) : Text.autoTriagePaused(p, now: i.now)
             if case .failed = p {
                 v.relativeTime = true
             }
@@ -411,7 +453,7 @@ extension Board {
                 return ""
             }
             if v.signingIn {
-                return v.provider == .chatgpt ? L10n.T("Connecting…") : Assistant.signInTexts().waiting
+                return Assistant.sourceOf(v.provider) == .chatgpt ? L10n.T("Connecting…") : Assistant.signInTexts().waiting
             }
             return v.paused.isEmpty ? v.statusLine : v.paused
         }
@@ -431,9 +473,12 @@ extension Board {
     public static func triageSettingsDescription(_ v: TriageView) -> String {
         switch v.control {
         case .getClaudeCode:
-            return v.provider == .chatgpt ? L10n.T("Codex was not found. Choose a native Codex executable.") : Text.triageSettingsNeedsClaudeCode
+            return notFoundWords(v.provider, claude: Text.triageSettingsNeedsClaudeCode)
         case .signIn:
-            return v.provider == .chatgpt ? (v.signingIn ? L10n.T("Connecting…") : L10n.T("Reconnect to ChatGPT")) : (v.signingIn ? Assistant.signInTexts().waiting : Text.triageSettingsNeedsSignIn)
+            if v.signingIn {
+                return Assistant.sourceOf(v.provider) == .chatgpt ? L10n.T("Connecting…") : Assistant.signInTexts().waiting
+            }
+            return notSignedInWords(v.provider, claude: Text.triageSettingsNeedsSignIn)
         case .unavailable:
             return v.unavailable == .backend ? Text.triageSettingsNoBackend : Text.triageSettingsNoTools
         case .hidden, .triage, .stop:

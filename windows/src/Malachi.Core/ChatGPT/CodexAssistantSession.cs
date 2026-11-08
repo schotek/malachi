@@ -6,7 +6,11 @@
 // by the application and launched without inference credentials. The
 // spec's tools, bridge arguments, turn timeout and the token usage events
 // follow macos/Sources/MalachiCore/ChatGPT/CodexProvider.swift
-// (CodexSession: policy, initialize, submit, notification).
+// (CodexSession: policy, initialize, submit, notification). A turn's
+// message is the daemon's (assistant.prompt of the session's purpose with
+// the turn's input, through the options' prompter; Swift submit, Go
+// session.Submit); the bridge starts with the daemon's arguments, --in-app
+// first (Assistant.PolicyBridgeArgs, Go toolPolicy).
 
 using System;
 using System.Collections.Generic;
@@ -100,9 +104,10 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
             // This peer is a sibling, not a Codex descendant: no access token
             // or even the local inference credential ever enters its environment.
             List<string> bridgeArgs = options.Socket.Length > 0 ? ["--socket", options.Socket] : [];
-            // The application's own bridge (Assistant.McpConfig does the same).
-            bridgeArgs.Add("--in-app");
-            bridgeArgs.AddRange(spec.BridgeArgs);
+            // The application's own bridge (Assistant.McpConfig does the
+            // same): --socket, then the daemon's arguments of the purpose,
+            // --in-app first.
+            bridgeArgs.AddRange(Assistant.PolicyBridgeArgs(spec));
             bridge = new CodexJsonRpc(options.Bridge, bridgeArgs,
                 Assistant.ChildEnvironment(options.Environment, options.Bridge), work);
             _ = await bridge.CallAsync("initialize", w =>
@@ -221,9 +226,39 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
     }
 
     /// <inheritdoc/>
-    public async Task SubmitAsync(string input, CancellationToken cancellationToken)
+    public async Task SubmitAsync(Api.PromptInput input, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(input);
+        if (!IsRunning || active || codex is null)
+        {
+            throw new AssistantProviderException("codex_session_busy_or_closed");
+        }
+        // The message the daemon builds of input; spec.Input is ignored:
+        // Codex takes its turns from here alone.
+        if (options.Prompter is not { } prompter)
+        {
+            throw new AssistantProviderException("chatgpt_no_prompter");
+        }
+        string message;
+        try
+        {
+            // Back on the caller's context afterwards: the turn starts there,
+            // as it did before the message came from the daemon.
+            var prompt = await prompter.PromptAsync(new Api.AssistantPromptParams
+            {
+                Purpose = spec.Purpose,
+                Language = spec.Language,
+                AccountId = spec.NoteAccountId,
+                Trigger = spec.Trigger,
+                RunId = spec.RunId,
+                Input = input,
+            }, cancellationToken).ConfigureAwait(true);
+            message = prompt.Message ?? "";
+        }
+        catch (Exception e) when (Assistant.IsPromptFailure(e))
+        {
+            throw new AssistantProviderException("chatgpt_request_failed");
+        }
         if (!IsRunning || active || codex is null)
         {
             throw new AssistantProviderException("codex_session_busy_or_closed");
@@ -246,7 +281,7 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
                 w.WriteStartObject();
                 w.WriteString("threadId", thread);
                 w.WriteStartArray("input");
-                w.WriteStartObject(); w.WriteString("type", "text"); w.WriteString("text", input); w.WriteEndObject();
+                w.WriteStartObject(); w.WriteString("type", "text"); w.WriteString("text", message); w.WriteEndObject();
                 w.WriteEndArray();
                 w.WriteStartArray("environments"); w.WriteEndArray();
                 if (spec.JsonSchema.Length > 0)

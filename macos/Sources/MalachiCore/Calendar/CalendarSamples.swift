@@ -4,7 +4,7 @@
 // MALACHI_CALENDAR_SAMPLES (docs/calendar.md §5.10): the invented sample
 // data of `Cal.sampleData` as a source. Read once at start, like
 // MALACHI_BOARD_SAMPLES; a window then gets `InMemoryCalendarSource.samples()`
-// instead of the daemon's source. DEVELOPMENT AID, never the owner's data.
+// instead of the daemon's source. DEVELOPMENT AID, never the user's data.
 
 import Foundation
 

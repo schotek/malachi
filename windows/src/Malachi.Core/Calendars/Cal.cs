@@ -648,8 +648,8 @@ public static partial class Cal
     /// view.go <c>SwitchAnchor</c>: the anchor after switching from view
     /// <paramref name="from"/> to <paramref name="to"/>. Switching to the
     /// Agenda starts it at today (the midnight of <paramref name="today"/>
-    /// in <paramref name="zone"/>), whatever day the other view showed (the
-    /// owner's decision of 2026-10-16); the Agenda moves only with ‹ ›,
+    /// in <paramref name="zone"/>), whatever day the other view showed;
+    /// the Agenda moves only with ‹ ›,
     /// Today or a date the user picks while it shows. Switching from the
     /// Agenda keeps its anchor, and every other switch keeps the anchor.
     /// </summary>

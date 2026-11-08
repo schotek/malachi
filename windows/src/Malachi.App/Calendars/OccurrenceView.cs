@@ -21,8 +21,8 @@
 // collapsed), its theme changes or its selection changes: a view is made
 // and first painted before it is in a window, so that first paint is only
 // provisional (its theme may not be its window's yet). The Week's fills,
-// outlines, bars and icons at half brightness that the owner found on
-// 2026-10-17 were not this: WinUI darkened them while a tentative bar's
+// outlines, bars and icons once drawn at half brightness were not
+// this: WinUI darkened them while a tentative bar's
 // hatching was a repeating gradient (BlockBackground.Hatch). The keyboard's
 // focus visual is drawn 3 DIP outside the view, so that it never covers
 // or looks like the selection's accent ring at the view's edge (Windows).

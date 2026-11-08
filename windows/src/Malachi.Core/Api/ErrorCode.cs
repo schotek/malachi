@@ -4,7 +4,8 @@
 // Port of macos/Sources/MalachiCore/API/ErrorCode.swift; Go:
 // backend/pkg/api/errors.go (ErrorCode, codeNames; the address books'
 // 1110, 1111, 1206, 1308 and 1509 of docs/api.md §4.19; the signatures'
-// 1510 of §4.22). RPCError.attachmentTooBig,
+// 1510 of §4.22; the daemon's assistant's 1113, 1207, 1511, 1512 and 1513
+// of §4.18). RPCError.attachmentTooBig,
 // which the Swift file adds as an extension, is RpcError.AttachmentTooBig.
 
 using System;
@@ -131,6 +132,12 @@ public readonly record struct ErrorCode(int Value)
     /// <summary>No mail rule with that id (docs/api.md §4.21).</summary>
     public const int RuleNotFound = 1112;
 
+    /// <summary>
+    /// No open assistant session with that id on this connection (ended,
+    /// timed out, another connection's; docs/api.md §4.18).
+    /// </summary>
+    public const int AssistantSessionNotFound = 1113;
+
     // 1200–1299: authentication.
 
     /// <summary>Credentials missing or token expired; see notify.authRequired.</summary>
@@ -165,6 +172,14 @@ public readonly record struct ErrorCode(int Value)
     /// <see cref="ContactsConsentRequiredData"/>.
     /// </summary>
     public const int ContactsConsentRequired = 1206;
+
+    /// <summary>
+    /// The <c>ai</c> account's user has not accepted the current consent text
+    /// (<see cref="AiConfig.Consent"/> below
+    /// <see cref="API.Limits.AssistantConsentVersion"/>), so no session starts
+    /// (docs/api.md §4.18).
+    /// </summary>
+    public const int AssistantConsentRequired = 1207;
 
     // 1300–1399: network and remote servers.
 
@@ -276,6 +291,23 @@ public readonly record struct ErrorCode(int Value)
     /// </summary>
     public const int RevocationFailed = 1510;
 
+    /// <summary>
+    /// An assistant session could not start: the MCP bridge could not be
+    /// started, answered no tools, or the daemon has
+    /// <see cref="API.Limits.MaxAssistantSessions"/> open (docs/api.md §4.18).
+    /// </summary>
+    public const int AssistantUnavailable = 1511;
+
+    /// <summary><c>assistant.sessionSend</c> while the session's previous turn still runs.</summary>
+    public const int AssistantSessionBusy = 1512;
+
+    /// <summary>
+    /// The <c>ai</c> account's model cannot call tools, which the purpose
+    /// needs (the provider refused the tool definitions); the one-shot
+    /// purposes without tools still work.
+    /// </summary>
+    public const int AssistantToolsUnsupported = 1513;
+
     private static readonly Dictionary<int, string> Names = new()
     {
         [ParseError] = "parseError",
@@ -333,6 +365,11 @@ public readonly record struct ErrorCode(int Value)
         [RecurrenceUnsupported] = "recurrenceUnsupported",
         [AddressBookReadOnly] = "addressBookReadOnly",
         [RevocationFailed] = "revocationFailed",
+        [AssistantSessionNotFound] = "assistantSessionNotFound",
+        [AssistantConsentRequired] = "assistantConsentRequired",
+        [AssistantUnavailable] = "assistantUnavailable",
+        [AssistantSessionBusy] = "assistantSessionBusy",
+        [AssistantToolsUnsupported] = "assistantToolsUnsupported",
     };
 
     /// <summary>
@@ -346,15 +383,16 @@ public readonly record struct ErrorCode(int Value)
         ReadOnly, InvitationsUnavailable,
         AccountNotFound, FolderNotFound, MessageNotFound, ThreadNotFound, DraftNotFound, AttachmentNotFound,
         CaseNotFound, CalendarNotFound, EventNotFound, CrmItemNotFound, ContactNotFound, AddressBookNotFound,
-        RuleNotFound,
+        RuleNotFound, AssistantSessionNotFound,
         AuthRequired, AuthFailed, KeyringError, OAuthClientMissing, CalendarConsentRequired, CrmSignInUnsupported,
-        ContactsConsentRequired,
+        ContactsConsentRequired, AssistantConsentRequired,
         Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone, EventGone, CrmDuplicate,
         ContactConflict,
         StorageError, MigrationFailed,
         MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
         UnsubscribeFailed, QuoteNotFound, MalformedCalendar, RecurrenceUnsupported, AddressBookReadOnly,
         RevocationFailed,
+        AssistantUnavailable, AssistantSessionBusy, AssistantToolsUnsupported,
     ];
 
     /// <summary>

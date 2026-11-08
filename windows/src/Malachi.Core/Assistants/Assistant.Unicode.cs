@@ -379,7 +379,7 @@ public static partial class Assistant
     /// <c>&gt;</c> <c>&amp;</c> as backslash-u escapes (u003c, u003e, u0026)
     /// and U+2028 U+2029 as u2028 and u2029 escapes. The result is one line.
     /// Without <paramref name="escapeHtml"/> (an Encoder with
-    /// <c>SetEscapeHTML(false)</c>, <see cref="WriteMessage"/>) the three
+    /// <c>SetEscapeHTML(false)</c>) the three
     /// HTML characters stay as they are; Go escapes U+2028 and U+2029 either
     /// way.
     /// </summary>

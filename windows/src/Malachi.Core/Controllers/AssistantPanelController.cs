@@ -9,10 +9,15 @@
 // newKey, run, run(_:on:), perform, runCalendar, canRunCalendarActions,
 // summarizeUnread, askAttachment, cancelPending, submit, retry, signIn,
 // openDraft, openCalendar, stop, newConversation,
-// close, start, prepare, prompt, unresolved, resolvePinned, settle, resolve,
-// launch, handle, exited, fail, clearRetries, endProcess, endSignIn,
-// closeSignIn, closeTurn, closeStreaming, append, localDate, Once); GTK:
-// ui/internal/assistantpanel/controller.go (Controller, its port).
+// close, start, prepare, prompt, promptContext, Turn, composeTurn,
+// promptParams, send, unresolved, resolvePinned, settle, resolve, launch,
+// handle, exited, fail, clearRetries, endProcess, endSignIn, closeSignIn,
+// closeTurn, closeStreaming, append, localDate, Once); GTK:
+// ui/internal/assistantpanel/controller.go (Controller, its port). Every
+// prompt is the daemon's (Prompter, assistant.prompt of purpose panel,
+// docs/api.md §4.18): the message of a turn, and for a new conversation the
+// system prompt with the user's profile, the tools and the bridge's
+// arguments.
 //
 // Windows differences:
 // - Every Swift Task goes through the controller scope (docs/windows-port.md
@@ -62,6 +67,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Daemon;
@@ -70,6 +76,9 @@ using Malachi.Core.Platform;
 using Malachi.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using AssistantEvent = Malachi.Core.Assistants.AssistantEvent;
+using AssistantEventKind = Malachi.Core.Assistants.AssistantEventKind;
+using AssistantUsage = Malachi.Core.Assistants.AssistantUsage;
 
 namespace Malachi.Core.Controllers;
 
@@ -170,11 +179,12 @@ namespace Malachi.Core.Controllers;
 /// </para>
 /// <para>
 /// The model hears of each pinned context once per Claude Code process: a
-/// free question carries a model-facing line in front of it for every
-/// context not yet told (<see cref="Assistant.ContextPreamble"/> for the
-/// first, <see cref="Assistant.AddedContextPreamble"/> for one added later),
-/// and an action's own prompt, which names its ids, tells the model of its
-/// context. A new process (after Stop, or when Claude Code ended) knows
+/// free question goes with every context not yet told
+/// (<see cref="PromptContext"/>; the daemon puts a line in front of the
+/// question, marked as an added one for a context added after the
+/// conversation's first; several untold contexts are told in one message,
+/// <see cref="ComposeTurnAsync"/>), and an action's own prompt, which names
+/// its ids, tells the model of its context. A new process (after Stop, or when Claude Code ended) knows
 /// nothing, so the contexts are told again.
 /// </para>
 /// <para>
@@ -292,7 +302,7 @@ public sealed partial class AssistantPanelController : IDisposable
         itemsView = items.AsReadOnly();
         pinnedView = pinned.AsReadOnly();
         Today = () => LocalDate(Time);
-        Language = () => Assistant.LanguageName(L10n.Catalogue.Language);
+        Language = () => Assistant.UiLanguage;
         settingsToken = settings.OnChange(SettingsKey.AssistantModel, RaiseState);
     }
 
@@ -348,22 +358,20 @@ public sealed partial class AssistantPanelController : IDisposable
     /// </summary>
     public Action<Assistant.CalendarRef>? OpenInCalendar { get; set; }
 
-    /// <summary>The date for the system prompt, YYYY-MM-DD: <see cref="LocalDate"/> on <see cref="Time"/> by default.</summary>
+    /// <summary>The date for the calendar actions' prompts, YYYY-MM-DD: <see cref="LocalDate"/> on <see cref="Time"/> by default.</summary>
     public Func<string> Today { get; set; }
 
     /// <summary>
-    /// The UI language's English name for the system prompt: the
-    /// <see cref="Assistant.LanguageName"/> of the catalogue's language by
-    /// default ("" is English).
+    /// The UI language as a BCP 47 tag ("cs"), which the model answers in;
+    /// "" or "en" is English (<see cref="Assistant.UiLanguage"/> by default).
     /// </summary>
     public Func<string> Language { get; set; }
 
     /// <summary>
-    /// The user's profile, for the system prompt of a new conversation: every
-    /// account's note (the conversation may span accounts; each note names
-    /// its account). Empty by default.
+    /// Builds the prompts (the daemon's assistant.prompt, the application's
+    /// <see cref="DaemonPrompter"/>); without one no question can be sent.
     /// </summary>
-    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+    public IAssistantPrompter? Prompter { get; set; }
 
     /// <summary>How long <see cref="ResolveContext"/> is waited for (<see cref="DefaultResolveTimeout"/>).</summary>
     public TimeSpan ResolveTimeout { get; set; } = DefaultResolveTimeout;
@@ -490,9 +498,13 @@ public sealed partial class AssistantPanelController : IDisposable
         _ => "",
     };
 
-    /// <summary>The panel's subtitle: "Claude Code · Sonnet" (two translated names, GTK's and Swift's separator).</summary>
+    /// <summary>
+    /// The panel's subtitle: "Claude Code · Sonnet", or the provider's name
+    /// and model (ChatGPT's, an ai account's; Go <c>Subtitle</c>), two
+    /// translated names with GTK's and Swift's separator.
+    /// </summary>
     public string Subtitle => Provider is { } provider
-        ? L10n.T("ChatGPT (Codex, experimental)") + " · " + (provider.Model.Length > 0 ? provider.Model : L10n.T("Use the provider’s default model"))
+        ? provider.Name + " · " + (provider.Model.Length > 0 ? provider.Model : L10n.T("Use the provider’s default model"))
         : Assistant.TargetName(AssistantTarget.Code) + " · " + Assistant.ModelName(Settings.AssistantModel);
 
     // What the quick actions act on: the chip's context before the
@@ -622,8 +634,8 @@ public sealed partial class AssistantPanelController : IDisposable
 
     /// <summary>
     /// The bar's Add to Conversation: the list's selection joins what the
-    /// conversation is about; the next free question tells the model
-    /// (<see cref="Assistant.AddedContextPreamble"/>).
+    /// conversation is about; the next free question tells the model (as an
+    /// added <see cref="PromptContext"/>).
     /// </summary>
     public void AddSelection()
     {
@@ -1017,8 +1029,23 @@ public sealed partial class AssistantPanelController : IDisposable
         {
             return;
         }
-        // 1. Consent, once ever.
+        // 1. Consent, once ever: the provider's, Claude Code's key without
+        // one; an ai account's is the account's own in the daemon, never a
+        // key (Swift consentGiven, recordConsent; GTK providerSettings).
         var selectedProvider = Provider;
+        var overAccount = Assistant.SourceOf(Settings.AssistantProvider) == AssistantProviderSource.Account;
+        if (overAccount && selectedProvider is null)
+        {
+            // The account's provider is not wired (the application gives
+            // it): nothing runs Claude Code meanwhile, and the question goes
+            // back to the field.
+            if (request.Text.Length > 0)
+            {
+                scope.Raise(RestoreInputRequested, this, request.Text);
+            }
+            FailProvider(UnavailableApiProvider.Reason, retry: false);
+            return;
+        }
         if (!(selectedProvider?.HasConsent ?? Settings.AssistantConsent))
         {
             var allowed = await AskConsentAsync();
@@ -1083,11 +1110,11 @@ public sealed partial class AssistantPanelController : IDisposable
                 return;
             }
         }
-        string prompt;
+        Turn turn;
         IReadOnlyList<int> told;
         try
         {
-            (prompt, told) = Prompt(request);
+            (turn, told) = Prompt(request);
         }
         catch (AssistantException e)
         {
@@ -1101,10 +1128,36 @@ public sealed partial class AssistantPanelController : IDisposable
             {
                 return;
             }
-            await SubmitProviderAsync(selectedProvider, prompt, told, my);
+            await SubmitProviderAsync(selectedProvider, turn, told, my);
             return;
         }
-        // 4. Claude Code, started when the conversation has none.
+        if (Prompter is not { } prompter)
+        {
+            Fail(Assistant.StoppedText(Assistant.NoPrompter), retry: false);
+            return;
+        }
+        // 4. The daemon's prompt: the message, and for a new conversation
+        // the system prompt and the tools as well.
+        PromptResult res;
+        try
+        {
+            (res, _) = await ComposeTurnAsync(prompter, PromptParams, turn, scope.Lifetime);
+        }
+        catch (Exception e) when (Assistant.IsPromptFailure(e) || e is OperationCanceledException)
+        {
+            if (my != gen)
+            {
+                return;
+            }
+            LogPromptCallFailed(logger, e.GetType().Name);
+            Fail(Assistant.StoppedText(Assistant.PromptReason(e)), retry: true);
+            return;
+        }
+        if (my != gen)
+        {
+            return;
+        }
+        // Claude Code, started when the conversation has none.
         if (!HasRunningSession)
         {
             Process = null;
@@ -1167,7 +1220,7 @@ public sealed partial class AssistantPanelController : IDisposable
             }
             try
             {
-                Process = Launch(path, bridgePath);
+                Process = Launch(path, bridgePath, res);
             }
             catch (ClaudeCodeStartException e)
             {
@@ -1182,8 +1235,8 @@ public sealed partial class AssistantPanelController : IDisposable
                 return;
             }
         }
-        // 5. The turn.
-        if (Process is not { } p || !p.Send(Assistant.UserMessage(prompt)))
+        // 5. The turn, the message as the daemon built it.
+        if (Process is not { } p || !p.Send(Assistant.UserMessage(res.Message ?? "")))
         {
             Fail(Assistant.StoppedText("claude is not running"), retry: true);
             return;
@@ -1221,12 +1274,14 @@ public sealed partial class AssistantPanelController : IDisposable
         }
     }
 
-    // The prompt of a question and the keys of the pinned contexts it tells
-    // the model about. A free question carries a line for every context not
-    // told yet (Assistant.ContextPreamble for the conversation's first,
-    // Assistant.AddedContextPreamble for one added later); a message action
-    // names its context's ids, and an attachment's question its message's.
-    private (string Prompt, IReadOnlyList<int> Told) Prompt(Request request)
+    // The turn of a question (the daemon builds the message from it,
+    // ComposeTurnAsync) and the keys of the pinned contexts it tells the
+    // model about. A free question carries every context not told yet (the
+    // conversation's first as it is, one added later marked Added; the
+    // daemon's context line goes in front of the question); a message action
+    // names its context's ids in its own prompt, and an attachment's question
+    // its message's.
+    private (Turn Turn, IReadOnlyList<int> Told) Prompt(Request request)
     {
         switch (request.Kind)
         {
@@ -1235,13 +1290,13 @@ public sealed partial class AssistantPanelController : IDisposable
                 {
                     throw new AssistantException(AssistantError.NoMessages, "assistant: no message ids");
                 }
-                return (Assistant.Prompt(AssistantTarget.App, a, c.Selection) + request.Text, [key]);
+                return (new Turn(Assistant.Prompt(AssistantTarget.App, a, c.Selection) + request.Text), [key]);
             case UnreadRequest(var account, var folder):
-                return (Assistant.UnreadPrompt(account, folder), []);
+                return (new Turn(Assistant.UnreadPrompt(account, folder)), []);
             case CalendarRequest(var calendar):
-                return (Assistant.CalendarPrompt(calendar, Today()) + request.Text, []);
+                return (new Turn(Assistant.CalendarPrompt(calendar, Today()) + request.Text), []);
             case AttachmentRequest(var account, var message, var part):
-                var prompt = Assistant.AttachmentPrompt(account, message, part) + request.Text;
+                var prompt = new Turn(Assistant.AttachmentPrompt(account, message, part) + request.Text);
                 if (request.Target is PinnedTarget(var own)
                     && PinnedContext(own)?.Selection == new AssistantSelection(account, [message]))
                 {
@@ -1249,7 +1304,7 @@ public sealed partial class AssistantPanelController : IDisposable
                 }
                 return (prompt, []);
             default:
-                var lines = new List<string>();
+                var contexts = new List<PromptContext>();
                 var told = new List<int>();
                 for (var i = 0; i < pinned.Count; i++)
                 {
@@ -1259,19 +1314,94 @@ public sealed partial class AssistantPanelController : IDisposable
                         continue;
                     }
                     told.Add(p.Key);
-                    if (p.Context is not { } context)
+                    if (p.Context is { } context && PromptContextOf(context.Selection, added: i > 0) is { } promptContext)
                     {
-                        continue;
-                    }
-                    var line = i == 0 ? Assistant.ContextPreamble(context.Selection) : Assistant.AddedContextPreamble(context.Selection);
-                    if (line.Length > 0)
-                    {
-                        lines.Add(line);
+                        contexts.Add(promptContext);
                     }
                 }
-                var preamble = string.Join("\n", lines);
-                return (preamble.Length == 0 ? request.Text : preamble + "\n\n" + request.Text, told);
+                return (new Turn(request.Text, contexts), told);
         }
+    }
+
+    /// <summary>
+    /// assistantpanel.promptContext: the context of a turn for
+    /// <paramref name="selection"/>: the account and the ids newest first, at
+    /// most <see cref="Assistant.MaxMessages"/> non-empty ones (the daemon
+    /// names them); null without an account or without an id, and then the
+    /// question goes alone.
+    /// </summary>
+    public static PromptContext? PromptContextOf(AssistantSelection selection, bool added)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        if (selection.AccountId.Length == 0)
+        {
+            return null;
+        }
+        var ids = selection.MessageIds.Where(id => id.Length > 0).Take(Assistant.MaxMessages).Select(id => new MessageId(id)).ToList();
+        return ids.Count == 0 ? null : new PromptContext { AccountId = new AccountId(selection.AccountId), MessageIds = ids, Added = added };
+    }
+
+    /// <summary>
+    /// What a question sends: the text, and the contexts to tell the model
+    /// about in front of it (none, one, or several when more than one pinned
+    /// context is untold).
+    /// </summary>
+    /// <param name="Text">The question's text, as the model reads it.</param>
+    /// <param name="Contexts">The contexts not told yet.</param>
+    public sealed record Turn(string Text, IReadOnlyList<PromptContext> Contexts)
+    {
+        /// <summary>A turn without a context.</summary>
+        public Turn(string text)
+            : this(text, [])
+        {
+        }
+    }
+
+    // The prompter's parameters of the panel: the purpose and the UI
+    // language (ComposeTurnAsync adds the input).
+    private AssistantPromptParams PromptParams => new() { Purpose = PromptPurpose.Panel, Language = Language() };
+
+    /// <summary>
+    /// assistantpanel.composeTurn: the daemon's prompt of
+    /// <paramref name="turn"/> under <paramref name="parameters"/>: the
+    /// system prompt, the tools and the bridge's arguments of the panel, and
+    /// the message of the turn; and the input a provider's session submits
+    /// for it. With at most one context both are one assistant.prompt call.
+    /// With several (a new process after Stop with two pinned contexts, two
+    /// selections added before a question) the daemon is asked once per
+    /// context, the context line of each answer (what precedes the text) is
+    /// taken, and the message is the lines, one per line, a blank line and
+    /// the text, as the clients composed it before the prompts moved to the
+    /// daemon; the input is then that whole message as the text, without a
+    /// context, so that a session gets the same message (assistant.prompt
+    /// takes one context per turn, docs/api.md §4.18).
+    /// </summary>
+    public static async Task<(PromptResult Result, PromptInput Input)> ComposeTurnAsync(
+        IAssistantPrompter prompter, AssistantPromptParams parameters, Turn turn, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(prompter);
+        ArgumentNullException.ThrowIfNull(parameters);
+        ArgumentNullException.ThrowIfNull(turn);
+        if (turn.Contexts.Count <= 1)
+        {
+            var input = new PromptInput { Text = turn.Text, Context = turn.Contexts.Count == 0 ? null : turn.Contexts[0] };
+            return (await prompter.PromptAsync(parameters with { Input = input }, cancellationToken), input);
+        }
+        PromptResult? first = null;
+        var lines = new List<string>();
+        var suffix = "\n\n" + turn.Text;
+        foreach (var c in turn.Contexts)
+        {
+            var res = await prompter.PromptAsync(parameters with { Input = new PromptInput { Text = turn.Text, Context = c } }, cancellationToken);
+            first ??= res;
+            var m = res.Message ?? "";
+            if (m.EndsWith(suffix, StringComparison.Ordinal) && m.Length > suffix.Length)
+            {
+                lines.Add(m[..^suffix.Length]);
+            }
+        }
+        var message = lines.Count == 0 ? turn.Text : string.Join("\n", lines) + "\n\n" + turn.Text;
+        return (first! with { Message = message }, new PromptInput { Text = message });
     }
 
     // The pinned folded conversations whose members the prompt of request
@@ -1404,12 +1534,10 @@ public sealed partial class AssistantPanelController : IDisposable
         }
     }
 
-    // The system prompt of a new conversation, with the user's profile.
-    private string NewConversationSystemPrompt() =>
-        Assistant.WithProfile(Assistant.SystemPrompt(Language(), Today()), Profile());
-
-    // Starts Claude Code for a new conversation, in the private directory.
-    private ClaudeCodeProcess Launch(string path, string bridgePath)
+    // Starts Claude Code for a new conversation, in the private directory,
+    // with the daemon's prompt res: the system prompt with the user's
+    // profile, the tools and the bridge's arguments.
+    private ClaudeCodeProcess Launch(string path, string bridgePath, PromptResult res)
     {
         if (directories is null)
         {
@@ -1424,7 +1552,7 @@ public sealed partial class AssistantPanelController : IDisposable
             Bridge = bridgePath,
             Socket = socket,
             Model = Settings.AssistantModel,
-            SystemPrompt = NewConversationSystemPrompt(),
+            Prompt = res,
         };
         var p = new ClaudeCodeProcess(
             path, Assistant.Args(options), Assistant.ChildEnvironment(environment, path), directory, killGrace, Time, processLogger);
@@ -1735,6 +1863,9 @@ public sealed partial class AssistantPanelController : IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "assistant prompt: {Kind}")]
     private static partial void LogPromptFailed(ILogger logger, AssistantError kind);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "assistant: the prompt could not be built: {Kind}")]
+    private static partial void LogPromptCallFailed(ILogger logger, string kind);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "assistant: claude could not be started: {Failure}")]
     private static partial void LogStartFailed(ILogger logger, ClaudeCodeStartFailure failure);

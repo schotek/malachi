@@ -46,7 +46,9 @@ final class ClaudeDesktopService: NSObject {
         ClaudeDesktopController.Platform(
             isRunning: { !Self.running().isEmpty },
             quit: { await Self.quit(timeout: $0) },
-            launch: { Self.launch() })
+            launch: { Self.launch() },
+            // The App Store build has no Apple events (docs/plans/mac-app-store.md §3.2).
+            canRestart: Distribution.current == .direct)
     }
 
     @objc private func applicationTerminated(_ note: Foundation.Notification) {

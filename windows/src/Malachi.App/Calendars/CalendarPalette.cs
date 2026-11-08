@@ -11,13 +11,13 @@
 // not in a calendar: the accent), the views' opaque surface in the
 // element's theme (CalendarStyles.xaml's CalendarSurfaceColor, light and
 // dark) and the opaque tints blended over it, so that no grid line shows
-// through a block (the owner's finding of the live test, docs/calendar.md
+// through a block (docs/calendar.md
 // §5.3). Windows: a normal block, bar or all-day pill is filled with the
-// saturated colour itself, not macOS's 18 % tint (the owner's decision of
-// 2026-10-17 after the Windows live test), so the text on it is chosen by
+// saturated colour itself, not macOS's 18 % tint,
+// so the text on it is chosen by
 // contrast (TextOn: white while white has 4.5:1 against the fill, WCAG's
-// threshold for normal text, otherwise near-black; the owner's second
-// finding of 2026-10-17 over his Outlook calendars, where 3:1 left white
+// threshold for normal text, otherwise near-black; with Outlook's
+// calendar colours 3:1 left white
 // too weak on the lighter colours); the text in the colour on the surface
 // (an unanswered invitation) is shaded until it has 4.5:1 (InkOn), and the
 // colour bar of a filled block is the colour 25 % towards black (Shade).

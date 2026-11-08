@@ -20,6 +20,12 @@
 // (AssistantTranscriptViews.swift AssistantCalendarView; docs/calendar.md
 // §5.9).
 //
+// Over an AI provider account (docs/plans/ai-api.md §7.4) the subtitle is
+// the provider's name and model, the footer names where the mail goes
+// (FooterText, the application's AssistantFooter), and an error line of a
+// session the daemon runs that Integrations mend offers Set Up in
+// Integrations… (OpenIntegrations; Swift onOpenIntegrations, footerText).
+//
 // Windows differences: Return sends and Shift+Return starts a new line in a
 // TextBox that accepts returns (GTK's text view the same); the user's
 // question is a tinted card like GTK's .assistant-user bubble; the activity
@@ -137,6 +143,30 @@ public sealed partial class AssistantPanel : UserControl
     public void FocusInput() => Input.Focus(FocusState.Programmatic);
 
     /// <summary>
+    /// The footer's sentence for the provider in effect (ChatGPT's, an ai
+    /// account's destination, Claude's; AppState.AssistantFooter); null shows
+    /// Claude's.
+    /// </summary>
+    public Func<string>? FooterText { get; set; }
+
+    /// <summary>
+    /// Set Up in Integrations… on an error line of a session the daemon runs
+    /// over an ai account (<see cref="ErrorOffer.SetUpInIntegrations"/>): the
+    /// application opens the account's settings.
+    /// </summary>
+    public Action? OpenIntegrations { get; set; }
+
+    /// <summary>The provider in effect or its account changed: the subtitle and the footer follow.</summary>
+    public void ProviderChanged()
+    {
+        if (controller is { } c)
+        {
+            SubtitleLabel.Text = c.Subtitle;
+        }
+        Footer.Text = FooterText?.Invoke() ?? Assistant.PanelTexts().Footer;
+    }
+
+    /// <summary>
     /// Whether the main window has a folder Summarize Unread in This Folder
     /// can run on (the Assistant menu item's condition); the main window
     /// installs it with <see cref="SummarizeUnreadRequested"/>.
@@ -210,7 +240,8 @@ public sealed partial class AssistantPanel : UserControl
             return;
         }
         SubtitleLabel.Text = c.Subtitle;
-        Footer.Text = c.Provider?.Id == AssistantProviderID.ChatGpt ? ChatGptText.Footer : Assistant.PanelTexts().Footer;
+        // Where the mail goes: ChatGPT's, an ai account's destination, Claude's.
+        Footer.Text = FooterText?.Invoke() ?? Assistant.PanelTexts().Footer;
         ChipLabel.Text = c.ContextLabel;
         ToolTipService.SetToolTip(ChipLabel, c.ContextLabel);
         if (c.IsPinned)
@@ -455,12 +486,14 @@ public sealed partial class AssistantPanel : UserControl
         ErrorOffer.SignIn => Assistant.SignInTexts().SignIn,
         ErrorOffer.Install => Assistant.SignInTexts().GetClaudeCode,
         ErrorOffer.Reconnect => ChatGptText.Reconnect,
+        ErrorOffer.SetUpInIntegrations => Assistant.ApiText().SetUpInIntegrations,
         _ => "",
     };
 
     // The other button of an error line: Sign In… runs Claude Code's own
     // sign-in and sends the question again (the controller's), Get Claude
-    // Code… opens Anthropic's page with the installers.
+    // Code… opens Anthropic's page with the installers, Set Up in
+    // Integrations… the ai account's settings.
     private void Offered(int id, ErrorOffer offer)
     {
         switch (offer)
@@ -473,6 +506,9 @@ public sealed partial class AssistantPanel : UserControl
                 break;
             case ErrorOffer.Reconnect:
                 controller?.Reconnect(id);
+                break;
+            case ErrorOffer.SetUpInIntegrations:
+                OpenIntegrations?.Invoke();
                 break;
             default:
                 break;

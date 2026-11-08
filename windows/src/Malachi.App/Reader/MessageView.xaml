@@ -186,7 +186,7 @@ gets the sanitiser's output only.
                 </AppBarButton>
                 <!-- The eWay-CRM button (docs/eway.md §2.6 crm_button), a
                      group of its own between Archive and Trash and the Star
-                     (owner, Gate B 2026-10-17): Save to eWay-CRM, Saving, or
+                     (a toolbar group): Save to eWay-CRM, Saving, or
                      In eWay-CRM with its menu; hidden without an eWay-CRM
                      account or for a message that cannot be saved (its
                      window's CrmController, MessageWindow). -->

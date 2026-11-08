@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Moves the data of the DMG build into the App Store build's container the
+first time a sandboxed copy starts (docs/plans/mac-app-store.md §6). Not in
+any bundle yet: it moves, it does not copy, so a test bundle with it would
+take the everyday app's mail store away from it. Whether a copy that
+leaves the DMG's data in place is possible is open (§6); until then this
+file stays out of make app.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Move</key>
+	<array>
+		<string>${ApplicationSupport}/Malachi Mail</string>
+	</array>
+</dict>
+</plist>

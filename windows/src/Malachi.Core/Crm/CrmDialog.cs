@@ -142,7 +142,7 @@ public sealed partial class CrmDialog
     /// <summary>
     /// OffersSearchHint: the dialog shows the quiet line that deals and
     /// projects are found by searching: something is listed, but no deal or
-    /// project (owner, 2026-10-17).
+    /// project.
     /// </summary>
     public bool OffersSearchHint => items.Count > 0 && !items.Keys.Any(k => CanBeSuperior(k.Kind));
 

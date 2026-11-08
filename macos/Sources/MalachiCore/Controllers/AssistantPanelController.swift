@@ -24,15 +24,21 @@ import os
 ///    known (`resolveContext`, which the application answers with
 ///    `ListController.selectedIDs`; after `resolveTimeout` the newest
 ///    message alone is used).
-/// 4. Without a running process: Claude Code is located (none: "Claude
-///    Code was not found on this computer"), the bridge must be there
-///    (none: the tools are not available), and Claude Code must not say it
-///    is signed out (`ClaudeCodeLocator.signedIn`, asked afresh; not known
-///    counts as signed in, and the process then says what is wrong):
-///    "Claude Code is not signed in" with Sign In…, see below. Then the
-///    process starts (`Assistant.args`, `Assistant.childEnv`, the private
+/// 4. The daemon builds the turn (`prompter`, assistant.prompt of purpose
+///    panel, docs/api.md §4.18): the message, and for a new conversation
+///    the system prompt with the user's profile, the tools and the
+///    bridge's arguments (`composeTurn`). Then, without a running process:
+///    Claude Code is located (none: "Claude Code was not found on this
+///    computer"), the bridge must be there (none: the tools are not
+///    available), and Claude Code must not say it is signed out
+///    (`ClaudeCodeLocator.signedIn`, asked afresh; not known counts as
+///    signed in, and the process then says what is wrong): "Claude Code
+///    is not signed in" with Sign In…, see below. Then the process starts
+///    (`Assistant.args` over the prompt, `Assistant.childEnv`, the private
 ///    directory) and is kept for the follow-up questions of the
-///    conversation.
+///    conversation. With another provider in effect (`provider`: Codex, a
+///    session the daemon runs over an `ai` account) its session takes the
+///    place of the process.
 /// 5. `running`: the turn is written to stdin. Its `system/init` must
 ///    report the bridge connected, or the conversation ends with "The
 ///    Malachi Mail tools are not available to the assistant". Text deltas
@@ -91,10 +97,11 @@ import os
 /// question on a message that is part of no pinned context adds it first.
 ///
 /// The model hears of each pinned context once per Claude Code process: a
-/// free question carries a model-facing line in front of it for every
-/// context not yet told (`Assistant.contextPreamble` for the first,
-/// `Assistant.addedContextPreamble` for one added later), and an action's
-/// own prompt, which names its ids, tells the model of its context. A new
+/// free question goes with every context not yet told (`PromptContext`;
+/// the daemon puts a line in front of the question, marked as an added one
+/// for a context added after the conversation's first; several untold
+/// contexts are told in one message, `composeTurn`), and an action's own
+/// prompt, which names its ids, tells the model of its context. A new
 /// process (after Stop, or when Claude Code ended) knows nothing, so the
 /// contexts are told again.
 ///
@@ -150,6 +157,12 @@ public final class AssistantPanelController {
         /// missing or lapsed (`reconnect(_:)`; only when the window gave
         /// `reconnectProvider`).
         case reconnectProvider
+        /// "Set Up in Integrations…" (`Assistant.apiText().setUpInIntegrations`)
+        /// beside a failure of a session the daemon runs over an `ai`
+        /// account that Integrations mend: the account's consent is not
+        /// given or the provider refused its key (docs/plans/ai-api.md
+        /// §7.4); the view opens the account's settings.
+        case setUpInIntegrations
     }
 
     /// What changed in `items`, for the view.
@@ -266,7 +279,12 @@ public final class AssistantPanelController {
 
     // MARK: Dependencies
 
+    /// The provider in effect; nil (or a hook that answers nil) is the
+    /// user's Claude Code.
     public var provider: (() -> (any AssistantProvider)?)?
+    /// Builds the prompts (the daemon's assistant.prompt); without one no
+    /// question can be sent.
+    public var prompter: (any AssistantPrompter)?
     /// Connects the ChatGPT account again (its sign-in in the browser);
     /// true when it worked. nil: a lapsed connection offers nothing.
     public var reconnectProvider: (@MainActor () async -> Bool)?
@@ -305,14 +323,11 @@ public final class AssistantPanelController {
     /// A question that was not sent (consent declined): its text goes back
     /// into the field.
     public var onRestoreInput: (@MainActor (String) -> Void)?
-    /// The date for the system prompt, YYYY-MM-DD.
+    /// The date for the calendar actions' prompts, YYYY-MM-DD.
     public var today: @MainActor () -> String = AssistantPanelController.localDate
-    /// The UI language's English name for the system prompt.
-    public var language: @MainActor () -> String = { Assistant.languageName(L10n.catalogue.language) }
-    /// The user's profile, for the system prompt of a new conversation:
-    /// every account's note (the conversation may span accounts; each note
-    /// names its account).
-    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
+    /// The UI language as a BCP 47 tag ("cs"), which the model answers in;
+    /// "" or "en" is English.
+    public var language: @MainActor () -> String = { Assistant.uiLanguage }
     /// How long `resolveContext` is waited for.
     public var resolveTimeout: Duration = AssistantPanelController.defaultResolveTimeout
 
@@ -540,11 +555,13 @@ public final class AssistantPanelController {
         }
     }
 
-    /// The panel's subtitle: "Claude Code · Sonnet".
+    /// The panel's subtitle: "Claude Code · Sonnet", or the provider's
+    /// name and model ("ChatGPT (Codex, experimental) · gpt-6", an `ai`
+    /// account's name and model).
     public var subtitle: String {
-        if settings.assistantProvider == .chatgpt {
-            let model = settings.assistantChatGPTModel.isEmpty ? L10n.T("Use the provider’s default model") : settings.assistantChatGPTModel
-            return ChatGPTText.name + " · " + model
+        if let p = provider?() {
+            let model = p.model.isEmpty ? L10n.T("Use the provider’s default model") : p.model
+            return p.name + " · " + model
         }
         return Assistant.targetName(.code) + " · " + Assistant.modelName(settings.assistantModel)
     }
@@ -834,9 +851,28 @@ public final class AssistantPanelController {
         }
     }
 
+    /// The consent of the provider in effect: the settings' key for Claude
+    /// Code and ChatGPT (`selectedAssistantConsent`); an `ai` account's is
+    /// the account's own in the daemon (`AssistantProvider.hasConsent`,
+    /// recorded by `acceptConsent`), never a key (GTK `providerSettings`).
+    var consentGiven: Bool {
+        if Assistant.sourceOf(settings.assistantProvider) == .account {
+            return provider?()?.hasConsent == true
+        }
+        return settings.selectedAssistantConsent
+    }
+
+    private func recordConsent() {
+        if Assistant.sourceOf(settings.assistantProvider) == .account {
+            provider?()?.acceptConsent()
+        } else {
+            settings.selectedAssistantConsent = true
+        }
+    }
+
     private func prepare(_ req: Request, _ my: Int, echo: Bool) async {
         // 1. Consent, once ever.
-        if !settings.selectedAssistantConsent {
+        if !consentGiven {
             let allowed = await consent?() ?? false
             guard my == gen else { return }
             guard allowed else {
@@ -847,7 +883,7 @@ public final class AssistantPanelController {
                 }
                 return
             }
-            settings.selectedAssistantConsent = true
+            recordConsent()
         }
         // 2. The question in the transcript; the conversation's first
         // question pins what the chip showed, and what the question is
@@ -888,23 +924,39 @@ public final class AssistantPanelController {
             await resolvePinned(key).value
             guard my == gen else { return }
         }
-        let prompt: String
+        let turn: Turn
         let told: [Int]
         do {
-            (prompt, told) = try self.prompt(req)
+            (turn, told) = try self.prompt(req)
         } catch {
             log.warning("assistant prompt: \(String(describing: error), privacy: .public)")
             fail(Assistant.stoppedText(String(describing: error)), retry: false)
             return
         }
-        if settings.assistantProvider == .chatgpt {
+        if Assistant.sourceOf(settings.assistantProvider) != .claude {
             if req.reconnect, reconnectProvider != nil {
                 guard await reconnectFirst(my) else { return }
             }
-            await submitProvider(prompt, told: told, generation: my)
+            await providerPrompt(turn, told: told, generation: my)
             return
         }
-        // 4. Claude Code, started when the conversation has none.
+        guard let prompter else {
+            fail(Assistant.stoppedText(AssistantRequest.noPrompter), retry: false)
+            return
+        }
+        // 4. The daemon's prompt: the message, and for a new conversation
+        // the system prompt and the tools as well.
+        let res: PromptResult
+        do {
+            (res, _) = try await Self.composeTurn(prompter, promptParams, turn)
+        } catch {
+            guard my == gen, !closed else { return }
+            log.warning("assistant prompt: \(String(describing: error), privacy: .public)")
+            fail(Assistant.stoppedText(AssistantRequest.promptReason(error)), retry: true)
+            return
+        }
+        guard my == gen, !closed else { return }
+        // Claude Code, started when the conversation has none.
         if process?.running != true {
             process = nil
             guard let path = locator.locate() else {
@@ -927,15 +979,20 @@ public final class AssistantPanelController {
                 }
             }
             do {
-                process = try launch(path, bridge)
+                process = try launch(path, bridge, res)
             } catch {
                 log.warning("assistant: \(String(describing: error), privacy: .public)")
                 fail(Assistant.stoppedText(String(describing: error)), retry: true)
                 return
             }
         }
-        // 5. The turn.
-        guard let process, process.send(Assistant.userMessage(prompt)) else {
+        // 5. The turn, the message as the daemon built it.
+        send(res.message, told: told)
+    }
+
+    /// Step 5: the turn, `message` as the daemon built it.
+    private func send(_ message: String, told: [Int]) {
+        guard let process, process.send(Assistant.userMessage(message)) else {
             fail(Assistant.stoppedText("claude is not running"), retry: true)
             return
         }
@@ -948,52 +1005,180 @@ public final class AssistantPanelController {
         onState?()
     }
 
-    private func submitProvider(_ prompt: String, told: [Int], generation my: Int) async {
-        guard let provider = provider?(), let bridge else {
-            fail(L10n.T("Could not connect to ChatGPT."), retry: false); return
+    /// The prompter's parameters of the panel: the purpose and the UI
+    /// language (`composeTurn` adds the input).
+    var promptParams: AssistantPromptParams {
+        AssistantPromptParams(purpose: .panel, language: language())
+    }
+
+    /// What a question sends: the text, and the contexts to tell the model
+    /// about in front of it (none, one, or several when more than one
+    /// pinned context is untold).
+    struct Turn: Sendable, Equatable {
+        var text: String
+        var contexts: [PromptContext] = []
+    }
+
+    /// assistantpanel.composeTurn: the daemon's prompt of `turn` under
+    /// `params`: the system prompt, the tools and the bridge's arguments of
+    /// the panel, and the message of the turn; and the input a provider's
+    /// session submits for it. With at most one context both are one
+    /// assistant.prompt call. With several (a new process after Stop with
+    /// two pinned contexts, two selections added before a question) the
+    /// daemon is asked once per context, the context line of each answer
+    /// (what precedes the text) is taken, and the message is the lines, one
+    /// per line, a blank line and the text, as the clients composed it
+    /// before the prompts moved to the daemon; the input is then that whole
+    /// message as the text, without a context, so that a session gets the
+    /// same message (assistant.prompt takes one context per turn,
+    /// docs/api.md §4.18).
+    static func composeTurn(
+        _ prompter: any AssistantPrompter, _ params: AssistantPromptParams, _ turn: Turn
+    ) async throws -> (PromptResult, PromptInput) {
+        var params = params
+        if turn.contexts.count <= 1 {
+            let input = PromptInput(text: turn.text, context: turn.contexts.first)
+            params.input = input
+            return (try await prompter.prompt(params), input)
         }
-        do {
-            if providerSession?.running != true {
-                let session = try await provider.start(AssistantSessionSpec(
-                    systemPrompt: systemPrompt(),
-                    tools: AssistantRequest.Tools(bridge: bridge, socket: socket, bridgeArgs: [], allowed: Assistant.allowedTools),
-                    modelID: settings.assistantChatGPTModel))
-                guard my == gen else { session.terminate(); return }
-                providerSession = session
-                session.onEvents = { [weak self] events in self?.handle(events) }
-                session.onExit = { [weak self] reason in
-                    guard let self, self.providerSession != nil else { return }
-                    self.providerSession = nil
-                    if self.phase == .running { self.providerFail(reason, retry: false) }
+        var first = PromptResult(systemPrompt: "")
+        var lines: [String] = []
+        for (i, c) in turn.contexts.enumerated() {
+            params.input = PromptInput(text: turn.text, context: c)
+            let res = try await prompter.prompt(params)
+            if i == 0 {
+                first = res
+            }
+            let suffix = "\n\n" + turn.text
+            if res.message.hasSuffix(suffix) {
+                let line = String(res.message.dropLast(suffix.count))
+                if !line.isEmpty {
+                    lines.append(line)
                 }
             }
-            guard my == gen, let session = providerSession else { return }
-            for i in pinned.indices where told.contains(pinned[i].key) { pinned[i].announced = true }
-            phase = .running; onState?()
-            try await session.submit(prompt)
+        }
+        var message = turn.text
+        if !lines.isEmpty {
+            message = lines.joined(separator: "\n") + "\n\n" + turn.text
+        }
+        first.message = message
+        return (first, PromptInput(text: message))
+    }
+
+    /// assistantpanel.providerPrompt: the turn of a provider's session:
+    /// the daemon's prompt of `turn` (`composeTurn`) is asked for first;
+    /// the running session then gets the turn's input, else a session is
+    /// opened with the panel's prompt (the system prompt with the profile,
+    /// the tools and the bridge's arguments) and gets it.
+    private func providerPrompt(_ turn: Turn, told: [Int], generation my: Int) async {
+        guard let provider = provider?(), let bridge else {
+            fail(L10n.T("Could not connect to ChatGPT."), retry: false)
+            return
+        }
+        guard let prompter else {
+            fail(Assistant.stoppedText(AssistantRequest.noPrompter), retry: false)
+            return
+        }
+        let res: PromptResult
+        let input: PromptInput
+        do {
+            (res, input) = try await Self.composeTurn(prompter, promptParams, turn)
         } catch {
-            guard my == gen else { return }
-            endProcess()
-            let code = (error as? ChatGPTFailure)?.code ?? ""
-            if AssistantRequest.providerFailure(code) == .notSignedIn, reconnectProvider != nil {
-                providerFail(code, retry: false)
-            } else {
-                fail(L10n.T("Could not connect to ChatGPT."), retry: false)
+            guard my == gen, !closed else { return }
+            log.warning("assistant prompt: \(String(describing: error), privacy: .public)")
+            fail(Assistant.stoppedText(AssistantRequest.promptReason(error)), retry: true)
+            return
+        }
+        guard my == gen, !closed else { return }
+        if providerSession?.running == true {
+            await sendProvider(input, told: told, generation: my)
+            return
+        }
+        do {
+            let session = try await provider.start(AssistantSessionSpec(
+                purpose: .panel, language: language(), bridgePath: bridge, systemPrompt: res.systemPrompt,
+                tools: AssistantRequest.Tools(
+                    bridge: bridge, socket: socket, bridgeArgs: res.bridgeArgs, allowed: Assistant.prefixTools(res.tools))))
+            guard my == gen, !closed else {
+                session.terminate()
+                return
             }
+            providerSession = session
+            session.onEvents = { [weak self, weak session] events in
+                guard let self, let session, self.providerSession === session, !self.closed else { return }
+                self.handle(events)
+            }
+            session.onExit = { [weak self, weak session] reason in
+                guard let self, let session, self.providerSession === session, !self.closed else { return }
+                self.providerSession = nil
+                if self.phase == .running {
+                    self.providerFail(reason, retry: true)
+                }
+            }
+        } catch {
+            guard my == gen, !closed else { return }
+            providerFail((error as? ChatGPTFailure)?.code ?? "chatgpt_request_failed", retry: false)
+            return
+        }
+        await sendProvider(input, told: told, generation: my)
+    }
+
+    /// The turn's input to the provider's session.
+    private func sendProvider(_ input: PromptInput, told: [Int], generation my: Int) async {
+        guard let session = providerSession else {
+            providerFail("codex_session_closed", retry: false)
+            return
+        }
+        for i in pinned.indices where told.contains(pinned[i].key) {
+            pinned[i].announced = true
+        }
+        authFailed = false
+        refreshFailed = false
+        phase = .running
+        onState?()
+        do {
+            try await session.submit(input)
+        } catch {
+            guard my == gen, providerSession === session, phase == .running else { return }
+            endProcess()
+            providerFail((error as? ChatGPTFailure)?.code ?? "chatgpt_request_failed", retry: false)
         }
     }
 
-    /// The error line of a provider's reason (GTK `providerFail`): a
-    /// connection that is missing or lapsed offers Reconnect to ChatGPT,
-    /// anything else is the assistant stopped with the reason.
+    /// The error line of a provider's reason (GTK `providerFail`,
+    /// `providerFailure`): Codex missing offers Try Again; a connection
+    /// that is missing or lapsed offers Reconnect to ChatGPT (when the
+    /// window gave `reconnectProvider`), an `ai` account whose consent is
+    /// not given or whose key was refused Set Up in Integrations…; the
+    /// plan's limit offers Try Again; anything else is the failure's own
+    /// line (a daemon session's failure class has a sentence of its own)
+    /// with `retry`.
     private func providerFail(_ reason: String, retry: Bool) {
-        if AssistantRequest.providerFailure(reason) == .notSignedIn, reconnectProvider != nil {
+        let f = AssistantRequest.providerFailure(reason)
+        var text = f.text
+        var retry = retry
+        var offer: Offer = .none
+        switch f {
+        case .notFound:
+            retry = true
+        case .notSignedIn(let r):
+            retry = false
+            if r.hasPrefix(Assistant.apiFailurePrefix) {
+                offer = .setUpInIntegrations
+            } else if reconnectProvider != nil {
+                offer = .reconnectProvider
+                text = L10n.T("Could not connect to ChatGPT.")
+            }
+        case .limit:
+            retry = true
+        default:
+            break
+        }
+        if offer == .reconnectProvider || offer == .setUpInIntegrations {
             // The next question needs a new session of the account.
             endProcess()
-            fail(L10n.T("Could not connect to ChatGPT."), retry: false, offer: .reconnectProvider)
-        } else {
-            fail(Assistant.stoppedText(reason), retry: retry)
         }
+        fail(text, retry: retry, offer: offer)
     }
 
     /// Connects ChatGPT again, shown as an activity line; true once it
@@ -1056,44 +1241,60 @@ public final class AssistantPanelController {
         }
     }
 
-    /// The prompt of a question and the keys of the pinned contexts it
-    /// tells the model about. A free question carries a line for every
-    /// context not told yet (`Assistant.contextPreamble` for the
-    /// conversation's first, `Assistant.addedContextPreamble` for one added
-    /// later); a message action names its context's ids, and an
+    /// The turn of a question (the daemon builds the message from it,
+    /// `composeTurn`) and the keys of the pinned contexts it tells the
+    /// model about. A free question carries every context not told yet
+    /// (the conversation's first as it is, one added later marked `added`;
+    /// the daemon's context line goes in front of the question); a message
+    /// action names its context's ids in its own prompt, and an
     /// attachment's question its message's.
-    private func prompt(_ req: Request) throws -> (String, [Int]) {
+    private func prompt(_ req: Request) throws -> (Turn, [Int]) {
         switch req.kind {
         case .free:
-            var lines: [String] = []
+            var turn = Turn(text: req.text)
             var told: [Int] = []
             for (i, p) in pinned.enumerated() where !p.announced {
                 told.append(p.key)
                 guard let s = p.context?.selection else { continue }
-                let line = i == 0 ? Assistant.contextPreamble(s) : Assistant.addedContextPreamble(s)
-                if !line.isEmpty {
-                    lines.append(line)
+                if let c = Self.promptContext(s, added: i > 0) {
+                    turn.contexts.append(c)
                 }
             }
-            let preamble = lines.joined(separator: "\n")
-            return (preamble.isEmpty ? req.text : preamble + "\n\n" + req.text, told)
+            return (turn, told)
         case .action(let a):
             guard case .pinned(let key)? = req.target, let c = pinnedContext(key) else {
                 throw Assistant.Failure.noMessages
             }
-            return (try Assistant.prompt(.app, a, c.selection) + req.text, [key])
+            return (Turn(text: try Assistant.prompt(.app, a, c.selection) + req.text), [key])
         case .unread(let acc, let folder):
-            return (try Assistant.unreadPrompt(accountID: acc, folderID: folder), [])
+            return (Turn(text: try Assistant.unreadPrompt(accountID: acc, folderID: folder)), [])
         case .calendar(let a):
-            return (try Assistant.calendarPrompt(a, date: today()) + req.text, [])
+            return (Turn(text: try Assistant.calendarPrompt(a, date: today()) + req.text), [])
         case .attachment(let acc, let msg, let part):
             let p = try Assistant.attachmentPrompt(accountID: acc, messageID: msg, partID: part) + req.text
             if case .pinned(let key)? = req.target,
                pinnedContext(key)?.selection == Assistant.Selection(accountID: acc, messageIDs: [msg]) {
-                return (p, [key])
+                return (Turn(text: p), [key])
             }
-            return (p, [])
+            return (Turn(text: p), [])
         }
+    }
+
+    /// assistantpanel.promptContext: the context of a turn for `sel`: the
+    /// account and the ids newest first, at most `Assistant.maxMessages`
+    /// non-empty ones (the daemon names them); nil without an account or
+    /// without an id, and then the question goes alone.
+    static func promptContext(_ sel: Assistant.Selection, added: Bool) -> PromptContext? {
+        guard !sel.accountID.isEmpty else { return nil }
+        var ids: [MessageID] = []
+        for id in sel.messageIDs where !id.isEmpty {
+            if ids.count == Assistant.maxMessages {
+                break
+            }
+            ids.append(MessageID(rawValue: id))
+        }
+        guard !ids.isEmpty else { return nil }
+        return PromptContext(accountId: AccountID(rawValue: sel.accountID), messageIds: ids, added: added)
     }
 
     /// The pinned folded conversations whose members the prompt of `req`
@@ -1162,18 +1363,13 @@ public final class AssistantPanelController {
         }
     }
 
-    /// The system prompt of a new conversation, with the user's profile.
-    private func systemPrompt() -> String {
-        Assistant.withProfile(Assistant.systemPrompt(language: language(), today: today()), profile())
-    }
-
-    /// Starts Claude Code for a new conversation.
-    private func launch(_ path: String, _ bridge: String) throws -> ClaudeCodeProcess {
+    /// Starts Claude Code for a new conversation with the daemon's prompt
+    /// `res`: the system prompt with the user's profile, the tools and the
+    /// bridge's arguments.
+    private func launch(_ path: String, _ bridge: String, _ res: PromptResult) throws -> ClaudeCodeProcess {
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let options = Assistant.Options(
-            bridge: bridge, socket: socket, model: settings.assistantModel,
-            systemPrompt: systemPrompt())
+        let options = Assistant.Options(bridge: bridge, socket: socket, model: settings.assistantModel, prompt: res)
         let p = ClaudeCodeProcess(
             executable: path, arguments: Assistant.args(options),
             environment: Assistant.childEnvironment(environment, claudePath: path), directory: directory,

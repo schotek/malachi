@@ -11,8 +11,8 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-// Preferences → Calendar, a tab of its own (the owner's decision of
-// 2026-10-16, replacing the placement of artboard 6): the group Display
+// Preferences → Calendar, a tab of its own (replacing the placement of
+// artboard 6): the group Display
 // with the daemon's calendar.preferences, then a section per account with
 // the calendar capability (its CalendarConfig, and for a CalDAV account
 // its connection), then Add CalDAV Calendar…. PreferencesLayout says what

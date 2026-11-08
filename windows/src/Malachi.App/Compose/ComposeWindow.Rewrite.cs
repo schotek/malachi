@@ -191,9 +191,9 @@ public sealed partial class ComposeWindow
         request.Consent = AskConsentAsync;
         var made = new ComposeRewriteController(request)
         {
-            // The note of the account the window writes from, as it is when
-            // the rewrite starts.
-            Profile = () => state.CurrentProfile.For(pane.WritingAccount.Value),
+            // The account the window writes from, as it is when the rewrite
+            // starts: the daemon appends its note of the user's profile.
+            Account = () => pane.WritingAccount,
         };
         made.StateChanged += (_, _) => RenderRewrite();
         rewriter = made;

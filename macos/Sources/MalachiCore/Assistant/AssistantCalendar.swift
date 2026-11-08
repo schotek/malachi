@@ -25,8 +25,8 @@ extension Assistant {
     public static let calendarActions: [Action] = [.whatsOnToday, .findFreeSlot]
 
     /// CalendarTools: the calendar's read-only bridge tools the panel's
-    /// conversation may run (part of `allowedTools`; the board's triage and
-    /// a suggested reply do not get them).
+    /// conversation may run (part of the daemon's panel prompt, docs/api.md
+    /// §4.18; the board's triage and a suggested reply do not get them).
     public static let calendarTools: [String] = [
         "mcp__malachi__list_calendars",
         "mcp__malachi__list_events",

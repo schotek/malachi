@@ -28,7 +28,9 @@ public final class ProfileStore {
     public private(set) var limits = ProfileLimits()
 
     private let client: RPCClient
-    private var accounts: [Account] = []
+    /// The daemon's accounts, for the names of the notes' accounts (read
+    /// with the profile).
+    public private(set) var accounts: [Account] = []
     private let observers = BoardObservers()
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "assistant")
     /// Orders the answers: an older one that ends after a newer one is
@@ -43,11 +45,6 @@ public final class ProfileStore {
     /// `supported`.
     public func observe(_ f: @escaping @MainActor () -> Void) -> BoardObserverToken {
         observers.add(f)
-    }
-
-    /// The profile for the prompts, with the names of its accounts.
-    public var profile: Assistant.Profile {
-        Assistant.Profile(stored, accounts: accounts)
     }
 
     /// A pending proposal by id.

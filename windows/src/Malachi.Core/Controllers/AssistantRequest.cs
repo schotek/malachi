@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Controllers/AssistantRequest.swift
-// (AssistantRequest: start, cancel, run, launch, finish, retire,
-// defaultTimeout, timedOut, Tools, the per-call timeout and model, onTool,
-// onUsage, toolsMissing); GTK: ui/internal/assistantpanel/oneshot.go
-// (Request, NewRequest, Start, Cancel, askConsent, locate, launch, finish,
-// retire).
+// (AssistantRequest: start, startCall, Call, cancel, run, promptParams,
+// launch, startTimer, finish, retire, defaultTimeout, timedOut, Tools, the
+// per-call timeout and model, onTool, onUsage, toolsMissing, prompter,
+// language); GTK: ui/internal/assistantpanel/oneshot.go (Request,
+// NewRequest, Start, StartCall, Call, Cancel, askConsent, locate, launch,
+// finish, retire). Every prompt is the daemon's (IAssistantPrompter,
+// assistant.prompt, docs/api.md §4.18): a request names its purpose and
+// input (PromptInput) and gets the system prompt with the user's profile,
+// the tools, the bridge's arguments, the schema and the message back.
 //
 // Windows differences: the private directory is made by an
 // IPrivateDirectoryFactory (a protected DACL, as the open directory's)
@@ -29,6 +33,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Daemon;
@@ -36,23 +41,30 @@ using Malachi.Core.Platform;
 using Malachi.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using AssistantEvent = Malachi.Core.Assistants.AssistantEvent;
+using AssistantEventKind = Malachi.Core.Assistants.AssistantEventKind;
 
 namespace Malachi.Core.Controllers;
 
 /// <summary>
-/// One question to the user's Claude Code: the one-shot requests of the In
+/// One question to the user's assistant: the one-shot requests of the In
 /// App target, the compose window's rewrite
-/// (<see cref="ComposeRewriteController"/>) and the search in the user's own
+/// (<see cref="ComposeRewriteController"/>) and writing bar
+/// (<see cref="ComposeWriteController"/>), the search in the user's own
 /// words (<see cref="SearchConversion"/>), which read no mail, and the
 /// board's triage run and suggested reply, which read it through the bridge.
 /// </summary>
 /// <remarks>
 /// <para>
-/// It runs the panel's protocol once (<see cref="ClaudeCodeProcess"/>): the
-/// command line of <see cref="Assistant.Args"/> without the bridge (no MCP
-/// server, no tool), or with the bridge, its extra arguments and the tools of
-/// <see cref="Tools"/> when the caller passes them, and with
-/// <c>--json-schema</c> when the answer has a shape,
+/// Every prompt is the daemon's (<see cref="Prompter"/>, assistant.prompt,
+/// docs/api.md §4.18): a request names its purpose and input
+/// (<see cref="PromptInput"/>) and gets the system prompt with the user's
+/// profile, the tools, the bridge's arguments, the schema and the message
+/// back. It runs the panel's protocol once (<see cref="ClaudeCodeProcess"/>):
+/// the command line of <see cref="Assistant.Args"/> over that prompt without
+/// the bridge (no MCP server, no tool), or with the bridge, the prompt's
+/// arguments and tools when the caller passes <see cref="Tools"/>, and with
+/// <c>--json-schema</c> when the prompt has a schema,
 /// in the panel's private directory and with
 /// <see cref="Assistant.ChildEnvironment"/>; one
 /// <see cref="Assistant.UserMessage"/> on stdin, which is then closed; the
@@ -64,6 +76,10 @@ namespace Malachi.Core.Controllers;
 /// is the shared <c>assistant-consent</c>, kept even when the request was
 /// cancelled meanwhile). Declined: <see cref="Outcome.Declined"/>, nothing
 /// is sent.</item>
+/// <item>The prompt is built by the daemon (<see cref="Prompter"/>,
+/// assistant.prompt with the call's purpose and input). A refused input
+/// (empty, too long, the daemon away) is <see cref="Failure.Stopped"/> with
+/// the daemon's reason; without a prompter <see cref="Assistant.NoPrompter"/>.</item>
 /// <item>Claude Code is located (none: <see cref="Failure.NotFound"/>) and
 /// must not say it is signed out (<see cref="ClaudeCodeLocator.SignedInAsync"/>,
 /// asked afresh: <see cref="Failure.NotSignedIn"/>; not known counts as
@@ -84,6 +100,11 @@ namespace Malachi.Core.Controllers;
 /// event is handled (<see cref="AssistantUsageTally"/> adds them up); none
 /// arrives once the request ended or was cancelled.</item>
 /// </list>
+/// <para>
+/// With a provider in effect (<see cref="Provider"/>: Codex) the last two
+/// steps are its session, opened with the prompt and the call's purpose,
+/// input and bound, and its events normalised to the same protocol.
+/// </para>
 /// <para>
 /// One request at a time: <see cref="Start"/> cancels the one under way,
 /// and <see cref="Cancel"/> ends it (its process terminated); a cancelled
@@ -190,35 +211,49 @@ public sealed partial class AssistantRequest : IDisposable
     public bool IsClosed => scope.IsClosed;
 
     /// <summary>
-    /// Asks Claude Code once: <paramref name="message"/> as the one turn
-    /// under <paramref name="systemPrompt"/>, with <paramref name="model"/>
-    /// (null: the <c>assistant-model</c> setting, read now) and, when
-    /// <paramref name="jsonSchema"/> is set, that shape of answer. A request
-    /// under way is cancelled first. <paramref name="tools"/> gives Claude
-    /// Code the bridge (null: no tool at all); <paramref name="timeout"/>
-    /// replaces the request's own for this call. <paramref name="onText"/>
-    /// gets the answer's text as it streams (all of it so far),
-    /// <paramref name="onTool"/> every tool call and tool result,
-    /// <paramref name="onUsage"/> every event that carries usage;
+    /// Builds the prompts (the daemon's assistant.prompt, the application's
+    /// <see cref="DaemonPrompter"/>); without one every request fails with
+    /// <see cref="Assistant.NoPrompter"/>.
+    /// </summary>
+    public IAssistantPrompter? Prompter { get; set; }
+
+    /// <summary>
+    /// The UI language as a BCP 47 tag ("cs"), which the model answers in;
+    /// "" or "en" is English (<see cref="Assistant.UiLanguage"/> by default).
+    /// </summary>
+    public Func<string> Language { get; set; } = () => Assistant.UiLanguage;
+
+    /// <summary>
+    /// Asks the assistant once without the bridge: <paramref name="input"/>
+    /// as the one turn of <paramref name="purpose"/> (a rewrite, the writing
+    /// bar, the search), with the note of <paramref name="noteAccountId"/>
+    /// (null for none) in the system prompt and the model of
+    /// <c>assistant-model</c>. A request under way is cancelled first.
+    /// <paramref name="onText"/> gets the answer's text as it streams (all of
+    /// it so far); <paramref name="completion"/> is called once with the
+    /// outcome, unless the request is cancelled. All on the UI thread.
+    /// </summary>
+    public void Start(
+        PromptPurpose purpose,
+        PromptInput input,
+        Action<Outcome> completion,
+        AccountId? noteAccountId = null,
+        Action<string>? onText = null)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        StartCall(new CallSpec { Purpose = purpose, Input = input, NoteAccountId = noteAccountId, OnText = onText }, completion);
+    }
+
+    /// <summary>
+    /// Asks the assistant once as <paramref name="call"/> says (see
+    /// <see cref="CallSpec"/>); a request under way is cancelled first.
     /// <paramref name="completion"/> is called once with the outcome, unless
     /// the request is cancelled. All on the UI thread.
     /// </summary>
-    public void Start(
-        string systemPrompt,
-        string message,
-        Action<Outcome> completion,
-        string jsonSchema = "",
-        Action<string>? onText = null,
-        Tools? tools = null,
-        TimeSpan? timeout = null,
-        AssistantModel? model = null,
-        Action<AssistantEvent>? onTool = null,
-        Action<AssistantEvent>? onUsage = null)
+    public void StartCall(CallSpec call, Action<Outcome> completion)
     {
-        ArgumentNullException.ThrowIfNull(systemPrompt);
-        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(completion);
-        ArgumentNullException.ThrowIfNull(jsonSchema);
         scope.VerifyAccess();
         Cancel();
         if (IsClosed)
@@ -227,9 +262,8 @@ public sealed partial class AssistantRequest : IDisposable
         }
         var my = ++gen;
         Running = true;
-        var call = new Call(
-            systemPrompt, message, jsonSchema, tools, timeout ?? Timeout, model ?? Settings.AssistantModel, onText, onTool, onUsage, completion);
-        scope.Run(_ => RunAsync(my, call));
+        var job = new Job(call, call.Timeout ?? Timeout, call.Model ?? Settings.AssistantModel, completion);
+        scope.Run(_ => RunAsync(my, job));
     }
 
     /// <summary>Ends the request under way: its process is terminated and its completion never called.</summary>
@@ -261,17 +295,42 @@ public sealed partial class AssistantRequest : IDisposable
     /// <summary>Closes the request.</summary>
     public void Dispose() => Close();
 
-    private async Task RunAsync(int my, Call call)
+    /// <summary>The prompter's parameters of <paramref name="call"/>.</summary>
+    private AssistantPromptParams PromptParams(CallSpec call)
     {
-        var completion = call.Completion;
+        ArgumentNullException.ThrowIfNull(call);
+        return new AssistantPromptParams
+        {
+            Purpose = call.Purpose,
+            Language = Language(),
+            AccountId = call.NoteAccountId,
+            Trigger = call.Trigger,
+            RunId = call.RunId,
+            Input = call.Input,
+        };
+    }
+
+    private async Task RunAsync(int my, Job job)
+    {
+        var completion = job.Completion;
         if (my != gen)
         {
             return;
         }
         var selectedProvider = Provider;
+        if (selectedProvider is null && Assistant.SourceOf(Settings.AssistantProvider) == AssistantProviderSource.Account)
+        {
+            // An ai account chosen whose provider is not wired (the
+            // application gives it, AssistantController.ApiProviderOrUnavailable):
+            // nothing runs Claude Code meanwhile (Swift run).
+            Finish(my, new Outcome.Failed(ProviderFailure(UnavailableApiProvider.Reason)), completion);
+            return;
+        }
         // 1. Consent, once ever; an answer counts even when the request was
         // cancelled while the question was up. A board request of a provider
-        // needs its board consent, which the board asks for itself.
+        // needs its board consent, which the board asks for itself; an ai
+        // account's consent is one for the panel and the board, the
+        // provider's (DaemonAssistantProvider.HasBoardConsent), never a key.
         if (selectedProvider is not null && UsesBoardConsent)
         {
             if (!selectedProvider.HasBoardConsent)
@@ -298,12 +357,37 @@ public sealed partial class AssistantRequest : IDisposable
                 return;
             }
         }
-        if (selectedProvider is not null)
+        // 2. The daemon's prompt of the call.
+        if (Prompter is not { } prompter)
         {
-            await RunProviderAsync(selectedProvider, my, call);
+            Finish(my, new Outcome.Failed(new Failure.Stopped(Assistant.NoPrompter)), completion);
             return;
         }
-        // 2. Claude Code, signed in.
+        PromptResult prompt;
+        try
+        {
+            prompt = await prompter.PromptAsync(PromptParams(job.Call), scope.Lifetime);
+        }
+        catch (Exception e) when (Assistant.IsPromptFailure(e) || e is OperationCanceledException)
+        {
+            if (my != gen || !Running)
+            {
+                return;
+            }
+            LogPromptFailed(logger, e.GetType().Name);
+            Finish(my, new Outcome.Failed(new Failure.Stopped(Assistant.PromptReason(e))), completion);
+            return;
+        }
+        if (my != gen || !Running)
+        {
+            return;
+        }
+        if (selectedProvider is not null)
+        {
+            await RunProviderAsync(selectedProvider, my, job, prompt);
+            return;
+        }
+        // 3. Claude Code, signed in.
         if (Locator.Locate() is not { } path)
         {
             Finish(my, new Outcome.Failed(new Failure.NotFound()), completion);
@@ -320,11 +404,11 @@ public sealed partial class AssistantRequest : IDisposable
             Finish(my, new Outcome.Failed(new Failure.NotSignedIn()), completion);
             return;
         }
-        // 3. The process, the turn, the answer.
+        // 4. The process, the turn, the answer.
         ClaudeCodeProcess p;
         try
         {
-            p = Launch(my, path, call);
+            p = Launch(my, path, job, prompt);
         }
         catch (ClaudeCodeStartException e)
         {
@@ -338,13 +422,13 @@ public sealed partial class AssistantRequest : IDisposable
             Finish(my, new Outcome.Failed(new Failure.Stopped("the assistant's directory: " + e.Message)), completion);
             return;
         }
-        if (!p.Send(Assistant.UserMessage(call.Message)))
+        if (!p.Send(Assistant.UserMessage(prompt.Message ?? "")))
         {
             Finish(my, new Outcome.Failed(new Failure.Stopped("claude is not running")), completion);
             return;
         }
         p.CloseInput();
-        StartTimer(my, call.Timeout, completion);
+        StartTimer(my, job.Timeout, completion);
     }
 
     // The hook's answer; no hook, or one that fails, declines.
@@ -367,8 +451,9 @@ public sealed partial class AssistantRequest : IDisposable
         }
     }
 
-    // Step 3: the private directory and the process.
-    private ClaudeCodeProcess Launch(int my, string path, Call call)
+    // Step 4: the private directory and the process, with the daemon's
+    // prompt on its command line.
+    private ClaudeCodeProcess Launch(int my, string path, Job job, PromptResult prompt)
     {
         if (directories is null)
         {
@@ -380,21 +465,18 @@ public sealed partial class AssistantRequest : IDisposable
         }
         var options = new AssistantOptions
         {
-            Bridge = call.Tools?.Bridge ?? "",
-            Socket = call.Tools?.Socket ?? "",
-            Model = call.Model,
-            SystemPrompt = call.SystemPrompt,
-            JsonSchema = call.JsonSchema,
-            BridgeArgs = call.Tools?.BridgeArgs ?? [],
-            Tools = call.Tools?.Allowed,
+            Bridge = job.Call.Tools?.Bridge ?? "",
+            Socket = job.Call.Tools?.Socket ?? "",
+            Model = job.Model,
+            Prompt = prompt,
         };
         var p = new ClaudeCodeProcess(
             path, Assistant.Args(options), Assistant.ChildEnvironment(environment, path), directory, killGrace, Time, processLogger);
         blocks = "";
         streamed = "";
-        EventHandler<IReadOnlyList<AssistantEvent>> events = (_, batch) => Handle(p, my, batch, call);
+        EventHandler<IReadOnlyList<AssistantEvent>> events = (_, batch) => Handle(p, my, batch, job);
         p.EventsReceived += events;
-        p.Exited += (_, exit) => Ended(p, my, exit, call.Completion);
+        p.Exited += (_, exit) => Ended(p, my, exit, job.Completion);
         p.Start();
         // Counted until its end was reported (after the handler above).
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -405,18 +487,19 @@ public sealed partial class AssistantRequest : IDisposable
         return p;
     }
 
-    private void Handle(ClaudeCodeProcess p, int my, IReadOnlyList<AssistantEvent> events, Call call)
+    private void Handle(ClaudeCodeProcess p, int my, IReadOnlyList<AssistantEvent> events, Job job)
     {
         if (p != process || my != gen)
         {
             return;
         }
-        HandleEvents(my, events, call);
+        HandleEvents(my, events, job);
     }
 
-    private void HandleEvents(int my, IReadOnlyList<AssistantEvent> events, Call call)
+    private void HandleEvents(int my, IReadOnlyList<AssistantEvent> events, Job job)
     {
-        var completion = call.Completion;
+        var completion = job.Completion;
+        var call = job.Call;
         foreach (var e in events)
         {
             if (e.Usage is not null && call.OnUsage is { } onUsage)
@@ -579,6 +662,9 @@ public sealed partial class AssistantRequest : IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "assistant request: no answer in time")]
     private static partial void LogTimedOut(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "assistant request: the prompt could not be built: {Kind}")]
+    private static partial void LogPromptFailed(ILogger logger, string kind);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "assistant request: claude could not be started: {Failure}")]
     private static partial void LogStartFailed(ILogger logger, ClaudeCodeStartFailure failure);

@@ -67,6 +67,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     public static let addressBookNotFound: ErrorCode = 1111
     /// No mail rule with that id (docs/api.md §4.21).
     public static let ruleNotFound: ErrorCode = 1112
+    /// No open assistant session with that id on this connection (ended,
+    /// timed out, another connection's; docs/api.md §4.18).
+    public static let assistantSessionNotFound: ErrorCode = 1113
 
     // 1200–1299: authentication.
     /// Credentials missing or token expired; see notify.authRequired.
@@ -87,6 +90,10 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The account's sign-in does not allow contacts access; `data` is
     /// `ContactsConsentRequiredData` (`RPCError.contactsConsentRequired`).
     public static let contactsConsentRequired: ErrorCode = 1206
+    /// The `ai` account's user has not accepted the current consent text
+    /// (`AIConfig.consent` below `API.Limits.assistantConsentVersion`), so
+    /// no session starts (docs/api.md §4.18).
+    public static let assistantConsentRequired: ErrorCode = 1207
 
     // 1300–1399: network and remote servers.
     public static let offline: ErrorCode = 1300
@@ -143,6 +150,16 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// certificate's issuer; `data` is `RevocationFailedData`
     /// (`RPCError.revocationFailedData`). `message` is never shown.
     public static let revocationFailed: ErrorCode = 1510
+    /// An assistant session could not start: the MCP bridge could not be
+    /// started, answered no tools, or the daemon has
+    /// `API.Limits.maxAssistantSessions` open (docs/api.md §4.18).
+    public static let assistantUnavailable: ErrorCode = 1511
+    /// `assistant.sessionSend` while the session's previous turn still runs.
+    public static let assistantSessionBusy: ErrorCode = 1512
+    /// The `ai` account's model cannot call tools, which the purpose needs
+    /// (the provider refused the tool definitions); the one-shot purposes
+    /// without tools still work.
+    public static let assistantToolsUnsupported: ErrorCode = 1513
 
     /// The stable symbolic name (api.ErrorCode.String): `"attachmentTooBig"`,
     /// or `"unknown(1234)"` for a code this client does not know.
@@ -160,14 +177,15 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .readOnly, .invitationsUnavailable,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
         .caseNotFound, .calendarNotFound, .eventNotFound, .crmItemNotFound, .contactNotFound, .addressBookNotFound,
-        .ruleNotFound,
+        .ruleNotFound, .assistantSessionNotFound,
         .authRequired, .authFailed, .keyringError, .oauthClientMissing, .calendarConsentRequired,
-        .crmSignInUnsupported, .contactsConsentRequired,
+        .crmSignInUnsupported, .contactsConsentRequired, .assistantConsentRequired,
         .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone, .eventGone, .crmDuplicate,
         .contactConflict,
         .storageError, .migrationFailed,
         .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
         .unsubscribeFailed, .quoteNotFound, .malformedCalendar, .recurrenceUnsupported, .addressBookReadOnly, .revocationFailed,
+        .assistantUnavailable, .assistantSessionBusy, .assistantToolsUnsupported,
     ]
 
     private static let names: [ErrorCode: String] = [
@@ -226,6 +244,11 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .recurrenceUnsupported: "recurrenceUnsupported",
         .addressBookReadOnly: "addressBookReadOnly",
         .revocationFailed: "revocationFailed",
+        .assistantSessionNotFound: "assistantSessionNotFound",
+        .assistantConsentRequired: "assistantConsentRequired",
+        .assistantUnavailable: "assistantUnavailable",
+        .assistantSessionBusy: "assistantSessionBusy",
+        .assistantToolsUnsupported: "assistantToolsUnsupported",
     ]
 }
 

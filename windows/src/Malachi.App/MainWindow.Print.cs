@@ -12,7 +12,7 @@
 // first, several rows each on a page, at most Print.MaxMessages), in the
 // Calendar the selected event, else the day the view stands on (P8), on
 // the Board nothing. More Actions and the message list's context menu
-// have it too (the owner's addition of 2026-11-04 to P4, until the
+// have it too (an addition to P4, until the
 // toolbar's item); never the primary menu "…" (PR #20).
 
 using Malachi.App.Printing;

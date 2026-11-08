@@ -61,7 +61,7 @@ final class CRMBarView: NSView {
         text.spacing = 1
         // The text takes the width between the symbol and the button, so
         // the button sits at the card's trailing edge, centred on the two
-        // lines (owner, 2026-10-17); `.gravityAreas`, the default, would
+        // lines; `.gravityAreas`, the default, would
         // pack it right after the text.
         text.setContentHuggingPriority(.defaultLow, for: .horizontal)
         text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

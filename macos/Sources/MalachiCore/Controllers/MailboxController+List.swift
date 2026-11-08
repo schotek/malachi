@@ -831,7 +831,7 @@ public final class ListController {
     /// leaves no connection either.
     public func handleConnection(_ state: ConnectionController.ConnectionState) {
         switch state {
-        case .unavailable, .protocolMismatch, .stopping:
+        case .unavailable, .protocolMismatch, .otherDaemon, .stopping:
             if mailbox.model.grouped {
                 collapseLoadingRows()
             }

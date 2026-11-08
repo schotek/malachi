@@ -7,7 +7,12 @@
 // model of one row of the Accounts or the Integrations page's list: Core's AccountRow applied
 // in place (KeyedListSync's view overload, docs/windows-port.md §7.5), so
 // that the list keeps the row's container, its focus and its selection
-// across a change of state. Everything shown is plain text.
+// across a change of state. Everything shown is plain text. An AI provider
+// account's row (kind ai) also has its "API key" capsule after the name,
+// the tokens the daemon's assistant used through it today after its
+// subtitle (ai_editors.go showUsage: "<subtitle> · %s tokens today", given
+// by the Integrations page), and Sign In while the provider refused its key
+// (its dialog on Replace Key…).
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -24,12 +29,14 @@ public sealed partial class AccountRowView : INotifyPropertyChanged
 {
     private AccountRow row;
     private bool groupEnabled;
+    private string usage;
 
-    /// <summary>The row of <paramref name="row"/>.</summary>
-    public AccountRowView(AccountRow row, bool groupEnabled)
+    /// <summary>The row of <paramref name="row"/>; <paramref name="usage"/> is its usage line ("" for none).</summary>
+    public AccountRowView(AccountRow row, bool groupEnabled, string usage = "")
     {
         this.row = row;
         this.groupEnabled = groupEnabled;
+        this.usage = usage;
     }
 
     /// <inheritdoc/>
@@ -41,8 +48,17 @@ public sealed partial class AccountRowView : INotifyPropertyChanged
     /// <summary>The name, or the address when unnamed.</summary>
     public string Title => row.Title;
 
-    /// <summary>The address, or the host of a Jira site or a CalDAV server.</summary>
-    public string Subtitle => row.Subtitle;
+    /// <summary>
+    /// The address, or the host of a Jira site or a CalDAV server, or an AI
+    /// provider account's provider and model, with its usage line after it.
+    /// </summary>
+    public string Subtitle => usage.Length == 0 ? row.Subtitle : row.Subtitle.Length == 0 ? usage : row.Subtitle + " · " + usage;
+
+    /// <summary>The capsule after the name (an AI provider account's "API key"); "" for none.</summary>
+    public string Badge => row.Badge;
+
+    /// <summary>The capsule is shown.</summary>
+    public Visibility BadgeVisibility => row.Badge.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>The status beside the switch; its tooltip shows it whole.</summary>
     public string Status => row.Status;
@@ -50,8 +66,11 @@ public sealed partial class AccountRowView : INotifyPropertyChanged
     /// <summary>The status is shown (not for the idle state).</summary>
     public Visibility StatusVisibility => row.Status.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>"Sign In…" is offered.</summary>
-    public Visibility SignInVisibility => row.OffersSignIn ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>
+    /// "Sign In…" is offered: an account of the browser sign-in that needs
+    /// it, or an AI provider account whose key the provider refused.
+    /// </summary>
+    public Visibility SignInVisibility => OffersSignIn(row) ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>What the Enabled switch shows.</summary>
     public bool IsOn => row.Enabled;
@@ -80,13 +99,18 @@ public sealed partial class AccountRowView : INotifyPropertyChanged
     /// </summary>
     public bool Applying { get; private set; }
 
-    /// <summary>Shows <paramref name="next"/> and the group's sensitivity, raising only what changed.</summary>
-    public void Update(AccountRow next, bool group)
+    /// <summary>
+    /// Shows <paramref name="next"/>, the group's sensitivity and the usage
+    /// line <paramref name="nextUsage"/>, raising only what changed.
+    /// </summary>
+    public void Update(AccountRow next, bool group, string nextUsage = "")
     {
         var old = row;
         var oldGroup = groupEnabled;
+        var oldUsage = usage;
         row = next;
         groupEnabled = group;
+        usage = nextUsage;
         Applying = true;
         try
         {
@@ -94,16 +118,21 @@ public sealed partial class AccountRowView : INotifyPropertyChanged
             {
                 Changed(nameof(Title));
             }
-            if (old.Subtitle != next.Subtitle)
+            if (old.Subtitle != next.Subtitle || oldUsage != nextUsage)
             {
                 Changed(nameof(Subtitle));
+            }
+            if (old.Badge != next.Badge)
+            {
+                Changed(nameof(Badge));
+                Changed(nameof(BadgeVisibility));
             }
             if (old.Status != next.Status)
             {
                 Changed(nameof(Status));
                 Changed(nameof(StatusVisibility));
             }
-            if (old.OffersSignIn != next.OffersSignIn)
+            if (OffersSignIn(old) != OffersSignIn(next))
             {
                 Changed(nameof(SignInVisibility));
             }
@@ -138,6 +167,9 @@ public sealed partial class AccountRowView : INotifyPropertyChanged
             Applying = false;
         }
     }
+
+    private static bool OffersSignIn(AccountRow r) =>
+        r.OffersSignIn || (r.Editor == Integrations.Editor.Ai && r.Account.State.Status == SyncStatus.AuthRequired);
 
     private void Changed([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

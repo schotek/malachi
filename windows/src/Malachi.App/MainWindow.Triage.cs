@@ -22,7 +22,11 @@
 //   Consent). Get Claude Code… opens Anthropic's page (Get Codex… the
 //   Codex page), Sign In… runs Claude Code's own sign-in in the browser (the
 //   application's one sign-in; ChatGPT's connection for the ChatGPT
-//   provider), a failure or a timeout as a toast. With
+//   provider), a failure or a timeout as a toast. Over an AI provider
+//   account the first two read Set Up in Integrations… and open the
+//   account's dialog, on Replace Key… when the provider refused its key
+//   (TriageView.OpensIntegrations; Preferences → Integrations when the
+//   account is not listed). With
 //   MALACHI_BOARD_SAMPLES it stays a placeholder: shown with the samples'
 //   assistant on, and a click only says "not in this preview".
 // - The strip (BoardPage.BoardTriageStrip, under the board's bar): Core's
@@ -210,7 +214,16 @@ public sealed partial class MainWindow
             Toasts.Show(Board.Text.Later);
             return;
         }
-        var chatGpt = state.Settings.AssistantProvider == AssistantProviderID.ChatGpt;
+        // Over an ai account Get Claude Code… and Sign In… read Set Up in
+        // Integrations… and open the account's dialog (with Replace Key…
+        // when the provider refused its key; GTK board_triage_button.go
+        // onTriageClicked).
+        if (Triage.View.OpensIntegrations)
+        {
+            state.OpenAssistantAccount(this);
+            return;
+        }
+        var chatGpt = Assistant.SourceOf(state.Settings.AssistantProvider) == AssistantProviderSource.ChatGpt;
         switch (Triage.View.Control)
         {
             case Board.TriageControl.Triage:

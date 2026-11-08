@@ -296,6 +296,42 @@ public enum Assistant {
         )
     }
 
+    /// assistant.WebsiteFeatures: how the App Store build points at what
+    /// Malachi Mail from malachimail.app adds (`Distribution.allowsLocalAgents`).
+    public struct WebsiteFeatures: Sendable, Equatable {
+        public let groupTitle, groupBody, more, statusLink, dialogTitle, dialogIntro: String
+        public let features: [String]
+        public let free, data, open, close: String
+    }
+
+    /// assistant.WebsiteFeaturesTexts.
+    public static func websiteFeaturesTexts() -> WebsiteFeatures {
+        WebsiteFeatures(
+            // TRANSLATORS: Group title in Settings → AI of Malachi Mail from the Mac App Store.
+            groupTitle: L10n.T("More Assistant Features"),
+            // TRANSLATORS: Settings → AI of Malachi Mail from the Mac App Store; malachimail.app is the website and stays as it is.
+            groupBody: L10n.T("Malachi Mail from malachimail.app also has the assistant right in the app with Claude or ChatGPT, the board's triage and suggested replies. This version from the App Store can't run them because it runs in a sandbox."),
+            // TRANSLATORS: Button opening the list of what the version from the website adds.
+            more: L10n.T("More…"),
+            // TRANSLATORS: Link in the status bar of Malachi Mail from the Mac App Store, before Report an Issue.
+            statusLink: L10n.T("More AI Features"),
+            // TRANSLATORS: Dialog title; malachimail.app is the website and stays as it is.
+            dialogTitle: L10n.T("Features of the Version from malachimail.app"),
+            dialogIntro: L10n.T("This version from the Mac App Store runs in the macOS sandbox. Because of it, it can't start Claude Code or Codex installed on your Mac, so it lacks:"),
+            features: [
+                L10n.T("The assistant in the app's panel with Claude Code or ChatGPT (Codex)"),
+                L10n.T("Rewriting and writing a message with the assistant, and searching in your own words"),
+                L10n.T("The board's triage, by hand and automatically, and Suggest Reply"),
+                L10n.T("Handing an attachment to Claude as a file"),
+            ],
+            free: L10n.T("Both versions are free. The version from the website updates itself, this one through the App Store."),
+            data: L10n.T("Accounts and settings don't move between the two versions yet: after switching, add your accounts again."),
+            // TRANSLATORS: Button opening the website in the browser; malachimail.app stays as it is.
+            open: L10n.T("Open malachimail.app"),
+            close: L10n.T("Close")
+        )
+    }
+
     /// assistant.RestartStrings: the texts of the offer to restart Claude
     /// Desktop around a change of "Register with Claude". Claude Desktop
     /// reads its MCP servers only when it starts and, while it runs,

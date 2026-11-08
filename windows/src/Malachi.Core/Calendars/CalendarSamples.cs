@@ -9,7 +9,7 @@
 // data of Cal.SampleData as a source's snapshot. Swift's extension of
 // InMemoryCalendarSource (samplesRequested, samples()) is in
 // InMemoryCalendarSource.cs, as the board's Dummy is in its source.
-// DEVELOPMENT AID, never the owner's data.
+// DEVELOPMENT AID, never the user's data.
 
 using System;
 

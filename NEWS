@@ -1,3 +1,31 @@
+Version 0.5.0
+~~~~~~~~~~~~~
+Released: 2026-11-08
+
+Features:
+ * The assistant can run on an API key of your own: Anthropic, OpenAI, or
+   any server with an OpenAI-compatible interface, such as Ollama,
+   llama.cpp, LM Studio, vLLM or OpenRouter. Everything the assistant
+   does works with it: the panel, rewriting and writing in the compose
+   window, searching in your own words, the board's triage and suggested
+   replies. The key stays in the system keyring.
+ * AI providers are integrations: Preferences → Integrations lists Claude
+   Code, Claude Desktop, ChatGPT and the API providers next to Jira,
+   calendars and the CRM; Preferences → AI keeps which one powers the
+   assistant, its model and your consents.
+ * Claude Desktop and Claude Code are registered with Malachi Mail each
+   on its own.
+ * Malachi Mail is being prepared for the Mac App Store. That edition runs
+   in the macOS sandbox, is updated by the App Store and has the
+   assistant in the app through an API provider; Claude Code and ChatGPT
+   stay in the version from malachimail.app.
+ * The About window says where the copy came from: malachimail.app, the
+   Mac App Store or the Microsoft Store.
+
+Bugfixes:
+ * On Linux with GTK 4.22 (Fedora 44) the assistant button and the
+   writing bar of the compose window work again.
+
 Version 0.4.0
 ~~~~~~~~~~~~~
 Released: 2026-11-04

@@ -52,20 +52,20 @@ func proposalCardFor(o proposalOutcome, found bool) proposalCard {
 // proposalAccountLine is "For the account <name>" for a note of an
 // account (its name, else its address, else its id), "" for the global
 // text.
-func proposalAccountLine(t assistant.ProfileStrings, q api.ProfileProposal, notes []assistant.AccountNote) string {
+func proposalAccountLine(t assistant.ProfileStrings, q api.ProfileProposal, accounts []api.Account) string {
 	if q.AccountID == "" {
 		return ""
 	}
 	name := string(q.AccountID)
-	for _, n := range notes {
-		if n.AccountID != string(q.AccountID) {
+	for _, a := range accounts {
+		if a.ID != q.AccountID {
 			continue
 		}
 		switch {
-		case n.Name != "":
-			name = n.Name
-		case n.Email != "":
-			name = n.Email
+		case a.Config.Name != "":
+			name = a.Config.Name
+		case a.Config.Email != "":
+			name = a.Config.Email
 		}
 		break
 	}
@@ -123,7 +123,7 @@ func (p *assistantPanel) proposalRow(id string) *transcriptRow {
 			detail.SetVisible(true)
 		case found:
 			text.SetText(q.Text)
-			line := proposalAccountLine(t, q, store.Profile().Accounts)
+			line := proposalAccountLine(t, q, store.Accounts())
 			detail.SetText(line)
 			detail.SetVisible(line != "")
 		default:

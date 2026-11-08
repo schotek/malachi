@@ -22,7 +22,9 @@
 // they are DaemonNotification cases), for the calendar's sources and the
 // application's alerts. notify.contactsChanged has its own handler kind
 // (Swift's AppState decodes it with ContactsChangedNotification.decode), and
-// so has notify.updateChanged (no params).
+// so has notify.updateChanged (no params). notify.assistantEvent goes to the
+// sessions of the daemon's assistant as decoded (Swift addAssistantEvent),
+// notify.assistantUsageChanged with its payload (addAssistantUsageChanged).
 
 using System;
 using System.Collections.Generic;
@@ -61,6 +63,8 @@ public sealed partial class NotificationHub : IDisposable
     private readonly HandlerList<DaemonNotification> updateChanged;
     private readonly HandlerList<DaemonNotification> rulesChanged;
     private readonly HandlerList<DaemonNotification> signaturesChanged;
+    private readonly HandlerList<DaemonNotification> assistantEvent;
+    private readonly HandlerList<AssistantUsageChangedNotification> assistantUsageChanged;
     private readonly HandlerList<ConnectionState> connection;
     private ConnectionController? attached;
 
@@ -84,6 +88,8 @@ public sealed partial class NotificationHub : IDisposable
         updateChanged = new HandlerList<DaemonNotification>(Pending);
         rulesChanged = new HandlerList<DaemonNotification>(Pending);
         signaturesChanged = new HandlerList<DaemonNotification>(Pending);
+        assistantEvent = new HandlerList<DaemonNotification>(Pending);
+        assistantUsageChanged = new HandlerList<AssistantUsageChangedNotification>(Pending);
         connection = new HandlerList<ConnectionState>(Pending);
     }
 
@@ -206,6 +212,23 @@ public sealed partial class NotificationHub : IDisposable
     }
 
     /// <summary>
+    /// Fires on every <c>notify.assistantEvent</c> as decoded
+    /// (<see cref="DaemonNotification.AssistantEvent"/>; Swift
+    /// <c>addAssistantEvent</c>): the application hands it to the sessions
+    /// of the daemon's assistant
+    /// (<see cref="ApiAssistants.AssistantSessions.Handle(DaemonNotification)"/>).
+    /// </summary>
+    public IDisposable AddAssistantEvent(Action<DaemonNotification> handler) => assistantEvent.Add(handler);
+
+    /// <summary>
+    /// Fires on every <c>notify.assistantUsageChanged</c> (docs/api.md §4.18;
+    /// Swift <c>addAssistantUsageChanged</c>): an <c>ai</c> account's usage of
+    /// today changed, so Preferences → Integrations reads it again and the
+    /// application lists the AI provider accounts again.
+    /// </summary>
+    public IDisposable AddAssistantUsageChanged(Action<AssistantUsageChangedNotification> handler) => assistantUsageChanged.Add(handler);
+
+    /// <summary>
     /// Fires on every connection state change, after
     /// <see cref="ConnectionState"/> was updated. A handler added later does
     /// not get the current state; read <see cref="ConnectionState"/> for that.
@@ -271,6 +294,12 @@ public sealed partial class NotificationHub : IDisposable
                 break;
             case DaemonNotification.SignaturesChanged:
                 signaturesChanged.Fire(n);
+                break;
+            case DaemonNotification.AssistantEvent:
+                assistantEvent.Fire(n);
+                break;
+            case DaemonNotification.AssistantUsageChanged u:
+                assistantUsageChanged.Fire(u.Payload);
                 break;
             case DaemonNotification.Unknown u:
                 LogUnknown(logger, u.Method);

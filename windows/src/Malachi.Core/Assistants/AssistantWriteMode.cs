@@ -6,7 +6,7 @@
 // macos/Sources/MalachiCore/Compose/ComposeAssistantPrompt.swift, which
 // names the mode `String(describing: ComposeKind)`. Go keeps the mode as a
 // string so that an unknown one exists; a C# enum is open the same way (any
-// other value is unknown: Assistant.WriteMessage refuses it), and
+// other value is unknown: the daemon refuses it), and
 // Assistant.WriteModeNick gives Go's string, as AssistantRewrite and
 // RewriteNick do for the rewrite.
 

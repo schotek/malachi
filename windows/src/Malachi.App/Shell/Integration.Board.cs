@@ -11,7 +11,7 @@
 //
 // The main window's board: its controller over the daemon's source, or
 // over the invented samples when MALACHI_BOARD_SAMPLES=1 (read once, at
-// start; the owner's development aid). The daemon's source starts the
+// start; a development aid). The daemon's source starts the
 // first time the board shows and then follows the daemon's notifications
 // (notify.boardChanged, notify.accountsChanged) and the connection. The
 // case actions reach the mail through here: Reply opens the ordinary reply

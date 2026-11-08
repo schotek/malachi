@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 Port of macos/Sources/MalachiMail/Preferences/CalendarPaneViewController.swift
 (loadView, buildDisplay); GTK: none yet (Swift-first, the structure is
 ui/internal/calendar/preferences.go PreferencesLayout, Core's Cal.Prefs).
-Preferences → Calendar (the owner's decision of 2026-10-16, docs/calendar.md
+Preferences → Calendar (docs/calendar.md
 §5.8 "As built (M9)"), one scrolling page clamped to the Preferences'
 width: the group Display (Week Starts On, Default Duration, Default Alert,
 Show Declined Events, Working Hours as a start and an end at half hours

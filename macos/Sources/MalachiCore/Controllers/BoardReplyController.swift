@@ -23,10 +23,13 @@ import os
 /// 2. `board.get` for the case: its newest members' ids and, fresh, its
 ///    reply target; a case that has a suggested reply by now ends it
 ///    quietly.
-/// 3. The request: `Assistant.suggestReplyMessage` under
-///    `Assistant.suggestReplySystemPrompt`, with the assistant's model, the
-///    bridge started as `--socket <socket> --reply-only <replyMessageId>`
-///    and only `Assistant.suggestReplyTools`.
+/// 3. The request: the daemon's prompt of purpose reply (assistant.prompt
+///    with `ReplyInput`: the case's account and reply target, its newest
+///    members' ids, the user's instruction, the follow-up variant for a
+///    case waiting on the other side; the note of the case's account), with
+///    the assistant's model, the bridge started as the prompt says
+///    (`--socket <socket> --in-app --reply-only <replyMessageId>`) and only
+///    its tools.
 /// 4. The draft is the one a successful create_draft result names
 ///    (`Assistant.parseDraftResult`, as the panel's Open Draft card).
 ///    Without one the request failed (`.noDraft`). With one it is linked
@@ -51,12 +54,33 @@ public final class BoardReplyController {
     public nonisolated static let endWait: Duration = BoardTriageController.endWait
 
     public let settings: Settings
+    /// Whether the provider in effect runs through `request.provider`
+    /// (Codex, a session the daemon runs over an `ai` account) rather than
+    /// the user's Claude Code (GTK `providerLocator`).
+    private var throughProvider: Bool { Assistant.sourceOf(settings.assistantProvider) != .claude }
     private var runtimeAvailable: Bool {
-        settings.assistantProvider == .chatgpt ? request.provider?()?.available == true : locator.locate() != nil
+        throughProvider ? request.provider?()?.available == true : locator.locate() != nil
     }
     private func runtimeSignedIn() async -> Bool? {
-        if settings.assistantProvider == .chatgpt { return request.provider?()?.connected ?? false }
+        if throughProvider { return request.provider?()?.connected ?? false }
         return await locator.signedIn()
+    }
+    /// The assistant's consent of the provider in effect: the settings'
+    /// (`selectedAssistantConsent`) for Claude Code and ChatGPT; an `ai`
+    /// account's is the account's own (`AssistantProvider.hasConsent`,
+    /// recorded by `acceptConsent`, never a key; GTK `providerSettings`).
+    private var assistantConsentGiven: Bool {
+        if Assistant.sourceOf(settings.assistantProvider) == .account {
+            return request.provider?()?.hasConsent == true
+        }
+        return settings.selectedAssistantConsent
+    }
+    private func recordAssistantConsent() {
+        if Assistant.sourceOf(settings.assistantProvider) == .account {
+            request.provider?()?.acceptConsent()
+        } else {
+            settings.selectedAssistantConsent = true
+        }
     }
     /// The assistant's provider in effect, or its profile, changed: a
     /// request under way stops and availability is asked again. The
@@ -99,9 +123,6 @@ public final class BoardReplyController {
     /// Asks the board to list again (after a draft was linked). The
     /// application wires it to its board source's `refresh()`.
     public var onRefresh: (@MainActor () -> Void)?
-    /// The user's profile; a request gets the note of the case's account
-    /// only.
-    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
 
     /// How long the request may take (`Assistant.suggestReplyTimeout`).
     /// The controller keeps the time itself (`sleep`), so the end of a
@@ -223,7 +244,7 @@ public final class BoardReplyController {
     /// later check, or a request's own finding, overtook is dropped.
     public func checkSignIn() {
         signInGen += 1
-        if settings.assistantProvider == .chatgpt { signedIn = request.provider?()?.connected ?? false; return }
+        if throughProvider { signedIn = request.provider?()?.connected ?? false; return }
         let g = signInGen
         guard available(), runtimeAvailable else {
             signedIn = nil
@@ -339,10 +360,10 @@ public final class BoardReplyController {
     private func run(_ my: Int, _ id: Board.CaseID, _ instruction: String) async {
         // 1. The assistant's consent, once ever; an answer counts even when
         // the request was stopped while the question was up.
-        if !settings.selectedAssistantConsent {
+        if !assistantConsentGiven {
             let allowed = await consent?() ?? false
             if allowed {
-                settings.selectedAssistantConsent = true
+                recordAssistantConsent()
             }
             guard my == gen else { return }
             guard allowed else {
@@ -377,31 +398,30 @@ public final class BoardReplyController {
             onRefresh?()
             return
         }
-        // 3. The request.
-        let message = Assistant.suggestReplyMessage(
-            accountID: c.accountId.rawValue, messageID: c.replyMessageId.rawValue,
-            others: got.messages.map(\.id.rawValue), instruction: instruction)
-        request.start(
-            // A case shown waiting on the other side (the effective state)
-            // answers the user's own last message: a follow-up.
-            systemPrompt: Assistant.withProfile(
-                Assistant.suggestReplySystemPrompt(
-                    followUp: Board.isFollowUp(DaemonBoardSource.convert(c), annotated: annotated)),
-                profile().for(c.accountId.rawValue)),
-            message: message,
-            tools: AssistantRequest.Tools(
-                bridge: bridge, socket: socket,
-                bridgeArgs: Assistant.suggestReplyBridgeArgs(messageID: c.replyMessageId.rawValue),
-                allowed: Assistant.suggestReplyTools),
-            timeout: timeout + .seconds(10),
-            // The assistant's model (`assistant-model`), not the board's
-            // triage model: the user asked for this reply and waits for
-            // it, as for the panel and the compose rewrite.
-            model: settings.assistantModel,
-            onTool: { [weak self] e in self?.tool(my, e) },
-            // No usage is recorded: the 24-hour row of tokens is the
-            // triage's (board.runEnd), and a suggested reply is no run.
-            onUsage: nil,
+        // 3. The request: the daemon's prompt of the reply. The case's
+        // members, oldest first; the daemon names the newest of them and
+        // takes at most `API.Limits.maxPromptMessageIDs`.
+        let others = got.messages.suffix(API.Limits.maxPromptMessageIDs).map(\.id)
+        request.startCall(
+            AssistantRequest.Call(
+                purpose: .reply,
+                input: PromptInput(reply: ReplyInput(
+                    accountId: c.accountId, messageId: c.replyMessageId, others: others, instruction: instruction,
+                    // A case shown waiting on the other side (the effective
+                    // state) answers the user's own last message: a
+                    // follow-up.
+                    followUp: Board.isFollowUp(DaemonBoardSource.convert(c), annotated: annotated))),
+                noteAccountID: c.accountId,
+                tools: AssistantRequest.Tools(bridge: bridge, socket: socket),
+                timeout: timeout + .seconds(10),
+                // The assistant's model (`assistant-model`), not the board's
+                // triage model: the user asked for this reply and waits for
+                // it, as for the panel and the compose rewrite.
+                model: settings.assistantModel,
+                onTool: { [weak self] e in self?.tool(my, e) },
+                // No usage is recorded: the 24-hour row of tokens is the
+                // triage's (board.runEnd), and a suggested reply is no run.
+                onUsage: nil),
             completion: { [weak self] outcome in self?.answered(my, id, outcome) })
     }
 
@@ -441,7 +461,7 @@ public final class BoardReplyController {
         case .answered, .failed:
             if case .answered = outcome {
                 learnSignedIn(true)
-            } else if outcome == .failed(.notSignedIn) {
+            } else if case .failed(.notSignedIn) = outcome {
                 learnSignedIn(false)
             }
             if let ref {

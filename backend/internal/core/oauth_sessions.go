@@ -721,6 +721,7 @@ func (b *Backend) Close() {
 		b.dl.close(b.log)
 		b.mem.close()
 		b.stopUpdates()
+		b.stopAssistant()
 	})
 }
 

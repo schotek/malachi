@@ -6,8 +6,8 @@
 // §6.4).
 //
 // An all-day or multi-day occurrence as one bar across the days it covers
-// in a week row of the Month view (Cal.MonthLanes, the owner's decision of
-// 2026-10-16): its calendar's colour with the colour bar at the left
+// in a week row of the Month view (Cal.MonthLanes): its calendar's
+// colour with the colour bar at the left
 // (Windows: the colour itself with a white or near-black title, tentative
 // a light fill with a hatched bar, BlockBackground), rounded only at the
 // ends where it does not continue, the title once. Named by Cal.BlockLabel;

@@ -54,15 +54,15 @@ internal static class CalendarMetrics
     /// <summary>
     /// The fill of a declined or cancelled occurrence: 18 % of the
     /// calendar's colour over the surface (macOS's fill of every block;
-    /// Windows fills a normal one with the colour itself, the owner's
-    /// decision of 2026-10-17).
+    /// Windows fills a normal one with the colour itself
+    /// instead).
     /// </summary>
     public const double FadedTint = 0.18;
 
     /// <summary>
     /// The light fill of a tentative occurrence: 25 % of the calendar's
     /// colour over the surface, with the theme's texts (Windows, the
-    /// owner's second decision of 2026-10-17: Outlook's style).
+    /// Outlook's style).
     /// </summary>
     public const double TentativeTint = 0.25;
 

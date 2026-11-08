@@ -304,6 +304,12 @@ final class Integration {
     /// as the fallback when it is up for this account), the preferences
     /// otherwise (GNOME Online Accounts has no panel here).
     private func signInAgain(_ kind: SignInKind, reason: ErrorCode, accountId id: AccountID) {
+        // An AI provider account's key is replaced in its own dialog (GTK
+        // sync.go `signInAgain`), never the mail wizard.
+        if let a = mailbox.model.account(id), a.config.protocolKind == .ai {
+            state.hooks.editAIAccount?(a, true)
+            return
+        }
         // A Jira account signs in with a token, like a password: `editAccount`
         // opens its own assistant (`accountEditor`) asking for it.
         if editsPassword(kind, reason), mailbox.model.account(id) != nil {
@@ -508,6 +514,7 @@ final class Integration {
             guard let state else { return }
             Integration.showPreferences(state).select(.ai)
         }
+        PreferencesHooks.install(in: state)
         state.hooks.addAccount = { [weak self] window in
             guard let self, let parent = window ?? self.mainWindow?.window else { return }
             // The sidebar reloads on notify.accountsChanged; nothing to do here.
@@ -542,6 +549,8 @@ final class Integration {
             confirmTrust: Integration.confirmTrust(state.alerts)
         )
         c.aiPane.configureProfile(state.profile)
+        c.integrationsPane.configure(notifications: state.notifications)
+        c.integrationsPane.websiteFeatures = { window in WebsiteFeaturesDialog.show(for: window, state: state) }
         c.contactsPane.configure(state.contacts)
         c.rulesPane.configure(state.rules)
         c.generalPane.configureUpdates(state.updates)

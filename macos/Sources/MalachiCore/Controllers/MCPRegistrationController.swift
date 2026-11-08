@@ -38,22 +38,58 @@ public struct MCPStatus: Codable, Equatable, Sendable {
         self.clients = clients
     }
 
-    /// Registered as the settings see it: with at least one client.
+    /// Registered with at least one client: what the Assistant as a whole
+    /// needs (`Assistant.shown`).
     public var isRegistered: Bool {
         clients.contains { $0.registered }
     }
+
+    /// The client ids of the bridge's report (`MCPClient.id`), which
+    /// `--client` of install and uninstall takes (mcpsetup.ClientDesktop,
+    /// ClientCode; `Integrations.clientID`).
+    public static let clientDesktop = "claude-desktop"
+    public static let clientCode = "claude-code"
+
+    /// mcpsetup.Status.Client: the report's entry for client `id`, nil when
+    /// the report has none.
+    public func client(_ id: String) -> MCPClient? {
+        clients.first { $0.id == id }
+    }
+
+    /// mcpsetup.Status.RegisteredIn: whether the bridge is registered with
+    /// client `id`, what that app's own Register switch shows; false for a
+    /// client the report does not list.
+    public func registered(in id: String) -> Bool {
+        client(id)?.registered ?? false
+    }
+
+    /// The status a test build goes by (`TestBuild`): a client where
+    /// another copy of Malachi Mail registered its bridge (`other`, the
+    /// stable app) counts as registered, since that bridge serves the same
+    /// daemon and store.
+    public func countingOtherCopies() -> MCPStatus {
+        var s = self
+        for i in s.clients.indices where !(s.clients[i].other ?? "").isEmpty {
+            s.clients[i].registered = true
+        }
+        return s
+    }
 }
 
-/// The MCP group of the AI page of the settings (preferences.blp
-/// `ai_page`, ui/internal/window/preferences.go `bindMCP`) without the
-/// widgets: one switch, "Register with Claude", that adds the bundled
-/// `malachi-mcp` bridge to the MCP configuration of Claude Desktop and
-/// Claude Code, or takes it out, through the bridge's own setup
-/// subcommands (`malachi-mcp status | install | uninstall --json`;
-/// docs/mcp.md). The application never touches those files itself.
+/// The MCP switch of a Claude app's sheet (ui/internal/window/
+/// claude_integration.go `bindMCP`) without the widgets: "Register with
+/// Claude", which adds the bundled `malachi-mcp` bridge to the MCP
+/// configuration of one Claude app (`client`: Claude Desktop or Claude
+/// Code, `--client` of the bridge; mcpsetup.Set), or takes it out, through
+/// the bridge's own setup subcommands (`malachi-mcp status | install |
+/// uninstall --json [--client ID]`; docs/mcp.md). The application never
+/// touches those files itself. Without a `client` (the application's
+/// status, the development steps) install and uninstall go to every
+/// Claude app present, and a call may name its own client
+/// (`change(registered:in:)`, an Integrations row's Unregister).
 ///
-/// The switch is on when at least one client reports the bridge as
-/// registered. A state not known yet is never shown as "off" for long: the
+/// The switch is on when the bridge reports it as registered in `client`
+/// (in at least one client without one). A state not known yet is never shown as "off" for long: the
 /// page hands over the application's last status (`adopt`), which is
 /// shown at once, and so is every newer one the application learns while
 /// no call of the page runs. The row is insensitive while the state is not
@@ -90,8 +126,21 @@ public final class MCPRegistrationController {
 
     /// The last status the bridge reported; nil until the first answered.
     public private(set) var status: MCPStatus?
-    /// What the switch shows: the last state the bridge confirmed.
+    /// What the switch shows: the last state the bridge confirmed for
+    /// `client` (for any client without one).
     public private(set) var isRegistered = false
+    /// Whether the last status has `client` as present (any client without
+    /// one): with `isRegistered` what `Integrations.registerSwitchFor`
+    /// needs. False until a status is known.
+    public var isPresent: Bool {
+        guard let status else { return false }
+        guard let client else { return status.clients.contains { $0.present } }
+        return status.client(client)?.present ?? false
+    }
+
+    /// The Claude app this controller registers the bridge in
+    /// (`MCPStatus.clientDesktop`, `clientCode`); nil for every app present.
+    public let client: String?
     /// The row's sensitivity: a bridge is there, its status is known and no
     /// install or uninstall is in flight.
     public private(set) var isEnabled = false
@@ -108,6 +157,10 @@ public final class MCPRegistrationController {
     public var onToast: (@MainActor (String) -> Void)?
 
     private let bridge: String?
+    /// A test build (`TestBuild`): the registration of another copy
+    /// counts (`MCPStatus.countingOtherCopies`), and install and uninstall
+    /// are refused, so the switch is never sensitive.
+    public let readOnly: Bool
     private let runner: BridgeRunner
     private let timeout: Duration
     private let statusRetryDelays: [Duration]
@@ -123,15 +176,20 @@ public final class MCPRegistrationController {
     /// - Parameters:
     ///   - bridge: the path of `malachi-mcp` (`Paths.mcpBridge`), or nil
     ///     when there is none beside the application.
+    ///   - client: the Claude app the switch is for; nil for every app.
     ///   - runner: how the bridge is run; the default runs the real thing.
     ///   - timeout: how long one call may take.
     ///   - statusRetryDelays: the pauses before repeating a failed status
     ///     check, one repeat each.
     public init(
-        bridge: String?, runner: BridgeRunner = BridgeRunner(), timeout: Duration = MCPRegistrationController.defaultTimeout,
-        statusRetryDelays: [Duration] = MCPRegistrationController.defaultStatusRetryDelays
+        bridge: String?, client: String? = nil, runner: BridgeRunner = BridgeRunner(),
+        timeout: Duration = MCPRegistrationController.defaultTimeout,
+        statusRetryDelays: [Duration] = MCPRegistrationController.defaultStatusRetryDelays,
+        readOnly: Bool = TestBuild.isActive
     ) {
         self.bridge = bridge
+        self.client = client
+        self.readOnly = readOnly
         self.runner = runner
         self.timeout = timeout
         self.statusRetryDelays = statusRetryDelays
@@ -164,9 +222,10 @@ public final class MCPRegistrationController {
     /// while a call runs (its answer is newer), without a bridge, or when it
     /// is the status already shown.
     public func adopt(_ s: MCPStatus) {
+        let s = readOnly ? s.countingOtherCopies() : s
         guard !closed, bridge != nil, !inFlight, s != status else { return }
         status = s
-        isRegistered = s.isRegistered
+        isRegistered = shown(s)
         statusRetries = 0
         setEnabled(true)
         onRegistered?(isRegistered)
@@ -174,40 +233,59 @@ public final class MCPRegistrationController {
 
     // MARK: Changes
 
-    /// Runs `install` or `uninstall` and shows what the bridge reports
-    /// afterwards; on failure the switch goes back and a toast says why.
-    public func set(registered want: Bool) {
+    /// Runs `install` or `uninstall` for `client` (nil: this controller's
+    /// own) and shows what the bridge reports afterwards; on failure the
+    /// switch goes back and a toast says why.
+    public func set(registered want: Bool, in client: String? = nil) {
         guard !closed else { return }
+        if readOnly {
+            refuseWrite()
+            return
+        }
         guard let bridge else {
             reportMissing()
             onRegistered?(isRegistered)
             return
         }
-        run(want ? .install : .uninstall, bridge)
+        run(want ? .install : .uninstall, bridge, client: client ?? self.client)
     }
 
-    /// `set(registered:)` that returns once the bridge answered, after the
+    /// `set(registered:in:)` that returns once the bridge answered, after the
     /// callbacks: the status the bridge reported, or nil when the call
     /// failed (its toast was shown), there is no bridge, a newer call
     /// overtook it or the controller closed. `ClaudeDesktopController`
     /// awaits it between quitting Claude Desktop and starting it again.
-    public func change(registered want: Bool) async -> MCPStatus? {
+    public func change(registered want: Bool, in client: String? = nil) async -> MCPStatus? {
         guard !closed else { return nil }
+        if readOnly {
+            refuseWrite()
+            return nil
+        }
         guard let bridge else {
             reportMissing()
             onRegistered?(isRegistered)
             return nil
         }
         return await withCheckedContinuation { (cont: CheckedContinuation<MCPStatus?, Never>) in
-            run(want ? .install : .uninstall, bridge) { cont.resume(returning: $0) }
+            run(want ? .install : .uninstall, bridge, client: client ?? self.client) { cont.resume(returning: $0) }
         }
     }
 
     // MARK: Internals
 
-    /// Runs `command`; `done` gets its status, or nil when it yielded none
-    /// or its reply was dropped, exactly once.
-    private func run(_ command: Command, _ bridge: String, done: (@MainActor (MCPStatus?) -> Void)? = nil) {
+    /// What the switch shows of `s`: registered in `client`, in any client
+    /// without one.
+    private func shown(_ s: MCPStatus) -> Bool {
+        guard let client else { return s.isRegistered }
+        return s.registered(in: client)
+    }
+
+    /// Runs `command` (install and uninstall with `--client` when `client`
+    /// is set); `done` gets its status, or nil when it yielded none or its
+    /// reply was dropped, exactly once.
+    private func run(
+        _ command: Command, _ bridge: String, client: String? = nil, done: (@MainActor (MCPStatus?) -> Void)? = nil
+    ) {
         op += 1
         let my = op
         inFlight = true
@@ -219,7 +297,7 @@ public final class MCPRegistrationController {
         let runner = runner
         let timeout = timeout
         Task { [weak self] in
-            let outcome = await Self.invoke(runner, bridge, command, timeout)
+            let outcome = await Self.invoke(runner, bridge, Self.arguments(command, client: client), timeout)
             guard let self, !self.closed, my == self.op else {
                 done?(nil)
                 return
@@ -227,9 +305,10 @@ public final class MCPRegistrationController {
             self.inFlight = false
             var answer: MCPStatus?
             switch outcome {
-            case .success(let s):
+            case .success(let reported):
+                let s = self.readOnly ? reported.countingOtherCopies() : reported
                 self.status = s
-                self.isRegistered = s.isRegistered
+                self.isRegistered = self.shown(s)
                 self.statusRetries = 0
                 answer = s
             case .failure(let f):
@@ -245,7 +324,7 @@ public final class MCPRegistrationController {
                     done?(nil)
                     return
                 }
-                self.onToast?(f.toast(registering: command == .install))
+                self.onToast?(f.toast(registering: command == .install, client: client))
             }
             self.setEnabled(true)
             self.onRegistered?(self.isRegistered)
@@ -277,17 +356,53 @@ public final class MCPRegistrationController {
         onToast?(L10n.T("The MCP bridge (malachi-mcp) was not found"))
     }
 
+    /// A test build changes no registration: the toast says where to,
+    /// and the switch goes back.
+    private func refuseWrite() {
+        onToast?(TestBuild.registrationNote)
+        onRegistered?(isRegistered)
+    }
+
     private func setEnabled(_ on: Bool) {
+        let on = on && !readOnly
         guard on != isEnabled else { return }
         isEnabled = on
         onEnabled?(on)
     }
 
-    /// Runs one subcommand and reads its status, off the main actor.
-    private nonisolated static func invoke(_ runner: BridgeRunner, _ bridge: String, _ command: Command, _ timeout: Duration) async -> Result<MCPStatus, MCPCallFailure> {
+    /// How the App Store build runs a setup subcommand instead of as a
+    /// child: there the bridge has a sandbox of its own, which a child of
+    /// the sandboxed app cannot have, so the app starts it through
+    /// LaunchServices and reads its report from a file
+    /// (`BridgeSetupLauncher` in MalachiMail, docs/plans/mac-app-store.md).
+    /// It gets the subcommand and its `--client` flags (`arguments` without
+    /// `--json`; the launcher asks for the report its own way). The same
+    /// shape as `BridgeRunner.run`: what stdout and stderr would have held
+    /// and the exit status. Set once at launch; nil runs the bridge as a
+    /// child (the DMG, development builds, tests).
+    public typealias SetupLauncher = @Sendable (_ bridge: String, _ setup: [String], _ timeout: Duration) async throws
+        -> (stdout: Data, stderr: Data, status: Int32)
+    nonisolated(unsafe) public static var setupLauncher: SetupLauncher?
+
+    /// The subcommand and, for install and uninstall of one app, its
+    /// `--client` (mcpsetup's `run`); without `--json`.
+    nonisolated static func arguments(_ command: Command, client: String?) -> [String] {
+        guard command != .status, let client else { return [command.rawValue] }
+        return [command.rawValue, "--client", client]
+    }
+
+    /// Runs one subcommand (`setup`: it and its flags, `arguments`) and
+    /// reads its status, off the main actor.
+    private nonisolated static func invoke(_ runner: BridgeRunner, _ bridge: String, _ setup: [String], _ timeout: Duration) async -> Result<MCPStatus, MCPCallFailure> {
         let output: (stdout: Data, stderr: Data, status: Int32)
+        let command = setup.first ?? ""
         do {
-            output = try await runner.run(bridge, [command.rawValue, "--json"], timeout: timeout)
+            if let launch = setupLauncher {
+                output = try await launch(bridge, setup, timeout)
+            } else {
+                // mcpsetup's order: the subcommand, --json, then the flags.
+                output = try await runner.run(bridge, [command, "--json"] + setup.dropFirst(), timeout: timeout)
+            }
         } catch {
             return .failure(.run(String(describing: error)))
         }
@@ -301,7 +416,7 @@ public final class MCPRegistrationController {
         do {
             return .success(try JSONDecoder().decode(MCPStatus.self, from: output.stdout))
         } catch {
-            return .failure(.failed("unexpected output from malachi-mcp \(command.rawValue)"))
+            return .failure(.failed("unexpected output from malachi-mcp \(command)"))
         }
     }
 
@@ -329,7 +444,7 @@ public final class MCPRegistrationController {
 
 /// Why a bridge call yielded no status.
 enum MCPCallFailure: Error, Equatable {
-    /// `install` found neither Claude app.
+    /// `install` found neither Claude app, or not the one `--client` named.
     case noClaudeApp
     /// A non-zero exit with the bridge's reason (or the exit status when it
     /// gave none), a crash, or output that is not a status.
@@ -347,12 +462,21 @@ enum MCPCallFailure: Error, Equatable {
         }
     }
 
-    /// The toast for a failed install (`registering`) or uninstall. The
-    /// msgids are the GTK page's.
-    func toast(registering: Bool) -> String {
+    /// The toast for a failed install (`registering`) or uninstall of
+    /// `client` (nil: every app). The msgids are the GTK dialog's: an app
+    /// that was not found says so with its sheet's `notInstalled`
+    /// (claude_integration.go `bindMCP`); without a client the bridge's
+    /// reason is shown as any other.
+    func toast(registering: Bool, client: String? = nil) -> String {
         switch self {
         case .noClaudeApp:
-            return L10n.T("No Claude app was found on this computer")
+            let kind = Integrations.localKinds.first { Integrations.clientID($0) == client && client != nil }
+            if let kind {
+                return Integrations.claudeAppText(kind).notInstalled
+            }
+            return registering
+                ? L10n.T("The MCP bridge could not be registered: %s", reason)
+                : L10n.T("The MCP bridge could not be unregistered: %s", reason)
         case .failed, .run:
             return registering
                 ? L10n.T("The MCP bridge could not be registered: %s", reason)

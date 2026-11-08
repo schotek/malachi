@@ -75,8 +75,8 @@ public struct ViewerChatColours: Sendable, Equatable {
 }
 
 /// The font rule of a chat bubble's document: every element in the system
-/// font at the text bubbles' size, whatever the message set (the owner's
-/// decision, 2026-10-20); weights, italics, underlines stay the message's.
+/// font at the text bubbles' size, whatever the message set; weights,
+/// italics, underlines stay the message's.
 func viewerChatFontCSS(size: Double) -> String {
     let px = size == size.rounded() ? String(Int(size)) : String(format: "%.1f", size)
     return "html, body, * { font-family: -apple-system, system-ui, sans-serif !important; font-size: \(px)px !important; line-height: 1.3 !important; }"
@@ -85,7 +85,7 @@ func viewerChatFontCSS(size: Double) -> String {
 /// The background rule of a chat bubble's document: every background of
 /// the content goes, so the bubble's own (the card colour, the user's
 /// accent tint) shows through the transparent web view, whatever the
-/// message painted (the owner's decision, 2026-10-20).
+/// message painted.
 public let viewerChatBackgroundCSS =
     "html, body, *, *::before, *::after { background-color: transparent !important; background-image: none !important; }"
 

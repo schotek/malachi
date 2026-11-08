@@ -37,6 +37,16 @@ import Foundation
 /// registered in any client, which is what `shown` asks anyway. The panel
 /// exists while `panelShown`: the Assistant is shown and In App chosen.
 ///
+/// The panel's provider is the `assistant-provider` preference
+/// (`Assistant.sourceOf`): the user's Claude Code, Codex with the user's
+/// ChatGPT plan (`chatGPT`), or an AI provider account of the daemon
+/// (`AssistantController+API.swift`, GTK ui/internal/window/ai_provider.go):
+/// over an account the daemon runs the assistant itself, so no
+/// registration of the bridge in the Claude apps is needed, only the
+/// bundled bridge (`bridge`, which the daemon starts), and the In App
+/// target is "found" while the account exists, is switched on and the
+/// provider has not refused its key (`apiReady`).
+///
 /// No texts and no AppKit here: the menus and the settings read
 /// `shown`, `availability`, `pick` and `Assistant.problem`.
 @MainActor
@@ -61,14 +71,53 @@ public final class AssistantController {
         }
     }
 
-    /// The targets, in the order of the menu and the settings.
-    public nonisolated static let targets: [Assistant.Target] = [.desktop, .code, .app]
+    /// The targets, in the order of the menu and the settings; without In
+    /// App in the App Store build (`Assistant.targets`). The instance's
+    /// `targets` adds In App there while an `ai` account is the provider.
+    public nonisolated static let targets: [Assistant.Target] = Assistant.targets
+
+    /// The targets this build offers with the provider chosen
+    /// (`Settings.assistantTargets`): the menus and the settings list
+    /// these.
+    public var targets: [Assistant.Target] { settings.assistantTargets }
 
     public var chatGPT: CodexProvider?
     public private(set) var providerGeneration = 0
     public var provider: (() -> (any AssistantProvider)?)?
-    public func providerChanged() { providerGeneration += 1; refreshHandlers(); notify() }
+    /// The provider in effect changed (the `assistant-provider` key, the
+    /// ChatGPT connection, the chosen `ai` account's configuration): a new
+    /// runtime generation, the provider over the chosen account built
+    /// anew (`rebuildAPI`), the targets looked up again and the observers
+    /// told (GTK `runtimeChanged`).
+    public func providerChanged() {
+        providerGeneration += 1
+        rebuildAPI()
+        refreshHandlers()
+        notify()
+    }
     public let settings: Settings
+    /// The daemon's RPC client, for the AI provider accounts
+    /// (`AssistantController+API.swift`): account.list and the provider
+    /// over the chosen account. nil until the application gives it
+    /// (`init(client:)` or `attach(client:)`); nothing is listed before.
+    public private(set) var client: RPCClient?
+    /// The daemon's `ai` accounts as last listed (account.list, again on
+    /// notify.accountsChanged and on connecting: `accountsChanged()`), in
+    /// the daemon's order; `aiAccountsKnown` once any listing answered,
+    /// `aiAccountsGen` drops an older listing's late answer.
+    public internal(set) var aiAccounts: [Account] = []
+    public internal(set) var aiAccountsKnown = false
+    var aiAccountsGen = 0
+    /// The provider over the chosen `ai` account for this runtime
+    /// generation (`rebuildAPI`); nil while another source is chosen, the
+    /// account is not listed, or there is no client.
+    public internal(set) var apiProvider: DaemonAssistantProvider?
+    /// The sessions of the daemon's assistant, one registry per
+    /// controller: the application feeds it the daemon's notifications
+    /// (`AssistantSessions.handle`), `apiDisconnected()` ends them with the
+    /// connection, `waitAPISessions()` lets their stops reach the daemon
+    /// at quit.
+    public let apiSessions = AssistantSessions()
     /// The last status the bridge reported; nil until one answered.
     public private(set) var status: MCPStatus?
     /// Whether an app handles each target's links, as last looked up; a
@@ -83,8 +132,12 @@ public final class AssistantController {
     private let registration: MCPRegistrationController
     private let lookup: HandlerLookup
     /// The bridge beside the application, which the panel passes to
-    /// Claude Code; nil without one.
-    private let bridge: String?
+    /// Claude Code (GTK `bridge`); nil without one.
+    let bridge: String?
+    /// The bridge the daemon starts for a session over an `ai` account
+    /// (GTK `daemonBridge`, `Paths.daemonBridge`): the same in the DMG, the
+    /// helper bundle's worker copy in the App Store build; nil without one.
+    let daemonBridge: String?
     /// Finds Claude Code for the panel; nil: the panel is never available.
     public let locator: ClaudeCodeLocator?
     private var menuToken: Settings.ChangeToken?
@@ -94,19 +147,25 @@ public final class AssistantController {
     /// - Parameters:
     ///   - bridge: the path of `malachi-mcp` (`Paths.mcpBridge`), or nil
     ///     when there is none beside the application.
+    ///   - daemonBridge: the bridge the daemon may start for an `ai`
+    ///     account (`Paths.daemonBridge`); nil takes `bridge`.
     ///   - settings: where the `assistant-target` preference is read.
     ///   - runner, timeout: how the bridge is run (tests pass a script).
     ///   - locator: finds Claude Code for the In App target; nil leaves
     ///     it unavailable.
+    ///   - client: the daemon's RPC client for the AI provider accounts
+    ///     (`attach(client:)` gives it later); nil lists none.
     ///   - handler: looks up whether an app handles a URL scheme.
     public init(
-        bridge: String?, settings: Settings, runner: BridgeRunner = BridgeRunner(),
+        bridge: String?, daemonBridge: String? = nil, settings: Settings, runner: BridgeRunner = BridgeRunner(),
         timeout: Duration = MCPRegistrationController.defaultTimeout, locator: ClaudeCodeLocator? = nil,
-        handler: @escaping HandlerLookup
+        client: RPCClient? = nil, handler: @escaping HandlerLookup
     ) {
         self.settings = settings
         self.bridge = bridge
+        self.daemonBridge = daemonBridge ?? bridge
         self.locator = locator
+        self.client = client
         lookup = handler
         registration = MCPRegistrationController(bridge: bridge, runner: runner, timeout: timeout)
         registration.onRegistered = { [weak self] _ in
@@ -117,6 +176,15 @@ public final class AssistantController {
             guard let self, !self.closed else { return }
             self.notify()
         }
+    }
+
+    /// Gives the daemon's RPC client (the application's, once it exists):
+    /// the provider over the chosen `ai` account is built and the accounts
+    /// listed (`refreshAIAccounts`).
+    public func attach(client: RPCClient) {
+        self.client = client
+        rebuildAPI()
+        refreshAIAccounts()
     }
 
     /// Stops listening: late replies are dropped, nothing is emitted.
@@ -147,7 +215,11 @@ public final class AssistantController {
         var found: [Assistant.Target: Bool] = [:]
         for t in Self.targets {
             if t == .app {
-                found[t] = bridge != nil && (settings.assistantProvider == .chatgpt ? provider?()?.available == true : claude)
+                switch source {
+                case .chatgpt: found[t] = bridge != nil && provider?()?.available == true
+                case .account: found[t] = daemonBridge != nil && apiReady
+                case .claude: found[t] = bridge != nil && claude
+                }
             } else {
                 found[t] = lookup(t.scheme)
             }
@@ -175,9 +247,11 @@ public final class AssistantController {
     }
 
     /// Whether the Assistant appears at all (`Assistant.shown`): the
-    /// `assistant-menu` preference while the bridge is registered.
+    /// `assistant-menu` preference while the bridge is registered; over
+    /// ChatGPT or an `ai` account with the In App target the preference
+    /// alone (no registration in a Claude app is needed).
     public var shown: Bool {
-        settings.assistantProvider == .chatgpt && settings.assistantTarget == .app ? settings.assistantMenu : Assistant.shown(menu: settings.assistantMenu, registered: registered)
+        source != .claude && settings.assistantTarget == .app ? settings.assistantMenu : Assistant.shown(menu: settings.assistantMenu, registered: registered)
     }
 
     /// What is known about target `t`: an app handles its links, the bridge
@@ -187,7 +261,11 @@ public final class AssistantController {
     public func availability(_ t: Assistant.Target) -> Assistant.Availability {
         let t = Assistant.parseTarget(t.rawValue)
         if t == .app {
-            return Assistant.Availability(handler: handlers[t] ?? false, registered: settings.assistantProvider == .chatgpt ? bridge != nil : registered)
+            switch source {
+            case .chatgpt: return Assistant.Availability(handler: handlers[t] ?? false, registered: bridge != nil)
+            case .account: return Assistant.Availability(handler: handlers[t] ?? false, registered: true)
+            case .claude: return Assistant.Availability(handler: handlers[t] ?? false, registered: registered)
+            }
         }
         let client = status?.clients.first { $0.id == t.clientID }
         return Assistant.Availability(handler: handlers[t] ?? false, registered: client?.registered ?? false)
@@ -217,14 +295,22 @@ public final class AssistantController {
     /// up); whether it is signed in is asked when a request runs. Its
     /// changes come through `onChange` and `Settings.onChange(.assistantTarget)`.
     public var canRunInApp: Bool {
-        panelShown && (settings.assistantProvider == .chatgpt ? provider?()?.available == true : claudeFound)
+        switch source {
+        case .chatgpt: return panelShown && provider?()?.available == true
+        case .account: return panelShown && apiReady
+        case .claude: return panelShown && claudeFound
+        }
     }
 
     /// Why target `t` cannot run the message actions; "" when it can
-    /// (`Assistant.problem`).
+    /// (`Assistant.problem`; over an `ai` account `apiProblem`).
     public func problem(_ t: Assistant.Target) -> String {
-        if t == .app && settings.assistantProvider == .chatgpt {
-            return provider?()?.available == true ? "" : L10n.T("Codex was not found. Choose a native Codex executable.")
+        if t == .app {
+            switch source {
+            case .chatgpt: return provider?()?.available == true ? "" : L10n.T("Codex was not found. Choose a native Codex executable.")
+            case .account: return apiProblem ?? ""
+            case .claude: break
+            }
         }
         return Assistant.problem(t, availability(t))
     }
@@ -241,7 +327,7 @@ public final class AssistantController {
         return Token(owner: self, id: id)
     }
 
-    private func notify() {
+    func notify() {
         // Copy first: a handler may cancel its own token.
         for f in observers.sorted(by: { $0.key < $1.key }).map(\.value) {
             f()

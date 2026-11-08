@@ -5,7 +5,7 @@
 // display mode of the toolbars, toolbar-display-mode, one for every bar, as
 // a shared presentation of the icon buttons' content. Icons Only is the
 // buttons as they are (their FontIcon); Icons and Text puts the label
-// beside the icon (the bars keep their height; Q-W9 left to the owner);
+// beside the icon (the bars keep their height; Q-W9);
 // Text Only shows the label without the glyph. A button with a label of its
 // own already (Today, the Board's text buttons, the views) is not
 // registered and stays as it is in every mode, as do the title bar's

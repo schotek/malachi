@@ -37,6 +37,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/graph"
 	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/jira"
+	"github.com/schotek/malachi/backend/internal/llm"
 	"github.com/schotek/malachi/backend/internal/outbox"
 	"github.com/schotek/malachi/backend/internal/remoteimg"
 	"github.com/schotek/malachi/backend/internal/revocation"
@@ -141,6 +142,18 @@ type Backend struct {
 	// crm is the state of the crm.* methods (crm_service.go).
 	ewaySync *eway.Supervisor
 	crm      crmState
+
+	// AIProvider builds the model API client of an ai account
+	// (accounts_ai.go, assistant_sessions.go); it defaults to the real
+	// clients of internal/llm and is a field so tests can substitute a
+	// fake provider. SocketPath is the daemon's own socket, set by
+	// malachid after the RPC server listens: the MCP bridge a session
+	// starts is told to connect there.
+	AIProvider func(llm.Config) (llm.Provider, error)
+	SocketPath string
+	// assist is the daemon's own assistant: its sessions per connection
+	// (assistant_sessions.go).
+	assist assistantState
 
 	// GOA is the GNOME Online Accounts client behind account.linked and the
 	// tokens of Graph accounts. It connects lazily; without a session bus
@@ -392,6 +405,8 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 	})
 	// eWay-CRM accounts synchronise nothing: the supervisor only holds
 	// their clients (docs/eway.md D21).
+	b.AIProvider = defaultAIProvider
+	b.assist = newAssistantState()
 	b.ewaySync = eway.NewSupervisor(eway.SupervisorDeps{
 		Password:  b.PasswordFor,
 		ClientID:  b.ewayClientID,
@@ -635,8 +650,13 @@ func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
 	boardDone := b.startBoard(ctx)
 	updatesDone := b.startUpdates(ctx)
 	sigDone := b.startSignatures(ctx)
+	assistDone := b.startAssistant(ctx)
 	var wg sync.WaitGroup
-	wg.Add(6)
+	wg.Add(7)
+	go func() {
+		defer wg.Done()
+		<-assistDone
+	}()
 	go func() {
 		defer wg.Done()
 		<-sigDone

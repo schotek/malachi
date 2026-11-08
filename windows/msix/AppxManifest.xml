@@ -27,7 +27,7 @@ What the package changes for the app, and what the test is for:
   the package start an executable in its folder (Claude Code and Claude
   Desktop got EPERM), but anyone may start the alias, which keeps its path
   across updates. The app hands it out in a package (Paths.InPackage).
-- mailto: (windows.protocol, owner's decision 2026-11-04): Windows lists
+- mailto: (windows.protocol): Windows lists
   the package in Default Apps under a ProgID of its own and drops it with
   the package; the app in a package writes no mailto: keys of its own
   (they named the versioned package folder and went stale with every

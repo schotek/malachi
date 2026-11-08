@@ -52,6 +52,14 @@ final class AssistantPanelViewController: NSViewController {
     private let profileButton = NSButton()
     private var profileToken: BoardObserverToken?
     var onOpenProfile: (@MainActor () -> Void)?
+    /// Set Up in Integrations… on an error line of a session the daemon
+    /// runs over an `ai` account (`Offer.setUpInIntegrations`): the
+    /// application opens the account's settings in Integrations.
+    var onOpenIntegrations: (@MainActor () -> Void)?
+    /// The footer's sentence for the provider in effect (ChatGPT's, an
+    /// `ai` account's destination, Claude's; `AppState.assistantFooter`);
+    /// nil shows Claude's (`Assistant.panelTexts().footer`).
+    var footerText: (@MainActor () -> String)?
     private let chip = AssistantContextChip()
     private let actionsFlow = FlowView(spacing: 6, lineSpacing: 6)
     private var actionButtons: [NSButton] = []
@@ -355,6 +363,8 @@ final class AssistantPanelViewController: NSViewController {
             onOpenPage?(Assistant.installURL)
         case .reconnectProvider:
             controller.reconnect(id)
+        case .setUpInIntegrations:
+            onOpenIntegrations?()
         case .none:
             break
         }
@@ -366,7 +376,7 @@ final class AssistantPanelViewController: NSViewController {
     /// state, its spinner among it.
     private func updateState() {
         let c = controller
-        footer.stringValue = c.settings.assistantProvider == .chatgpt ? ChatGPTText.footer : Assistant.panelTexts().footer
+        footer.stringValue = footerText?() ?? Assistant.panelTexts().footer
         subtitleLabel.stringValue = c.subtitle
         if c.isPinned {
             let symbol = c.pinned.count > 1

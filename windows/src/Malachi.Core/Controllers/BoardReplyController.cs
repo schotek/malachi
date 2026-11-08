@@ -18,8 +18,10 @@
 // controller infrastructure (§7.2): board.get with Perform, board.setDraft
 // and draft.delete with PerformPastClose (sent even when the controller is
 // disposed right after), each kept in the pending calls until its answer
-// was handled. The ChatGPT branches are Swift's (the selected provider's
-// Available, Connected and consent; Go has no provider); a provider's
+// was handled. The provider branches are Swift's (the selected provider's
+// Available, Connected and consent, for ChatGPT and an ai account alike,
+// whose consent is the account's own, never a key; Go has no provider); a
+// provider's
 // session gets AssistantToolPolicy.ReplyOnly. Dispose (stop listening,
 // cancel) is Windows' own, as Go's Close. Only kinds are logged, never what
 // the model wrote nor an address.
@@ -38,6 +40,8 @@ using Malachi.Core.Settings;
 using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using AssistantEvent = Malachi.Core.Assistants.AssistantEvent;
+using AssistantEventKind = Malachi.Core.Assistants.AssistantEventKind;
 
 namespace Malachi.Core.Controllers;
 
@@ -63,10 +67,13 @@ namespace Malachi.Core.Controllers;
 /// <item><c>board.get</c> for the case: its newest members' ids and, fresh,
 /// its reply target; a case that has a suggested reply by now ends it
 /// quietly.</item>
-/// <item>The request: <see cref="Assistant.SuggestReplyMessage"/> under
-/// <see cref="Assistant.SuggestReplySystemPrompt"/>, with the assistant's
-/// model, the bridge started as <c>--socket &lt;socket&gt; --reply-only
-/// &lt;replyMessageId&gt;</c> and only <see cref="Assistant.SuggestReplyTools"/>.</item>
+/// <item>The request: the daemon's prompt of purpose reply (assistant.prompt
+/// with <see cref="ReplyInput"/>: the case's account and reply target, its
+/// newest members' ids, the user's instruction, the follow-up variant for a
+/// case waiting on the other side; the note of the case's account), with the
+/// assistant's model, the bridge started as the prompt says (<c>--socket
+/// &lt;socket&gt; --in-app --reply-only &lt;replyMessageId&gt;</c>) and only
+/// its tools.</item>
 /// <item>The draft is the one a successful create_draft result names
 /// (<see cref="Assistant.ParseDraftResult"/>). Without one the request failed
 /// (<see cref="Board.SuggestReplyFailure.NoDraft"/>). With one it is linked
@@ -237,12 +244,6 @@ public sealed partial class BoardReplyController : IDisposable
     public Action? OnRefresh { get; set; }
 
     /// <summary>
-    /// The user's profile; a request gets the note of the case's account only
-    /// (<see cref="UserProfile.For"/>). Empty by default.
-    /// </summary>
-    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
-
-    /// <summary>
     /// How long a request may take (<see cref="Assistant.SuggestReplyTimeout"/>).
     /// The controller keeps the time itself, so the end of a request that
     /// runs out of it is the controller's, created draft and all; the
@@ -259,9 +260,12 @@ public sealed partial class BoardReplyController : IDisposable
     /// <summary>The feature can run: available, the bridge and Claude Code (or the selected provider) there.</summary>
     public bool CanRun => available() && bridge is not null && RuntimeAvailable;
 
-    private bool ChatGpt => Settings.AssistantProvider == AssistantProviderID.ChatGpt;
+    // The provider in effect runs through Request.Provider (Codex, a session
+    // the daemon runs over an ai account) rather than the user's Claude Code
+    // (Swift throughProvider).
+    private bool ThroughProvider => Assistant.SourceOf(Settings.AssistantProvider) != AssistantProviderSource.Claude;
 
-    private bool RuntimeAvailable => ChatGpt ? Request.Provider?.Available == true : Locator.Locate() is not null;
+    private bool RuntimeAvailable => ThroughProvider ? Request.Provider?.Available == true : Locator.Locate() is not null;
 
     /// <summary>Calls <paramref name="f"/> after any change of what the control shows; the token removes it.</summary>
     public BoardObserverToken Observe(Action f) => observers.Add(f);
@@ -302,7 +306,7 @@ public sealed partial class BoardReplyController : IDisposable
     {
         scope.VerifyAccess();
         signInGen++;
-        if (ChatGpt)
+        if (ThroughProvider)
         {
             SetSignedIn(Request.Provider?.Connected ?? false);
             return;
@@ -451,11 +455,15 @@ public sealed partial class BoardReplyController : IDisposable
         AfterConsent(my, id, instruction);
     }
 
-    private bool HasConsent() => ChatGpt ? Request.Provider?.HasConsent == true : Settings.AssistantConsent;
+    // The assistant's consent of the provider in effect: Claude Code's key;
+    // ChatGPT's and an ai account's the provider's (an account's is its own
+    // in the daemon, recorded by AcceptConsent, never a key; Swift
+    // assistantConsentGiven, recordAssistantConsent).
+    private bool HasConsent() => ThroughProvider ? Request.Provider?.HasConsent == true : Settings.AssistantConsent;
 
     private void AcceptConsent()
     {
-        if (ChatGpt)
+        if (ThroughProvider)
         {
             Request.Provider?.AcceptConsent();
         }
@@ -551,32 +559,44 @@ public sealed partial class BoardReplyController : IDisposable
             Refresh();
             return;
         }
-        var message = Assistant.SuggestReplyMessage(
-            r.Case.AccountId.Value, r.Case.ReplyMessageId.Value, [.. r.Messages.Select(m => m.Id.Value)], instruction);
-        Request.Start(
-            // A case waiting on the other side gets a follow-up on the user's
-            // own last message.
-            Assistant.WithProfile(
-                Assistant.SuggestReplySystemPromptFor(Board.IsFollowUpWire(r.Case, annotated)),
-                Profile().For(r.Case.AccountId.Value)),
-            message,
-            outcome => Answered(my, id, outcome),
-            tools: new AssistantRequest.Tools
+        // 3. The request: the daemon's prompt of the reply. The case's
+        // members, oldest first; the daemon names the newest of them and
+        // takes at most API.Limits.MaxPromptMessageIDs.
+        var others = r.Messages.Select(m => m.Id).TakeLast(API.Limits.MaxPromptMessageIDs).ToList();
+        Request.StartCall(
+            new AssistantRequest.CallSpec
             {
-                Bridge = bridge,
-                Socket = socket,
-                BridgeArgs = Assistant.SuggestReplyBridgeArgs(r.Case.ReplyMessageId.Value),
-                Allowed = Assistant.SuggestReplyTools,
-                Policy = AssistantToolPolicy.ReplyOnly,
+                Purpose = PromptPurpose.Reply,
+                Input = new PromptInput
+                {
+                    Reply = new ReplyInput
+                    {
+                        AccountId = r.Case.AccountId,
+                        MessageId = r.Case.ReplyMessageId,
+                        Others = others,
+                        Instruction = instruction,
+                        // A case waiting on the other side gets a follow-up on
+                        // the user's own last message.
+                        FollowUp = Board.IsFollowUpWire(r.Case, annotated),
+                    },
+                },
+                NoteAccountId = r.Case.AccountId,
+                Tools = new AssistantRequest.Tools
+                {
+                    Bridge = bridge,
+                    Socket = socket,
+                    Policy = AssistantToolPolicy.ReplyOnly,
+                },
+                Timeout = Timeout + TimeSpan.FromSeconds(10),
+                // The assistant's model (assistant-model), not the board's
+                // triage model: the user asked for this reply and waits for
+                // it, as for the panel and the compose rewrite.
+                Model = Settings.AssistantModel,
+                OnTool = e => Tool(my, e),
+                // No usage is recorded (see the remarks of the class).
+                OnUsage = null,
             },
-            timeout: Timeout + TimeSpan.FromSeconds(10),
-            // The assistant's model (assistant-model), not the board's
-            // triage model: the user asked for this reply and waits for it,
-            // as for the panel and the compose rewrite.
-            model: Settings.AssistantModel,
-            onTool: e => Tool(my, e),
-            // No usage is recorded (see the remarks of the class).
-            onUsage: null);
+            outcome => Answered(my, id, outcome));
     }
 
     // Notes the draft a create_draft of request my created.

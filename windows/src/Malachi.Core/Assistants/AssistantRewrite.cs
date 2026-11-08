@@ -5,7 +5,7 @@
 // (Assistant.Rewrite); GTK: ui/internal/assistant/rewrite.go (Rewrite).
 // Swift and Go keep the rewrite as a string so that an unknown one exists;
 // a C# enum is open the same way (any other value is unknown:
-// RewriteLabel is "" for it, RewriteMessage refuses it), and
+// RewriteLabel is "" for it, the daemon refuses it), and
 // Assistant.RewriteNick gives Go's string.
 
 namespace Malachi.Core.Assistants;

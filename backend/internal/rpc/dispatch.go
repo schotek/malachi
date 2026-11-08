@@ -234,6 +234,12 @@ func (s *Server) registerAssistant(b api.Backend) {
 	s.handlers[api.MethodAssistantProfileSet] = wrap(as.ProfileSet)
 	s.handlers[api.MethodAssistantProfilePropose] = wrap(as.ProfilePropose)
 	s.handlers[api.MethodAssistantProfileResolve] = wrap(as.ProfileResolve)
+	s.handlers[api.MethodAssistantPrompt] = wrap(as.Prompt)
+	s.handlers[api.MethodAssistantSessionStart] = wrap(as.SessionStart)
+	s.handlers[api.MethodAssistantSessionSend] = wrap(as.SessionSend)
+	s.handlers[api.MethodAssistantSessionStop] = wrap(as.SessionStop)
+	s.handlers[api.MethodAssistantProviderModels] = wrap(as.ProviderModels)
+	s.handlers[api.MethodAssistantUsage] = wrap(as.Usage)
 }
 
 // registerCrm binds the CRM methods (docs/api.md §4.1, §4.17).

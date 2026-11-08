@@ -12,7 +12,12 @@
 // otherwise, GNOME Online Accounts having no panel on Windows), edit it for
 // a certificate, or check it for new mail. The wizard is opened through the
 // application's EditAccount hook (wave 2, E6); the browser only gets an
-// https address, and a failure is a toast over the main window.
+// https address, and a failure is a toast over the main window. An AI
+// provider account (kind ai, which the status line shows only with a
+// refused key, SyncStatusTexts.InStatusLine) never opens the mail wizard:
+// its Sign In and Edit Account… open its own dialog through the
+// EditAiAccount hook, Sign In on Replace Key… (Swift StatusBarViewController,
+// GTK sync.go editAIAccount).
 
 using System;
 using Malachi.App.Shell;
@@ -104,6 +109,11 @@ internal sealed class AccountRepair
     // account), the preferences otherwise.
     private void SignInAgain(SignInKind kind, ErrorCode reason, AccountId id)
     {
+        // The provider refused an ai account's key: its dialog on Replace Key….
+        if (EditAiAccount(id, replaceKey: true))
+        {
+            return;
+        }
         if (SyncStatusTexts.EditsPassword(kind, reason) && mailbox.Model.Account(id) is not null)
         {
             EditAccount(id, reason);
@@ -150,11 +160,23 @@ internal sealed class AccountRepair
     // for the password with a reason.
     private void EditAccount(AccountId id, ErrorCode? requestPassword)
     {
-        if (mailbox.Model.Account(id) is null)
+        if (mailbox.Model.Account(id) is null || EditAiAccount(id, replaceKey: requestPassword is not null))
         {
             return;
         }
         // Over the main window (null: the wizard picks it), as the banners and the status flyout live there.
         state.Hooks.EditAccount?.Invoke(null, id, requestPassword);
+    }
+
+    // An ai account's own dialog instead of the mail wizard (over the main
+    // window: null lets the hook pick it); false for any other account.
+    private bool EditAiAccount(AccountId id, bool replaceKey)
+    {
+        if (mailbox.Model.Account(id) is not { } a || a.Config.ProtocolKind != AccountKind.Ai)
+        {
+            return false;
+        }
+        state.Hooks.EditAiAccount?.Invoke(null, a, replaceKey);
+        return true;
     }
 }

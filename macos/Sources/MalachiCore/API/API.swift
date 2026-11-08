@@ -604,7 +604,7 @@ public enum API {
         BoardArchive.self, BoardTrash.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
         BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
         BoardRunStart.self, BoardRunEnd.self,
-    ] + calendarMethods + crmMethods + assistantProfileMethods + contactsMethods + updateMethods + rulesMethods + signatureMethods
+    ] + calendarMethods + crmMethods + assistantProfileMethods + assistantMethods + contactsMethods + updateMethods + rulesMethods + signatureMethods
 
     /// api.AllMethods: every callable method name.
     public static let allMethods: [String] = methods.map { $0.name }
@@ -638,6 +638,12 @@ public enum API {
         /// The assistant profile or its proposals changed; the
         /// application's `ProfileStore` reads it again.
         public static let assistantProfileChanged = "notify.assistantProfileChanged"
+        /// `AssistantEvent` (API/AIAPI.swift): an event of a session of
+        /// the daemon's assistant, sent to the session's connection only.
+        public static let assistantEvent = "notify.assistantEvent"
+        /// `AssistantUsageChangedNotification`: an `ai` account's usage of
+        /// today changed; the application runs assistant.usage again.
+        public static let assistantUsageChanged = "notify.assistantUsageChanged"
         /// `ContactsChangedNotification`: the contacts of these books
         /// changed; the Contacts window, Preferences → Contacts and the
         /// address chips' lookup read them again.
@@ -660,7 +666,7 @@ public enum API {
         Notify.newMessage, Notify.syncState, Notify.authRequired, Notify.accountsChanged, Notify.messagesChanged,
         Notify.boardChanged, Notify.draftsChanged,
         Notify.calendarChanged, Notify.calendarState, Notify.eventAlert, Notify.invitationsChanged,
-        Notify.assistantProfileChanged,
+        Notify.assistantProfileChanged, Notify.assistantEvent, Notify.assistantUsageChanged,
         Notify.contactsChanged,
         Notify.updateChanged,
         Notify.rulesChanged,

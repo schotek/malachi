@@ -6,16 +6,13 @@
 // RefreshProfile, OnProfileChange). The user's profile for the assistant
 // (docs/api.md §4.18, docs/plans/assistant-profile.md), once for the
 // application: one ProfileStore, read when the connection comes and again on
-// notify.assistantProfileChanged and notify.accountsChanged. Every prompt
-// carries it: the triage and Suggest Reply here, the panel, the compose
-// window's rewrite and writing bar and the search in the user's own words
-// where they are made (UserProfile.For the window's account there);
-// Preferences → AI → About You edits it and the panel's proposal cards
-// resolve through it.
+// notify.assistantProfileChanged and notify.accountsChanged. The daemon
+// puts it into every prompt it builds (assistant.prompt; the one-shot
+// requests name the account whose note goes with it); Preferences → AI →
+// About You edits it and the panel's proposal cards resolve through it.
 
 using System;
 using System.Collections.Generic;
-using Malachi.Core.Assistants;
 using Malachi.Core.Controllers;
 using Microsoft.Extensions.Logging;
 
@@ -29,10 +26,7 @@ public sealed partial class AppState
     /// <summary>The user's profile, one for the application.</summary>
     public ProfileStore Profile { get; private set; } = null!;
 
-    /// <summary>The profile for the prompts, every account's note; empty before the store exists.</summary>
-    public UserProfile CurrentProfile => Profile is { } p ? p.Profile : UserProfile.Empty;
-
-    // After the board (the triage and Suggest Reply carry the profile).
+    // After the board.
     private void InitializeProfile()
     {
         Profile = new ProfileStore(Client, Logs.CreateLogger<ProfileStore>());
@@ -49,8 +43,6 @@ public sealed partial class AppState
         {
             Profile.Refresh();
         }
-        BoardTriage.Profile = () => CurrentProfile;
-        BoardReply.Profile = () => CurrentProfile;
     }
 
     private void CloseProfile()

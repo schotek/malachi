@@ -163,6 +163,8 @@ func run() error {
 	}
 	// Idempotent; removes the key file and the socket on every way out.
 	defer srv.Close()
+	// The assistant's bridge connects where the clients do.
+	backend.SocketPath = *flagSocket
 	syncDone := backend.StartSync(ctx)
 	maintainDone := make(chan struct{})
 	go func() {

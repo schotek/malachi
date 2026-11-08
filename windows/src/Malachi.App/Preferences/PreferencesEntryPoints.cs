@@ -13,7 +13,13 @@
 // buttons, and the banners' and the status popover's Edit Account…
 // (AppHooks.EditAccount). A Jira account is edited in its settings
 // (AccountsPage.EditorOf), or in the assistant asking for a new token when
-// the route names why (a sign-in banner's reason, JiraEditorFor).
+// the route names why (a sign-in banner's reason, JiraEditorFor). Since the
+// AI providers through their API (docs/plans/ai-api.md §15.3) also the
+// panel's and the board's "Set Up in Integrations…" (OpenIntegrations), and
+// the dialog of an AI provider account (EditAiAccount, on Replace Key… for a
+// route that says the provider refused the key; AddAiAccount), both over
+// Preferences → Integrations, as macOS Hooks.openIntegrationsSettings,
+// editAIAccount and addAIAccount.
 
 using Malachi.App.Shell;
 using Malachi.App.Wizard;
@@ -44,10 +50,34 @@ internal static class PreferencesEntryPoints
                 state.ShowAddCalDAVCalendar(owner, null);
             }
         };
+        hooks.OpenIntegrations = _ => PreferencesWindow.Show(state)?.ShowIntegrations();
+        hooks.EditAiAccount = (_, account, replaceKey) =>
+        {
+            if (PreferencesWindow.Show(state) is { } preferences)
+            {
+                preferences.ShowIntegrations();
+                preferences.Integrations.EditAiAccount(account, replaceKey);
+            }
+        };
+        hooks.AddAiAccount = (_, provider) =>
+        {
+            if (PreferencesWindow.Show(state) is { } preferences)
+            {
+                preferences.ShowIntegrations();
+                preferences.Integrations.AddAiAccount(provider);
+            }
+        };
         hooks.EditAccount = (window, id, reason) =>
         {
             if (state.Integration?.Mailbox.Model.Account(id) is not { } account)
             {
+                return;
+            }
+            // An AI provider account is edited in its dialog, never the
+            // mail wizard (a sign-in route means its key was refused).
+            if (account.Config.ProtocolKind == AccountKind.Ai)
+            {
+                hooks.EditAiAccount?.Invoke(window, account, reason is not null);
                 return;
             }
             if (Pages.EditorOf(account) == AccountEditor.Jira)

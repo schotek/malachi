@@ -136,6 +136,24 @@ public sealed class AppHooks
     /// </summary>
     public Func<Draft, bool>? RaiseDraft { get; set; }
 
+    /// <summary>
+    /// Opens Preferences → Integrations (the panel's and the board's "Set Up
+    /// in Integrations…"; macOS Hooks.openIntegrationsSettings, GTK
+    /// app.integrations). Registered by PreferencesEntryPoints.
+    /// </summary>
+    public Action<Window?>? OpenIntegrations { get; set; }
+
+    /// <summary>
+    /// Opens the dialog of an AI provider account (kind ai) over the
+    /// Preferences, on Replace Key… when the last argument is true (a route
+    /// that says the provider refused the key: the status bar's and the
+    /// board's Sign In). macOS Hooks.editAIAccount, GTK editAIAccount.
+    /// </summary>
+    public Action<Window?, Account, bool>? EditAiAccount { get; set; }
+
+    /// <summary>Opens the dialog that adds an AI provider account of the given provider (macOS Hooks.addAIAccount).</summary>
+    public Action<Window?, AiProvider>? AddAiAccount { get; set; }
+
     /// <summary>What a hook answers changed (the accounts): the commands re-validate.</summary>
     public void NotifyChanged() => Changed?.Invoke(this, EventArgs.Empty);
 

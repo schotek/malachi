@@ -5,400 +5,380 @@ package window
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"slices"
 
-	"github.com/diamondburned/gotk4/pkg/gio/v2"
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/chatgpt"
-	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
-func (d *PreferencesDialog) bindChatGPT(s *settings.Store) func() {
-	a := d.assist
-	t := assistant.ChatGPTText(tr)
-	d.assistantProvider.SetTitle(t.Provider)
-	d.assistantProvider.SetModel(gtk.NewStringList([]string{assistant.TargetName(tr, assistant.Code), t.Name}))
-	d.chatGPTGroup.SetTitle(t.Name)
-	d.chatGPTGroup.SetDescription(t.Description)
-	d.codexRow.SetTitle(t.Codex)
-	d.codexChoose.SetLabel(assistant.PanelTexts(tr).Choose)
-	d.codexInstall.SetLabel(t.Install)
-	d.chatGPTConnection.SetTitle(i18n.T("Account"))
-	d.chatGPTSignIn.SetLabel(t.SignIn)
-	d.chatGPTDisconnect.SetLabel(t.Disconnect)
-	d.chatGPTModel.SetTitle(assistant.PanelTexts(tr).Model)
-	d.chatGPTUsage.SetTitle(t.Usage)
-	d.chatGPTManageUsage.SetLabel(t.Usage)
-	var syncing, busy bool
-	var ids []string
-	var generation int
-	var cancel context.CancelFunc
-	var version, versionPath string
-	var lastCatalog assistantModelCatalogKey
-	catalogKnown := false
-	var catalog []chatgpt.Model
-	fillModels := func(models []chatgpt.Model) {
+// The Model rows of Preferences → AI (the panel's, and the board's in the
+// Board group) and of the ChatGPT integration follow the provider in
+// effect (docs/plans/ai-api.md §7.3): Claude Code offers the fixed
+// models of ui/internal/assistant (assistant-model, board-triage-model),
+// ChatGPT the catalogue Codex lists, with the provider's default first
+// (assistant-chatgpt-model, board-triage-chatgpt-model), and an AI
+// provider account the models the daemon lists for it
+// (assistant.providerModels), with the account's own stored model: a
+// choice is written to the account (account.update with its
+// configuration and the changed model, no credentials; the board's
+// first entry, empty, uses the account's model).
+
+// modelPurpose is which model a row chooses: the panel's (and the
+// one-shot requests'), or the board's triage.
+type modelPurpose int
+
+const (
+	modelPanel modelPurpose = iota
+	modelBoard
+)
+
+// modelHost is what a Model row needs of the dialog it is in.
+type modelHost interface {
+	isClosed() bool
+	assistantState() *Assistant
+	// daemon is the RPC client, nil without one (a test).
+	daemon() *client.Client
+	toast(text string)
+}
+
+func (d *PreferencesDialog) isClosed() bool             { return d.closed }
+func (d *PreferencesDialog) assistantState() *Assistant { return d.assist }
+func (d *PreferencesDialog) daemon() *client.Client     { return d.rpc }
+func (d *PreferencesDialog) toast(text string)          { d.AddToast(widget.PlainToast(text)) }
+
+// bindProviderModel keeps row with the model of purpose for the provider
+// in effect, and writes the user's choice. Its model is replaced only
+// outside GTK's selection notification (deferUpdate). The returned
+// function stops following.
+func bindProviderModel(h modelHost, s *settings.Store, row *adw.ComboRow, purpose modelPurpose) func() {
+	a := h.assistantState()
+	var (
+		syncing bool
+		// ids are the values of the rows shown; "" is the provider's
+		// default (ChatGPT) or the account's model (the board over an
+		// account).
+		ids        []string
+		generation int
+		cancel     context.CancelFunc
+		// The catalogue of the provider, asked once per key.
+		lastCatalog  assistantModelCatalogKey
+		catalogKnown bool
+		catalog      []string
+		names        map[string]string
+		// pending is a choice written to the daemon and not listed back
+		// yet (an account's model).
+		pending string
+	)
+	x := assistant.APIText(tr)
+	chatGPTModel := func() string {
+		if purpose == modelBoard {
+			return s.BoardChatGPTModel()
+		}
+		return s.AssistantChatGPTModel()
+	}
+	accountModel := func(acc api.Account) string {
+		if acc.Config.AI == nil {
+			return ""
+		}
+		if purpose == modelBoard {
+			return acc.Config.AI.BoardModel
+		}
+		return acc.Config.AI.Model
+	}
+	// fill shows the catalogue with the current value, which it adds when
+	// the catalogue lacks it; withDefault puts the empty value first.
+	fill := func(current string, withDefault bool, defaultName string) {
 		syncing = true
 		defer func() { syncing = false }()
-		ids = []string{""}
-		names := []string{t.DefaultModel}
-		for _, m := range models {
-			if m.ID != "" && !slices.Contains(ids, m.ID) {
-				ids = append(ids, m.ID)
-				names = append(names, m.Name)
+		ids = ids[:0]
+		var labels []string
+		if withDefault {
+			ids = append(ids, "")
+			labels = append(labels, defaultName)
+		}
+		for _, id := range catalog {
+			if id != "" && !slices.Contains(ids, id) {
+				ids = append(ids, id)
+				if n := names[id]; n != "" {
+					labels = append(labels, n)
+				} else {
+					labels = append(labels, id)
+				}
 			}
 		}
-		selected := s.AssistantChatGPTModel()
-		if !slices.Contains(ids, selected) {
-			ids = append(ids, selected)
-			names = append(names, selected)
+		if !slices.Contains(ids, current) {
+			ids = append(ids, current)
+			labels = append(labels, current)
 		}
-		d.chatGPTModel.SetModel(gtk.NewStringList(names))
-		d.chatGPTModel.SetSelected(uint(slices.Index(ids, selected)))
+		row.SetModel(gtk.NewStringList(labels))
+		row.SetSelected(uint(slices.Index(ids, current)))
 	}
-	update := func() {
-		if d.closed {
-			return
-		}
-		syncing = true
-		if a.usesChatGPT() {
-			d.assistantProvider.SetSelected(1)
-		} else {
-			d.assistantProvider.SetSelected(0)
-		}
-		syncing = false
-		shown := a.usesChatGPT() && a.target() == assistant.App
-		d.chatGPTGroup.SetVisible(shown)
-		if !shown {
-			return
-		}
-		ready := a.chatGPT != nil && os.Getenv("FLATPAK_ID") == ""
-		if os.Getenv("FLATPAK_ID") != "" {
-			d.chatGPTGroup.SetDescription(t.FlatpakUnavailable)
-		} else if !ready {
-			d.chatGPTGroup.SetDescription(t.ConnectionFailed)
-		} else {
-			d.chatGPTGroup.SetDescription(t.Description)
-		}
-		connection := chatgpt.Connection{}
-		if ready {
-			connection = a.chatGPT.Connection()
-		}
-		connected := connection.Status == chatgpt.Connected
-		state := t.Disconnected
-		switch connection.Status {
-		case chatgpt.Connected:
-			state = fmt.Sprintf(t.Connected, connection.Email)
-		case chatgpt.SigningIn:
-			state = t.Connecting
-		case chatgpt.ReconnectRequired:
-			state = t.Reconnect
-		}
-		d.chatGPTConnection.SetSubtitle(state)
-		d.chatGPTSignIn.SetVisible(!connected)
-		d.chatGPTSignIn.SetSensitive(ready && !busy && connection.Status != chatgpt.SigningIn)
-		d.chatGPTDisconnect.SetVisible(connected || connection.Status == chatgpt.SigningIn || connection.Status == chatgpt.ReconnectRequired)
-		d.chatGPTDisconnect.SetSensitive(ready)
-		d.chatGPTManageUsage.SetSensitive(connected)
-		d.chatGPTModel.SetSensitive(connected)
-		path := chatgpt.Locate(s.AssistantCodexPath())
-		if path == "" {
-			d.codexRow.SetSubtitle(t.NativeMissingCodex)
-		} else {
-			shownPath := path
-			if versionPath == path && version != "" {
-				shownPath += " · " + version
-			}
-			d.codexRow.SetSubtitle(shownPath)
-		}
-		d.codexInstall.SetVisible(path == "")
-		d.codexChoose.SetSensitive(os.Getenv("FLATPAK_ID") == "")
-		key := assistantModelCatalogKey{s.AssistantProvider(), a.target(), path, connection.ConnectionID, connection.Status}
-		if catalogKnown && lastCatalog == key {
-			// Model selection changes the request runtime, not the model catalog.
+	// reselect shows current, or fills again when it is not listed.
+	reselect := func(current string, withDefault bool, defaultName string) {
+		if i := slices.Index(ids, current); i >= 0 {
 			syncing = true
-			if i := slices.Index(ids, s.AssistantChatGPTModel()); i >= 0 {
-				d.chatGPTModel.SetSelected(uint(i))
-			} else {
-				fillModels(catalog)
-			}
+			row.SetSelected(uint(i))
 			syncing = false
 			return
 		}
-		lastCatalog, catalogKnown, catalog = key, true, nil
-		generation++
-		my := generation
-		if cancel != nil {
-			cancel()
+		fill(current, withDefault, defaultName)
+	}
+	forget := func() {
+		if catalogKnown {
+			generation++
+			if cancel != nil {
+				cancel()
+			}
+			catalogKnown = false
 		}
-		ctx, stop := context.WithCancel(context.Background())
-		cancel = stop
-		fillModels(nil)
-		if path != "" {
+	}
+	update := func() {
+		if h.isClosed() {
+			return
+		}
+		// The board's row hides with an AI provider account, whose card in
+		// Integrations chooses its models;
+		// the Assistant group decides on its own row.
+		if purpose == modelBoard {
+			row.SetVisible(a.source() != assistant.SourceAccount)
+		}
+		switch a.source() {
+		case assistant.SourceClaude:
+			forget()
+			row.SetSubtitle("")
+			catalog, names = nil, nil
+			for _, m := range assistant.Models {
+				catalog = append(catalog, string(m))
+			}
+			names = map[string]string{}
+			for i, m := range assistant.Models {
+				names[string(m)] = modelNames()[i]
+			}
+			current := string(s.AssistantModel())
+			if purpose == modelBoard {
+				current = string(s.BoardTriageModel())
+			}
+			fill(current, false, "")
+		case assistant.SourceChatGPT:
+			connection := chatgpt.Connection{}
+			if a.chatGPT != nil {
+				connection = a.chatGPT.Connection()
+			}
+			key := assistantModelCatalogKey{provider: s.AssistantProvider(), target: a.target(),
+				executable: chatgpt.Locate(s.AssistantCodexPath()), connectionID: connection.ConnectionID, status: connection.Status}
+			defaultName := assistant.ChatGPTText(tr).DefaultModel
+			if catalogKnown && key == lastCatalog {
+				reselect(chatGPTModel(), true, defaultName)
+				return
+			}
+			lastCatalog, catalogKnown, catalog, names = key, true, nil, nil
+			row.SetSubtitle("")
+			generation++
+			my := generation
+			if cancel != nil {
+				cancel()
+			}
+			ctx, stop := context.WithCancel(context.Background())
+			cancel = stop
+			fill(chatGPTModel(), true, defaultName)
+			if a.codex == nil || !a.chatGPTReady() {
+				return
+			}
+			runtime := a.codex
 			go func() {
-				v, err := chatgpt.Version(ctx, path)
+				models, err := runtime.GetModels(ctx)
 				glib.IdleAdd(func() {
-					if !d.closed && my == generation && ctx.Err() == nil && err == nil {
-						versionPath, version = path, v
-						d.codexRow.SetSubtitle(path + " · " + v)
+					if h.isClosed() || generation != my || ctx.Err() != nil || a.source() != assistant.SourceChatGPT {
+						return
 					}
+					if err != nil {
+						row.SetSubtitle(assistant.ChatGPTText(tr).ModelsUnavailable)
+						return
+					}
+					names = map[string]string{}
+					catalog = nil
+					for _, m := range models {
+						catalog = append(catalog, m.ID)
+						names[m.ID] = m.Name
+					}
+					fill(chatGPTModel(), true, defaultName)
+				})
+			}()
+		case assistant.SourceAccount:
+			acc, _ := a.apiAccount()
+			current := accountModel(acc)
+			if pending != "" {
+				if pending == current {
+					pending = ""
+				} else {
+					current = pending
+				}
+			}
+			subtitle, withDefault, defaultName := x.ModelSubtitle, false, ""
+			if purpose == modelBoard {
+				subtitle, withDefault, defaultName = x.BoardModelSubtitle, true, x.BoardModelDefault
+			}
+			row.SetSubtitle(subtitle)
+			key := assistantModelCatalogKey{provider: s.AssistantProvider(), account: acc.ID, enabled: acc.Enabled}
+			if catalogKnown && key == lastCatalog {
+				reselect(current, withDefault, defaultName)
+				return
+			}
+			lastCatalog, catalogKnown, catalog, names = key, true, nil, nil
+			generation++
+			my := generation
+			if cancel != nil {
+				cancel()
+			}
+			ctx, stop := context.WithCancel(context.Background())
+			cancel = stop
+			fill(current, withDefault, defaultName)
+			rpc := h.daemon()
+			if rpc == nil || acc.ID == "" {
+				return
+			}
+			go func() {
+				var res api.AssistantProviderModelsResult
+				err := rpc.Call(ctx, api.MethodAssistantProviderModels, api.AssistantProviderModelsParams{AccountID: acc.ID}, &res)
+				glib.IdleAdd(func() {
+					if h.isClosed() || generation != my || ctx.Err() != nil || err != nil || a.source() != assistant.SourceAccount {
+						return
+					}
+					names = map[string]string{}
+					catalog = nil
+					for _, m := range res.Models {
+						catalog = append(catalog, m.ID)
+						names[m.ID] = m.DisplayName
+					}
+					acc, _ := a.apiAccount()
+					current := accountModel(acc)
+					if pending != "" {
+						current = pending
+					}
+					fill(current, withDefault, defaultName)
 				})
 			}()
 		}
-		if !connected || path == "" || a.codex == nil {
+	}
+	// chooseAccountModel writes model to the chosen account.
+	chooseAccountModel := func(model string) {
+		acc, ok := a.apiAccount()
+		rpc := h.daemon()
+		if !ok || rpc == nil || acc.Config.AI == nil || accountModel(acc) == model {
 			return
 		}
-		runtime := a.codex
+		cfg := acc.Config
+		ai := *cfg.AI
+		if purpose == modelBoard {
+			ai.BoardModel = model
+		} else {
+			ai.Model = model
+		}
+		cfg.AI = &ai
+		pending = model
 		go func() {
-			models, err := runtime.GetModels(ctx)
+			ctx, stop := context.WithTimeout(context.Background(), rpcTimeout)
+			defer stop()
+			err := rpc.Call(ctx, api.MethodAccountUpdate, api.AccountUpdateParams{AccountID: acc.ID, Config: cfg}, &api.AccountUpdateResult{})
 			glib.IdleAdd(func() {
-				if d.closed || my != generation || ctx.Err() != nil {
+				if h.isClosed() {
 					return
 				}
 				if err != nil {
-					d.chatGPTModel.SetSubtitle(t.ModelsUnavailable)
-				} else {
-					d.chatGPTModel.SetSubtitle("")
-					catalog = models
-					fillModels(catalog)
+					pending = ""
+					h.toast(widget.RPCErrorText(assistant.APIText(tr).ModelRow, err))
+					update()
 				}
 			})
 		}()
 	}
-	providerHandle := d.assistantProvider.NotifyProperty("selected", func() {
+	handle := row.NotifyProperty("selected", func() {
 		if syncing {
 			return
 		}
-		if d.assistantProvider.Selected() == 1 {
-			s.SetAssistantProvider("chatgpt")
-		} else {
-			s.SetAssistantProvider("claude")
-		}
-	})
-	modelHandle := d.chatGPTModel.NotifyProperty("selected", func() {
-		if i := d.chatGPTModel.Selected(); !syncing && i < uint(len(ids)) {
-			s.SetAssistantChatGPTModel(ids[i])
-		}
-	})
-	chooseHandle := d.codexChoose.ConnectClicked(func() {
-		dlg := gtk.NewFileDialog()
-		dlg.SetTitle(t.Codex)
-		dlg.Open(context.Background(), nil, func(r gio.AsyncResulter) {
-			f, err := dlg.OpenFinish(r)
-			if err != nil || d.closed {
-				return
-			}
-			if path := f.Path(); path != "" && chatgpt.Locate(path) != "" {
-				s.SetAssistantCodexPath(path)
-			}
-		})
-	})
-	installHandle := d.codexInstall.ConnectClicked(func() { widget.LaunchURI(nil, "https://developers.openai.com/codex/cli/", nil) })
-	usageHandle := d.chatGPTManageUsage.ConnectClicked(func() { widget.LaunchURI(nil, "https://chatgpt.com/settings/usage", nil) })
-	var refresh func()
-	refresh = update
-	signInHandle := d.chatGPTSignIn.ConnectClicked(func() {
-		if a.chatGPT == nil || busy {
+		i := row.Selected()
+		if i >= uint(len(ids)) {
 			return
 		}
-		busy = true
-		refresh()
-		go func() {
-			err := a.chatGPT.SignIn(context.Background())
-			glib.IdleAdd(func() {
-				busy = false
-				if !d.closed {
-					if err != nil {
-						d.AddToast(widget.PlainToast(t.ConnectionFailed))
-					}
-					refresh()
-				}
-				if err == nil {
-					// The board's triage may have waited for this.
-					a.recheckBoardSignIn()
-				}
-			})
-		}()
-	})
-	disconnectHandle := d.chatGPTDisconnect.ConnectClicked(func() {
-		if a.chatGPT == nil {
-			return
-		}
-		a.chatGPT.CancelSignIn()
-		go func() {
-			confirmed, err := a.chatGPT.Disconnect(context.Background())
-			glib.IdleAdd(func() {
-				if !d.closed {
-					if err != nil || !confirmed {
-						d.AddToast(widget.PlainToast(t.RevocationUnconfirmed))
-					}
-					refresh()
-				}
-			})
-		}()
-	})
-	scheduleUpdate := d.deferChoiceUpdate(update)
-	remove := a.OnChange(scheduleUpdate)
-	update()
-	return func() {
-		generation++
-		if cancel != nil {
-			cancel()
-		}
-		remove()
-		d.assistantProvider.HandlerDisconnect(providerHandle)
-		d.chatGPTModel.HandlerDisconnect(modelHandle)
-		d.codexChoose.HandlerDisconnect(chooseHandle)
-		d.codexInstall.HandlerDisconnect(installHandle)
-		d.chatGPTManageUsage.HandlerDisconnect(usageHandle)
-		d.chatGPTSignIn.HandlerDisconnect(signInHandle)
-		d.chatGPTDisconnect.HandlerDisconnect(disconnectHandle)
-	}
-}
-
-// Board model selection is separate from the conversational provider's model.
-func (d *PreferencesDialog) bindBoardProviderModel(s *settings.Store) func() {
-	var syncing bool
-	var ids []string
-	var generation int
-	var cancel context.CancelFunc
-	var lastCatalog assistantModelCatalogKey
-	var catalogKnown bool
-	var catalog []chatgpt.Model
-	fillModels := func() {
-		ids = []string{""}
-		names := []string{assistant.ChatGPTText(tr).DefaultModel}
-		for _, m := range catalog {
-			if m.ID != "" && !slices.Contains(ids, m.ID) {
-				ids = append(ids, m.ID)
-				names = append(names, m.Name)
-			}
-		}
-		selected := s.BoardChatGPTModel()
-		if !slices.Contains(ids, selected) {
-			ids = append(ids, selected)
-			names = append(names, selected)
-		}
-		d.boardTriageModel.SetModel(gtk.NewStringList(names))
-		d.boardTriageModel.SetSelected(uint(slices.Index(ids, selected)))
-	}
-	update := func() {
-		if d.closed {
-			return
-		}
-		syncing = true
-		defer func() { syncing = false }()
-		a := d.assist
-		if !a.usesChatGPT() {
-			if catalogKnown {
-				generation++
-				if cancel != nil {
-					cancel()
-				}
-				catalogKnown = false
-			}
-			d.boardTriageModel.SetModel(gtk.NewStringList(modelNames()))
-			d.boardTriageModel.SetSelected(uint(slices.Index(assistant.Models, s.BoardTriageModel())))
-			return
-		}
-		connection := chatgpt.Connection{}
-		if a.chatGPT != nil {
-			connection = a.chatGPT.Connection()
-		}
-		key := assistantModelCatalogKey{s.AssistantProvider(), a.target(), chatgpt.Locate(s.AssistantCodexPath()), connection.ConnectionID, connection.Status}
-		if catalogKnown && key == lastCatalog {
-			if i := slices.Index(ids, s.BoardChatGPTModel()); i >= 0 {
-				d.boardTriageModel.SetSelected(uint(i))
+		chosen := ids[i]
+		switch a.source() {
+		case assistant.SourceClaude:
+			if purpose == modelBoard {
+				s.SetBoardTriageModel(assistant.Model(chosen))
 			} else {
-				fillModels()
+				s.SetAssistantModel(assistant.Model(chosen))
 			}
-			return
-		}
-		lastCatalog, catalogKnown, catalog = key, true, nil
-		generation++
-		my := generation
-		if cancel != nil {
-			cancel()
-		}
-		ctx, stop := context.WithCancel(context.Background())
-		cancel = stop
-		fillModels()
-		if a.codex == nil || !a.chatGPTReady() {
-			return
-		}
-		runtime := a.codex
-		go func() {
-			models, err := runtime.GetModels(ctx)
-			glib.IdleAdd(func() {
-				if d.closed || generation != my || ctx.Err() != nil || !a.usesChatGPT() || err != nil {
-					return
-				}
-				syncing = true
-				defer func() { syncing = false }()
-				catalog = models
-				fillModels()
-			})
-		}()
-	}
-	handle := d.boardTriageModel.NotifyProperty("selected", func() {
-		if syncing {
-			return
-		}
-		i := d.boardTriageModel.Selected()
-		if d.assist.usesChatGPT() {
-			if i < uint(len(ids)) {
-				s.SetBoardChatGPTModel(ids[i])
+		case assistant.SourceChatGPT:
+			if purpose == modelBoard {
+				s.SetBoardChatGPTModel(chosen)
+			} else {
+				s.SetAssistantChatGPTModel(chosen)
 			}
-		} else if i < uint(len(assistant.Models)) {
-			s.SetBoardTriageModel(assistant.Models[i])
+		case assistant.SourceAccount:
+			chooseAccountModel(chosen)
 		}
 	})
-	scheduleUpdate := d.deferChoiceUpdate(update)
-	remove := d.assist.OnChange(scheduleUpdate)
-	removeLegacy := s.OnChanged(settings.KeyBoardTriageModel, scheduleUpdate)
-	removeModel := s.OnChanged(settings.KeyBoardChatGPTModel, scheduleUpdate)
+	scheduleUpdate := deferUpdate(h.isClosed, update)
+	removes := []func(){
+		a.OnChange(scheduleUpdate),
+		s.OnChanged(settings.KeyAssistantModel, scheduleUpdate),
+		s.OnChanged(settings.KeyBoardTriageModel, scheduleUpdate),
+		s.OnChanged(settings.KeyAssistantChatGPTModel, scheduleUpdate),
+		s.OnChanged(settings.KeyBoardChatGPTModel, scheduleUpdate),
+	}
 	update()
 	return func() {
 		generation++
 		if cancel != nil {
 			cancel()
 		}
-		remove()
-		removeLegacy()
-		removeModel()
-		d.boardTriageModel.HandlerDisconnect(handle)
+		for _, r := range removes {
+			r()
+		}
+		row.HandlerDisconnect(handle)
 	}
 }
 
-// Runtime model choices do not affect the locally discovered model catalog.
+// assistantModelCatalogKey is what a catalogue was listed for: a change
+// lists it again; a model chosen does not.
 type assistantModelCatalogKey struct {
 	provider                 string
 	target                   assistant.Target
 	executable, connectionID string
 	status                   chatgpt.Status
+	account                  api.AccountID
+	enabled                  bool
 }
 
 // Selection notifications run inside GTK's drop-down update. Replacing its
 // model from that stack invalidates GTK's current selection item. Render
-// once at idle instead; runtime cancellation and settings writes stay immediate.
-func (d *PreferencesDialog) deferChoiceUpdate(update func()) func() {
+// once at idle instead; runtime cancellation and settings writes stay
+// immediate. closed says whether the dialog went away meanwhile.
+func deferUpdate(closed func() bool, update func()) func() {
 	queued := false
 	return func() {
-		if queued || d.closed {
+		if queued || closed() {
 			return
 		}
 		queued = true
 		glib.IdleAdd(func() {
 			queued = false
-			if !d.closed {
+			if !closed() {
 				update()
 			}
 		})
 	}
+}
+
+// deferChoiceUpdate is deferUpdate for the preferences dialog.
+func (d *PreferencesDialog) deferChoiceUpdate(update func()) func() {
+	return deferUpdate(d.isClosed, update)
 }

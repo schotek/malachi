@@ -89,6 +89,14 @@ public sealed record AssistantEvent
     public string MessageId { get; init; } = "";
 
     /// <summary>
+    /// Event.UsageFinal: <see cref="Usage"/> is the message's whole usage,
+    /// reported when the message ended (the daemon's sessions over an ai
+    /// account), not a part of it; <see cref="AssistantUsageTally"/> then
+    /// counts the message as complete.
+    /// </summary>
+    public bool UsageFinal { get; init; }
+
+    /// <summary>
     /// Event.NotSignedIn: whether the event is the failure of a turn for
     /// want of a sign-in the API accepts: Claude Code is signed out, or its
     /// sign-in has expired or was revoked (<c>claude auth status</c> may
@@ -128,7 +136,8 @@ public sealed record AssistantEvent
             : other.Structured is not null && Structured.AsSpan().SequenceEqual(other.Structured))
         && string.Equals(Failure, other.Failure, StringComparison.Ordinal)
         && Usage == other.Usage
-        && string.Equals(MessageId, other.MessageId, StringComparison.Ordinal);
+        && string.Equals(MessageId, other.MessageId, StringComparison.Ordinal)
+        && UsageFinal == other.UsageFinal;
 
     /// <inheritdoc/>
     public override int GetHashCode()
@@ -159,6 +168,7 @@ public sealed record AssistantEvent
         hash.Add(Failure, StringComparer.Ordinal);
         hash.Add(Usage);
         hash.Add(MessageId, StringComparer.Ordinal);
+        hash.Add(UsageFinal);
         return hash.ToHashCode();
     }
 }

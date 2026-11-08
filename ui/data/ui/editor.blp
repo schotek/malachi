@@ -6,6 +6,13 @@ using WebKit 6.0;
 // properties (network session, user content manager, settings) can only be
 // set here: the Go binding has no g_object_new with properties.
 //
+// They stand before `styles`: GtkBuilder (4.22) constructs the object at
+// the first custom tag, and a construct-only property written after it
+// is silently dropped — the view then has its own user content manager
+// (the bridge script never reaches the page, the editor never becomes
+// ready) and a persistent network session. Blueprint writes the tags in
+// source order. The order is checked by TestWebViewBlueprintsConstructFirst.
+//
 // JavaScript is enabled only so the application can run its own bridge
 // script; enable-javascript-markup: false makes WebKit drop <script>,
 // on*= attributes and javascript: URLs from the document itself. Network
@@ -15,10 +22,6 @@ WebKit.WebView editor_view {
   vexpand: true;
   hexpand: true;
   editable: true;
-
-  styles [
-    "compose-editor",
-  ]
 
   network-session: WebKit.NetworkSession {
     is-ephemeral: true;
@@ -38,4 +41,8 @@ WebKit.WebView editor_view {
     enable-page-cache: false;
     enable-write-console-messages-to-stdout: false;
   };
+
+  styles [
+    "compose-editor",
+  ]
 }

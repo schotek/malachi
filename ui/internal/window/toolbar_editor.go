@@ -51,8 +51,8 @@ type toolbarEditor struct {
 	// dragging is set while a row of the editor is being dragged; a drop
 	// (or a reload) then waits in pending until the drag has ended, so the
 	// rows and their drag and drop controllers are never destroyed while
-	// GTK still runs the drag (the owner's crash of 2026-11-04 under
-	// XQuartz, where the source's drag-end comes after the drop);
+	// GTK still runs the drag (that crashed under XQuartz, where the
+	// source's drag-end comes after the drop);
 	// pendingTimer runs it anyway should no drag-end come.
 	dragging     bool
 	pending      func()

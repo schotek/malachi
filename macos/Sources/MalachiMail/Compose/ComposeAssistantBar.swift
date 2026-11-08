@@ -29,7 +29,7 @@ final class ComposeAssistantBar: NSView {
         super.init(frame: frame)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        disclosure.title = ComposeAssistantPrompt.barTitle(chatGPT: false)
+        disclosure.title = ComposeAssistantPrompt.barTitle(for: ComposeAssistantPrompt.claudeBrand)
         disclosure.isBordered = false
         disclosure.font = .systemFont(ofSize: 13, weight: .semibold)
         disclosure.imagePosition = .imageLeading
@@ -104,9 +104,11 @@ final class ComposeAssistantBar: NSView {
     override func updateLayer() { layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.06).cgColor }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 
-    /// Names the provider in effect after "Assistant".
-    func setProvider(chatGPT: Bool) {
-        disclosure.title = ComposeAssistantPrompt.barTitle(chatGPT: chatGPT)
+    /// Names the provider in effect after "Assistant" by its brand
+    /// (`ComposeAssistantPrompt.claudeBrand`, `chatGPTBrand`, an `ai`
+    /// account's name).
+    func setProvider(brand: String) {
+        disclosure.title = ComposeAssistantPrompt.barTitle(for: brand)
     }
 
     func setMode(_ kind: ComposeKind) {

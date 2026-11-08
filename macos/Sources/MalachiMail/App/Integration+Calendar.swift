@@ -45,7 +45,7 @@ final class AppCalendar {
                 let connected: Bool
                 switch s {
                 case .connected, .infoFailed: connected = true
-                case .connecting, .protocolMismatch, .unavailable, .stopping: connected = false
+                case .connecting, .protocolMismatch, .otherDaemon, .unavailable, .stopping: connected = false
                 }
                 self?.daemonSources.forEach { $0.connectionChanged(connected: connected) }
             },

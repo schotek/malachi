@@ -54,6 +54,9 @@ public sealed record AccountRow
     /// </summary>
     public required string Icon { get; init; }
 
+    /// <summary>The capsule after the name (an AI provider account's "API key", <see cref="Integrations.Row.Badge"/>); "" for none.</summary>
+    public string Badge { get; init; } = "";
+
     /// <summary>Whether the row has the Enabled switch (not a CalDAV account's, which has no pause).</summary>
     public required bool OffersSwitch { get; init; }
 
@@ -85,6 +88,7 @@ public sealed record AccountRow
             Enabled = wanted ?? account.Enabled,
             Busy = busy,
             Icon = AccountsPage.AccountIcon(account),
+            Badge = spec.Badge,
             OffersSwitch = spec.OffersSwitch,
             Editor = spec.Editor,
             EditLabel = spec.EditLabel,

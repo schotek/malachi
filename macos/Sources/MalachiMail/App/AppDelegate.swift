@@ -29,6 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "app")
 
     func applicationDidFinishLaunching(_ notification: Foundation.Notification) {
+        // A test build reads the stable app's preferences under its own
+        // (TestBuild), before anything reads a preference.
+        TestBuild.overlayPreferences()
         // Translations first: every string built from here on is localised.
         L10n.catalogue = Catalogue.default()
         // Settings() registers the gschema defaults with UserDefaults.standard.
@@ -40,6 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         purgeOpenDir()
 
         let paths = Paths.resolve()
+        // The App Store build runs the bridge's setup through
+        // LaunchServices, not as a child (BridgeSetupLauncher).
+        BridgeSetupLauncher.install(paths: paths)
         do {
             try paths.ensureDirectories()
         } catch {
@@ -65,7 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let supervisor = DaemonSupervisor(launch: launch, socket: paths.socket)
         let client = RPCClient(socketPath: paths.socket)
-        let connection = ConnectionController(client: client, supervisor: supervisor)
+        // A test build uses only a daemon of its own version: the stable
+        // app's is left alone (TestBuild).
+        let connection = ConnectionController(
+            client: client, supervisor: supervisor, requiredDaemonVersion: TestBuild.isActive ? Version.full : nil)
 
         let state = AppState(client: client, connection: connection, settings: settings, paths: paths)
         self.state = state
@@ -328,6 +337,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !line.isEmpty {
             paragraph(line, before: 10, [.foregroundColor: NSColor.secondaryLabelColor])
         }
+        // Where this copy came from (updates.EditionLine): the DMG from the
+        // website or the Mac App Store build.
+        paragraph(
+            Updates.editionLine(.of(Distribution.current)), before: line.isEmpty ? 10 : 2,
+            [.foregroundColor: NSColor.secondaryLabelColor])
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: MainMenu.appName,
             .applicationVersion: Version.full,

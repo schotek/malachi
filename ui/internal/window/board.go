@@ -389,7 +389,7 @@ func (w *Window) ensureBoard() {
 }
 
 // newDataSource is the board's source: the daemon's, unless
-// MALACHI_BOARD_SAMPLES=1 asks for the invented sample board (the owner's
+// MALACHI_BOARD_SAMPLES=1 asks for the invented sample board (a
 // development aid, read once here; never the daemon's past this point, as
 // CLAUDE.md's "Stav a priority" describes it).
 func (p *boardPage) newDataSource() {

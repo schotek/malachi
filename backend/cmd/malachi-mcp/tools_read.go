@@ -107,6 +107,12 @@ func (b *bridge) listAccounts(ctx context.Context, _ *mcp.CallToolRequest, _ noA
 	}{Accounts: make([]accountOut, 0, len(res.Accounts))}
 	notes := b.accountNotes(ctx)
 	for _, a := range res.Accounts {
+		if a.Config.Protocol() == api.AccountAI {
+			// An AI provider account is the daemon's own assistant's
+			// (docs/api.md §4.18): not mail, nothing a model reads or acts
+			// on, so it is not listed.
+			continue
+		}
 		out.Accounts = append(out.Accounts, accountOut{
 			ID:            string(a.ID),
 			Name:          oneLine(a.Config.Name),

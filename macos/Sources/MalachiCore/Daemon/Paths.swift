@@ -24,6 +24,15 @@ public struct Paths: Sendable {
     public let dataDir: URL
     /// `Contents/MacOS/malachi-mcp` when bundled, nil otherwise.
     public let mcpBridge: URL?
+    /// The bridge the daemon itself may start for a session over an `ai`
+    /// account (assistant.sessionStart `bridge`, docs/api.md §4.18): the
+    /// same `malachi-mcp` in the DMG and a checkout; in the App Store build
+    /// `malachi-mcp-worker` of the helper bundle, the copy signed with the
+    /// inherited sandbox (docs/plans/mac-app-store.md: a process with a
+    /// sandbox of its own must not be a child of a sandboxed process, and
+    /// the daemon runs with `inherit`; `malachi-mcp` there is the copy
+    /// Claude starts). Nil when neither is there.
+    public let daemonBridge: URL?
     /// `Contents/MacOS/malachi-keychain` (a regular executable file beside
     /// the app's executable) when bundled: the daemon's keyring helper
     /// (`MALACHI_KEYRING=helper`). Nil otherwise, and the daemon then runs
@@ -33,11 +42,12 @@ public struct Paths: Sendable {
     public var config: String { dataDir.appendingPathComponent("config.toml").path }
     public var store: String { dataDir.appendingPathComponent("store.db").path }
 
-    public init(socket: String, dataDir: URL, mcpBridge: URL?, keychainHelper: URL? = nil) {
+    public init(socket: String, dataDir: URL, mcpBridge: URL?, keychainHelper: URL? = nil, daemonBridge: URL? = nil) {
         self.socket = socket
         self.dataDir = dataDir
         self.mcpBridge = mcpBridge
         self.keychainHelper = keychainHelper
+        self.daemonBridge = daemonBridge ?? mcpBridge
     }
 
     /// True when `MALACHI_DATA_DIR` is set and non-empty: an isolated
@@ -50,15 +60,27 @@ public struct Paths: Sendable {
         return false
     }
 
+    /// - Parameter groupContainer: the app group's container of the App
+    ///   Store build (`Distribution.groupContainer`), nil for the DMG. The
+    ///   socket then lies at its top as `rpc.sock`: the App Sandbox keeps
+    ///   the daemon out of `~/.cache`, and malachi-mcp, sandboxed on its
+    ///   own, reaches only the group. The short name keeps the path under
+    ///   `UnixSocketProbe.maxPathBytes` for user names of up to 25 bytes
+    ///   (the app checks it at launch). Its data directory needs no such
+    ///   case: in the sandbox `~/Library/Application Support` already is
+    ///   the app's container.
     public static func resolve(
         environment env: [String: String] = ProcessInfo.processInfo.environment,
-        executable: URL? = Bundle.main.executableURL
+        executable: URL? = Bundle.main.executableURL,
+        groupContainer: URL? = Distribution.current.groupContainer
     ) -> Paths {
         // Go's os.UserHomeDir reads $HOME; do the same so both sides agree.
         let home = env["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? FileManager.default.homeDirectoryForCurrentUser.path
         let socket: String
         if let s = env["MALACHI_SOCKET"], !s.isEmpty {
             socket = s
+        } else if let group = groupContainer {
+            socket = group.appendingPathComponent("rpc.sock").path
         } else if let rt = env["XDG_RUNTIME_DIR"], !rt.isEmpty {
             socket = rt + "/malachi/rpc.sock"
         } else {
@@ -73,10 +95,43 @@ public struct Paths: Sendable {
                 ?? URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support", isDirectory: true)
             dataDir = support.appendingPathComponent("Malachi Mail", isDirectory: true)
         }
-        let mcp = executable?.deletingLastPathComponent().appendingPathComponent("malachi-mcp")
-        let bridge = mcp.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil }
+        let bridge = bridgeExecutable(beside: executable)
         let helper = executable?.deletingLastPathComponent().appendingPathComponent("malachi-keychain")
-        return Paths(socket: socket, dataDir: dataDir, mcpBridge: bridge, keychainHelper: helper.flatMap(regularExecutable))
+        return Paths(
+            socket: socket, dataDir: dataDir, mcpBridge: bridge, keychainHelper: helper.flatMap(regularExecutable),
+            daemonBridge: daemonBridgeExecutable(beside: executable))
+    }
+
+    /// The bridge the app registers with Claude: `Contents/MacOS/malachi-mcp`
+    /// in the DMG and a checkout; in the App Store build the executable of
+    /// its own bundle, `Contents/Helpers/Malachi Mail MCP.app` (it needs a
+    /// bundle for the sandbox Claude starts it in). Nil when neither is
+    /// there.
+    static func bridgeExecutable(beside executable: URL?) -> URL? {
+        guard let dir = executable?.deletingLastPathComponent() else { return nil }
+        let candidates = [
+            dir.appendingPathComponent("malachi-mcp"),
+            dir.deletingLastPathComponent()
+                .appendingPathComponent("Helpers/Malachi Mail MCP.app/Contents/MacOS/malachi-mcp"),
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
+    /// The bridge the daemon starts (`daemonBridge`): `Contents/MacOS/
+    /// malachi-mcp` in the DMG and a checkout; in the App Store build the
+    /// worker copy of the helper bundle, `Contents/Helpers/Malachi Mail
+    /// MCP.app/Contents/MacOS/malachi-mcp-worker` (signed with `inherit`,
+    /// so the sandboxed daemon may start it). Nil when neither is there:
+    /// the helper bundle's `malachi-mcp` never stands in, it would crash
+    /// under the daemon's sandbox.
+    static func daemonBridgeExecutable(beside executable: URL?) -> URL? {
+        guard let dir = executable?.deletingLastPathComponent() else { return nil }
+        let candidates = [
+            dir.appendingPathComponent("malachi-mcp"),
+            dir.deletingLastPathComponent()
+                .appendingPathComponent("Helpers/Malachi Mail MCP.app/Contents/MacOS/malachi-mcp-worker"),
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
     /// The URL when it is a regular file with an execute bit (a directory

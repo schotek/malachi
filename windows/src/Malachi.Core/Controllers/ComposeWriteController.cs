@@ -9,9 +9,10 @@
 // the event StateChanged, raised through ControllerEvents
 // (docs/windows-port.md §7.5); Dispose (the window closed: Cancel, and no
 // report afterwards) is Windows' own, as the rewrite's. Swift's
-// `String(describing: ComposeKind)` is Mode.
+// `String(describing: ComposeKind)` is Mode; Go's Account is Account.
 
 using System;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers.Infrastructure;
@@ -22,9 +23,8 @@ namespace Malachi.Core.Controllers;
 /// <summary>
 /// The compose window's assistant bar (the In App target) without its
 /// widgets: the optional instruction, the subject, the user's own text and
-/// the prepared original go to the user's assistant
-/// (<see cref="Assistant.WriteMessage"/> under
-/// <see cref="Assistant.WriteSystemPrompt"/>, one
+/// the prepared original go to the user's assistant (the daemon's prompt of
+/// purpose write, <see cref="WriteInput"/>, one
 /// <see cref="AssistantRequest"/>), and the answer, cleaned
 /// (<see cref="Assistant.CleanRewrite"/>), is previewed in the bar for
 /// Replace, which the window does as plain text through the editor bridge.
@@ -62,10 +62,11 @@ public sealed class ComposeWriteController : IDisposable
     public RewriteState State { get; private set; } = new RewriteState.Idle();
 
     /// <summary>
-    /// The user's profile with the note of the account the window writes
-    /// from (<see cref="UserProfile.For"/>); empty by default.
+    /// The account the window writes from, whose profile note the daemon
+    /// appends to the system prompt (read when the writing starts); null:
+    /// none.
     /// </summary>
-    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+    public Func<AccountId?> Account { get; set; } = () => null;
 
     /// <summary>Whether an answer is awaited.</summary>
     public bool Running => State is RewriteState.Running;
@@ -86,9 +87,8 @@ public sealed class ComposeWriteController : IDisposable
 
     /// <summary>
     /// Asks for the body of a window of <paramref name="mode"/>. A request
-    /// that cannot be made (nothing to work from, too long;
-    /// <see cref="Assistant.WriteMessage"/>) fails at once with its reason;
-    /// nothing is sent then.
+    /// the daemon refuses (nothing to work from, too long) fails with its
+    /// reason.
     /// </summary>
     /// <param name="mode">The kind of window.</param>
     /// <param name="instruction">The user's instruction (may be empty).</param>
@@ -101,22 +101,20 @@ public sealed class ComposeWriteController : IDisposable
         ArgumentNullException.ThrowIfNull(subject);
         ArgumentNullException.ThrowIfNull(own);
         ArgumentNullException.ThrowIfNull(quote);
-        string message;
-        try
-        {
-            message = Assistant.WriteMessage(mode, instruction, subject, own, quote);
-        }
-        catch (AssistantException e)
-        {
-            Request.Cancel();
-            Set(new RewriteState.Failed(Assistant.StoppedText(e.Message)));
-            return;
-        }
         Set(new RewriteState.Running(""));
+        var input = new WriteInput
+        {
+            Mode = Assistant.WriteModeOf(mode),
+            Instruction = instruction,
+            Subject = subject,
+            Own = own,
+            Quote = quote,
+        };
         Request.Start(
-            Assistant.WithProfile(Assistant.WriteSystemPrompt(), Profile()),
-            message,
+            PromptPurpose.Write,
+            new PromptInput { Write = input },
             outcome => Set(ComposeRewriteController.AnswerState(outcome)),
+            noteAccountId: Account(),
             onText: text =>
             {
                 if (Running)

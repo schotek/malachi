@@ -63,9 +63,15 @@ public sealed partial class ComposeAssistantBar : UserControl
     public event EventHandler<string>? ApplyRequested;
 
     /// <summary>setProvider: names the provider in effect after "Assistant".</summary>
-    public void SetProvider(bool chatGpt)
+    public void SetProvider(bool chatGpt) => SetProvider(chatGpt ? Assistant.ChatGptBrand : Assistant.ClaudeBrand);
+
+    /// <summary>
+    /// setProvider(brand:): names <paramref name="brand"/> after "Assistant",
+    /// a brand or the name of an AI provider account (GTK WriteBarTitleFor).
+    /// </summary>
+    public void SetProvider(string brand)
     {
-        var title = Assistant.WriteBarTitle(chatGpt);
+        var title = Assistant.WriteBarTitleFor(brand);
         TitleText.Text = title;
         AutomationProperties.SetName(Disclosure, title);
     }

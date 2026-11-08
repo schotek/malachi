@@ -16,7 +16,7 @@
 // in Mail, where its card answers it (Integration.ShowInvitationInMail, as
 // macOS's reveal).
 //
-// Windows differences (the owner's wireframe, board 8): the unanswered
+// Windows differences (wireframe board 8): the unanswered
 // invitations of the snapshot that today's event.list does not list are
 // rows as well (Cal.OccurrenceOf, as the calendar's Unanswered filter makes
 // them), with a hollow dashed dot and a small Invitation pill; a row is a

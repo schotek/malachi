@@ -5,39 +5,116 @@ package assistantpanel
 
 import (
 	"context"
-	"github.com/schotek/malachi/ui/internal/assistant"
+	"slices"
+	"strings"
 	"time"
+
+	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/assistant"
 )
+
+// Caller calls the daemon (the window's RPC client; the method set of
+// board.Caller, so the window passes the same one).
+type Caller interface {
+	Call(ctx context.Context, method string, params any, result any) error
+}
+
+// Prompter builds the prompts of a purpose: the system prompt with the
+// user's profile, the tools, the bridge's arguments, the answer's schema
+// and the message of a turn (docs/api.md §4.18 assistant.prompt,
+// docs/plans/ai-api.md D6). The daemon builds every prompt; the clients
+// that run Claude Code or Codex themselves take it from here, a session
+// the daemon runs over an ai account (ui/internal/apiassistant) needs
+// none. It may be called from any goroutine.
+type Prompter interface {
+	Prompt(ctx context.Context, p api.AssistantPromptParams) (api.PromptResult, error)
+}
+
+// promptTimeout bounds one assistant.prompt call.
+const promptTimeout = 15 * time.Second
+
+// daemonPrompter is the Prompter over the daemon (assistant.prompt).
+type daemonPrompter struct{ caller Caller }
+
+// NewPrompter is the Prompter over the daemon: assistant.prompt through
+// caller, each call bounded by promptTimeout (and by ctx).
+func NewPrompter(caller Caller) Prompter { return daemonPrompter{caller} }
+
+func (d daemonPrompter) Prompt(ctx context.Context, p api.AssistantPromptParams) (api.PromptResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, promptTimeout)
+	defer cancel()
+	var res api.PromptResult
+	if err := d.caller.Call(ctx, api.MethodAssistantPrompt, p, &res); err != nil {
+		return api.PromptResult{}, err
+	}
+	return res, nil
+}
 
 // Provider opens an isolated session; credentials are never exposed to views.
 // A nil Provider factory keeps the established Claude implementation.
 type Provider interface {
+	// Name is the provider's name for the panel's subtitle (ChatGPT's
+	// assistant.ChatGPTText Name, an ai account's name).
+	Name() string
 	Model() string
 	HasConsent() bool
 	AcceptConsent()
 	Open(context.Context, SessionSpec) (Session, error)
 }
 
-// SessionSpec freezes instructions and tool authority before any input is sent.
+// SessionSpec freezes what a session is for, and the instructions and tool
+// authority resolved for it (Prompter), before any input is sent. A
+// provider that runs the model itself (Codex) takes SystemPrompt, Tools,
+// JSONSchema and the message of each turn from the Prompter; the daemon's
+// own session (apiassistant) takes Purpose, Language, NoteAccountID,
+// Trigger, RunID and BridgePath and builds the rest itself.
 type SessionSpec struct {
-	SystemPrompt, JSONSchema, ModelID string
-	Tools                             *Tools
-	Timeout                           time.Duration
+	// Purpose is what the session is for; Language the UI language (BCP
+	// 47) the model answers in; NoteAccountID the account whose profile
+	// note a one-shot purpose of a compose window appends; Trigger and
+	// RunID the triage's trigger and board run.
+	Purpose       api.PromptPurpose
+	Language      string
+	NoteAccountID api.AccountID
+	Trigger       api.BoardTrigger
+	RunID         string
+	// BridgePath is the bundled bridge's absolute path ("" without one).
+	BridgePath string
+	// The resolved prompt of the purpose (api.PromptResult without the
+	// message): the system prompt with the profile, the answer's schema
+	// (as a string, "" for none), the tools (Tools.Allowed, prefixed) and
+	// the bridge's arguments (Tools.BridgeArgs).
+	SystemPrompt, JSONSchema string
+	Tools                    *Tools
+	// ModelID overrides the provider's model; Timeout bounds one turn (0:
+	// the provider's default).
+	ModelID string
+	Timeout time.Duration
+	// Input is the one turn of a one-shot purpose, given with the start:
+	// the daemon's assistant.sessionStart takes it there and sends it at
+	// once (docs/api.md §4.18; a one-shot purpose cannot start without
+	// it), and its session then takes the request's Submit of the same
+	// input as already sent. A provider that takes its turns by Submit
+	// alone (Codex) ignores it. Nil for the panel.
+	Input *api.PromptInput
 }
 
 // Session normalizes provider events to the existing panel protocol.
 // Handlers may run on a worker; controllers marshal them through their Loop.
 type Session interface {
 	Running() bool
-	Submit(context.Context, string) error
+	// Submit sends one turn: the panel's text with its context, or the
+	// structured input of a one-shot purpose (api.PromptInput).
+	Submit(context.Context, api.PromptInput) error
 	Terminate()
 	Completion() <-chan struct{}
 	SetHandlers(func([]assistant.Event), func(Exit))
 }
 
 // FailureLimit: the provider refused the request because the usage limit
-// of the user's plan was reached (ChatGPT's HTTP 429); Reason is the
-// provider's code. It follows the kinds of oneshot.go.
+// of the user's plan was reached (ChatGPT's HTTP 429, an API provider's
+// rate limit); Reason is the provider's code. It follows the kinds of
+// oneshot.go.
 const FailureLimit = FailureToolsMissing + 1
 
 // ProviderFailure is the failure a provider's reason stands for (an error
@@ -46,18 +123,31 @@ const FailureLimit = FailureToolsMissing + 1
 // missing, lapsed, refused or without consent is FailureNotSignedIn (the
 // board offers to connect again, as it offers Claude Code's sign-in); the
 // plan's usage limit is FailureLimit; anything else FailureStopped with
-// the reason as it is.
+// the reason as it is. The reasons of a session the daemon runs over an
+// ai account are "api_<class>" (ui/internal/apiassistant): a missing
+// consent or a refused key is FailureNotSignedIn, a rate limit or an
+// overloaded provider FailureLimit, a model without tools or a bridge
+// that could not start FailureToolsMissing, the rest FailureStopped.
 func ProviderFailure(reason string) Failure {
 	switch reason {
 	case "codex_not_found":
 		return Failure{Kind: FailureNotFound, Reason: reason}
 	case "chatgpt_not_connected", "chatgpt_reconnect_required", "chatgpt_consent_required",
-		"chatgpt_permission_denied", "chatgpt_identity_mismatch":
+		"chatgpt_permission_denied", "chatgpt_identity_mismatch",
+		"api_consent_required", "api_auth":
 		return Failure{Kind: FailureNotSignedIn, Reason: reason}
-	case "chatgpt_usage_limit":
+	case "chatgpt_usage_limit", "api_rateLimit", "api_overloaded", "api_quota":
 		return Failure{Kind: FailureLimit, Reason: reason}
+	case "api_toolsUnsupported", "api_bridge", "api_model":
+		return Failure{Kind: FailureToolsMissing, Reason: reason}
 	}
 	return Failure{Kind: FailureStopped, Reason: reason}
+}
+
+// apiFailure says whether reason is a session's failure class of the
+// daemon's assistant (assistant.APIFailurePrefix).
+func apiFailure(reason string) bool {
+	return strings.HasPrefix(reason, assistant.APIFailurePrefix)
 }
 
 // providerFailed is the outcome of a provider's request that failed for
@@ -71,15 +161,49 @@ func (c *Controller) ProviderChanged() { c.NewConversation(); c.selectedProvider
 func (c *Controller) hasSession() bool {
 	return (c.process != nil && c.process.Running()) || (c.providerSession != nil && c.providerSession.Running())
 }
-func (c *Controller) providerPrompt(my int, prompt string, told []int) {
-	if c.providerSession != nil && c.providerSession.Running() {
-		c.sendProvider(my, prompt, told)
+
+// providerPrompt is the turn of a provider's session: the daemon's
+// prompt of tn (composeTurn) is asked for first; the running session then
+// gets the turn's input, else a session is opened with the panel's prompt
+// (the system prompt with the profile, the tools and the bridge's
+// arguments) and gets it.
+func (c *Controller) providerPrompt(my int, tn turn, told []int) {
+	if c.prompter == nil {
+		c.fail(assistant.StoppedText(c.tr, errNoPrompter.Error()), false)
 		return
 	}
+	prompter := c.prompter
+	params := c.promptParams()
+	go func() {
+		res, input, err := composeTurn(context.Background(), prompter, params, tn)
+		c.loop.Post(func() {
+			if my != c.gen || c.closed {
+				return
+			}
+			if err != nil {
+				c.log.Warn("assistant prompt", "err", err)
+				c.fail(assistant.StoppedText(c.tr, promptReason(err)), true)
+				return
+			}
+			if c.providerSession != nil && c.providerSession.Running() {
+				c.sendProvider(my, input, told)
+				return
+			}
+			c.openProvider(my, res, input, told)
+		})
+	}()
+}
+
+// openProvider opens the provider's session with the panel's prompt res
+// and sends the turn's input.
+func (c *Controller) openProvider(my int, res api.PromptResult, input api.PromptInput, told []int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancelProvider = cancel
 	provider := c.selectedProvider
-	spec := SessionSpec{SystemPrompt: c.systemPrompt(), Tools: &Tools{Bridge: c.bridge, Socket: c.socket, Allowed: append([]string{}, assistant.AllowedTools...)}}
+	spec := SessionSpec{
+		Purpose: api.PurposePanel, Language: c.Language(), BridgePath: c.bridge, SystemPrompt: res.SystemPrompt,
+		Tools: &Tools{Bridge: c.bridge, Socket: c.socket, BridgeArgs: slices.Clone(res.BridgeArgs), Allowed: assistant.PrefixTools(res.Tools)},
+	}
 	go func() {
 		session, err := provider.Open(ctx, spec)
 		c.loop.Post(func() {
@@ -108,11 +232,11 @@ func (c *Controller) providerPrompt(my int, prompt string, told []int) {
 					}
 				})
 			})
-			c.sendProvider(my, prompt, told)
+			c.sendProvider(my, input, told)
 		})
 	}()
 }
-func (c *Controller) sendProvider(my int, prompt string, told []int) {
+func (c *Controller) sendProvider(my int, input api.PromptInput, told []int) {
 	session := c.providerSession
 	if session == nil {
 		c.providerFail("codex_session_closed", false)
@@ -129,7 +253,7 @@ func (c *Controller) sendProvider(my int, prompt string, told []int) {
 	c.phase = PhaseRunning
 	c.state()
 	go func() {
-		err := session.Submit(context.Background(), prompt)
+		err := session.Submit(context.Background(), input)
 		if err != nil {
 			c.loop.Post(func() {
 				if c.providerSession == session && my == c.gen && c.phase == PhaseRunning {
@@ -140,16 +264,24 @@ func (c *Controller) sendProvider(my int, prompt string, told []int) {
 		}
 	}()
 }
-func (r *Request) launchProvider(my int, c Call, completion func(Outcome)) {
+
+// launchProvider is a one-shot request through the provider: a session
+// opened with the call's resolved prompt (res), its input submitted.
+func (r *Request) launchProvider(my int, c Call, res api.PromptResult, completion func(Outcome)) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r.cancelProvider = cancel
 	provider := r.selectedProvider
-	spec := SessionSpec{SystemPrompt: c.SystemPrompt, JSONSchema: c.JSONSchema, ModelID: c.ModelID, Tools: c.Tools, Timeout: c.Timeout}
+	spec := SessionSpec{
+		Purpose: c.Purpose, Language: r.language(), NoteAccountID: c.NoteAccountID, Trigger: c.Trigger, RunID: c.RunID,
+		SystemPrompt: res.SystemPrompt, JSONSchema: string(res.JSONSchema), ModelID: c.ModelID, Timeout: c.Timeout,
+	}
+	if c.Purpose != api.PurposePanel {
+		input := c.Input
+		spec.Input = &input
+	}
 	if c.Tools != nil {
-		cp := *c.Tools
-		cp.Allowed = append([]string{}, c.Tools.Allowed...)
-		cp.BridgeArgs = append([]string{}, c.Tools.BridgeArgs...)
-		spec.Tools = &cp
+		spec.BridgePath = c.Tools.Bridge
+		spec.Tools = &Tools{Bridge: c.Tools.Bridge, Socket: c.Tools.Socket, BridgeArgs: slices.Clone(res.BridgeArgs), Allowed: assistant.PrefixTools(res.Tools)}
 	}
 	timeout := r.Timeout
 	if c.Timeout > 0 {
@@ -189,7 +321,7 @@ func (r *Request) launchProvider(my int, c Call, completion func(Outcome)) {
 				})
 			})
 			go func() {
-				if err := session.Submit(ctx, c.Message); err != nil {
+				if err := session.Submit(ctx, c.Input); err != nil {
 					r.loop.Post(func() {
 						if my == r.gen && r.running && r.providerSession == session {
 							r.finish(my, providerFailed(err.Error()), completion)

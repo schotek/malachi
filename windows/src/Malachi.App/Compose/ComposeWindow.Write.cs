@@ -11,7 +11,7 @@
 // rewrite's condition) and never in comment mode. It writes a reply, a
 // forward's introduction or a message from an optional instruction, the
 // user's own text (the editor, flushed) and the prepared original under it
-// (ComposeWriteController over Assistant.WriteMessage), previews the answer
+// (ComposeWriteController, the daemon's prompt of purpose write), previews the answer
 // as plain text, and only Replace puts it into the editor: the editor takes
 // the keyboard with the caret at its start, the bridge notes its own text
 // as the passage (the attribution line of ComposeParams.Attribution only
@@ -27,7 +27,6 @@
 // it does for the rewrite, and the request takes the new provider.
 
 using System;
-using Malachi.Core.Assistants;
 using Malachi.Core.Controllers;
 using Microsoft.UI.Xaml;
 using RewriteState = Malachi.Core.Controllers.ComposeRewriteController.RewriteState;
@@ -74,7 +73,8 @@ public sealed partial class ComposeWindow
             return;
         }
         var bar = pane.AssistantBar;
-        bar.SetProvider(chatGpt: state.Settings.AssistantProvider == AssistantProviderID.ChatGpt);
+        // The provider in effect: Claude, ChatGPT or the ai account's name.
+        bar.SetProvider(state.AssistantBrand);
         var available = RewriteAvailable && !IsComment;
         bar.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
         if (!available)
@@ -123,7 +123,8 @@ public sealed partial class ComposeWindow
         request.Consent = AskConsentAsync;
         var made = new ComposeWriteController(request)
         {
-            Profile = () => state.CurrentProfile.For(pane.WritingAccount.Value),
+            // The daemon appends the note of the account the window writes from.
+            Account = () => pane.WritingAccount,
         };
         made.StateChanged += (_, s) => RenderWrite(s);
         writer = made;

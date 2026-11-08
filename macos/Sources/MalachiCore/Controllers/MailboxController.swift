@@ -648,6 +648,8 @@ public final class MailboxController {
             break  // the board's own controller listens (BoardController)
         case .draftsChanged(let d):
             handleDraftsChanged(d)
+        case .assistantEvent, .assistantUsageChanged:
+            break  // the assistant's provider and the Integrations page listen
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }
@@ -883,7 +885,7 @@ public final class MailboxController {
         case .connected, .infoFailed:
             loadAccounts()
             loadSyncStatus()
-        case .unavailable, .protocolMismatch, .stopping:
+        case .unavailable, .protocolMismatch, .otherDaemon, .stopping:
             model.bumpAll()
             if model.grouped {
                 collapseLoading?()

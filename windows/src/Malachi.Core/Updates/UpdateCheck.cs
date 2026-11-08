@@ -41,7 +41,7 @@ using Malachi.Core.I18n;
 namespace Malachi.Core.Updates;
 
 /// <summary>ui/internal/updates: a namespace of functions, so that the Go names map 1:1.</summary>
-public static class UpdateCheck
+public static partial class UpdateCheck
 {
     /// <summary>The longest URL a browser is given (updates.OpenableURL).</summary>
     public const int MaxUrlBytes = 2048;
@@ -184,7 +184,7 @@ public static class UpdateCheck
 
     /// <summary>
     /// updates.NewsURL: the page More Information opens, the project's news
-    /// (the owner's choice over the release's infoUrl, 2026-11-02).
+    /// (rather than the release's infoUrl).
     /// </summary>
     public const string NewsUrl = "https://malachimail.app/news.html";
 

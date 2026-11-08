@@ -105,9 +105,10 @@ const usageText = `Usage:
   malachi-mcp install [--json]     register this binary (read-only + drafts) with every Claude app found
   malachi-mcp uninstall [--json]   remove that registration
 
-The setup subcommands also take --claude-desktop-config PATH and --command PATH,
-for a Claude Desktop file or a command the bridge cannot find by itself
-(malachi-mcp status -h).
+install and uninstall take --client ID (claude-desktop, claude-code; repeatable)
+to act on only that Claude app. The setup subcommands also take
+--claude-desktop-config PATH and --command PATH, for a Claude Desktop file or
+a command the bridge cannot find by itself (malachi-mcp install -h).
 
 Flags:
 `
@@ -117,6 +118,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 	// server keeps every other command line it accepted so far.
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		return runSetup(args[0], args[1:], stdout, stderr)
+	}
+	// Started with no arguments but a setup request named in the
+	// environment: a caller that cannot pass arguments (setup.go).
+	if len(args) == 0 {
+		if path := os.Getenv(setupRequestEnv); path != "" {
+			return runSetupRequest(path)
+		}
 	}
 	cfg, showVersion, err := parseServerFlags(args, stderr)
 	if err != nil {

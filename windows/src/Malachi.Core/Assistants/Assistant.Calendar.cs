@@ -38,8 +38,9 @@ public static partial class Assistant
 
     /// <summary>
     /// The calendar's read-only bridge tools the panel's conversation may run
-    /// (assistant.CalendarTools; part of <see cref="AllowedTools"/>; the
-    /// board's triage and a suggested reply do not get them).
+    /// (assistant.CalendarTools; part of the daemon's panel prompt,
+    /// docs/api.md §4.18; the board's triage and a suggested reply do not
+    /// get them).
     /// </summary>
     public static IReadOnlyList<string> CalendarTools { get; } =
     [

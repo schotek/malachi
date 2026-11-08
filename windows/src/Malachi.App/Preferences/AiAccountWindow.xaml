@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/AIAccount/AIAccountViewController.swift
+and AIAccountSheetController.swift; GTK: ai_account.blp (ai_account_dialog,
+Adw.Dialog 600×720). The dialog that adds or edits an AI provider account
+(kind ai, docs/plans/ai-api.md §7.2) as an owned modal window over the
+Preferences (ModalDialog): the title bar with the dialog's title; the banner
+of a failed call and the plain-http warning (D8) under it; one scrolling
+page clamped to the Preferences' width with its groups: the account (the
+provider, read only; the name; the server address of an OpenAI-compatible
+server with the examples under it), the key (the password field with Keep
+the Stored Key, or "Key stored" with Replace Key… for an existing account;
+the pinned certificate with Forget; Test with its outcome at the start and
+Trust Certificate… after a refused https certificate), the models (typed,
+or picked from what Test listed: editable combo boxes) and the consent (a
+switch under the consent's heading with the provider's text). The models,
+the consent and the primary button wait for a successful test
+(AiAccountController.Unlocked, CanSave). At the bottom the call under way
+at the start, then Add Account / Save (the default) and Cancel, in the
+order of a Windows dialog. Every text comes from Core (AiAccount.Texts,
+ConsentTexts) and is set from code; everything the provider answers (the
+model ids) is plain text.
+-->
+<Window
+    x:Class="Malachi.App.Preferences.AiAccountWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls">
+    <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                    <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="Header"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="AiAccountHeader"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False" />
+
+        <InfoBar
+            x:Name="Banner"
+            Grid.Row="1"
+            AutomationProperties.AutomationId="AiAccountBanner"
+            CornerRadius="0"
+            IsClosable="False"
+            IsOpen="False"
+            Severity="Warning" />
+
+        <!-- Plain http to a server outside this computer (D8). -->
+        <InfoBar
+            x:Name="HttpBanner"
+            Grid.Row="2"
+            AutomationProperties.AutomationId="AiAccountHttpWarning"
+            CornerRadius="0"
+            IsClosable="False"
+            IsOpen="False"
+            Severity="Warning" />
+
+        <ScrollViewer
+            Grid.Row="3"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <StackPanel
+                    MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                    Padding="{StaticResource SettingsPagePadding}"
+                    Spacing="{StaticResource SettingsGroupSpacing}">
+
+                    <!-- account_group -->
+                    <StackPanel x:Name="AccountGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                        <tk:SettingsCard x:Name="ProviderRow">
+                            <TextBlock
+                                x:Name="ProviderValue"
+                                AutomationProperties.AutomationId="AiAccountProvider"
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource DimLabelStyle}" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="NameRow">
+                            <TextBox
+                                x:Name="NameBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="AiAccountName"
+                                KeyDown="OnFieldKeyDown"
+                                TextChanged="OnNameChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="AddressRow" Visibility="Collapsed">
+                            <TextBox
+                                x:Name="AddressBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="AiAccountServer"
+                                InputScope="Url"
+                                KeyDown="OnFieldKeyDown"
+                                TextChanged="OnAddressChanged" />
+                        </tk:SettingsCard>
+                        <TextBlock
+                            x:Name="AddressHint"
+                            Margin="12,2,12,0"
+                            AutomationProperties.AutomationId="AiAccountServerHint"
+                            IsTextSelectionEnabled="True"
+                            Style="{StaticResource DimCaptionLabelStyle}"
+                            TextWrapping="Wrap"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+
+                    <!-- key_group -->
+                    <StackPanel x:Name="KeyGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                        <tk:SettingsCard x:Name="KeyStoredRow" Visibility="Collapsed">
+                            <Button
+                                x:Name="ReplaceKeyButton"
+                                AutomationProperties.AutomationId="AiAccountReplaceKey"
+                                Click="OnReplaceKeyClick" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="KeyRow">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <PasswordBox
+                                    x:Name="KeyBox"
+                                    MinWidth="{StaticResource SettingsEntryWidth}"
+                                    AutomationProperties.AutomationId="AiAccountKey"
+                                    KeyDown="OnFieldKeyDown"
+                                    PasswordChanged="OnKeyChanged" />
+                                <Button
+                                    x:Name="KeepKeyButton"
+                                    AutomationProperties.AutomationId="AiAccountKeepKey"
+                                    Click="OnKeepKeyClick"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="PinRow" Visibility="Collapsed">
+                            <tk:SettingsCard.Description>
+                                <TextBlock
+                                    x:Name="PinText"
+                                    AutomationProperties.AutomationId="AiAccountPin"
+                                    FontFamily="Consolas"
+                                    IsTextSelectionEnabled="True"
+                                    TextWrapping="Wrap" />
+                            </tk:SettingsCard.Description>
+                            <Button
+                                x:Name="ForgetPinButton"
+                                AutomationProperties.AutomationId="AiAccountForgetPin"
+                                Click="OnForgetPinClick" />
+                        </tk:SettingsCard>
+                        <!-- Test: the outcome at the start, Trust Certificate… and Test at the end. -->
+                        <Grid Margin="12,6,0,0" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="TestResult"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="AiAccountTestResult"
+                                AutomationProperties.LiveSetting="Polite"
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource CaptionLabelStyle}"
+                                TextWrapping="Wrap" />
+                            <StackPanel
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <Button
+                                    x:Name="TrustButton"
+                                    AutomationProperties.AutomationId="AiAccountTrust"
+                                    Click="OnTrustClick"
+                                    Visibility="Collapsed" />
+                                <Button
+                                    x:Name="TestButton"
+                                    AutomationProperties.AutomationId="AiAccountTest"
+                                    Click="OnTestClick" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- model_group -->
+                    <StackPanel x:Name="ModelGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock x:Name="ModelDescription" Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                        <tk:SettingsCard x:Name="ModelRow">
+                            <ComboBox
+                                x:Name="ModelBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="AiAccountModel"
+                                IsEditable="True"
+                                SelectionChanged="OnModelSelected"
+                                TextSubmitted="OnModelSubmitted" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="BoardModelRow">
+                            <ComboBox
+                                x:Name="BoardModelBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="AiAccountBoardModel"
+                                IsEditable="True"
+                                SelectionChanged="OnModelSelected"
+                                TextSubmitted="OnModelSubmitted" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+
+                    <!-- consent_group -->
+                    <StackPanel x:Name="ConsentGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock
+                            x:Name="ConsentHeading"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}" />
+                        <tk:SettingsCard x:Name="ConsentRow">
+                            <tk:SettingsCard.Description>
+                                <TextBlock
+                                    x:Name="ConsentBody"
+                                    AutomationProperties.AutomationId="AiAccountConsentBody"
+                                    IsTextSelectionEnabled="True"
+                                    TextWrapping="Wrap" />
+                            </tk:SettingsCard.Description>
+                            <ToggleSwitch
+                                x:Name="ConsentSwitch"
+                                AutomationProperties.AutomationId="AiAccountConsent"
+                                Toggled="OnConsentToggled" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <Grid
+            Grid.Row="4"
+            Margin="12"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <!-- progress_spinner and window_title's subtitle: the call under way. -->
+            <StackPanel
+                x:Name="Progress"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="6"
+                Visibility="Collapsed">
+                <ProgressRing
+                    x:Name="ProgressSpinner"
+                    Width="16"
+                    Height="16"
+                    IsActive="False" />
+                <TextBlock
+                    x:Name="ProgressText"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Style="{StaticResource DimLabelStyle}"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <Button
+                x:Name="SaveButton"
+                Grid.Column="1"
+                AutomationProperties.AutomationId="AiAccountSave"
+                Click="OnSaveClick"
+                Style="{StaticResource AccentButtonStyle}" />
+            <Button
+                x:Name="CancelButton"
+                Grid.Column="2"
+                l:MnemonicLabel.Text="{l:T Msgid='_Cancel'}"
+                AutomationProperties.AutomationId="AiAccountCancel"
+                Click="OnCancelClick" />
+        </Grid>
+
+        <controls:ToastHost x:Name="ToastsHost" Grid.Row="3" />
+    </Grid>
+</Window>

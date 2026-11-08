@@ -19,18 +19,24 @@
 // again (GTK: whether the panel can run changes with the claude chosen).
 // The bridge is run by an McpRegistrationController of its own, without
 // its toasts, given the Microsoft Store's Claude Desktop as the AI page's
-// is (--claude-desktop-config).
+// is (--claude-desktop-config). The third provider, an ai account of the
+// daemon, is AssistantController.Api.cs (Swift AssistantController+API.swift):
+// over it, as over ChatGPT, In App needs no registration in a Claude app,
+// and its availability and problem are the account's.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Malachi.Core.ApiAssistants;
 using Malachi.Core.Assistants;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Daemon;
 using Malachi.Core.I18n;
 using Malachi.Core.Platform;
 using Malachi.Core.Settings;
+using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Malachi.Core.Controllers;
 
@@ -83,7 +89,7 @@ namespace Malachi.Core.Controllers;
 /// and <see cref="Problem"/>. Create it, and call it, on the UI thread.
 /// </para>
 /// </remarks>
-public sealed class AssistantController : IDisposable
+public sealed partial class AssistantController : IDisposable
 {
     private readonly McpRegistrationController registration;
     private readonly Func<string, bool> lookup;
@@ -94,6 +100,8 @@ public sealed class AssistantController : IDisposable
     private readonly ControllerScope scope;
     private readonly List<SettingsChangeToken> tokens = [];
 
+    private readonly ILogger logger;
+    private readonly ILogger<DaemonAssistantProvider>? apiLogger;
     private Dictionary<AssistantTarget, bool> handlers = [];
     private bool inAppProviderAvailable;
     private string inAppProviderProblem = "chatgpt_not_connected";
@@ -108,6 +116,11 @@ public sealed class AssistantController : IDisposable
     /// <param name="claudeDesktop">The Microsoft Store's Claude Desktop (<see cref="ClaudeDesktopPackage.ForCurrentUser"/>).</param>
     /// <param name="registrationLogger">The logger of the bridge's calls.</param>
     /// <param name="pending">Counts the background work (the bridge's status); one of its own when null.</param>
+    /// <param name="client">The daemon's RPC client for the AI provider accounts (<see cref="Attach"/> gives it later); null lists none.</param>
+    /// <param name="daemonBridge">The bridge the daemon may start for an ai account (<see cref="DaemonBridge"/>); null takes <paramref name="bridge"/>.</param>
+    /// <param name="apiSessions">The registry of the daemon's assistant sessions; one of its own when null.</param>
+    /// <param name="logger">Receives the codes of a failed listing of the accounts.</param>
+    /// <param name="apiLogger">The logger of the providers over an ai account.</param>
     public AssistantController(
         string? bridge,
         SettingsStore settings,
@@ -117,12 +130,22 @@ public sealed class AssistantController : IDisposable
         ClaudeCodeLocator? locator = null,
         ClaudeDesktopPackage? claudeDesktop = null,
         ILogger<McpRegistrationController>? registrationLogger = null,
-        PendingWork? pending = null)
+        PendingWork? pending = null,
+        RpcClient? client = null,
+        string? daemonBridge = null,
+        AssistantSessions? apiSessions = null,
+        ILogger<AssistantController>? logger = null,
+        ILogger<DaemonAssistantProvider>? apiLogger = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(handler);
         Settings = settings;
         this.bridge = bridge;
+        DaemonBridge = daemonBridge ?? bridge;
+        Client = client;
+        ApiSessions = apiSessions ?? new AssistantSessions();
+        this.logger = (ILogger?)logger ?? NullLogger.Instance;
+        this.apiLogger = apiLogger;
         Locator = locator;
         lookup = handler;
         scope = new ControllerScope(pending);
@@ -136,7 +159,8 @@ public sealed class AssistantController : IDisposable
         };
         tokens.Add(settings.OnChange(SettingsKey.AssistantMenu, Notify));
         tokens.Add(settings.OnChange(SettingsKey.AssistantTarget, Notify));
-        tokens.Add(settings.OnChange(SettingsKey.AssistantProvider, Notify));
+        // Another provider: the one over an ai account is built anew.
+        tokens.Add(settings.OnChange(SettingsKey.AssistantProvider, ProviderKeyChanged));
         // Another claude chosen: whether the panel can run changes.
         tokens.Add(settings.OnChange(SettingsKey.AssistantClaudePath, RefreshHandlers));
     }
@@ -184,7 +208,11 @@ public sealed class AssistantController : IDisposable
     /// Whether the Assistant appears at all (<see cref="Assistant.Shown"/>):
     /// the <c>assistant-menu</c> preference while the bridge is registered.
     /// </summary>
-    public bool Shown => Settings.AssistantProvider == AssistantProviderID.ChatGpt && Settings.AssistantTarget == AssistantTarget.App
+    /// <remarks>
+    /// Over ChatGPT or an ai account with the In App target the preference
+    /// alone: no registration in a Claude app is needed.
+    /// </remarks>
+    public bool Shown => Source != AssistantProviderSource.Claude && Settings.AssistantTarget == AssistantTarget.App
         ? Settings.AssistantMenu : Assistant.Shown(Settings.AssistantMenu, Registered);
 
     /// <summary>
@@ -201,7 +229,12 @@ public sealed class AssistantController : IDisposable
     /// found (as last looked up); whether it is signed in is asked when a
     /// request runs. Its changes come through <see cref="Changed"/>.
     /// </summary>
-    public bool CanRunInApp => PanelShown && (Settings.AssistantProvider == AssistantProviderID.ChatGpt ? inAppProviderAvailable : ClaudeFound);
+    public bool CanRunInApp => PanelShown && Source switch
+    {
+        AssistantProviderSource.ChatGpt => inAppProviderAvailable,
+        AssistantProviderSource.Account => ApiReady,
+        _ => ClaudeFound,
+    };
 
     /// <summary>Stops listening: late replies are dropped, nothing is emitted.</summary>
     public void Close()
@@ -215,6 +248,7 @@ public sealed class AssistantController : IDisposable
         }
         tokens.Clear();
         Changed = null;
+        ProviderChanged = null;
         scope.Close();
     }
 
@@ -290,11 +324,13 @@ public sealed class AssistantController : IDisposable
         var handler = handlers.TryGetValue(t, out var h) && h;
         if (t == AssistantTarget.App)
         {
-            if (Settings.AssistantProvider == AssistantProviderID.ChatGpt)
+            return Source switch
             {
-                return new AssistantAvailability(inAppProviderAvailable, bridge is not null);
-            }
-            return new AssistantAvailability(handler, Registered);
+                AssistantProviderSource.ChatGpt => new AssistantAvailability(inAppProviderAvailable, bridge is not null),
+                // The daemon starts the bridge: no registration in a Claude app.
+                AssistantProviderSource.Account => new AssistantAvailability(DaemonBridge is not null && ApiReady, true),
+                _ => new AssistantAvailability(handler, Registered),
+            };
         }
         var client = Status?.Clients.FirstOrDefault(c => c.Id == t.ClientId());
         return new AssistantAvailability(handler, client?.Registered ?? false);
@@ -317,9 +353,12 @@ public sealed class AssistantController : IDisposable
             needsBridge);
 
     /// <summary>Why target <paramref name="t"/> cannot run the message actions; "" when it can (<see cref="Assistant.Problem"/>).</summary>
-    public string Problem(AssistantTarget t) => t == AssistantTarget.App && Settings.AssistantProvider == AssistantProviderID.ChatGpt
-        ? (!inAppProviderAvailable ? inAppProviderProblem : bridge is null ? L10n.T("The MCP bridge (malachi-mcp) was not found") : "")
-        : Assistant.Problem(t, Availability(t));
+    public string Problem(AssistantTarget t) => (t == AssistantTarget.App ? Source : AssistantProviderSource.Claude) switch
+    {
+        AssistantProviderSource.ChatGpt => !inAppProviderAvailable ? inAppProviderProblem : bridge is null ? L10n.T("The MCP bridge (malachi-mcp) was not found") : "",
+        AssistantProviderSource.Account => ApiProblem ?? "",
+        _ => Assistant.Problem(t, Availability(t)),
+    };
 
     /// <summary>Platform connection/runtime availability; independent of Claude registration.</summary>
     public void SetInAppProviderAvailable(bool available, string? problem = null)

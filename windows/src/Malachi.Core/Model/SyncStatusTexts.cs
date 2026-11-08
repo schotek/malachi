@@ -14,6 +14,9 @@
 // which macOS keeps in its sync controller, is here with the texts it
 // chooses between. StatusAction and AccountStatus have files of their own;
 // the class is not named SyncStatus, which is the wire enum's name.
+// InStatusLine and the listed counter of SyncStatusText are those of the AI
+// via API work (Swift inStatusLine, Go sync.go inStatusLine; an ai account,
+// docs/api.md §4.1, synchronises nothing).
 
 using System;
 using System.Collections.Generic;
@@ -33,8 +36,23 @@ namespace Malachi.Core.Model;
 public static class SyncStatusTexts
 {
     /// <summary>
+    /// Whether an account counts in the status line and the status popover
+    /// (sync.go <c>inStatusLine</c>): an <c>ai</c> account (docs/api.md
+    /// §4.1) synchronises nothing, so it is left out unless its key was
+    /// refused (authRequired, where Sign In opens its settings to replace the
+    /// key); every other account counts.
+    /// </summary>
+    public static bool InStatusLine(Account a, SyncState s)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(s);
+        return a.Config.ProtocolKind != AccountKind.Ai || s.Status == SyncStatus.AuthRequired;
+    }
+
+    /// <summary>
     /// The status line for the given states (sync.go <c>syncStatusText</c>).
-    /// Only enabled accounts count; an account missing from
+    /// Only enabled accounts count (an <c>ai</c> account only with a refused
+    /// key, <see cref="InStatusLine"/>); an account missing from
     /// <paramref name="states"/> uses the state embedded in its
     /// <c>account.list</c> entry. The most pressing state wins: syncing (with
     /// the folder or account name and the progress when known), then sign-in
@@ -67,18 +85,25 @@ public static class SyncStatusTexts
         var certProblem = false;
         var syncError = new List<Account>();
         var offline = new List<Account>();
+        // The accounts the line speaks for: ai ones only with a refused key.
+        var listed = 0;
         var enabled = 0;
         var pending = 0;
         var failed = 0;
         DateTimeOffset? lastSync = null;
         foreach (var a in accounts)
         {
+            var s = states.GetValueOrDefault(a.Id) ?? a.State;
+            if (a.Config.ProtocolKind == AccountKind.Ai && (!a.Enabled || !InStatusLine(a, s)))
+            {
+                continue;
+            }
+            listed++;
             if (!a.Enabled)
             {
                 continue;
             }
             enabled++;
-            var s = states.GetValueOrDefault(a.Id) ?? a.State;
             pending += s.PendingOutbox;
             failed += s.FailedOutbox;
             if (s.LastSync is { } t && !t.IsGoZero && (lastSync is null || t > lastSync))
@@ -127,7 +152,7 @@ public static class SyncStatusTexts
         string? Named(List<Account> list) => list.Count == 1 && enabled >= 2 ? AccountsPage.AccountRowTitle(list[0]) : null;
         if (enabled == 0)
         {
-            return accounts.Count == 0 ? ("", false) : (L10n.T("Paused"), false);
+            return listed == 0 ? ("", false) : (L10n.T("Paused"), false);
         }
         if (syncing is not null)
         {
@@ -214,7 +239,8 @@ public static class SyncStatusTexts
     /// <summary>
     /// The status popover's content (status.go <c>accountStatuses</c>): one
     /// entry per account, in <c>account.list</c> order, paused accounts
-    /// included. Whether an account is paused is decided by
+    /// included (an <c>ai</c> account only with a refused key,
+    /// <see cref="InStatusLine"/>). Whether an account is paused is decided by
     /// <see cref="Account.Enabled"/>, not by <paramref name="states"/>:
     /// pausing sends no <c>notify.syncState</c>, so
     /// <paramref name="states"/> keeps what the account said before. A state
@@ -243,6 +269,10 @@ public static class SyncStatusTexts
             };
             if (!a.Enabled)
             {
+                if (a.Config.ProtocolKind == AccountKind.Ai)
+                {
+                    continue;
+                }
                 var paused = a.State;
                 if (states.GetValueOrDefault(a.Id) is { } cached && cached.Status == SyncStatus.Disabled)
                 {
@@ -252,6 +282,10 @@ public static class SyncStatusTexts
                 continue;
             }
             var s = states.GetValueOrDefault(a.Id) ?? a.State;
+            if (!InStatusLine(a, s))
+            {
+                continue;
+            }
             var (detail, action) = AccountDetail(a.Id, s, folderName, now);
             st = st with { Detail = detail, Action = action, Failed = s.FailedOutbox };
             if (action == StatusAction.SignIn && s.Error is { } e)

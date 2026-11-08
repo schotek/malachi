@@ -59,7 +59,8 @@ type accountStatus struct {
 }
 
 // accountStatuses is the status popover's content: one entry per account,
-// in account.list order, paused accounts included. Whether an account is
+// in account.list order, paused accounts included (an ai account only
+// with a refused key, inStatusLine). Whether an account is
 // paused is decided by a.Enabled, not by states: pausing sends no
 // notify.syncState, so states keeps what the account said before. A state
 // that came afterwards (an outbox change of the paused account) says
@@ -72,6 +73,9 @@ func accountStatuses(states map[api.AccountID]api.SyncState, accounts []api.Acco
 		st := accountStatus{Account: a.ID, Title: accountRowTitle(a), SignIn: signin.KindOf(a.Config)}
 		s, ok := states[a.ID]
 		if !a.Enabled {
+			if a.Config.Protocol() == api.AccountAI {
+				continue
+			}
 			if !ok || s.Status != api.SyncDisabled {
 				s = a.State
 			}
@@ -82,6 +86,9 @@ func accountStatuses(states map[api.AccountID]api.SyncState, accounts []api.Acco
 		}
 		if !ok {
 			s = a.State
+		}
+		if !inStatusLine(a, s) {
+			continue
 		}
 		st.Detail, st.Action = accountDetail(a.ID, s, folderName, now)
 		if st.Action == statusActionSignIn && s.Error != nil {

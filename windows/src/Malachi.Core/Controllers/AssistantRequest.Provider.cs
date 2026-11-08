@@ -6,9 +6,12 @@
 // docs/chatgpt-integration.md §3. UI callbacks stay on the controller scope.
 // The board's use (usesBoardConsent, providerModelID, the call's tools,
 // timeout and model) is macos/Sources/MalachiCore/Controllers/
-// AssistantRequest.swift runProvider's; a provider starts the bridge and its
-// socket from its own options, so only the call's tools, bridge arguments
-// and policy reach it. A provider's failure codes are classified as Go's
+// AssistantRequest.swift launchProvider's: the session is opened with the
+// call's resolved prompt (the daemon's system prompt, schema, tools and
+// bridge arguments) and its purpose, input and bound, and the input is
+// submitted (Codex takes the turn's message from the daemon itself); a
+// provider starts the bridge and its socket from its own options, so only
+// the prompt's tools, bridge arguments and the call's policy reach it. A provider's failure codes are classified as Go's
 // assistantpanel.ProviderFailure does (ProviderFailure).
 
 using System;
@@ -16,6 +19,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 
 namespace Malachi.Core.Controllers;
@@ -55,37 +59,60 @@ public sealed partial class AssistantRequest
     /// submitting, a failed result's text, an exit's reason): Codex missing
     /// is <see cref="Failure.NotFound"/>; a ChatGPT connection that is
     /// missing, lapsed, refused or without consent is
-    /// <see cref="Failure.NotSignedIn"/> (the board offers to connect again,
-    /// as it offers Claude Code's sign-in); the plan's usage limit is
-    /// <see cref="Failure.Limit"/>; anything else <see cref="Failure.Stopped"/>
-    /// with the code as it is.
+    /// <see cref="Failure.NotSignedIn"/> with the code (the board offers to
+    /// connect again, as it offers Claude Code's sign-in); the plan's usage
+    /// limit is <see cref="Failure.Limit"/>; anything else
+    /// <see cref="Failure.Stopped"/> with the code as it is. The reasons of a
+    /// session the daemon runs over an ai account are "api_&lt;class&gt;"
+    /// (<see cref="Assistant.ApiFailurePrefix"/>): a missing consent or a
+    /// refused key is <see cref="Failure.NotSignedIn"/> with the reason (the
+    /// panel offers Set Up in Integrations…), a rate limit, an overloaded
+    /// provider or an account without credit <see cref="Failure.Limit"/>, a
+    /// model without tools, a server without the model or a bridge that
+    /// could not start <see cref="Failure.ToolsMissing"/> with the reason,
+    /// the rest <see cref="Failure.Stopped"/> (Go and Swift
+    /// <c>ProviderFailure</c>).
     /// </summary>
     public static Failure ProviderFailure(string code) => code switch
     {
         "codex_not_found" => new Failure.NotFound(),
         "chatgpt_not_connected" or "chatgpt_reconnect_required" or "chatgpt_consent_required"
-            or "chatgpt_permission_denied" or "chatgpt_identity_mismatch" => new Failure.NotSignedIn(),
-        "chatgpt_usage_limit" => new Failure.Limit(code),
+            or "chatgpt_permission_denied" or "chatgpt_identity_mismatch"
+            or "api_consent_required" or "api_auth" => new Failure.NotSignedIn(code),
+        "chatgpt_usage_limit" or "api_rateLimit" or "api_overloaded" or "api_quota" => new Failure.Limit(code),
+        "api_toolsUnsupported" or "api_bridge" or "api_model" => new Failure.ToolsMissing(code),
         _ => new Failure.Stopped(code),
     };
 
-    private async Task RunProviderAsync(IAssistantProvider selected, int my, Call call)
+    // assistantpanel.launchProvider: a one-shot request through the provider:
+    // a session opened with the call's resolved prompt (the purpose's input
+    // given with the start; a provider that takes its turns by SubmitAsync
+    // alone ignores it), its input submitted.
+    private async Task RunProviderAsync(IAssistantProvider selected, int my, Job job, PromptResult prompt)
     {
-        var completion = call.Completion;
+        var completion = job.Completion;
+        var call = job.Call;
         try
         {
             var stop = CancellationTokenSource.CreateLinkedTokenSource(scope.Lifetime);
             providerStop = stop;
-            StartTimer(my, call.Timeout, completion);
+            StartTimer(my, job.Timeout, completion);
             var session = await selected.OpenAsync(new AssistantSessionSpec
             {
-                SystemPrompt = call.SystemPrompt,
-                JsonSchema = call.JsonSchema,
+                Purpose = call.Purpose,
+                Language = Language(),
+                NoteAccountId = call.NoteAccountId,
+                Trigger = call.Trigger,
+                RunId = call.RunId,
+                BridgePath = call.Tools?.Bridge ?? "",
+                Input = call.Purpose == PromptPurpose.Panel ? null : call.Input,
+                SystemPrompt = prompt.SystemPrompt,
+                JsonSchema = prompt.JsonSchemaText,
                 ToolPolicy = call.Tools?.Policy ?? AssistantToolPolicy.None,
-                Tools = call.Tools?.Allowed,
-                BridgeArgs = call.Tools?.BridgeArgs ?? [],
-                ModelId = ProviderModelId?.Invoke() ?? "",
-                Timeout = call.Timeout,
+                Tools = call.Tools is null ? null : Assistant.PrefixTools(prompt.Tools),
+                BridgeArgs = call.Tools is null ? [] : prompt.BridgeArgs,
+                ModelId = call.ModelId.Length > 0 ? call.ModelId : ProviderModelId?.Invoke() ?? "",
+                Timeout = job.Timeout,
                 BoardConsent = UsesBoardConsent,
             }, stop.Token);
             scope.Pending.Track(session.Completion);
@@ -101,7 +128,7 @@ public sealed partial class AssistantRequest
             {
                 if (ReferenceEquals(session, providerSession) && my == gen && Running)
                 {
-                    HandleEvents(my, batch, call);
+                    HandleEvents(my, batch, job);
                 }
             };
             session.Exited += (_, exit) =>
@@ -111,7 +138,7 @@ public sealed partial class AssistantRequest
                     Finish(my, new Outcome.Failed(ProviderFailure(exit.Description)), completion);
                 }
             };
-            await session.SubmitAsync(call.Message, stop.Token);
+            await session.SubmitAsync(call.Input, stop.Token);
         }
         catch (OperationCanceledException)
         {

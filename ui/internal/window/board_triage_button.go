@@ -9,6 +9,8 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"context"
+
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/board"
@@ -109,10 +111,12 @@ func boardTriageClickFor(c boardtriage.Control) boardTriageClick {
 }
 
 // onTriageClicked runs the Triage button's control (boardtriage.View's
-// Control, boardTriageClickFor), the same four things Preferences → AI's
-// own Claude Code row offers (preferences.go bindClaudeCode): start or
-// stop a manual run, open Anthropic's page, or run Claude Code's own
-// sign-in.
+// Control, boardTriageClickFor), the same four things the Claude
+// integration's Claude Code row offers (claude_integration.go
+// bindClaudeCode): start or stop a manual run, open Anthropic's page, or
+// run Claude Code's own sign-in. Over an AI provider account the last two
+// read Set Up in Integrations… and open the account's settings instead
+// (the switch, Replace Key…).
 func (p *boardPage) onTriageClicked() {
 	if p.daemon == nil {
 		p.w.Toast(board.Later(i18n.Tr))
@@ -123,41 +127,56 @@ func (p *boardPage) onTriageClicked() {
 		return
 	}
 	// A click acts on the controller's View of this moment, not the copy.
-	switch boardTriageClickFor(bt.Controller().View().Control) {
+	click := boardTriageClickFor(bt.Controller().View().Control)
+	switch click {
 	case clickStart:
 		bt.Controller().Start(boardtriage.Manual, 0)
 	case clickStop:
 		bt.Controller().Cancel()
-	case clickInstall:
+	case clickInstall, clickSignIn:
+		if a := p.w.assist; a.usesAPI() {
+			if acc, ok := a.apiAccount(); ok {
+				p.w.editAIAccount(acc, acc.State.Status == api.SyncAuthRequired)
+			}
+			return
+		}
+		if click == clickSignIn {
+			p.triageSignIn()
+			return
+		}
 		url := assistant.InstallURL
 		if p.w.assist.usesChatGPT() {
 			url = chatgpt.InstallURL
 		}
 		p.w.launchURI(&p.w.ApplicationWindow.Window, url)
-	case clickSignIn:
-		if a := p.w.assist; a.usesChatGPT() {
-			if a.chatGPT != nil && a.chatGPT.Connection().Status != chatgpt.SigningIn {
-				go func() {
-					if err := a.chatGPT.SignIn(context.Background()); err != nil {
-						glib.IdleAdd(func() {
-							if !a.chatGPTClosed {
-								p.w.Toast(assistant.ChatGPTText(i18n.Tr).ConnectionFailed)
-							}
-						})
-					}
-				}()
-			}
-			return
-		}
-		p.w.assist.locator.SignIn(func(r assistantpanel.SignInResult) {
-			switch r.Outcome {
-			case assistantpanel.SignInFailed:
-				p.w.Toast(assistant.SignInFailedText(i18n.Tr, r.Reason))
-			case assistantpanel.SignInTimedOut:
-				p.w.Toast(assistant.SignInTexts(i18n.Tr).TimedOut)
-			}
-		})
 	}
+}
+
+// triageSignIn is the Triage button's Sign In…: ChatGPT's sign-in in the
+// browser, or Claude Code's own.
+func (p *boardPage) triageSignIn() {
+	if a := p.w.assist; a.usesChatGPT() {
+		if a.chatGPT != nil && a.chatGPT.Connection().Status != chatgpt.SigningIn {
+			go func() {
+				if err := a.chatGPT.SignIn(context.Background()); err != nil {
+					glib.IdleAdd(func() {
+						if !a.chatGPTClosed {
+							p.w.Toast(assistant.ChatGPTText(i18n.Tr).ConnectionFailed)
+						}
+					})
+				}
+			}()
+		}
+		return
+	}
+	p.w.assist.locator.SignIn(func(r assistantpanel.SignInResult) {
+		switch r.Outcome {
+		case assistantpanel.SignInFailed:
+			p.w.Toast(assistant.SignInFailedText(i18n.Tr, r.Reason))
+		case assistantpanel.SignInTimedOut:
+			p.w.Toast(assistant.SignInTexts(i18n.Tr).TimedOut)
+		}
+	})
 }
 
 // renderTriageButton shows the Triage button's state (boardtriage.View):

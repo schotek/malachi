@@ -8,9 +8,14 @@
 // AssistantSessionSpec). Swift's tools carry the bridge and its socket; the
 // Windows provider has them from its options, so only the allowed tools and
 // the bridge's further arguments travel here, checked against ToolPolicy.
+// Purpose, Language, NoteAccountId, Trigger, RunId, BridgePath and Input
+// are those of the Swift spec for a session the daemon runs over an ai
+// account (docs/api.md §4.18, assistant.sessionStart); a provider that runs
+// the model itself takes SystemPrompt, JsonSchema and the tools instead.
 
 using System;
 using System.Collections.Generic;
+using Malachi.Core.Api;
 
 namespace Malachi.Core.Assistants;
 
@@ -19,6 +24,38 @@ public sealed record AssistantSessionSpec
 {
     /// <summary>The default <see cref="Timeout"/> of a turn.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(120);
+
+    /// <summary>What the session is for (the daemon's sessions; <see cref="PromptPurpose.Panel"/> by default).</summary>
+    public PromptPurpose Purpose { get; init; } = PromptPurpose.Panel;
+
+    /// <summary>The UI language (BCP 47, "" = English) the model answers in.</summary>
+    public string Language { get; init; } = "";
+
+    /// <summary>
+    /// The mail or Jira account whose profile note a one-shot purpose of a
+    /// compose window appends; null for none.
+    /// </summary>
+    public AccountId? NoteAccountId { get; init; }
+
+    /// <summary>The triage run's trigger; null outside a triage.</summary>
+    public BoardTrigger? Trigger { get; init; }
+
+    /// <summary>The triage run's board run (<c>board.runStart</c>); "" outside a triage.</summary>
+    public string RunId { get; init; } = "";
+
+    /// <summary>The bundled bridge's absolute path ("" without one), which the daemon starts for the tools.</summary>
+    public string BridgePath { get; init; } = "";
+
+    /// <summary>
+    /// The one turn of a one-shot purpose, given with the start: the
+    /// daemon's <c>assistant.sessionStart</c> takes it there and sends it at
+    /// once (a one-shot purpose cannot start without it), and its session
+    /// then takes the request's <see cref="IAssistantSession.SubmitAsync"/>
+    /// of the same input as already sent. A provider that takes its turns by
+    /// <see cref="IAssistantSession.SubmitAsync"/> alone (Codex) ignores it.
+    /// Null for the panel.
+    /// </summary>
+    public PromptInput? Input { get; init; }
 
     /// <summary>The application's instructions, separate from untrusted input.</summary>
     public required string SystemPrompt { get; init; }
@@ -37,8 +74,10 @@ public sealed record AssistantSessionSpec
     public IReadOnlyList<string>? Tools { get; init; }
 
     /// <summary>
-    /// The bridge's arguments after <c>--socket</c>, as the policy requires
-    /// them (<see cref="Assistant.PolicyAllows"/>); empty for the panel.
+    /// The bridge's arguments after <c>--socket</c> as the daemon's prompt
+    /// gives them (<see cref="PromptResult.BridgeArgs"/>, <c>--in-app</c>
+    /// first), as the policy requires them (<see cref="Assistant.PolicyAllows"/>);
+    /// <c>--in-app</c> alone, or empty, for the panel.
     /// </summary>
     public IReadOnlyList<string> BridgeArgs { get; init; } = [];
 

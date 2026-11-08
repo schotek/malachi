@@ -73,6 +73,10 @@ const (
 	CodeAddressBookNotFound ErrorCode = 1111
 	// CodeRuleNotFound: no mail rule with that id (docs/api.md §4.21).
 	CodeRuleNotFound ErrorCode = 1112
+	// CodeAssistantSessionNotFound: no open assistant session with that
+	// id on this connection (ended, timed out, another connection's;
+	// docs/api.md §4.18).
+	CodeAssistantSessionNotFound ErrorCode = 1113
 
 	// 1200–1299: authentication.
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
@@ -91,6 +95,10 @@ const (
 	// CodeContactsConsentRequired: the account's sign-in does not allow
 	// contacts access; Error.Data is a ContactsConsentRequiredData.
 	CodeContactsConsentRequired ErrorCode = 1206
+	// CodeAssistantConsentRequired: the ai account's user has not accepted
+	// the current consent text (AIConfig.Consent below
+	// AssistantConsentVersion), so no session starts (docs/api.md §4.18).
+	CodeAssistantConsentRequired ErrorCode = 1207
 
 	// 1300–1399: network and remote servers.
 	CodeOffline      ErrorCode = 1300
@@ -155,6 +163,17 @@ const (
 	// (§4.22); Error.Data is a RevocationFailedData with the class,
 	// Error.Message is not for display.
 	CodeRevocationFailed ErrorCode = 1510
+	// CodeAssistantUnavailable: an assistant session could not start: the
+	// MCP bridge could not be started, answered no tools, or the daemon
+	// has MaxAssistantSessions open (docs/api.md §4.18).
+	CodeAssistantUnavailable ErrorCode = 1511
+	// CodeAssistantSessionBusy: assistant.sessionSend while the session's
+	// previous turn is still running.
+	CodeAssistantSessionBusy ErrorCode = 1512
+	// CodeAssistantToolsUnsupported: the ai account's model cannot call
+	// tools, which the purpose needs (the provider refused the tool
+	// definitions); the one-shot purposes without tools still work.
+	CodeAssistantToolsUnsupported ErrorCode = 1513
 )
 
 // String returns the stable symbolic name of the code.
@@ -166,61 +185,66 @@ func (c ErrorCode) String() string {
 }
 
 var codeNames = map[ErrorCode]string{
-	CodeParseError:              "parseError",
-	CodeInvalidRequest:          "invalidRequest",
-	CodeMethodNotFound:          "methodNotFound",
-	CodeInvalidParams:           "invalidParams",
-	CodeInternalError:           "internalError",
-	CodeNotImplemented:          "notImplemented",
-	CodeInvalidArgument:         "invalidArgument",
-	CodeConflict:                "conflict",
-	CodeCancelled:               "cancelled",
-	CodeUnavailable:             "unavailable",
-	CodeUnauthenticated:         "unauthenticated",
-	CodeReadOnly:                "readOnly",
-	CodeInvitationsUnavailable:  "invitationsUnavailable",
-	CodeAccountNotFound:         "accountNotFound",
-	CodeFolderNotFound:          "folderNotFound",
-	CodeMessageNotFound:         "messageNotFound",
-	CodeThreadNotFound:          "threadNotFound",
-	CodeDraftNotFound:           "draftNotFound",
-	CodeAttachmentNotFound:      "attachmentNotFound",
-	CodeCaseNotFound:            "caseNotFound",
-	CodeCalendarNotFound:        "calendarNotFound",
-	CodeEventNotFound:           "eventNotFound",
-	CodeCrmItemNotFound:         "crmItemNotFound",
-	CodeContactNotFound:         "contactNotFound",
-	CodeAddressBookNotFound:     "addressBookNotFound",
-	CodeRuleNotFound:            "ruleNotFound",
-	CodeAuthRequired:            "authRequired",
-	CodeAuthFailed:              "authFailed",
-	CodeKeyringError:            "keyringError",
-	CodeOAuthClientMissing:      "oauthClientMissing",
-	CodeCalendarConsentRequired: "calendarConsentRequired",
-	CodeCrmSignInUnsupported:    "crmSignInUnsupported",
-	CodeContactsConsentRequired: "contactsConsentRequired",
-	CodeOffline:                 "offline",
-	CodeNetworkError:            "networkError",
-	CodeServerError:             "serverError",
-	CodeTLSError:                "tlsError",
-	CodeServerTimeout:           "serverTimeout",
-	CodeMessageGone:             "messageGone",
-	CodeEventGone:               "eventGone",
-	CodeCrmDuplicate:            "crmDuplicate",
-	CodeContactConflict:         "contactConflict",
-	CodeStorageError:            "storageError",
-	CodeMigrationFailed:         "migrationFailed",
-	CodeMalformedMessage:        "malformedMessage",
-	CodeSanitizeFailed:          "sanitizeFailed",
-	CodeAttachmentTooBig:        "attachmentTooBig",
-	CodePartNotFound:            "partNotFound",
-	CodePartNotDownloaded:       "partNotDownloaded",
-	CodeUnsubscribeFailed:       "unsubscribeFailed",
-	CodeQuoteNotFound:           "quoteNotFound",
-	CodeMalformedCalendar:       "malformedCalendar",
-	CodeRecurrenceUnsupported:   "recurrenceUnsupported",
-	CodeAddressBookReadOnly:     "addressBookReadOnly",
-	CodeRevocationFailed:        "revocationFailed",
+	CodeParseError:                "parseError",
+	CodeInvalidRequest:            "invalidRequest",
+	CodeMethodNotFound:            "methodNotFound",
+	CodeInvalidParams:             "invalidParams",
+	CodeInternalError:             "internalError",
+	CodeNotImplemented:            "notImplemented",
+	CodeInvalidArgument:           "invalidArgument",
+	CodeConflict:                  "conflict",
+	CodeCancelled:                 "cancelled",
+	CodeUnavailable:               "unavailable",
+	CodeUnauthenticated:           "unauthenticated",
+	CodeReadOnly:                  "readOnly",
+	CodeInvitationsUnavailable:    "invitationsUnavailable",
+	CodeAccountNotFound:           "accountNotFound",
+	CodeFolderNotFound:            "folderNotFound",
+	CodeMessageNotFound:           "messageNotFound",
+	CodeThreadNotFound:            "threadNotFound",
+	CodeDraftNotFound:             "draftNotFound",
+	CodeAttachmentNotFound:        "attachmentNotFound",
+	CodeCaseNotFound:              "caseNotFound",
+	CodeCalendarNotFound:          "calendarNotFound",
+	CodeEventNotFound:             "eventNotFound",
+	CodeCrmItemNotFound:           "crmItemNotFound",
+	CodeContactNotFound:           "contactNotFound",
+	CodeAddressBookNotFound:       "addressBookNotFound",
+	CodeRuleNotFound:              "ruleNotFound",
+	CodeAuthRequired:              "authRequired",
+	CodeAuthFailed:                "authFailed",
+	CodeKeyringError:              "keyringError",
+	CodeOAuthClientMissing:        "oauthClientMissing",
+	CodeCalendarConsentRequired:   "calendarConsentRequired",
+	CodeCrmSignInUnsupported:      "crmSignInUnsupported",
+	CodeContactsConsentRequired:   "contactsConsentRequired",
+	CodeOffline:                   "offline",
+	CodeNetworkError:              "networkError",
+	CodeServerError:               "serverError",
+	CodeTLSError:                  "tlsError",
+	CodeServerTimeout:             "serverTimeout",
+	CodeMessageGone:               "messageGone",
+	CodeEventGone:                 "eventGone",
+	CodeCrmDuplicate:              "crmDuplicate",
+	CodeContactConflict:           "contactConflict",
+	CodeStorageError:              "storageError",
+	CodeMigrationFailed:           "migrationFailed",
+	CodeMalformedMessage:          "malformedMessage",
+	CodeSanitizeFailed:            "sanitizeFailed",
+	CodeAttachmentTooBig:          "attachmentTooBig",
+	CodePartNotFound:              "partNotFound",
+	CodePartNotDownloaded:         "partNotDownloaded",
+	CodeUnsubscribeFailed:         "unsubscribeFailed",
+	CodeQuoteNotFound:             "quoteNotFound",
+	CodeMalformedCalendar:         "malformedCalendar",
+	CodeRecurrenceUnsupported:     "recurrenceUnsupported",
+	CodeAddressBookReadOnly:       "addressBookReadOnly",
+	CodeRevocationFailed:          "revocationFailed",
+	CodeAssistantSessionNotFound:  "assistantSessionNotFound",
+	CodeAssistantConsentRequired:  "assistantConsentRequired",
+	CodeAssistantUnavailable:      "assistantUnavailable",
+	CodeAssistantSessionBusy:      "assistantSessionBusy",
+	CodeAssistantToolsUnsupported: "assistantToolsUnsupported",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so

@@ -30,7 +30,10 @@
 // - Model: the triage's own model, board-triage-model for Claude (apart
 //   from the panel's assistant-model), board-triage-chatgpt-model from the
 //   provider's catalog for ChatGPT (its default first, a stored model the
-//   catalog no longer lists kept as an item); the next run takes it.
+//   catalog no longer lists kept as an item); the next run takes it. None
+//   over an AI provider account, whose board model is on its card in
+//   Integrations, where the consent is the account's too (its subtitle
+//   names where the mail goes: AssistantController.ApiBoardConsentBody).
 // - "Triage new mail automatically", "At most every" (15, 30, 60, 180
 //   minutes) and "Conversations a day" (20, 60, 150): the daemon's
 //   board.preferences through the application's BoardPreferencesController
@@ -44,8 +47,9 @@
 //   the board is asked to list again whenever the page comes up.
 //
 // The group's description says why triage cannot run now
-// (Board.TriageSettingsDescription); the Claude Code row above offers what
-// Claude Code needs. All texts are Core's (Board.Text, ChatGptBoardText).
+// (Board.TriageSettingsDescription); the Claude window of Integrations
+// offers what Claude Code needs. All texts are Core's (Board.Text,
+// ChatGptBoardText, Assistant.ApiText).
 
 using System;
 using System.Collections.Generic;
@@ -160,8 +164,11 @@ public sealed partial class AiPage
         {
             return;
         }
-        var chatGpt = state.Settings.AssistantProvider == AssistantProviderID.ChatGpt;
-        BoardModelRow.Visibility = chatGpt ? Visibility.Collapsed : Visibility.Visible;
+        // The model of the provider in effect; an AI provider account's is
+        // chosen on its card in Integrations.
+        var source = state.Assistant.Source;
+        var chatGpt = source == AssistantProviderSource.ChatGpt;
+        BoardModelRow.Visibility = source == AssistantProviderSource.Claude ? Visibility.Visible : Visibility.Collapsed;
         BoardChatGptModelRow.Visibility = chatGpt ? Visibility.Visible : Visibility.Collapsed;
         var v = BoardTriage.View;
         if (!v.Offered)
@@ -173,7 +180,13 @@ public sealed partial class AiPage
         var description = Board.TriageSettingsDescription(v);
         BoardDescription.Text = description;
         BoardDescription.Visibility = description.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        BoardConsentRow.Description = chatGpt ? ChatGptBoardText.BoardConsentBody : Board.Text.TriageSettingsConsentSubtitle;
+        BoardConsentRow.Description = source switch
+        {
+            AssistantProviderSource.ChatGpt => ChatGptBoardText.BoardConsentBody,
+            // Over an AI provider account: where its mail goes, by name.
+            AssistantProviderSource.Account when state.Assistant.ApiAccount is { } account => AssistantController.ApiBoardConsentBody(account),
+            _ => Board.Text.TriageSettingsConsentSubtitle,
+        };
         var ready = v.Control is Board.TriageControl.Triage or Board.TriageControl.Stop;
         var prefs = BoardTriage.Preferences.Preferences;
         var consent = givingBoardConsent ? BoardConsentSwitch.IsOn : BoardTriage.ConsentGiven;
@@ -431,7 +444,7 @@ public sealed partial class AiPage
         var cancellation = boardModelsRefresh.Token;
         var generation = ++boardModelsGeneration;
         ShowBoardChatGptModels([]);
-        if (state.Settings.AssistantProvider != AssistantProviderID.ChatGpt
+        if (state.Assistant.Source != AssistantProviderSource.ChatGpt
             || state.ChatGpt.Connection.Status != ChatGptConnectionStatus.Connected
             || CodexExecutable.Resolve(state.Settings.AssistantCodexPath) is null)
         {

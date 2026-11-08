@@ -4,10 +4,11 @@
 // Port of macos/Sources/MalachiCore/Assistant/AssistantUsage.swift
 // (Assistant.UsageTally, maxUsageTokens, addTokens); GTK:
 // ui/internal/assistant/usage.go (UsageTally, Finished, LowerBound,
-// MaxUsageTokens). Go's Event.UsageFinal (a provider that reports each
-// message's whole usage at its end) has no counterpart here: the Windows
-// Codex session reports its turn's total with its result, which the tally
-// takes, so every message usage counted here is partial. Swift's
+// MaxUsageTokens). Go's Event.UsageFinal is AssistantEvent.UsageFinal: the
+// daemon's sessions over an ai account (ApiAssistants) report each turn's
+// whole usage, which counts as complete; the Windows Codex session reports
+// its turn's total with its result, which the tally takes, and its message
+// usage counted here is partial. Swift's
 // mutating struct is a class here: one tally per run, filled on the UI
 // thread. This file holds no translatable text.
 
@@ -42,7 +43,8 @@ public sealed class AssistantUsageTally
     /// Whether <see cref="Total"/> is a lower bound of what the run used: true
     /// unless the result's usage was taken (or nothing was counted); the
     /// messages' sum stays a lower bound even after <see cref="Finished"/>,
-    /// since no message usage counted here is final.
+    /// unless every message's usage counted was final
+    /// (<see cref="AssistantEvent.UsageFinal"/>).
     /// </summary>
     public bool LowerBound => !ResultTaken && messages.Count > 0 && (!finished || partial.Count > 0);
 
@@ -106,8 +108,14 @@ public sealed class AssistantUsageTally
             return;
         }
         messages[e.MessageId] = u;
-        // Not a message's final usage (see the file's note).
-        partial.Add(e.MessageId);
+        if (e.UsageFinal)
+        {
+            partial.Remove(e.MessageId);
+        }
+        else
+        {
+            partial.Add(e.MessageId);
+        }
     }
 
     /// <summary>a + b of two counters from 0 up, at most <see cref="Assistant.MaxUsageTokens"/>.</summary>

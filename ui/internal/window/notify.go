@@ -27,6 +27,12 @@ const notificationBodyMax = 200
 func (w *Window) handleNotification(method string, params json.RawMessage) {
 	dispatchContacts(method, params)
 	dispatchRules(method, params)
+	dispatchAssistantUsage(method, params)
+	// A session of the daemon's assistant over an AI provider account
+	// (ai_provider.go): its events go to the session, nowhere else.
+	if w.assist != nil && w.assist.apiSessions != nil && w.assist.apiSessions.Handle(method, params) {
+		return
+	}
 	switch method {
 	case api.NotifyNewMessage:
 		var n api.NewMessageNotification
@@ -67,6 +73,7 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 		w.modeAccountsChanged()
 		if w.assist != nil {
 			w.assist.RefreshProfile()
+			w.assist.AccountsChanged()
 		}
 	case api.NotifyBoardChanged:
 		var n api.BoardChangedNotification
@@ -92,6 +99,9 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 		if w.assist != nil {
 			w.assist.RefreshProfile()
 		}
+	case api.NotifyAssistantUsageChanged:
+		// dispatchAssistantUsage above: Preferences → Integrations
+		// listens (ai_editors.go).
 	case api.NotifySignaturesChanged:
 		// Trust changed: the verdicts on display, an open details dialog
 		// (signature.go); Preferences → Security listens itself.

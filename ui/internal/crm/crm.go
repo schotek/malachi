@@ -130,7 +130,7 @@ type Row struct {
 	Saved bool
 	// Conversation: the row is a conversation's row (folded or not), which
 	// stands for its members in the folder rather than for one message.
-	// Such a row offers nothing (owner's decision 2026-10-17): the user
+	// Such a row offers nothing: the user
 	// unfolds it and saves the members, one or several.
 	Conversation bool
 }

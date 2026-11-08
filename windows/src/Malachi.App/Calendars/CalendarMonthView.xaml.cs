@@ -9,7 +9,7 @@
 // grid, the weekday headers, the occurrences, showDeclined, the calendars'
 // colours); a change of the selection only repaints. The bars of each week
 // row (Cal.MonthLanes: all-day events and timed ones that cross midnight,
-// the owner's decision of 2026-10-16) lie under the row's day numbers,
+// see docs/calendar.md) lie under the row's day numbers,
 // one bar per span, a lane the row has no room for not drawn (macOS's
 // known gap); the pills start under the row's lanes. How many pills a cell
 // holds is Core's (Cal.CellCapacity with the cell's actual height and its

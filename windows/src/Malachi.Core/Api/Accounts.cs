@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/API/Accounts.swift; Go:
-// backend/pkg/api/types.go ("Pagination", "System", "Accounts"); contract:
-// docs/api.md §3, §4.0, §4.1.
+// backend/pkg/api/types.go ("Pagination", "System", "Accounts"; the ai
+// account's block and test result are Ai.cs); contract: docs/api.md §3,
+// §4.0, §4.1.
 //
 // A member that Swift's initializer requires is `required` here, and
 // missing from the JSON it fails the decoding as in Swift; one that Swift's
@@ -233,6 +234,14 @@ public sealed record AccountConfig
     /// </summary>
     [JsonPropertyName("eway")]
     public EwayConfig? Eway { get; init; }
+
+    /// <summary>
+    /// The model API of an AI provider account (kind <c>ai</c> only,
+    /// docs/api.md §4.1, §4.18); its API key is
+    /// <see cref="Credentials.Password"/>.
+    /// </summary>
+    [JsonPropertyName("ai")]
+    public AiConfig? Ai { get; init; }
 
     /// <summary>
     /// The calendar part of a graph or caldav account (docs/api.md §4.14);
@@ -663,7 +672,8 @@ public sealed record EndpointTestResult
 /// <see cref="CalDAV"/> for a CalDAV account (its capabilities among
 /// <c>calendar-access</c>, <c>calendar-auto-schedule</c> and
 /// <c>sync-collection</c>), <see cref="Eway"/> for an eWay-CRM account
-/// (one sign-in).
+/// (one sign-in), <see cref="Ai"/> for an AI provider account (one listing
+/// of its models, which the result carries).
 /// </summary>
 public sealed record AccountTestResult
 {
@@ -690,4 +700,8 @@ public sealed record AccountTestResult
     /// <summary>The eWay-CRM instance's outcome (one sign-in).</summary>
     [JsonPropertyName("eway")]
     public EndpointTestResult? Eway { get; init; }
+
+    /// <summary>The AI provider's outcome (one listing of its models).</summary>
+    [JsonPropertyName("ai")]
+    public AiTestResult? Ai { get; init; }
 }

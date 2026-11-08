@@ -160,14 +160,18 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
     /// envelope, a ticket for Jira, a calendar for CalDAV), name and host
     /// or address, the switch only where the kind can pause, and the Edit
     /// button only where there is an editor, its tooltip naming it.
-    func apply(_ a: Account) {
+    /// `usage` is the second line of an AI provider account's row (the
+    /// tokens used today), after the subtitle.
+    func apply(_ a: Account, usage: String? = nil) {
         let row = Integrations.rowFor(a)
         icon.image = wizardSymbol(AccountRowCell.symbol(for: row.icon), pointSize: 15)
         titleLabel.stringValue = row.title
-        let badge = accountHeaderBadge(a)
+        // The capsule: the row's own ("API key" of an AI provider account),
+        // else the kind of the account as the sidebar shows it.
+        let badge = row.badge.isEmpty ? accountHeaderBadge(a) : row.badge
         kindBadge.stringValue = badge
         kindBadge.isHidden = badge.isEmpty
-        subtitleLabel.stringValue = row.subtitle
+        subtitleLabel.stringValue = [row.subtitle, usage ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
         toggle.isHidden = !row.offersSwitch
         editButton.isHidden = row.editor == .none
         editButton.toolTip = row.editLabel
@@ -180,8 +184,11 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         // way to the name and shows whole in the tooltip.
         statusLabel.toolTip = status.isEmpty ? nil : status
         statusLabel.isHidden = status.isEmpty
-        signInButton.isHidden = !accountRowOffersSignIn(a)
-        toolTip = a.config.email
+        // An AI provider account whose key the provider refused offers
+        // Sign In… too: it opens its dialog on Replace Key….
+        let keyRefused = row.kind == .ai && a.state.status == .authRequired
+        signInButton.isHidden = !(accountRowOffersSignIn(a) || keyRefused)
+        toolTip = a.config.email.isEmpty ? row.title : a.config.email
     }
 
     /// The SF Symbol of an `Integrations` icon name.
@@ -190,6 +197,7 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         case Integrations.jiraIcon: return "ticket"
         case Integrations.calDAVIcon: return "calendar"
         case Integrations.ewayIcon: return Icon.crmSymbol
+        case Integrations.aiIcon: return "sparkles"
         default: return "envelope"
         }
     }

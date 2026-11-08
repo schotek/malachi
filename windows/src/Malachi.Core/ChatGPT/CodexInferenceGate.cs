@@ -4,7 +4,8 @@
 // Inference policy from docs/chatgpt-integration.md §6. Codex has no global
 // tool allow list: this native loopback gateway enforces the model-facing
 // catalog and response calls before the child can execute anything. Mirrors
-// the authority of Go/Swift Assistant.AllowedTools; no OS or UI dependency.
+// the authority of the session's tools (Assistant.SessionTools within
+// Assistant.PolicyTools, Go toolPolicy); no OS or UI dependency.
 
 using System;
 using System.Collections.Generic;

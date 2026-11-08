@@ -21,7 +21,9 @@
 // whenever the window is activated (after a visit to Settings). The
 // Integrations page (after Accounts, as GTK and macOS have it) lists the
 // accounts that are not mail accounts and the services that can be added;
-// a CalDAV row's Edit shows the Calendar page (ShowCalendar). The Rules
+// a CalDAV row's Edit shows the Calendar page (ShowCalendar), and the
+// page looks at the local AI integrations and the usage of the AI provider
+// accounts again whenever it comes up. The Rules
 // page (right after it, docs/plans/rules.md R14) lists the mail rules and
 // asks the daemon again whenever it comes up. Ctrl+Up and
 // Ctrl+Down are the window's MoveUp and MoveDown commands, which move the
@@ -102,7 +104,7 @@ public sealed partial class PreferencesWindow : Window
         contactsPage = new ContactsPreferencesPage(state, this, ToastsHost);
         security = new SecurityPage(state, this, ToastsHost);
         appearance = new AppearancePage(state, bindings);
-        ai = new AiPage(state, bindings, ToastsHost, () => this);
+        ai = new AiPage(state, bindings, () => this);
 
         var commands = Tracked.Commands;
         commands.MoveUp.Handler = () => MoveSelected(-1);
@@ -288,6 +290,11 @@ public sealed partial class PreferencesWindow : Window
         {
             // The rules are asked again whenever the page comes up.
             rules.Refresh();
+        }
+        else if (ReferenceEquals(page, integrations))
+        {
+            // The local integrations and the usage lines are looked at again.
+            integrations.Refresh();
         }
         else if (ReferenceEquals(page, calendar))
         {

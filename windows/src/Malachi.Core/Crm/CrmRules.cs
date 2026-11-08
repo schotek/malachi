@@ -381,7 +381,7 @@ public static class CrmRules
 /// <param name="Conversation">
 /// The row is a conversation's row (folded or not), which stands for its
 /// members in the folder rather than for one message: it offers nothing
-/// (owner, 2026-10-17); the user unfolds it and saves the members.
+/// at all; the user unfolds it and saves the members.
 /// </param>
 public readonly record struct CrmRow(Account Account, FolderRole Role, bool LocalDraft = false, bool Saved = false, bool Conversation = false);
 

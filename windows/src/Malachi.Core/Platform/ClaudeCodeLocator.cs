@@ -8,7 +8,7 @@
 // Candidates, Locate, AutomaticPath, IsExecutableFile, Refresh, Version,
 // SignedIn, SignIn, CancelSignIn, SigningIn, OnSignInChange, run).
 //
-// Windows differences (decided with the owner):
+// Windows differences:
 // - Only claude.exe runs (Assistant.CandidatePaths, IsExecutableFile):
 //   npm's claude.cmd would go through cmd.exe, whose parsing of a command
 //   line cannot carry the JSON arguments of Assistant.Args safely. A usable

@@ -74,8 +74,8 @@ type updateView struct {
 
 // setupUpdates builds the bar and the first-run note from the window's
 // builder and follows the store. The bar is window.blp's update_bar, across
-// the top of the whole window above the header bars (the owner's choice,
-// 2026-11-02, as the macOS card): one bar serves Mail, the Board, the
+// the top of the whole window above the header bars (as the macOS
+// card): one bar serves Mail, the Board, the
 // Calendar and the no-accounts page.
 func (w *Window) setupUpdates(b *gtk.Builder) {
 	v := &updateView{w: w, store: updateStore(w.client, w.log)}

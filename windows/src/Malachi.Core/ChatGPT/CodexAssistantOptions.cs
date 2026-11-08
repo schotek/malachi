@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Codex platform injection from docs/chatgpt-integration.md §5–6. Mirrors
-// the services injected into the Go/Swift Claude process, without OS APIs.
+// the services injected into the Go/Swift Claude process, without OS APIs;
+// the prompter is Swift CodexProvider's (prompter) and Go's chatgpt
+// provider's: the daemon builds the message of every turn.
 
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using Malachi.Core.Assistants;
 
 namespace Malachi.Core.ChatGPT;
 
@@ -49,6 +52,13 @@ public sealed record CodexAssistantOptions
 
     /// <summary>Persists version 1 of the board's consent; nothing without it.</summary>
     public Action? AcceptBoardConsent { get; init; }
+
+    /// <summary>
+    /// Builds the message of each turn (assistant.prompt of the session's
+    /// purpose, the application's <see cref="DaemonPrompter"/>); without one
+    /// a turn cannot be sent (<c>chatgpt_no_prompter</c>).
+    /// </summary>
+    public IAssistantPrompter? Prompter { get; init; }
 
     /// <summary>
     /// Whether the ChatGPT account is connected; without it, whether the

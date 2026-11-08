@@ -5,12 +5,14 @@
 // (ComposeRewriteController: state, onState, running, start, cancel,
 // finished); GTK: ui/internal/assistantpanel/oneshot.go (Rewriter,
 // NewRewriter, State, Running, Start, Cancel, finished, and answerState,
-// which the compose window's ComposeWriteController shares). Swift's onState is
+// which the compose window's ComposeWriteController shares; account, the
+// note of the window's account). Swift's onState is
 // the event StateChanged, raised through ControllerEvents
 // (docs/windows-port.md §7.5); Dispose (the window closed: Cancel, and no
 // report afterwards) is Windows' own.
 
 using System;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Controllers.Infrastructure;
 
@@ -19,9 +21,8 @@ namespace Malachi.Core.Controllers;
 /// <summary>
 /// The compose window's rewrite (the In App target) without its popover: a
 /// passage of the message, the selection or the user's own text, goes to the
-/// user's Claude Code with a preset or the user's own instruction
-/// (<see cref="Assistant.RewriteMessage"/> under
-/// <see cref="Assistant.RewriteSystemPrompt"/>, one
+/// user's assistant with a preset or the user's own instruction (the
+/// daemon's prompt of purpose rewrite, <see cref="RewriteInput"/>, one
 /// <see cref="AssistantRequest"/>), and the answer, cleaned
 /// (<see cref="Assistant.CleanRewrite"/>), is offered for Replace or Insert
 /// Below, which the window does as plain text.
@@ -33,7 +34,8 @@ namespace Malachi.Core.Controllers;
 /// <see cref="RewriteState.Done"/> with the text to insert,
 /// <see cref="RewriteState.Failed"/> with the line to show (Claude Code not
 /// found or not signed in, the panel's texts; "The assistant stopped: …"
-/// otherwise, an empty answer included). A new rewrite cancels the one under
+/// otherwise, a passage the daemon refuses as too long and an empty answer
+/// included). A new rewrite cancels the one under
 /// way; <see cref="Cancel"/> (the popover or the window closed) ends it and
 /// goes back to idle. Call it on the UI thread.
 /// </remarks>
@@ -61,10 +63,11 @@ public sealed partial class ComposeRewriteController : IDisposable
     public RewriteState State { get; private set; } = new RewriteState.Idle();
 
     /// <summary>
-    /// The user's profile with the note of the account the window writes
-    /// from (<see cref="UserProfile.For"/>); empty by default.
+    /// The account the window writes from, whose profile note the daemon
+    /// appends to the system prompt (read when the rewrite starts); null:
+    /// none.
     /// </summary>
-    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+    public Func<AccountId?> Account { get; set; } = () => null;
 
     /// <summary>Whether an answer is awaited.</summary>
     public bool Running => State is RewriteState.Running;
@@ -74,33 +77,27 @@ public sealed partial class ComposeRewriteController : IDisposable
     /// (<paramref name="custom"/>: the user's own instruction, for
     /// <see cref="AssistantRewrite.Custom"/>). False, and nothing changes,
     /// when there is nothing to ask: an empty passage, or Custom without
-    /// words. A passage that is too long (or a rewrite that does not exist)
-    /// fails at once.
+    /// words. A passage the daemon refuses (too long, a rewrite that does
+    /// not exist) fails with its reason.
     /// </summary>
     public bool Start(AssistantRewrite rewrite, string custom, string passage)
     {
         ArgumentNullException.ThrowIfNull(custom);
         ArgumentNullException.ThrowIfNull(passage);
-        string message;
-        try
-        {
-            message = Assistant.RewriteMessage(rewrite, custom, passage);
-        }
-        catch (AssistantException e) when (e.Kind is AssistantError.NoPassage or AssistantError.NoInstruction)
+        if (Assistant.TrimmedString(passage).Length == 0
+            || (rewrite == AssistantRewrite.Custom && Assistant.TrimmedString(custom).Length == 0))
         {
             return false;
         }
-        catch (AssistantException e)
-        {
-            Request.Cancel();
-            Set(new RewriteState.Failed(Assistant.StoppedText(e.Message)));
-            return true;
-        }
         Set(new RewriteState.Running(""));
         Request.Start(
-            Assistant.WithProfile(Assistant.RewriteSystemPrompt(), Profile()),
-            message,
+            PromptPurpose.Rewrite,
+            new PromptInput
+            {
+                Rewrite = new RewriteInput { Preset = Assistant.RewritePresetOf(rewrite), Instruction = custom, Passage = passage },
+            },
             Finished,
+            noteAccountId: Account(),
             onText: text =>
             {
                 if (Running)

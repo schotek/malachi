@@ -15,7 +15,7 @@ texts are the page's). A row, in the order of the GTK row: the drag
 handle (its tooltip names the keys), the kind's or provider's icon, the
 name over the address or host, the status (dim caption, cut with its
 whole text as tooltip), Sign In… (an account of the browser sign-in that
-needs it), the Enabled switch (not on a CalDAV row:
+needs it, or an AI provider account whose key was refused), the Enabled switch (not on a CalDAV row:
 Integrations.Row.OffersSwitch), Edit (its tooltip by kind, none for a
 kind this client does not know) and Remove. The rows are a ListView of
 cards: a click selects the row (windows/README.md, M21), Ctrl+Up and
@@ -91,11 +91,20 @@ status and the controls go to a second line (AccountRowPanel).
                             FontSize="16"
                             Glyph="{x:Bind IconGlyph, Mode=OneWay}" />
                         <StackPanel VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Subtitle, Mode=OneWay}">
-                            <TextBlock
-                                MaxLines="1"
-                                Style="{StaticResource BodyLabelStyle}"
-                                Text="{x:Bind Title, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock
+                                    MaxLines="1"
+                                    Style="{StaticResource BodyLabelStyle}"
+                                    Text="{x:Bind Title, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <!-- widget.NewSourcePill: the neutral pill ("API key"). -->
+                                <Border Style="{StaticResource IssuePillBorderStyle}" Visibility="{x:Bind BadgeVisibility, Mode=OneWay}">
+                                    <TextBlock
+                                        Foreground="{ThemeResource BulkPillForegroundBrush}"
+                                        Style="{StaticResource IssuePillTextStyle}"
+                                        Text="{x:Bind Badge, Mode=OneWay}" />
+                                </Border>
+                            </StackPanel>
                             <TextBlock
                                 MaxLines="1"
                                 Style="{StaticResource DimCaptionLabelStyle}"
@@ -159,9 +168,10 @@ status and the controls go to a second line (AccountRowPanel).
             </ListView.ItemTemplate>
         </ListView>
 
+        <!-- Shown while the page has no row at all (UpdateEmptyRow): the Integrations page's local rows count too. -->
         <tk:SettingsCard
             x:Name="EmptyRow"
             IsEnabled="False"
-            Visibility="{x:Bind res:Bind.Visible(Controller.IsEmpty), Mode=OneWay}" />
+            Visibility="Collapsed" />
     </StackPanel>
 </UserControl>

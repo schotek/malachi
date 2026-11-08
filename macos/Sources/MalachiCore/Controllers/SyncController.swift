@@ -423,6 +423,8 @@ public func connectionStatusLine(_ state: ConnectionController.ConnectionState) 
         return ("network-transmit-receive-symbolic", L10n.T("Connected to malachid %s (pid %d)", info.version, info.pid))
     case .protocolMismatch(let daemon):
         return ("network-transmit-receive-symbolic", L10n.T("Protocol mismatch: UI %d, backend %d", API.protocolVersion, daemon))
+    case .otherDaemon(let version):
+        return ("network-offline-symbolic", TestBuild.otherDaemonText(version))
     case .infoFailed:
         return ("network-transmit-receive-symbolic", L10n.T("Connected, but system.info failed"))
     case .unavailable, .stopping:
@@ -484,7 +486,7 @@ public func statusLineFor(_ c: ConnView, text: String, spinning: Bool) -> Status
     case .connecting, .unavailable, .stopping:
         let conn = connectionStatusLine(c.state)
         return StatusLine(text: conn.text, icon: conn.icon)
-    case .protocolMismatch:
+    case .protocolMismatch, .otherDaemon:
         return StatusLine(text: connectionStatusLine(c.state).text)
     case .connected, .infoFailed:
         var line = StatusLine(text: text, spinning: spinning, daemon: connectionStatusLine(c.state).text)

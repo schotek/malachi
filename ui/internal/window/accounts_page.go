@@ -38,6 +38,7 @@ type accountRow struct {
 	handle    *gtk.Image   // drag handle; the whole row is the drop target
 	status    *gtk.Label
 	signIn    *gtk.Button
+	badge     *gtk.Label  // integrations.Row.Badge, hidden when empty
 	toggle    *gtk.Switch // nil without integrations.Row.OffersSwitch
 	edit      *gtk.Button // nil with integrations.EditorNone
 	remove    *gtk.Button
@@ -161,6 +162,7 @@ func (d *PreferencesDialog) setAccounts(c *client.Client, accounts []api.Account
 	}
 	if d.integrationList != nil {
 		d.setListAccounts(c, d.integrationList, other)
+		d.refreshIntegrationsEmpty()
 	}
 }
 
@@ -195,6 +197,10 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, l *accountList, a ap
 	// the handle goes in after the account icon to end up before it.
 	row.AddPrefix(gtk.NewImageFromIconName(accountIcon(a)))
 	row.AddPrefix(row.handle)
+
+	// The capsule of an AI provider account ("API key"), before its status.
+	row.badge = widget.NewSourcePill(spec.Badge)
+	row.AddSuffix(row.badge)
 
 	row.status = gtk.NewLabel("")
 	row.status.AddCSSClass("caption")
@@ -246,6 +252,10 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, l *accountList, a ap
 	}
 	row.remove.ConnectClicked(func() { d.removeAccount(c, row) })
 	d.addRowReorder(c, row)
+	if spec.Kind == api.AccountAI {
+		// The tokens used today, once the row is in its list (ai_editors.go).
+		glib.IdleAdd(func() { d.refreshUsage(c, a.ID) })
+	}
 	return row
 }
 
@@ -312,6 +322,8 @@ func (d *PreferencesDialog) editAccount(c *client.Client, row *accountRow) {
 		d.presentEdit(c, accountwizard.NewEdit(c, d.log, row.account))
 	case integrations.EditorEway:
 		d.editEwayAccount(c, row.account)
+	case integrations.EditorAI:
+		d.editAIAccount(c, row.account)
 	}
 }
 
@@ -385,6 +397,8 @@ const (
 	editorJira
 	// editorEway: the eWay-CRM assistant in its edit mode.
 	editorEway
+	// editorAI: an AI provider account's dialog (ui/internal/aiaccount).
+	editorAI
 )
 
 // accountEditor is the editorKind of account a, by its kind.
@@ -394,6 +408,8 @@ func accountEditor(a api.Account) editorKind {
 		return editorJira
 	case a.Config.Protocol() == api.AccountEway:
 		return editorEway
+	case a.Config.Protocol() == api.AccountAI:
+		return editorAI
 	}
 	return editorMailWizard
 }

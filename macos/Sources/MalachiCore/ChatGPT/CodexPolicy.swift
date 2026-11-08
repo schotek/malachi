@@ -12,26 +12,53 @@ public struct CodexPolicy: Sendable {
         tools = Set(allowed.map { $0.hasPrefix("mcp__malachi__") ? String($0.dropFirst(14)) : $0 })
     }
 
+    /// The bridge's first argument whenever the application starts it
+    /// (the daemon's `PromptResult.bridgeArgs` start with it; Go
+    /// `inAppArg`): the prompts carry the user's profile, so the bridge
+    /// keeps it out of its instructions.
+    static let inAppArg = "--in-app"
+
+    /// The bridge's tools each purpose may call, by their bare names, as
+    /// the daemon names them (backend/internal/assistant tools.go; Go
+    /// `panelTools`, `triageTools`, `replyTools`): the policy accepts no
+    /// other, whatever the daemon's prompt lists.
+    static let panelTools = [
+        "list_accounts", "list_folders", "list_messages", "search_messages", "read_message", "get_attachment",
+        "create_draft", "list_calendars", "list_events", "get_event", "find_free_time", "list_invitations",
+        "get_user_profile", "propose_profile_note",
+    ]
+    static let triageTools = [
+        "list_accounts", "list_folders", "list_messages", "search_messages", "read_message", "get_attachment",
+        "create_draft", "list_triage_queue", "annotate_case", "add_commitment",
+    ]
+    static let replyTools = ["read_message", "list_messages", "create_draft"]
+
     /// The gate a session passes before it starts anything (Go
     /// `toolPolicy`, C# `Assistant.PolicyAllows`): only the application's
-    /// known capability sets and complete, immutable bridge argument forms.
-    /// Exactly three shapes of `tools.bridgeArgs` pass: none (the panel's
-    /// read and draft tools), `--reply-only <id>` (a suggested reply's
-    /// tools), and `--allow-triage --triage-run <id> --triage-max <n>` with
-    /// `n` in `Assistant.triageMaxRange` (the triage's tools); every tool
-    /// must carry the bridge's prefix, be one of that set's and appear once.
-    /// Anything else, `--allow-modify` and `--allow-send` included, throws
-    /// `chatgpt_invalid_tool_policy`: fails closed. No tools at all (nil)
-    /// pass with no bridge.
-    public static func check(_ tools: AssistantRequest.Tools?) throws {
-        guard let tools else { return }
+    /// known capability sets and complete, immutable bridge argument forms
+    /// (the daemon's, `--in-app` first; without it, it is put first).
+    /// Exactly three shapes of `tools.bridgeArgs` pass after that: none
+    /// (the panel's read and draft tools), `--reply-only <id>` (a
+    /// suggested reply's tools), and `--allow-triage --triage-run <id>
+    /// --triage-max <n>` with `n` in `Assistant.triageMaxRange` (the
+    /// triage's tools); every tool must carry the bridge's prefix, be one
+    /// of that set's and appear once. Anything else, `--allow-modify` and
+    /// `--allow-send` included, throws `chatgpt_invalid_tool_policy`:
+    /// fails closed. No tools at all (nil) pass with no bridge. Returns the
+    /// bridge's arguments as the session starts it with, `--in-app` first.
+    @discardableResult
+    public static func check(_ tools: AssistantRequest.Tools?) throws -> [String] {
+        guard let tools else { return [] }
         let refused = ChatGPTFailure("chatgpt_invalid_tool_policy")
-        let args = tools.bridgeArgs
+        var args = tools.bridgeArgs
+        if args.first == inAppArg {
+            args.removeFirst()
+        }
         let known: [String]
         if args.isEmpty {
-            known = Assistant.allowedTools
+            known = panelTools
         } else if args.count == 2, args[0] == "--reply-only", validIdentifier(args[1]) {
-            known = Assistant.suggestReplyTools
+            known = replyTools
         } else if args.count == 5, args[0] == "--allow-triage", args[1] == "--triage-run", validIdentifier(args[2]),
                   args[3] == "--triage-max"
         {
@@ -40,17 +67,18 @@ public struct CodexPolicy: Sendable {
             guard !args[4].isEmpty, args[4].utf8.count <= 4, args[4].utf8.allSatisfy({ $0 >= 0x30 && $0 <= 0x39 }),
                   let n = Int(args[4]), Assistant.triageMaxRange.contains(n)
             else { throw refused }
-            known = Assistant.triageTools
+            known = triageTools
         } else {
             throw refused
         }
-        let bare = Set(known.map { String($0.dropFirst(prefix.count)) })
+        let bare = Set(known)
         var seen = Set<String>()
         for name in tools.allowed {
             guard name.hasPrefix(prefix) else { throw refused }
             let tool = String(name.dropFirst(prefix.count))
             guard bare.contains(tool), seen.insert(tool).inserted else { throw refused }
         }
+        return [inAppArg] + args
     }
 
     /// The bridge's prefix of the tools' names.

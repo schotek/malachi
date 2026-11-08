@@ -7,8 +7,8 @@
 // (docs/calendar.md §6.4).
 //
 // The fill and the outline of a block, a bar or a pill by its
-// Cal.BlockState, and the ink of the texts drawn over them. Windows (the
-// owner's decisions of 2026-10-17 after the Windows live test; macOS fills
+// Cal.BlockState, and the ink of the texts drawn over them. Windows
+// (macOS fills
 // every block with its colour at 18 % over the surface): a normal block is
 // filled with its calendar's colour itself, its texts white or, where white
 // has less than 4.5:1, near-black (CalendarPalette.TextOn), its 3 DIP
@@ -286,8 +286,8 @@ internal sealed partial class BlockBackground : Grid
     // with GradientSpreadMethod.Repeat is drawn, WinUI draws the solid
     // fills, outlines, texts and icons it renders in the same pass with half
     // their red, green and blue (their alpha kept), which turned every block
-    // of a Week or Day that showed a tentative event dark (measured on the
-    // owner's machine, 2026-10-17: #1F6FEB came out #0F3775, the surface
+    // of a Week or Day that showed a tentative event dark (measured:
+    // #1F6FEB came out #0F3775, the surface
     // #F9F9F9 #7C7C7C; Pad and Reflect draw nothing wrong). So one period of
     // the gradient is laid out symmetric about its middle, the colour in its
     // middle half, and the reflection repeats it unchanged.

@@ -280,7 +280,7 @@ var defaults = map[string]any{
 	KeyWindowMaximized: false,
 
 	KeyAssistantMenu:                  true,
-	KeyAssistantTarget:                string(assistant.Desktop),
+	KeyAssistantTarget:                string(assistant.App),
 	KeyAssistantModel:                 string(assistant.Sonnet),
 	KeyAssistantClaudePath:            "",
 	KeyAssistantConsent:               false,
@@ -504,15 +504,19 @@ func (s *Store) SetAssistantClaudePath(v string) { s.set(KeyAssistantClaudePath,
 func (s *Store) AssistantConsent() bool     { return s.boolean(KeyAssistantConsent) }
 func (s *Store) SetAssistantConsent(v bool) { s.set(KeyAssistantConsent, v) }
 
+// AssistantProvider is the provider of the assistant in the app
+// (assistant-provider, a string since docs/plans/ai-api.md D14): "claude",
+// "chatgpt" or the id of an AI provider account ("acc_…"); an empty or
+// unknown value reads as "claude" (assistant.NormalizeProvider).
 // Provider-specific consents never reuse permission given to another service.
 func (s *Store) AssistantProvider() string {
-	if s.str(KeyAssistantProvider) == "chatgpt" {
-		return "chatgpt"
-	}
-	return "claude"
+	return assistant.NormalizeProvider(s.str(KeyAssistantProvider))
 }
+
+// SetAssistantProvider accepts "claude", "chatgpt" or an account id and
+// ignores anything else.
 func (s *Store) SetAssistantProvider(v string) {
-	if v == "claude" || v == "chatgpt" {
+	if v == assistant.ProviderClaude || v == assistant.ProviderChatGPT || assistant.IsAccountProvider(v) {
 		s.set(KeyAssistantProvider, v)
 	}
 }

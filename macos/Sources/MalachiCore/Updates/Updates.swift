@@ -229,7 +229,7 @@ public enum Updates {
     }
 
     /// updates.NewsURL: the page More Information opens, the project's
-    /// news (the owner's choice over the release's infoUrl, 2026-11-02).
+    /// news (rather than the release's infoUrl).
     public static let newsURL = "https://malachimail.app/news.html"
 
     /// updates.NotesBlocks: notes read as Markdown, links as plain text.

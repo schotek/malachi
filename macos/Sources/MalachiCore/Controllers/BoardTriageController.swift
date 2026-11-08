@@ -23,14 +23,16 @@ import os
 ///    (`consent`, the sheet) and gives it (`giveConsent`); an automatic run
 ///    never asks. A manual run whose queue is known to be empty ends at
 ///    once (`.nothingToDo`).
-/// 2. `board.runStart` with the trigger and `Assistant.triageSource`.
-/// 3. The request: `Assistant.triageMessage` for at most the run's limit
-///    under `Assistant.triageSystemPrompt`, with the board's own model
+/// 2. `board.runStart` with the trigger and the run's `source`
+///    (`Assistant.triageSource` for Claude Code).
+/// 3. The request: the daemon's prompt of purpose triage (assistant.prompt
+///    with the trigger, the run and `TriageInput`: at most the run's
+///    limit, drafts for a manual run only), with the board's own model
 ///    (`board-triage-model`, read when the run starts; not the panel's
-///    `assistant-model`), with the bridge started as
-///    `--socket <socket> --allow-triage --triage-run <runId> --triage-max
-///    <limit>` and only `Assistant.triageTools(for:)` (no create_draft for
-///    an automatic run), for at most `Assistant.triageTimeout`. Every
+///    `assistant-model`), with the bridge started as the prompt says
+///    (`--socket <socket> --in-app --allow-triage --triage-run <runId>
+///    --triage-max <limit>`) and only its tools (no create_draft for an
+///    automatic run), for at most `Assistant.triageTimeout`. Every
 ///    `annotate_case` call the bridge accepted counts as progress, of the
 ///    queue's size at the start capped by the limit; refused ones are
 ///    counted apart. When the accepted ones reach the limit the run has
@@ -60,7 +62,7 @@ import os
 /// class.
 @MainActor
 public final class BoardTriageController {
-    /// Owner's decision (2026-10-01): triage is offered only under the
+    /// Triage is offered only under the
     /// assistant's "In App (experimental)" target, the condition of the
     /// panel, the compose rewrite and the search in the user's own words
     /// (`AssistantController.panelShown`). It is the only target under
@@ -81,7 +83,7 @@ public final class BoardTriageController {
     /// carry only their starts' output tokens). The bridge has closed the
     /// queue and tells the model to stop, so it needs one or two more API
     /// calls over its cached context to notice and end its turn; on the
-    /// owner's first real run a call took about 10 s (40 notes, 8 minutes),
+    /// a measured real run a call took about 10 s (40 notes, 8 minutes),
     /// so 45 s leaves room for a slow pair without a full progress bar
     /// hanging for long.
     public nonisolated static let limitGrace: Duration = .seconds(45)
@@ -94,12 +96,26 @@ public final class BoardTriageController {
     public nonisolated static let clockTick: Duration = .seconds(60)
 
     public let settings: Settings
+    /// Whether the provider in effect runs through `request.provider`
+    /// (Codex, a session the daemon runs over an `ai` account) rather than
+    /// the user's Claude Code (GTK `providerLocator`).
+    private var throughProvider: Bool { Assistant.sourceOf(settings.assistantProvider) != .claude }
+    /// The provider is an `ai` account of the daemon: its consent is the
+    /// account's, one for the panel and the board (`AIConfig.consent`;
+    /// GTK `boardProviderSettings`, docs/plans/ai-api.md §14).
+    private var overAccount: Bool { Assistant.sourceOf(settings.assistantProvider) == .account }
     private var runtimeAvailable: Bool {
-        settings.assistantProvider == .chatgpt ? request.provider?()?.available == true : locator.locate() != nil
+        throughProvider ? request.provider?()?.available == true : locator.locate() != nil
     }
     private func runtimeSignedIn() async -> Bool? {
-        if settings.assistantProvider == .chatgpt { return request.provider?()?.connected ?? false }
+        if throughProvider { return request.provider?()?.connected ?? false }
         return await locator.signedIn()
+    }
+    /// The board's consent of the provider in effect: the settings' key
+    /// for Claude Code and ChatGPT, the account's own for an `ai` account
+    /// (`AssistantProvider.hasConsent`; no key is ever written for it).
+    private var boardConsent: Bool {
+        overAccount ? request.provider?()?.hasConsent == true : settings.selectedBoardConsent
     }
     private var providerEpoch = 0
     /// The assistant's provider changed, or its profile (Go
@@ -118,7 +134,7 @@ public final class BoardTriageController {
     public func providerChanged(disableAutomaticTriage: Bool = false) {
         providerEpoch += 1
         cancel()
-        var repair = !granting && !settings.selectedBoardConsent
+        var repair = !granting && !boardConsent
         if preferences.stored?.assistant == false {
             repair = false
         }
@@ -190,8 +206,24 @@ public final class BoardTriageController {
     /// Asks the board to list again (after a run ended). The application
     /// wires it to its board sources' `refresh()`.
     public var onRefresh: (@MainActor () -> Void)?
-    /// The user's profile, every account's note (each names its account).
-    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
+    /// The run's `source` for `board.runStart`: what the bridge reports as
+    /// its client's name for the annotations of the run (GTK
+    /// `triageSource`): Claude Code's `Assistant.triageSource`, ChatGPT's
+    /// "malachi-chatgpt", an `ai` account's "api:<provider>". The default
+    /// (`defaultSource`) knows no account and names the OpenAI-compatible
+    /// kind; the convenience init over the `AssistantController` takes its
+    /// `triageSource`, which knows the chosen account's provider.
+    public var source: @MainActor () -> String
+
+    /// The run's source from the `assistant-provider` key alone
+    /// (`Assistant.sourceOf`), without the chosen account's provider.
+    public static func defaultSource(_ settings: Settings) -> String {
+        switch Assistant.sourceOf(settings.assistantProvider) {
+        case .chatgpt: return "malachi-chatgpt"
+        case .account: return "api:" + AIProvider.openaiCompatible.rawValue
+        case .claude: return Assistant.triageSource
+        }
+    }
 
     /// How the clock of relative times sleeps (tests replace it).
     public typealias Sleep = @Sendable (Duration) async -> Void
@@ -222,8 +254,6 @@ public final class BoardTriageController {
     private let socket: String
     private let available: @MainActor () -> Bool
     private let now: @MainActor () -> Date
-    private let language: @MainActor () -> String
-    private let today: @MainActor () -> String
     private let observers = BoardObservers()
     private let ended = BoardObservers()
     private var endedRun: (trigger: Board.TriageTrigger, failure: Board.TriageFailure?)?
@@ -283,15 +313,12 @@ public final class BoardTriageController {
     ///   - socket: the daemon's socket, for the bridge.
     ///   - available: whether triage is available (`triageAvailable`); its
     ///     changes come through `availabilityChanged()`.
-    ///   - now, language, today: the clock, the English name of the UI
-    ///     language ("" English) and today as YYYY-MM-DD for the system
-    ///     prompt.
+    ///   - now: the clock. The UI language of the prompts is the request's
+    ///     (`AssistantRequest.language`).
     public init(
         client: RPCClient, settings: Settings, locator: ClaudeCodeLocator, preferences: BoardPreferencesController,
         request: AssistantRequest? = nil, bridge: String?, socket: String,
-        available: @escaping @MainActor () -> Bool, now: @escaping @MainActor () -> Date = { Date() },
-        language: @escaping @MainActor () -> String = { Assistant.languageName(L10n.catalogue.language) },
-        today: @escaping @MainActor () -> String = AssistantPanelController.localDate
+        available: @escaping @MainActor () -> Bool, now: @escaping @MainActor () -> Date = { Date() }
     ) {
         self.client = client
         self.settings = settings
@@ -302,8 +329,7 @@ public final class BoardTriageController {
         self.socket = socket
         self.available = available
         self.now = now
-        self.language = language
-        self.today = today
+        self.source = { [settings] in Self.defaultSource(settings) }
         // The run checks consent itself and never lets the request ask.
         self.request.consent = nil
         // The only registration of these keys for the triage: a change that
@@ -331,7 +357,8 @@ public final class BoardTriageController {
 
     /// The application's run: available as `triageAvailable` says for
     /// the assistant's `shown` and the `assistant-target` preference, whose
-    /// changes are reported here.
+    /// changes are reported here; the run's `source` is the assistant's
+    /// `triageSource` (an `ai` account's provider).
     public convenience init(
         client: RPCClient, settings: Settings, locator: ClaudeCodeLocator, preferences: BoardPreferencesController,
         assistant: AssistantController, bridge: String?, socket: String
@@ -339,8 +366,12 @@ public final class BoardTriageController {
         self.init(
             client: client, settings: settings, locator: locator, preferences: preferences, bridge: bridge,
             socket: socket, available: { [weak assistant, settings] in
-                Self.triageAvailable(shown: assistant?.shown ?? false, target: settings.assistantTarget)
+                // Never in the App Store build, whatever the target reads
+                // as (`Distribution.allowsLocalAgents`).
+                settings.distribution.allowsLocalAgents
+                    && Self.triageAvailable(shown: assistant?.shown ?? false, target: settings.assistantTarget)
             })
+        source = { [weak assistant, settings] in assistant?.triageSource ?? Self.defaultSource(settings) }
         assistantToken = assistant.onChange { [weak self] in self?.availabilityChanged() }
         settingsTokens.append(settings.onChange(.assistantTarget) { [weak self] in self?.availabilityChanged() })
     }
@@ -439,7 +470,7 @@ public final class BoardTriageController {
     /// to a triage bridge. Not while consent is being given or a write is
     /// under way (each write reads afresh first).
     private func repairAssistantPreference() {
-        guard !granting, !preferences.writing, !settings.selectedBoardConsent,
+        guard !granting, !preferences.writing, !boardConsent,
               preferences.stored?.assistant == true
         else { return }
         log.info("board triage: the assistant preference was on without consent; turning it off")
@@ -465,7 +496,7 @@ public final class BoardTriageController {
     /// check, or a run's own finding, overtook is dropped.
     public func checkSignIn() {
         signInGen += 1
-        if settings.assistantProvider == .chatgpt { signedIn = request.provider?()?.connected ?? false; return }
+        if throughProvider { signedIn = request.provider?()?.connected ?? false; return }
         let g = signInGen
         guard runtimeAvailable else {
             signedIn = nil
@@ -498,9 +529,11 @@ public final class BoardTriageController {
         available() && bridge != nil && runtimeAvailable
     }
 
-    /// Both consents and the board's assistant preference.
+    /// Both consents and the board's assistant preference: Claude Code's
+    /// `assistant-consent` and `board-triage-consent`, ChatGPT's board
+    /// version key alone, an `ai` account's one consent (`boardConsent`).
     public var consentGiven: Bool {
-        (settings.assistantProvider == .chatgpt || settings.selectedAssistantConsent) && settings.selectedBoardConsent && preferences.preferences?.assistant == true
+        (throughProvider || settings.selectedAssistantConsent) && boardConsent && preferences.preferences?.assistant == true
     }
 
     /// A manual run would ask for consent first.
@@ -531,8 +564,13 @@ public final class BoardTriageController {
             preferences.update(quiet: true, { $0.assistant = false; $0.autoTriage = false }, completion: nil)
             return false
         }
-        if provider == .claude { settings.assistantConsent = true; settings.boardTriageConsent = true }
-        else { settings.boardTriageChatGPTConsentVersion = 1 }
+        switch Assistant.sourceOf(provider) {
+        case .claude: settings.assistantConsent = true; settings.boardTriageConsent = true
+        case .chatgpt: settings.boardTriageChatGPTConsentVersion = 1
+        // The account's consent goes to the daemon (account.update through
+        // the provider); no key here.
+        case .account: request.provider?()?.acceptConsent()
+        }
         return true
     }
 
@@ -564,7 +602,7 @@ public final class BoardTriageController {
                 needsConsent: needsConsent, assistantOn: board.known ? board.assistantOn : consentGiven,
                 state: state, lastRun: board.lastRun, autoTriage: preferences.preferences?.autoTriage ?? false,
                 pause: autoPause, backendFailed: preferences.preferences == nil && preferences.lastLoadFailed,
-                annotatedToday: today, boardPhase: viewBoardPhase, signingIn: settings.assistantProvider == .claude && locator.signingIn, usageKnown: board.known,
+                annotatedToday: today, boardPhase: viewBoardPhase, signingIn: settings.assistantProvider == Assistant.providerClaude && locator.signingIn, usageKnown: board.known,
                 usage24h: board.usage24h, queue: board.known && board.assistantOn ? board.queue : nil, now: now, provider: settings.assistantProvider))
     }
 
@@ -714,8 +752,7 @@ public final class BoardTriageController {
         // 2. The daemon's run.
         let id: BoardRunID
         do {
-            let r = try await client.call(
-                API.BoardRunStart.self, BoardRunStartParams(trigger: trigger.wire, source: settings.assistantProvider == .chatgpt ? "malachi-chatgpt" : Assistant.triageSource))
+            let r = try await client.call(API.BoardRunStart.self, BoardRunStartParams(trigger: trigger.wire, source: source()))
             id = r.runId
         } catch {
             log.info("board.runStart: \(String(describing: error), privacy: .public)")
@@ -731,18 +768,16 @@ public final class BoardTriageController {
         let total = queueKnown ? min(board.queue, limit) : limit
         state = .running(trigger, done: 0, total: total)
         log.info("board triage: run started (\(trigger == .manual ? "manual" : "auto", privacy: .public))")
-        // 3. The request.
+        // 3. The request: the daemon's prompt of the run, the bridge
+        // started as it says.
         let drafts = Assistant.triageDrafts(for: trigger)
-        request.start(
-            systemPrompt: Assistant.withProfile(Assistant.triageSystemPrompt(language: language(), today: today()), profile()),
-            message: Assistant.triageMessage(maxCases: limit, drafts: drafts),
-            tools: AssistantRequest.Tools(
-                bridge: bridge, socket: socket,
-                bridgeArgs: Assistant.triageBridgeArgs(runID: id.rawValue, maxCases: limit),
-                allowed: Assistant.triageTools(drafts: drafts)),
-            timeout: timeout, model: settings.boardTriageModel,
-            onTool: { [weak self] e in self?.tool(my, trigger, e) },
-            onUsage: { [weak self] e in self?.counted(my, e) },
+        request.startCall(
+            AssistantRequest.Call(
+                purpose: .triage, input: PromptInput(triage: TriageInput(maxCases: limit, drafts: drafts)),
+                trigger: trigger.wire, runID: id.rawValue, tools: AssistantRequest.Tools(bridge: bridge, socket: socket),
+                timeout: timeout, model: settings.boardTriageModel,
+                onTool: { [weak self] e in self?.tool(my, trigger, e) },
+                onUsage: { [weak self] e in self?.counted(my, e) }),
             completion: { [weak self] outcome in self?.answered(my, trigger, outcome) })
     }
 
@@ -808,7 +843,7 @@ public final class BoardTriageController {
         if limitHit {
             // At its limit the run has succeeded, whatever the result says;
             // its usage was counted before this.
-            if outcome == .failed(.notSignedIn) {
+            if case .failed(.notSignedIn) = outcome {
                 learnSignedIn(false)
             }
             if case .answered = outcome {

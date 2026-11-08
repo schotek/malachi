@@ -221,6 +221,13 @@ const (
 	// invalidArgument, and clients never show it in Mail. Its only
 	// capability is CapabilityCrm (docs/api.md §4.17).
 	AccountEway AccountKind = "eway"
+	// AccountAI is a model API the daemon's assistant runs over
+	// (AIConfig; the API key is Credentials.Password, optional for an
+	// OpenAI-compatible server). It has no mail, like a caldav account:
+	// folder.list answers no folders, message methods invalidArgument,
+	// and clients never show it in Mail. Its only capability is
+	// CapabilityAssistant (docs/api.md §4.18).
+	AccountAI AccountKind = "ai"
 )
 
 // GraphSource says who holds the OAuth2 session of a Graph account.
@@ -363,7 +370,8 @@ type StatusRef struct {
 //
 // IMAP and SMTP are set for AccountIMAP only, Graph for AccountGraph only,
 // Jira for AccountJira only, CalDAV for AccountCalDAV only, Eway for
-// AccountEway only; Calendar only for AccountGraph and AccountCalDAV.
+// AccountEway only, AI for AccountAI only; Calendar only for AccountGraph
+// and AccountCalDAV.
 type AccountConfig struct {
 	Name        string        `json:"name"`  // display name of the account
 	Email       string        `json:"email"` // primary address
@@ -376,6 +384,7 @@ type AccountConfig struct {
 	Jira        *JiraConfig   `json:"jira,omitempty"`
 	CalDAV      *CalDAVConfig `json:"caldav,omitempty"`
 	Eway        *EwayConfig   `json:"eway,omitempty"`
+	AI          *AIConfig     `json:"ai,omitempty"`
 	// Calendar is the calendar part of a graph or caldav account
 	// (docs/api.md §4.14); nil on a graph account = calendar sync off.
 	Calendar     *CalendarConfig `json:"calendar,omitempty"`
@@ -431,6 +440,10 @@ const (
 	// account (crm.*, docs/api.md §4.17). An eway account has exactly this
 	// one.
 	CapabilityCrm AccountCapability = "crm"
+	// CapabilityAssistant: the daemon's assistant can run over this
+	// account (assistant.session*, docs/api.md §4.18). An ai account has
+	// exactly this one.
+	CapabilityAssistant AccountCapability = "assistant"
 )
 
 // MailCapabilities is what a mail account (imap, graph) can do, and what a
@@ -679,7 +692,8 @@ type EndpointTestResult struct {
 // "gateway" when the Atlassian API gateway route was used), caldav for a
 // CalDAV account (its Capabilities among "calendar-access",
 // "calendar-auto-schedule" and "sync-collection"), eway for an eWay-CRM
-// account (one sign-in).
+// account (one sign-in), ai for an AI provider account (one listing of
+// its models, which the result carries).
 type AccountTestResult struct {
 	IMAP   *EndpointTestResult `json:"imap,omitempty"`
 	SMTP   *EndpointTestResult `json:"smtp,omitempty"`
@@ -687,6 +701,7 @@ type AccountTestResult struct {
 	Jira   *EndpointTestResult `json:"jira,omitempty"`
 	CalDAV *EndpointTestResult `json:"caldav,omitempty"`
 	Eway   *EndpointTestResult `json:"eway,omitempty"`
+	AI     *AITestResult       `json:"ai,omitempty"`
 }
 
 // AccountDetectSiteParams asks what kind of issue-tracker site a URL

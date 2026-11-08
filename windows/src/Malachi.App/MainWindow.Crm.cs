@@ -10,7 +10,7 @@
 // button of the message pane's header bar, the list's context menu and the
 // bar of the reading pane (Reader/MessageView), over one CrmController that
 // acts on the selection: the shown message of each selected row; a
-// conversation's row offers nothing (owner, Gate B 2026-10-17).
+// conversation's row offers nothing.
 
 using System;
 using System.Linq;

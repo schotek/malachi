@@ -16,6 +16,13 @@
 // ToastRequested, onStatus StatusReported); the writes are
 // Func<bool, Task<McpStatus?>> (Swift's Write), the page's being
 // McpRegistrationController.ChangeAsync.
+//
+// Since Claude Desktop and Claude Code are two integrations,
+// only Claude Desktop's switch and its row's
+// Unregister go through this controller, with a registration for Claude
+// Desktop only (--client claude-desktop); its own write is one too, so a
+// pending change written again after Claude Desktop quit never touches
+// Claude Code's registration. Claude Code's switch writes at once.
 
 using System;
 using System.Collections.Generic;
@@ -31,8 +38,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Malachi.Core.Controllers;
 
 /// <summary>
-/// Claude Desktop around a change of "Register with Claude" (the MCP switch
-/// of Preferences → AI, <see cref="McpRegistrationController"/>). Claude
+/// Claude Desktop around a change of its "Register with Claude" (the switch
+/// of Preferences → Integrations → Claude Desktop and its row's Unregister,
+/// a <see cref="McpRegistrationController"/> for
+/// <see cref="McpStatus.ClientDesktop"/>). Claude
 /// Desktop reads its MCP servers only when it starts and, while it runs,
 /// rewrites its configuration file from memory, so an entry that
 /// <c>malachi-mcp install</c> writes, or <c>uninstall</c> removes, while it
@@ -108,9 +117,9 @@ public sealed partial class ClaudeDesktopController : IDisposable
 
     /// <summary>
     /// A controller whose own write is an <see cref="McpRegistrationController"/>
-    /// of its own over <paramref name="bridge"/> (<see cref="Daemon.Paths.McpBridge"/>;
-    /// null when there is none beside the application): no toasts, a failure
-    /// is logged.
+    /// of its own for Claude Desktop over <paramref name="bridge"/>
+    /// (<see cref="Daemon.Paths.McpBridge"/>; null when there is none beside
+    /// the application): no toasts, a failure is logged.
     /// </summary>
     public ClaudeDesktopController(
         string? bridge,
@@ -123,7 +132,7 @@ public sealed partial class ClaudeDesktopController : IDisposable
         PendingWork? pending = null)
         : this(platform, NoWrite, quitTimeout, logger, pending)
     {
-        var registration = new McpRegistrationController(bridge, runner, timeout, claudeDesktop: claudeDesktop, pending: pending);
+        var registration = new McpRegistrationController(bridge, runner, timeout, claudeDesktop: claudeDesktop, pending: pending, client: McpStatus.ClientDesktop);
         ownRegistration = registration;
         own = registration.ChangeAsync;
     }
@@ -138,10 +147,10 @@ public sealed partial class ClaudeDesktopController : IDisposable
         Later,
     }
 
-    /// <summary><see cref="Pending"/> or <see cref="IsBusy"/> changed; the AI page listens while it is open.</summary>
+    /// <summary><see cref="Pending"/> or <see cref="IsBusy"/> changed; Claude Desktop's window listens while it is open.</summary>
     public event EventHandler? Changed;
 
-    /// <summary>The text of a toast (Claude Desktop did not quit); the AI page shows it while open, otherwise it is only logged.</summary>
+    /// <summary>The text of a toast (Claude Desktop did not quit); Claude Desktop's window shows it while open, otherwise it is only logged.</summary>
     public event EventHandler<string>? ToastRequested;
 
     /// <summary>Every status a write reported.</summary>
@@ -206,7 +215,8 @@ public sealed partial class ClaudeDesktopController : IDisposable
     }
 
     /// <summary>
-    /// The AI page's switch flipped to <paramref name="want"/>.
+    /// Claude Desktop's switch flipped to <paramref name="want"/> (or its
+    /// row's Unregister, false).
     /// <paramref name="status"/> is the page's last status,
     /// <paramref name="write"/> the page's own write (its switch and row
     /// follow it). Without the offer (<see cref="OffersRestart"/>) the change

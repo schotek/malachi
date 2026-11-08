@@ -4,21 +4,22 @@
 import Foundation
 
 /// The compose window's rewrite (ui/internal/assistant rewrite.go, the In
-/// App target; GTK assistantpanel.Rewriter is its port) without its popover: a
-/// passage of the message, the selection or the user's own text, goes to
-/// the user's Claude Code with a preset or the user's own instruction
-/// (`Assistant.rewriteMessage` under `Assistant.rewriteSystemPrompt`, one
-/// `AssistantRequest`), and the answer, cleaned (`Assistant.cleanRewrite`),
-/// is offered for Replace or Insert Below, which the window does as plain
-/// text.
+/// App target; GTK assistantpanel.Rewriter is its port) without its
+/// popover: a passage of the message, the selection or the user's own
+/// text, goes to the user's assistant with a preset or the user's own
+/// instruction (the daemon's prompt of purpose rewrite, `RewriteInput`,
+/// one `AssistantRequest`), and the answer, cleaned
+/// (`Assistant.cleanRewrite`), is offered for Replace or Insert Below,
+/// which the window does as plain text.
 ///
 /// `state`: `idle` (nothing asked, or the consent was declined),
 /// `running` with the answer as it streams (cleaned the same way),
 /// `done` with the text to insert, `failed` with the line to show (Claude
 /// Code not found or not signed in, the panel's texts; "The assistant
-/// stopped: …" otherwise, an empty answer included). A new rewrite
-/// cancels the one under way; `cancel()` (the popover or the window
-/// closed) ends it and goes back to `idle`.
+/// stopped: …" otherwise, a passage the daemon refuses as too long and an
+/// empty answer included). A new rewrite cancels the one under way;
+/// `cancel()` (the popover or the window closed) ends it and goes back to
+/// `idle`.
 @MainActor
 public final class ComposeRewriteController {
     public enum State: Sendable, Equatable {
@@ -43,9 +44,9 @@ public final class ComposeRewriteController {
 
     /// `state` changed.
     public var onState: (@MainActor (State) -> Void)?
-    /// The user's profile with the note of the account the window writes
-    /// from (`Assistant.Profile.for`).
-    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
+    /// The account the window writes from, whose profile note the daemon
+    /// appends to the system prompt; nil: none.
+    public var account: @MainActor () -> AccountID? = { nil }
 
     public init(request: AssistantRequest) {
         self.request = request
@@ -61,23 +62,17 @@ public final class ComposeRewriteController {
     /// Asks for `rewrite` of `passage` (`custom`: the user's own
     /// instruction, for `.custom`). False, and nothing changes, when there
     /// is nothing to ask: an empty passage, or `.custom` without words. A
-    /// passage that is too long (or a rewrite that does not exist) fails at
-    /// once.
+    /// passage the daemon refuses (too long) fails with its reason.
     @discardableResult
     public func start(rewrite: Assistant.Rewrite, custom: String, passage: String) -> Bool {
-        let message: String
-        do {
-            message = try Assistant.rewriteMessage(rewrite, custom: custom, passage: passage)
-        } catch Assistant.RewriteError.noPassage, Assistant.RewriteError.noInstruction {
+        if Assistant.trimmedString(passage).isEmpty || (rewrite == .custom && Assistant.trimmedString(custom).isEmpty) {
             return false
-        } catch {
-            request.cancel()
-            state = .failed(Assistant.stoppedText(String(describing: error)))
-            return true
         }
         state = .running(preview: "")
         request.start(
-            systemPrompt: Assistant.withProfile(Assistant.rewriteSystemPrompt(), profile()), message: message,
+            purpose: .rewrite,
+            input: PromptInput(rewrite: RewriteInput(preset: rewrite.preset, instruction: custom, passage: passage)),
+            noteAccountID: account(),
             onText: { [weak self] text in
                 guard let self, self.running else { return }
                 self.state = .running(preview: Assistant.cleanRewrite(text))
@@ -96,14 +91,22 @@ public final class ComposeRewriteController {
     }
 
     private func finished(_ outcome: AssistantRequest.Outcome) {
+        state = Self.answerState(outcome)
+    }
+
+    /// assistantpanel.answerState: the state a rewrite or the compose
+    /// window's writing ends in: the answer cleaned
+    /// (`Assistant.cleanRewrite`), an empty one a failure; a failure's
+    /// line; idle when the consent was declined.
+    public static func answerState(_ outcome: AssistantRequest.Outcome) -> State {
         switch outcome {
         case .answered(let text, _):
             let clean = Assistant.cleanRewrite(text)
-            state = clean.isEmpty ? .failed(Assistant.stoppedText("the answer is empty")) : .done(clean)
+            return clean.isEmpty ? .failed(Assistant.stoppedText("the answer is empty")) : .done(clean)
         case .failed(let failure):
-            state = .failed(failure.text)
+            return .failed(failure.text)
         case .declined:
-            state = .idle
+            return .idle
         }
     }
 }

@@ -42,6 +42,9 @@ final class AssistantMenu: NSObject, NSMenuDelegate {
     /// The separator, the problem and "Set Up the Assistant…", shown while
     /// the chosen target cannot run the message actions.
     private var setUpItems: [NSMenuItem] = []
+    /// The "Open In" choices, one per target of the full list; a target
+    /// this build does not offer is hidden (`menuNeedsUpdate`).
+    private var targetItems: [NSMenuItem] = []
     /// Why the chosen target cannot run the message actions: disabled,
     /// information only.
     private let problemItem = NSMenuItem()
@@ -63,16 +66,23 @@ final class AssistantMenu: NSObject, NSMenuDelegate {
         return Assistant.messageActions[tag]
     }
 
-    /// The target behind an item's tag.
+    /// The target behind an item's tag (the tag is the target's index in
+    /// the full list, `Assistant.allTargets`; a build's own list is a
+    /// prefix of it).
     static func target(tag: Int?) -> Assistant.Target? {
-        guard let tag, AssistantController.targets.indices.contains(tag) else { return nil }
-        return AssistantController.targets[tag]
+        guard let tag, Assistant.allTargets.indices.contains(tag) else { return nil }
+        return Assistant.allTargets[tag]
     }
 
     // MARK: NSMenuDelegate
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         state.assistant.refresh()
+        // The App Store build offers In App only while an `ai` account is
+        // the provider (`AssistantController.targets`): the item follows.
+        for item in targetItems {
+            item.isHidden = !state.assistant.targets.contains(Assistant.allTargets[item.tag])
+        }
         updateSetUp()
     }
 
@@ -101,8 +111,12 @@ final class AssistantMenu: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(.sectionHeader(title: texts.openIn))
-        for (i, t) in AssistantController.targets.enumerated() {
-            menu.addItem(item(Assistant.targetName(t), Action.setAssistantTarget, tag: i))
+        let targets = state.assistant.targets
+        for (i, t) in Assistant.allTargets.enumerated() {
+            let it = item(Assistant.targetName(t), Action.setAssistantTarget, tag: i)
+            it.isHidden = !targets.contains(t)
+            targetItems.append(it)
+            menu.addItem(it)
         }
         // No action: AppKit keeps it disabled.
         problemItem.isEnabled = false

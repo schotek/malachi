@@ -16,8 +16,8 @@
 // and backend/pkg/api's DefaultCalendarPreferences (Swift
 // Cal.defaultPreferences).
 //
-// Preferences → Calendar, a tab of its own (the owner's decision of
-// 2026-10-16, docs/calendar.md §5.8): the group Display with the daemon's
+// Preferences → Calendar, a tab of its own (docs/calendar.md §5.8): the
+// group Display with the daemon's
 // calendar.preferences, then a section per account with the calendar
 // capability (its CalendarConfig, and for a CalDAV account its connection),
 // then Add CalDAV Calendar…. PreferencesLayout says what goes where; CalDAV

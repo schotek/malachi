@@ -197,8 +197,8 @@ func (d *Dialog) IsEmpty() bool { return len(d.items) == 0 }
 
 // OffersSearchHint reports whether the dialog shows the quiet line that
 // deals and projects are found by searching: something is listed, but
-// no deal or project (owner, 2026-10-17: the empty space under two
-// groups left the user wondering what was missing).
+// no deal or project (the empty space under two groups would leave the
+// user wondering what was missing).
 func (d *Dialog) OffersSearchHint() bool {
 	if len(d.items) == 0 {
 		return false

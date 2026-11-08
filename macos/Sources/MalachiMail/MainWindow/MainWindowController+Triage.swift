@@ -12,7 +12,9 @@ import MalachiCore
 //
 // - Triage: what `triage.view.control` offers — hidden, Get Claude Code…,
 //   Sign In…, unavailable (insensitive, the tooltip says why), ✦ Triage,
-//   Stop while a run works — with the view's title and tooltip; validated
+//   Stop while a run works — with the view's title and tooltip (over an
+//   `ai` account the first two read Set Up in Integrations… and open the
+//   account's dialog, `TriageView.opensIntegrations`); validated
 //   like the board's other items (`Action.boardTriage`, Board mode only).
 //   Whether it shows at all is Core's one rule (`TriageView.offered`, which
 //   Settings' Board group follows too). The second click of a double
@@ -170,13 +172,24 @@ extension MainWindowController {
             return
         }
         let triage = state.triage
-        switch triage.view.control {
+        let view = triage.view
+        // Over an `ai` account both Get Claude Code… and Sign In… read Set
+        // Up in Integrations… and open the account's dialog (with Replace
+        // Key… when the provider refused its key; GTK
+        // board_triage_button.go `onTriageClicked`).
+        if view.opensIntegrations {
+            if let acc = state.assistant.apiAccount {
+                state.hooks.editAIAccount?(acc, acc.state.status == .authRequired)
+            }
+            return
+        }
+        switch view.control {
         case .triage:
             triage.start(.manual)
         case .stop:
             triage.cancel()
         case .getClaudeCode:
-            openInBrowser(state.settings.assistantProvider == .chatgpt ? "https://developers.openai.com/codex/cli" : Assistant.installURL) { [weak self] text in
+            openInBrowser(state.settings.assistantProvider == Assistant.providerChatGPT ? "https://developers.openai.com/codex/cli" : Assistant.installURL) { [weak self] text in
                 self?.toasts.show(text)
             }
         case .signIn:
@@ -191,7 +204,7 @@ extension MainWindowController {
     /// triage asks the sign-in again by itself when it ends. A failure or
     /// a timeout is a toast, as Settings says it.
     private func triageSignIn() {
-        if state.settings.assistantProvider == .chatgpt {
+        if state.settings.assistantProvider == Assistant.providerChatGPT {
             guard !state.chatGPT.connecting else { return }
             Task { @MainActor [weak self] in
                 guard let self else { return }

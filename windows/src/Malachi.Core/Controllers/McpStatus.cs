@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Controllers/MCPRegistrationController.swift
 // (MCPStatus, isRegistered); GTK: ui/internal/mcpsetup/mcpsetup.go (Status,
-// Registered); the contract is the --json report of docs/mcp.md. Swift
+// Registered, Client, RegisteredIn, ClientDesktop, ClientCode); the
+// contract is the --json report of docs/mcp.md. Swift
 // decodes it with JSONDecoder; here McpJsonContext does, generated, as the
 // API's own context does (docs/windows-port.md §3.1).
 
@@ -24,6 +25,16 @@ namespace Malachi.Core.Controllers;
 /// </summary>
 public sealed record McpStatus
 {
+    /// <summary>
+    /// mcpsetup.ClientDesktop: the id of Claude Desktop in the report
+    /// (<see cref="McpClient.Id"/>), which <c>--client</c> of install and
+    /// uninstall takes.
+    /// </summary>
+    public const string ClientDesktop = "claude-desktop";
+
+    /// <summary>mcpsetup.ClientCode: the id of Claude Code in the report.</summary>
+    public const string ClientCode = "claude-code";
+
     /// <summary>The command written into the configurations (<c>--command</c>, else the bridge itself).</summary>
     [JsonPropertyName("command")]
     public required string Command { get; init; }
@@ -33,9 +44,26 @@ public sealed record McpStatus
     [JsonConverter(typeof(NullAsEmptyListConverter<McpClient>))]
     public IReadOnlyList<McpClient> Clients { get; init => field = value ?? []; } = [];
 
-    /// <summary>Registered as the preferences see it: with at least one client (mcpsetup <c>Registered</c>).</summary>
+    /// <summary>
+    /// Registered with at least one client (mcpsetup <c>Registered</c>): what
+    /// the Assistant as a whole needs (assistant.Shown).
+    /// </summary>
     [JsonIgnore]
     public bool IsRegistered => Clients.Any(c => c.Registered);
+
+    /// <summary>
+    /// mcpsetup <c>Status.Client</c>: the report's entry for client
+    /// <paramref name="id"/> (<see cref="ClientDesktop"/>,
+    /// <see cref="ClientCode"/>); null when the report has none.
+    /// </summary>
+    public McpClient? Client(string id) => Clients.FirstOrDefault(c => c.Id == id);
+
+    /// <summary>
+    /// mcpsetup <c>Status.RegisteredIn</c>: whether the bridge is registered
+    /// with client <paramref name="id"/>: what that app's Register switch
+    /// and its row of Preferences → Integrations show.
+    /// </summary>
+    public bool RegisteredIn(string id) => Client(id)?.Registered ?? false;
 
     /// <summary>
     /// The report in <paramref name="json"/>, or a

@@ -11,7 +11,9 @@
 // control and the status strip. Pure; the texts are Board.Text's. A run's
 // outcome is only counts and classes: neither the model's words nor mail
 // text ever get here. The ChatGPT branches are Swift's (the Windows client
-// has the Codex provider; Go's view has no provider). Swift's
+// has the Codex provider; Go's view has no provider), and so are the ones of
+// an AI provider account (Swift NotFoundWords, NotSignedInWords,
+// ProviderButton, OpensIntegrations; GTK providerBoardTranslator). Swift's
 // Board.triageView and Board.TriageView share a name, which C# does not
 // allow in one class: the function is Go's ViewOf, TriageViewOf. Swift's
 // TriageState.trigger is TriggeredBy, beside the cases' own Trigger.
@@ -191,7 +193,7 @@ public static partial class Board
     public sealed record TriageViewInputs
     {
         /// <summary>The in-app provider.</summary>
-        public AssistantProviderID Provider { get; init; } = AssistantProviderID.Claude;
+        public string Provider { get; init; } = Assistant.ProviderClaude;
 
         /// <summary>The assistant is shown (Settings → AI, registered).</summary>
         public required bool Shown { get; init; }
@@ -265,7 +267,18 @@ public static partial class Board
     public sealed record TriageView
     {
         /// <summary>The in-app provider.</summary>
-        public AssistantProviderID Provider { get; init; } = AssistantProviderID.Claude;
+        public string Provider { get; init; } = Assistant.ProviderClaude;
+
+        /// <summary>
+        /// Over an AI provider account the <see cref="TriageControl.GetClaudeCode"/>
+        /// and <see cref="TriageControl.SignIn"/> controls read Set Up in
+        /// Integrations… and open the account's settings in Settings →
+        /// Integrations instead of the installer page or Claude Code's sign-in
+        /// (GTK <c>providerBoardTranslator</c>).
+        /// </summary>
+        public bool OpensIntegrations =>
+            Assistant.SourceOf(Provider) == AssistantProviderSource.Account
+            && Control is TriageControl.GetClaudeCode or TriageControl.SignIn;
 
         /// <summary>
         /// <see cref="TriageControl.Hidden"/> exactly when triage is not
@@ -347,11 +360,51 @@ public static partial class Board
         public bool Offered => Control != TriageControl.Hidden;
     }
 
+    /// <summary>
+    /// What the triage says instead of Claude Code's missing executable over
+    /// <paramref name="provider"/> (GTK <c>providerBoardTranslator</c>):
+    /// Codex's own words, an AI provider account's "switched off"
+    /// (<see cref="ApiStrings.BoardAccountOff"/>), else <paramref name="claude"/>.
+    /// </summary>
+    public static string NotFoundWords(string provider, string claude) => Assistant.SourceOf(provider) switch
+    {
+        AssistantProviderSource.ChatGpt => L10n.T("Codex was not found. Choose a native Codex executable."),
+        AssistantProviderSource.Account => Assistant.ApiText().BoardAccountOff,
+        _ => claude,
+    };
+
+    /// <summary>
+    /// What the triage says instead of Claude Code's sign-in over
+    /// <paramref name="provider"/>: Codex's reconnect, an AI provider
+    /// account's "the key was refused" (<see cref="ApiStrings.BoardKeyRefused"/>),
+    /// else <paramref name="claude"/>.
+    /// </summary>
+    public static string NotSignedInWords(string provider, string claude) => Assistant.SourceOf(provider) switch
+    {
+        AssistantProviderSource.ChatGpt => L10n.T("Reconnect to ChatGPT"),
+        AssistantProviderSource.Account => Assistant.ApiText().BoardKeyRefused,
+        _ => claude,
+    };
+
+    /// <summary>
+    /// The button beside those words: <paramref name="chatGpt"/> (Get Codex…
+    /// / Continue with ChatGPT), an AI provider account's Set Up in
+    /// Integrations… (both open the account's settings), else
+    /// <paramref name="claude"/>.
+    /// </summary>
+    public static string ProviderButton(string provider, string chatGpt, string claude) => Assistant.SourceOf(provider) switch
+    {
+        AssistantProviderSource.ChatGpt => chatGpt,
+        AssistantProviderSource.Account => Assistant.ApiText().SetUpInIntegrations,
+        _ => claude,
+    };
+
     /// <summary>The Triage control and the status strip for <paramref name="i"/> (Swift <c>triageView</c>, Go <c>ViewOf</c>).</summary>
     public static TriageView TriageViewOf(TriageViewInputs i)
     {
         ArgumentNullException.ThrowIfNull(i);
-        var chatGpt = i.Provider == AssistantProviderID.ChatGpt;
+        var chatGpt = Assistant.SourceOf(i.Provider) == AssistantProviderSource.ChatGpt;
+        var local = Assistant.SourceOf(i.Provider) == AssistantProviderSource.Claude;
         var active = i.State.IsActive;
         var control = TriageControl.Triage;
         var title = Text.Triage;
@@ -379,8 +432,8 @@ public static partial class Board
         else if (!i.ClaudeFound)
         {
             control = TriageControl.GetClaudeCode;
-            title = chatGpt ? L10n.T("Get Codex…") : Assistant.SignInTexts().GetClaudeCode;
-            toolTip = chatGpt ? L10n.T("Codex was not found. Choose a native Codex executable.") : Text.TriageNeedsClaudeCode;
+            title = ProviderButton(i.Provider, L10n.T("Get Codex…"), Assistant.SignInTexts().GetClaudeCode);
+            toolTip = NotFoundWords(i.Provider, Text.TriageNeedsClaudeCode);
         }
         else if (!i.Bridge)
         {
@@ -409,8 +462,8 @@ public static partial class Board
         else if (i.SignedIn == false)
         {
             control = TriageControl.SignIn;
-            title = chatGpt ? L10n.T("Continue with ChatGPT") : Assistant.SignInTexts().SignIn;
-            toolTip = chatGpt ? L10n.T("Reconnect to ChatGPT") : Text.TriageNeedsSignIn;
+            title = ProviderButton(i.Provider, L10n.T("Continue with ChatGPT"), Assistant.SignInTexts().SignIn);
+            toolTip = NotSignedInWords(i.Provider, Text.TriageNeedsSignIn);
         }
 
         var progress = "";
@@ -427,11 +480,11 @@ public static partial class Board
                 result = Text.TriageFinished(f.Annotated, f.Refused);
                 break;
             case TriageState.Failed { Failure: var f }:
-                if (chatGpt && f is TriageFailure.NotFound or TriageFailure.NotSignedIn)
+                if (!local && f is TriageFailure.NotFound or TriageFailure.NotSignedIn)
                 {
                     result = L10n.T(
                         "Triage failed: %s.",
-                        f == TriageFailure.NotFound ? L10n.T("Codex was not found. Choose a native Codex executable.") : L10n.T("Reconnect to ChatGPT"));
+                        f == TriageFailure.NotFound ? NotFoundWords(i.Provider, "") : NotSignedInWords(i.Provider, ""));
                 }
                 else
                 {
@@ -469,8 +522,8 @@ public static partial class Board
         var paused = "";
         if (offered && i.AutoTriage && !active && i.Pause is { } p)
         {
-            paused = chatGpt && p is AutoTriagePause.SignedOut
-                ? L10n.T("Automatic triage paused: %s", L10n.T("Reconnect to ChatGPT"))
+            paused = !local && p is AutoTriagePause.SignedOut
+                ? L10n.T("Automatic triage paused: %s", NotSignedInWords(i.Provider, ""))
                 : Text.AutoTriagePaused(p, i.Now, i.TimeZone);
             if (p is AutoTriagePause.Failed)
             {
@@ -610,7 +663,7 @@ public static partial class Board
         }
         if (v.SigningIn)
         {
-            return v.Provider == AssistantProviderID.ChatGpt ? L10n.T("Connecting…") : Assistant.SignInTexts().Waiting;
+            return Assistant.SourceOf(v.Provider) == AssistantProviderSource.ChatGpt ? L10n.T("Connecting…") : Assistant.SignInTexts().Waiting;
         }
         return v.Paused.Length == 0 ? v.StatusLine : v.Paused;
     }
@@ -634,15 +687,13 @@ public static partial class Board
     public static string TriageSettingsDescription(TriageView v)
     {
         ArgumentNullException.ThrowIfNull(v);
-        var chatGpt = v.Provider == AssistantProviderID.ChatGpt;
+        var chatGpt = Assistant.SourceOf(v.Provider) == AssistantProviderSource.ChatGpt;
         return v.Control switch
         {
-            TriageControl.GetClaudeCode => chatGpt
-                ? L10n.T("Codex was not found. Choose a native Codex executable.")
-                : Text.TriageSettingsNeedsClaudeCode,
-            TriageControl.SignIn => chatGpt
-                ? (v.SigningIn ? L10n.T("Connecting…") : L10n.T("Reconnect to ChatGPT"))
-                : (v.SigningIn ? Assistant.SignInTexts().Waiting : Text.TriageSettingsNeedsSignIn),
+            TriageControl.GetClaudeCode => NotFoundWords(v.Provider, Text.TriageSettingsNeedsClaudeCode),
+            TriageControl.SignIn => v.SigningIn
+                ? (chatGpt ? L10n.T("Connecting…") : Assistant.SignInTexts().Waiting)
+                : NotSignedInWords(v.Provider, Text.TriageSettingsNeedsSignIn),
             TriageControl.Unavailable => v.Unavailable == TriageFailure.Backend ? Text.TriageSettingsNoBackend : Text.TriageSettingsNoTools,
             _ => "",
         };

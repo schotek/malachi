@@ -25,15 +25,17 @@
 //    manual run without consent asks (Consent, the sheet) and gives it
 //    (GiveConsentAsync); an automatic run never asks. A manual run whose
 //    queue is known to be empty ends at once (NothingToDo).
-// 2. board.runStart with the trigger and the source (Assistant.TriageSource,
-//    "malachi-chatgpt" for the ChatGPT provider).
-// 3. The request: Assistant.TriageMessage for at most the run's limit under
-//    Assistant.TriageSystemPrompt, with the board's own model
+// 2. board.runStart with the trigger and the run's Source
+//    (Assistant.TriageSource for Claude Code, "malachi-chatgpt" for the
+//    ChatGPT provider, "api:<provider>" for an ai account).
+// 3. The request: the daemon's prompt of purpose triage (assistant.prompt
+//    with the trigger, the run and TriageInput: at most the run's limit,
+//    drafts for a manual run only), with the board's own model
 //    (board-triage-model, read when the run starts; not the panel's
-//    assistant-model), with the bridge started as --socket <socket>
-//    --allow-triage --triage-run <runId> --triage-max <limit> and only
-//    Assistant.TriageTools (no create_draft for an automatic run), for at
-//    most Timeout. Every annotate_case call the bridge accepted counts as
+//    assistant-model), with the bridge started as the prompt says
+//    (--socket <socket> --in-app --allow-triage --triage-run <runId>
+//    --triage-max <limit>) and only its tools (no create_draft for an
+//    automatic run), for at most Timeout. Every annotate_case call the bridge accepted counts as
 //    progress, of the queue's size at the start capped by the limit; refused
 //    ones are counted apart. When the accepted ones reach the limit the run
 //    has succeeded: the bridge refuses more and closes the queue, telling
@@ -57,7 +59,11 @@
 // ConsentIdentity): a change of assistant-provider, assistant-codex-path,
 // assistant-chatgpt-model or board-triage-chatgpt-model stops a run (and a
 // provider switch turns automatic triage off, provider_test.go), and a
-// consent whose write the switch overtook approves nothing.
+// consent whose write the switch overtook approves nothing. An ai account
+// of the daemon runs through Request.Provider as ChatGPT does (Swift
+// throughProvider), and its consent is the account's own, one for the panel
+// and the board (Swift overAccount, boardConsent; GTK boardProviderSettings):
+// no settings key is ever read or written for it.
 //
 // Windows: Swift's onRefresh is the event RefreshRequested, observe and
 // observeEnded return BoardObserverTokens as Swift's; the clock, the grace,
@@ -85,6 +91,9 @@ using Malachi.Core.Text;
 using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using AssistantEvent = Malachi.Core.Assistants.AssistantEvent;
+using AssistantEventKind = Malachi.Core.Assistants.AssistantEventKind;
+using AssistantUsage = Malachi.Core.Assistants.AssistantUsage;
 
 namespace Malachi.Core.Controllers;
 
@@ -92,7 +101,7 @@ namespace Malachi.Core.Controllers;
 public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDisposable
 {
     /// <summary>
-    /// Owner's decision (2026-10-01): triage is offered only under the
+    /// Triage is offered only under the
     /// assistant's "In App (experimental)" target, the condition of the panel,
     /// the compose rewrite and the search in the user's own words. It is the
     /// only target under which the application itself starts Claude Code, and
@@ -121,8 +130,6 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     private readonly Func<bool> available;
     private readonly TimeProvider time;
     private readonly TimeZoneInfo timeZone;
-    private readonly Func<string> language;
-    private readonly Func<string> today;
     private readonly ControllerScope scope;
     private readonly ILogger logger;
     private readonly BoardObservers observers = new();
@@ -194,8 +201,6 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     /// <param name="available">Whether triage is available (<see cref="TriageAvailable"/>); its changes come through <see cref="AvailabilityChanged"/>.</param>
     /// <param name="time">The clock; the system's when null.</param>
     /// <param name="timeZone">Where "today" is counted; the local zone when null.</param>
-    /// <param name="language">The English name of the UI language ("" English), for the system prompt.</param>
-    /// <param name="today">Today as YYYY-MM-DD, for the system prompt.</param>
     /// <param name="logger">Receives steps, kinds and counts; never model text or mail.</param>
     /// <param name="pending">Counts the controller's background work; one of its own when null.</param>
     public BoardTriageController(
@@ -209,8 +214,6 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         Func<bool> available,
         TimeProvider? time = null,
         TimeZoneInfo? timeZone = null,
-        Func<string>? language = null,
-        Func<string>? today = null,
         ILogger<BoardTriageController>? logger = null,
         PendingWork? pending = null)
     {
@@ -231,8 +234,6 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         this.available = available;
         this.time = time ?? TimeProvider.System;
         this.timeZone = timeZone ?? TimeZoneInfo.Local;
-        this.language = language ?? (() => Assistant.LanguageName(L10n.Catalogue.Language));
-        this.today = today ?? (() => AssistantPanelController.LocalDate(this.time));
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
         scope = new ControllerScope(pending);
         Timeout = Assistant.TriageTimeout;
@@ -241,6 +242,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         request.Consent = null;
         request.UsesBoardConsent = true;
         request.ProviderModelId = () => settings.BoardChatGptModel;
+        Source = () => DefaultSource(settings);
         foreach (var key in new[] { SettingsKey.AssistantProvider, SettingsKey.AssistantCodexPath })
         {
             // The provider itself, or the ChatGPT provider's executable while
@@ -252,7 +254,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
             var disable = key == SettingsKey.AssistantProvider;
             settingsTokens.Add(settings.OnChange(key, () =>
             {
-                if (disable || settings.AssistantProvider == AssistantProviderID.ChatGpt)
+                if (disable || Assistant.SourceOf(settings.AssistantProvider) == AssistantProviderSource.ChatGpt)
                 {
                     ProviderChanged(disable);
                 }
@@ -293,6 +295,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     {
         ArgumentNullException.ThrowIfNull(assistant);
         this.assistant = assistant;
+        Source = () => this.assistant?.TriageSource ?? DefaultSource(settings);
         assistant.Changed += OnAssistantChanged;
         settingsTokens.Add(settings.OnChange(SettingsKey.AssistantTarget, AvailabilityChanged));
     }
@@ -307,6 +310,38 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     /// <summary>The consents, the models, the provider.</summary>
     public SettingsStore Settings { get; }
 
+    /// <summary>The run's source of the ChatGPT provider (Codex), as the daemon records it.</summary>
+    public const string ChatGptSource = "malachi-chatgpt";
+
+    /// <summary>
+    /// The run's <c>source</c> for <c>board.runStart</c>: what the bridge
+    /// reports as its client's name for the annotations of the run (GTK
+    /// <c>triageSource</c>): Claude Code's <see cref="Assistant.TriageSource"/>,
+    /// ChatGPT's <see cref="ChatGptSource"/>, an ai account's
+    /// "api:&lt;provider&gt;" (<see cref="ApiSource"/>). The default
+    /// (<see cref="DefaultSource"/>) knows no account and names the
+    /// OpenAI-compatible kind; the constructor over the
+    /// <see cref="AssistantController"/> takes its
+    /// <see cref="AssistantController.TriageSource"/>, which knows the chosen
+    /// account's provider.
+    /// </summary>
+    public Func<string> Source { get; set; }
+
+    /// <summary>The run's source of an ai account of provider kind <paramref name="provider"/>: "api:" and the kind.</summary>
+    public static string ApiSource(AiProvider provider) => "api:" + provider.Value;
+
+    /// <summary>The run's source from the <c>assistant-provider</c> key alone (<see cref="Assistant.SourceOf"/>), without the chosen account's provider.</summary>
+    public static string DefaultSource(SettingsStore settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return Assistant.SourceOf(settings.AssistantProvider) switch
+        {
+            AssistantProviderSource.ChatGpt => ChatGptSource,
+            AssistantProviderSource.Account => ApiSource(AiProvider.OpenAiCompatible),
+            _ => Assistant.TriageSource,
+        };
+    }
+
     /// <summary>The application's Claude Code.</summary>
     public ClaudeCodeLocator Locator { get; }
 
@@ -315,9 +350,6 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
 
     /// <summary>The one-shot request the runs use.</summary>
     public AssistantRequest Request { get; }
-
-    /// <summary>The user's profile, every account's note (each names its account); empty by default.</summary>
-    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
 
     /// <summary>Where the application's run is.</summary>
     public Board.TriageState State
@@ -399,25 +431,24 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     /// <summary>Whether <see cref="Close"/> ran.</summary>
     public bool IsClosed => scope.IsClosed;
 
-    private bool ChatGpt => Settings.AssistantProvider == AssistantProviderID.ChatGpt;
+    // The provider in effect runs through Request.Provider (Codex, a session
+    // the daemon runs over an ai account) rather than the user's Claude Code
+    // (Swift throughProvider).
+    private bool ThroughProvider => Assistant.SourceOf(Settings.AssistantProvider) != AssistantProviderSource.Claude;
 
-    private bool RuntimeAvailable => ChatGpt ? Request.Provider?.Available == true : Locator.Locate() is not null;
+    // The provider is an ai account of the daemon: its consent is the
+    // account's, one for the panel and the board (Swift overAccount).
+    private bool OverAccount => Assistant.SourceOf(Settings.AssistantProvider) == AssistantProviderSource.Account;
 
-    // The board's consent of the selected provider (Swift selectedBoardConsent).
+    private bool RuntimeAvailable => ThroughProvider ? Request.Provider?.Available == true : Locator.Locate() is not null;
+
+    // The board's consent of the selected provider (Swift selectedBoardConsent,
+    // boardConsent): an ai account's is the provider's (its account's), which
+    // reads false without one and is never written here.
     private bool SelectedBoardConsent
     {
-        get => ChatGpt ? Settings.BoardChatGptConsentVersion == 1 : Settings.BoardTriageConsent;
-        set
-        {
-            if (ChatGpt)
-            {
-                Settings.BoardChatGptConsentVersion = value ? 1 : 0;
-            }
-            else
-            {
-                Settings.BoardTriageConsent = value;
-            }
-        }
+        get => OverAccount ? Request.Provider?.HasBoardConsent == true : Settings.SelectedBoardConsent;
+        set => Settings.SelectedBoardConsent = value;
     }
 
     private DateTimeOffset Now => time.GetUtcNow();
@@ -591,7 +622,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     public void CheckSignIn()
     {
         var g = ++signInGen;
-        if (ChatGpt)
+        if (ThroughProvider)
         {
             SignedIn = Request.Provider?.Connected ?? false;
             return;
@@ -636,9 +667,13 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     /// <summary>Triage is available, Claude Code is there and so is the bridge.</summary>
     public bool CanRun => available() && bridge is not null && RuntimeAvailable;
 
-    /// <summary>Both consents and the board's assistant preference.</summary>
+    /// <summary>
+    /// Both consents and the board's assistant preference: Claude Code's
+    /// <c>assistant-consent</c> and <c>board-triage-consent</c>, ChatGPT's
+    /// board version key alone, an ai account's one consent.
+    /// </summary>
     public bool ConsentGiven =>
-        (ChatGpt || Settings.AssistantConsent) && SelectedBoardConsent && Preferences.Preferences?.Assistant == true;
+        (ThroughProvider || Settings.AssistantConsent) && SelectedBoardConsent && Preferences.Preferences?.Assistant == true;
 
     /// <summary>A manual run would ask for consent first.</summary>
     public bool NeedsConsent => !ConsentGiven;
@@ -678,14 +713,20 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
                 Preferences.Update(p => p with { Assistant = false, AutoTriage = false }, quiet: true);
                 return false;
             }
-            if (provider == AssistantProviderID.Claude)
+            switch (Assistant.SourceOf(provider))
             {
-                Settings.AssistantConsent = true;
-                Settings.BoardTriageConsent = true;
-            }
-            else
-            {
-                Settings.BoardChatGptConsentVersion = 1;
+                case AssistantProviderSource.ChatGpt:
+                    Settings.BoardChatGptConsentVersion = 1;
+                    break;
+                case AssistantProviderSource.Account:
+                    // The account's consent goes to the daemon (account.update
+                    // through the provider); no key here.
+                    Request.Provider?.AcceptBoardConsent();
+                    break;
+                default:
+                    Settings.AssistantConsent = true;
+                    Settings.BoardTriageConsent = true;
+                    break;
             }
             return true;
         }
@@ -737,7 +778,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
                 BackendFailed = p is null && Preferences.LastLoadFailed,
                 AnnotatedToday = annotatedToday,
                 BoardPhase = ViewBoardPhase,
-                SigningIn = !ChatGpt && Locator.SigningIn,
+                SigningIn = !ThroughProvider && Locator.SigningIn,
                 UsageKnown = Board.Known,
                 Usage24h = Board.Usage24h,
                 Queue = Board.Known && Board.AssistantOn ? Board.Queue : null,
@@ -955,7 +996,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         {
             var r = await client.CallAsync(
                 API.BoardRunStart,
-                new BoardRunStartParams { Trigger = trigger.Wire, Source = ChatGpt ? "malachi-chatgpt" : Assistant.TriageSource },
+                new BoardRunStartParams { Trigger = trigger.Wire, Source = Source() },
                 scope.Lifetime);
             id = r.RunId;
         }
@@ -975,24 +1016,28 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         var total = queueKnown ? Math.Min(Board.Queue, limit) : limit;
         State = new Boards.Board.TriageState.Running(trigger, 0, total);
         LogRunStarted(logger, trigger);
-        // 3. The request.
+        // 3. The request: the daemon's prompt of the run, the bridge started
+        // as it says.
         var drafts = Assistant.TriageDrafts(trigger == Boards.Board.TriageTrigger.Manual);
-        Request.Start(
-            Assistant.WithProfile(Assistant.TriageSystemPrompt(language(), today()), Profile()),
-            Assistant.TriageMessage(limit, drafts),
-            o => Answered(my, trigger, o),
-            tools: new AssistantRequest.Tools
+        Request.StartCall(
+            new AssistantRequest.CallSpec
             {
-                Bridge = bridgePath,
-                Socket = socket,
-                BridgeArgs = Assistant.TriageBridgeArgs(id.Value, limit),
-                Allowed = Assistant.TriageTools(drafts),
-                Policy = drafts ? AssistantToolPolicy.TriageDrafts : AssistantToolPolicy.Triage,
+                Purpose = PromptPurpose.Triage,
+                Input = new PromptInput { Triage = new TriageInput { MaxCases = limit, Drafts = drafts } },
+                Trigger = trigger.Wire,
+                RunId = id.Value,
+                Tools = new AssistantRequest.Tools
+                {
+                    Bridge = bridgePath,
+                    Socket = socket,
+                    Policy = drafts ? AssistantToolPolicy.TriageDrafts : AssistantToolPolicy.Triage,
+                },
+                Timeout = Timeout,
+                Model = Settings.BoardTriageModel,
+                OnTool = e => Tool(my, trigger, e),
+                OnUsage = e => Counted(my, e),
             },
-            timeout: Timeout,
-            model: Settings.BoardTriageModel,
-            onTool: e => Tool(my, trigger, e),
-            onUsage: e => Counted(my, e));
+            o => Answered(my, trigger, o));
     }
 
     // The consent hook's answer; one that fails declines, and is reported.
@@ -1013,7 +1058,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
 
     private async Task<bool?> RuntimeSignedInAsync()
     {
-        if (ChatGpt)
+        if (ThroughProvider)
         {
             return Request.Provider?.Connected ?? false;
         }

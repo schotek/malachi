@@ -4,7 +4,8 @@
 // Port of macos/Sources/MalachiCore/Controllers/MCPRegistrationController.swift
 // (MCPRegistrationController, invoke, firstLine, exitDescription); GTK:
 // ui/internal/window/preferences.go (bindMCP) and
-// ui/internal/mcpsetup/mcpsetup.go (Query, Install, Uninstall, run, reason).
+// ui/internal/mcpsetup/mcpsetup.go (Query, Install, Uninstall, Set, run,
+// reason) and ui/internal/window/claude_integration.go (bindMCP).
 //
 // Windows differences. The group description reports what GTK reports
 // there and macOS only toasts or logs (docs/windows-port.md §3.1, U2 and
@@ -34,6 +35,18 @@
 // wording. The Swift callbacks are events of the same
 // words (onRegistered is RegisteredChanged, onEnabled EnabledChanged,
 // onToast ToastRequested), and DescriptionChanged is Windows' own.
+//
+// Since Claude Desktop and Claude Code are two integrations,
+// a controller may be for one Claude app (Client,
+// mcpsetup.Set): its install and uninstall pass --client with that app's
+// id, its switch shows the registration in that app only
+// (McpStatus.RegisteredIn), and a registration that failed because that
+// app is not installed toasts the app's own sentence
+// (Integrations.ClaudeAppText NotInstalled). A status is always asked of
+// both apps (status takes no --client) and shared with the application as
+// it is. A controller without a client (the AI page's, which only asks
+// for the status) installs into and uninstalls from every app present, as
+// before.
 
 using System;
 using System.Collections.Generic;
@@ -55,16 +68,19 @@ namespace Malachi.Core.Controllers;
 
 /// <summary>
 /// The MCP group of the AI page of the preferences (preferences.blp
-/// <c>ai_page</c>, preferences.go <c>bindMCP</c>) without the widgets: one
-/// switch, "Register with Claude", that adds the bundled
-/// <c>malachi-mcp.exe</c> to the MCP configuration of Claude Desktop and
-/// Claude Code, or takes it out, through the bridge's own setup subcommands
-/// (<c>malachi-mcp status | install | uninstall --json</c>; docs/mcp.md).
-/// The application never touches those files itself.
+/// <c>ai_page</c>, claude_integration.go <c>bindMCP</c>) without the widgets:
+/// one switch, "Register with Claude", that adds the bundled
+/// <c>malachi-mcp.exe</c> to the MCP configuration of one Claude app
+/// (<see cref="Client"/>: Claude Desktop or Claude Code), or of both
+/// without one, or takes it out, through the bridge's own setup
+/// subcommands (<c>malachi-mcp status | install | uninstall --json
+/// [--client ID]</c>; docs/mcp.md). The application never touches those
+/// files itself.
 /// </summary>
 /// <remarks>
-/// The switch is on when at least one client reports the bridge as
-/// registered. A state not known yet is never shown as "off" for long: the
+/// The switch is on when the controller's client reports the bridge as
+/// registered (without a client: at least one). A state not known yet is
+/// never shown as "off" for long: the
 /// page hands over the application's last status (<see cref="Adopt"/>),
 /// which is shown at once, and so is every newer one the application learns
 /// while no call of the page runs. The row is insensitive while the state is
@@ -99,14 +115,16 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     public static readonly IReadOnlyList<TimeSpan> DefaultStatusRetryDelays =
         [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
 
-    // How install says that neither Claude app is installed: the start of
-    // its one-line reason on stderr, compared case-insensitively.
+    // How install says that neither Claude app is installed, or that the
+    // app --client named is not ("no Claude app found (Claude Code)"): the
+    // start of its one-line reason on stderr, compared case-insensitively.
     private const string NoClaudeAppPrefix = "no claude app found";
 
     // How the bridge starts every error line on stderr (main.go).
     private const string ProgramPrefix = "malachi-mcp:";
 
     private readonly string? bridge;
+    private readonly string? client;
     private readonly BridgeRunner runner;
     private readonly TimeSpan timeout;
     private readonly IReadOnlyList<TimeSpan> statusRetryDelays;
@@ -145,6 +163,11 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     /// <param name="time">The clock of the repeats; the system's when null.</param>
     /// <param name="logger">Receives the subcommand and the kind of a failure, never a path or a reason.</param>
     /// <param name="pending">Counts the controller's background work; one of its own when null.</param>
+    /// <param name="client">
+    /// The Claude app this controller registers with
+    /// (<see cref="McpStatus.ClientDesktop"/>, <see cref="McpStatus.ClientCode"/>),
+    /// or null for every app present.
+    /// </param>
     public McpRegistrationController(
         string? bridge,
         BridgeRunner? runner = null,
@@ -153,9 +176,15 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         ClaudeDesktopPackage? claudeDesktop = null,
         TimeProvider? time = null,
         ILogger<McpRegistrationController>? logger = null,
-        PendingWork? pending = null)
+        PendingWork? pending = null,
+        string? client = null)
     {
+        if (client is not null && client != McpStatus.ClientDesktop && client != McpStatus.ClientCode)
+        {
+            throw new ArgumentException("not a Claude app the bridge knows", nameof(client));
+        }
         this.bridge = bridge is null ? null : CanonicalPath(bridge);
+        this.client = client;
         this.runner = runner ?? new BridgeRunner();
         this.timeout = timeout ?? DefaultTimeout;
         this.statusRetryDelays = statusRetryDelays is null ? DefaultStatusRetryDelays : [.. statusRetryDelays];
@@ -191,7 +220,7 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         /// <summary>What is installed and what is registered.</summary>
         Status,
 
-        /// <summary>Register with every Claude app found.</summary>
+        /// <summary>Register with the controller's Claude app, or with every one found.</summary>
         Install,
 
         /// <summary>Remove the registration.</summary>
@@ -202,7 +231,11 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     [ObservableProperty]
     public partial McpStatus? Status { get; private set; }
 
-    /// <summary>What the switch shows: the last state the bridge confirmed.</summary>
+    /// <summary>
+    /// What the switch shows: the last state the bridge confirmed, for the
+    /// controller's <see cref="Client"/> (without one: registered with at
+    /// least one app).
+    /// </summary>
     [ObservableProperty]
     public partial bool IsRegistered { get; private set; }
 
@@ -217,17 +250,32 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     /// <summary>The bridge as it is registered and run (<see cref="CanonicalPath"/>); null without one.</summary>
     public string? Bridge => bridge;
 
+    /// <summary>
+    /// The Claude app this controller registers with (<see cref="McpStatus.ClientDesktop"/>,
+    /// <see cref="McpStatus.ClientCode"/>); null for every app present.
+    /// </summary>
+    public string? Client => client;
+
+    /// <summary>
+    /// The controller's app as the last status reports it
+    /// (<see cref="McpStatus.Client"/>); null without a client or a status,
+    /// or when the report does not list it.
+    /// </summary>
+    public McpClient? ClientStatus => client is null ? null : Status?.Client(client);
+
     /// <summary>The window closed: late replies are dropped (Swift <c>closed</c>).</summary>
     public bool IsClosed => scope.IsClosed;
 
     /// <summary>
     /// The arguments of one call: the subcommand, <c>--json</c>,
-    /// <c>--command</c> with <paramref name="commandPath"/>, and
+    /// <c>--command</c> with <paramref name="commandPath"/>,
     /// <c>--claude-desktop-config</c> with <paramref name="claudeDesktopConfig"/>
     /// when it is set (docs/mcp.md: the path flags go to every call, status
-    /// included, or the report describes the defaults).
+    /// included, or the report describes the defaults), and for an install
+    /// or uninstall <c>--client</c> with <paramref name="client"/> when it is
+    /// set (mcpsetup.run; status takes none).
     /// </summary>
-    public static IReadOnlyList<string> Arguments(Command command, string commandPath, string? claudeDesktopConfig)
+    public static IReadOnlyList<string> Arguments(Command command, string commandPath, string? claudeDesktopConfig, string? client = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(commandPath);
         List<string> arguments = [CommandName(command), "--json", "--command", commandPath];
@@ -235,6 +283,11 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         {
             arguments.Add("--claude-desktop-config");
             arguments.Add(claudeDesktopConfig);
+        }
+        if (client is not null && command != Command.Status)
+        {
+            arguments.Add("--client");
+            arguments.Add(client);
         }
         return arguments;
     }
@@ -374,7 +427,7 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
             return;
         }
         Status = status;
-        IsRegistered = status.IsRegistered;
+        IsRegistered = RegisteredOf(status);
         statusRetries = 0;
         SetDescription(null);
         SetEnabled(true);
@@ -448,10 +501,11 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         var run = runner;
         var limit = timeout;
         var desktop = claudeDesktop;
+        var app = client;
         // Off the UI thread, as Swift's nonisolated invoke: the process is
         // started and the package looked for from the thread pool.
         Task<(McpStatus? Status, McpCallFailure? Failure)> Invoke(CancellationToken cancellationToken) =>
-            Task.Run(() => InvokeAsync(run, path, command, desktop, limit, cancellationToken), CancellationToken.None);
+            Task.Run(() => InvokeAsync(run, path, command, desktop, app, limit, cancellationToken), CancellationToken.None);
         void Done(Outcome<(McpStatus? Status, McpCallFailure? Failure)> outcome) => Answered(my, command, outcome);
         if (command == Command.Status)
         {
@@ -479,7 +533,7 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         if (status is not null)
         {
             Status = status;
-            IsRegistered = status.IsRegistered;
+            IsRegistered = RegisteredOf(status);
             statusRetries = 0;
             // The bridge answers again: the page's own description is back.
             SetDescription(null);
@@ -506,12 +560,16 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
                 done?.Invoke(null);
                 return;
             }
-            ToastRequested?.Invoke(this, failure.Toast(registering: command == Command.Install));
+            ToastRequested?.Invoke(this, failure.Toast(registering: command == Command.Install, client));
         }
         SetEnabled(true);
         RegisteredChanged?.Invoke(this, IsRegistered);
         done?.Invoke(status);
     }
+
+    // What the switch shows of status: the registration in the controller's
+    // app, or in at least one without one.
+    private bool RegisteredOf(McpStatus status) => client is null ? status.IsRegistered : status.RegisteredIn(client);
 
     // Repeats the failed status check of call my after the next of the
     // status retry delays, unless a newer call came meanwhile (its answer is
@@ -598,12 +656,12 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     // Runs one subcommand and reads its status (Swift invoke): a failure is
     // a result, never an exception, except the end of a status with the page.
     private static async Task<(McpStatus? Status, McpCallFailure? Failure)> InvokeAsync(
-        BridgeRunner runner, string bridge, Command command, ClaudeDesktopPackage desktop, TimeSpan timeout, CancellationToken cancellationToken)
+        BridgeRunner runner, string bridge, Command command, ClaudeDesktopPackage desktop, string? client, TimeSpan timeout, CancellationToken cancellationToken)
     {
         BridgeRunnerOutput output;
         try
         {
-            var arguments = Arguments(command, bridge, desktop.IsInstalled ? desktop.ConfigPath : null);
+            var arguments = Arguments(command, bridge, desktop.IsInstalled ? desktop.ConfigPath : null, client);
             output = await runner.RunAsync(bridge, arguments, timeout, cancellationToken);
         }
         catch (BridgeRunnerException e)

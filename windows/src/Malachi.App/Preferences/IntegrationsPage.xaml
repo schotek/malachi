@@ -7,15 +7,23 @@ Port of macos/Sources/MalachiMail/Preferences/IntegrationsPaneViewController.swi
 GTK: preferences.blp integrations_page (its texts set from
 ui/internal/integrations in ui/internal/window/integrations_page.go). The
 page's description under the navigation's title ("Services beside your
-mail: issue trackers, calendars and CRM"), the group Connected Services
+mail: issue trackers, calendars, CRM and AI"), the group Connected Services
 (integrations_group) with every account that is not a mail account
-(AccountListSection: its description, the rows and the empty row
+(AccountListSection: its description, the rows — an AI provider account's
+with its "API key" capsule and today's tokens — and the empty row
 integrations_empty_row, "No integrations yet", "Add one from the list
-below"), then the group Available Services (integrations_available_group):
-a card per service of the catalogue (Integrations.Catalog: Jira, CalDAV
-Calendar, eWay-CRM) with its icon, name and description and its Add… button, which
-opens the service's assistant. Every text comes from Core's Integrations
-and is set from code.
+below", shown only while there is no row at all), then without a heading
+of their own the local AI integrations that are connected (Claude Desktop,
+Claude Code and ChatGPT (Codex), state of this client rather than accounts
+of the daemon: the icon, the name with the "This computer" capsule, what is
+known of it, Settings and Unregister / Disconnect), then
+the group Available Services (integrations_available_group): a card per
+entry of the catalogue (Integrations.Catalog: Jira, CalDAV Calendar,
+eWay-CRM, then the AI: Claude Desktop, Claude Code and ChatGPT while they
+are not connected, Anthropic API, OpenAI API, OpenAI-compatible server)
+with its icon, name, capsule and description and its Add… button, which
+opens the service's assistant or window. The cards and the local rows are
+built in code; every text comes from Core's Integrations.
 -->
 <UserControl
     x:Class="Malachi.App.Preferences.IntegrationsPage"
@@ -49,6 +57,12 @@ and is set from code.
                         AutomationProperties.HeadingLevel="Level2"
                         Style="{StaticResource SettingsGroupHeaderStyle}" />
                     <Border x:Name="ListSlot" />
+                    <!-- The local integrations' rows (IntegrationsPage.Local.cs), shown while one is connected. -->
+                    <StackPanel
+                        x:Name="LocalRows"
+                        AutomationProperties.AutomationId="LocalIntegrations"
+                        Spacing="4"
+                        Visibility="Collapsed" />
                 </StackPanel>
 
                 <StackPanel x:Name="AvailableGroup" Spacing="{StaticResource SettingsCardSpacing}">
@@ -56,24 +70,8 @@ and is set from code.
                         x:Name="AvailableHeader"
                         AutomationProperties.HeadingLevel="Level2"
                         Style="{StaticResource SettingsGroupHeaderStyle}" />
-                    <tk:SettingsCard x:Name="JiraService" AutomationProperties.AutomationId="JiraService">
-                        <Button
-                            x:Name="AddJiraButton"
-                            AutomationProperties.AutomationId="AddJiraIntegration"
-                            Click="OnAddJiraClick" />
-                    </tk:SettingsCard>
-                    <tk:SettingsCard x:Name="CalDAVService" AutomationProperties.AutomationId="CalDAVService">
-                        <Button
-                            x:Name="AddCalDAVButton"
-                            AutomationProperties.AutomationId="AddCalDAVIntegration"
-                            Click="OnAddCalDAVClick" />
-                    </tk:SettingsCard>
-                    <tk:SettingsCard x:Name="EwayService" AutomationProperties.AutomationId="EwayService">
-                        <Button
-                            x:Name="AddEwayButton"
-                            AutomationProperties.AutomationId="AddEwayIntegration"
-                            Click="OnAddEwayClick" />
-                    </tk:SettingsCard>
+                    <!-- A card per catalogue entry (IntegrationsPage.xaml.cs). -->
+                    <StackPanel x:Name="ServiceCards" Spacing="{StaticResource SettingsCardSpacing}" />
                 </StackPanel>
             </StackPanel>
         </Grid>

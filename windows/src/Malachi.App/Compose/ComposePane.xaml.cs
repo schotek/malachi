@@ -405,7 +405,7 @@ public sealed partial class ComposePane : UserControl, IComposeForm
 
     /// <summary>
     /// The account the window writes from, whose note of the user's profile
-    /// the rewrite and the writing bar carry (UserProfile.For).
+    /// the daemon appends for the rewrite and the writing bar.
     /// </summary>
     internal AccountId WritingAccount => Account.Id;
 

@@ -15,6 +15,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Assistants;
+using Malachi.Core.I18n;
 using Malachi.Core.Platform;
 
 namespace Malachi.Core.ChatGPT;
@@ -40,7 +41,7 @@ public sealed class CodexAssistantProvider : IAssistantProvider
     }
 
     /// <inheritdoc/>
-    public AssistantProviderID Id => AssistantProviderID.ChatGpt;
+    public string Name => L10n.T("ChatGPT (Codex, experimental)");
 
     /// <inheritdoc/>
     public string Model => options.Model();

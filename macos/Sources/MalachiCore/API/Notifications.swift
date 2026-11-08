@@ -84,6 +84,12 @@ public enum DaemonNotification: Sendable, Equatable {
     case boardChanged(BoardChangedNotification)
     /// Drafts of the threads named changed (`DraftsChangedNotification`).
     case draftsChanged(DraftsChangedNotification)
+    /// An event of a session of the daemon's assistant (`AssistantEvent`,
+    /// API/AIAPI.swift); only the connection whose session it is gets it.
+    case assistantEvent(AssistantEvent)
+    /// An `ai` account's usage of today changed
+    /// (`AssistantUsageChangedNotification`).
+    case assistantUsageChanged(AssistantUsageChangedNotification)
     case unknown(method: String)
 
     /// Decodes the params of a raw notification by its method. Throws when
@@ -106,6 +112,10 @@ public enum DaemonNotification: Sendable, Equatable {
             self = .boardChanged(envelope.params ?? BoardChangedNotification())
         case API.Notify.draftsChanged:
             self = .draftsChanged(try raw.params(DraftsChangedNotification.self))
+        case API.Notify.assistantEvent:
+            self = .assistantEvent(try raw.params(AssistantEvent.self))
+        case API.Notify.assistantUsageChanged:
+            self = .assistantUsageChanged(try raw.params(AssistantUsageChangedNotification.self))
         default:
             self = .unknown(method: raw.method)
         }

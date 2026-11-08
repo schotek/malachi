@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/ClaudeIntegrationSheetController.swift;
+GTK: claude_integration.blp (claude_integration_dialog, Adw.Dialog 560×420,
+260 high for Claude Desktop). The settings of one Claude app on this
+computer, Claude Desktop or Claude Code (one window for both, by the kind:
+Integrations.ClaudeAppText), opened from the app's row of Preferences →
+Integrations and from its catalogue entry, as an owned modal window over
+the Preferences (ModalDialog): the title bar with the app's name (a brand);
+the group MCP with its description, which a missing bridge or a status the
+bridge did not give replaces, and its row Register with Claude (its texts
+set in code: "Adds the malachi-mcp bridge to <app> on this computer", or
+that the app is not installed), which registers the bridge in that app only,
+insensitive while its state is not known, while a change runs and while the
+app is neither installed nor registered; for Claude Desktop under it, while
+a change waits for Claude Desktop to restart, the row Claude Desktop with
+Restart (macOS; GTK has no Claude Desktop restart); for Claude Code only the
+row Claude Code (the claude.exe the panel runs, Choose…, and in front of it
+the button of what the row offers: Sign In… or Get Claude Code…). Both
+groups were part of the AI page until the AI providers through their API
+came (docs/plans/ai-api.md §7.2), and one window with one switch for both
+apps before they were split. At the bottom Close.
+-->
+<Window
+    x:Class="Malachi.App.Preferences.ClaudeIntegrationWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls">
+    <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                    <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="Header"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="ClaudeIntegrationHeader"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False" />
+
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <StackPanel
+                    MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                    Padding="{StaticResource SettingsPagePadding}"
+                    Spacing="{StaticResource SettingsGroupSpacing}">
+                    <!-- mcp_group -->
+                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}"
+                            Text="{l:T Msgid='MCP'}" />
+                        <TextBlock
+                            x:Name="McpDescription"
+                            AutomationProperties.AutomationId="McpDescription"
+                            Style="{StaticResource SettingsGroupDescriptionStyle}"
+                            Text="{l:T Msgid='Lets AI assistants read your mail and prepare drafts through the Model Context Protocol.'}" />
+                        <tk:SettingsCard x:Name="RegisterRow" IsEnabled="False">
+                            <ToggleSwitch
+                                x:Name="RegisterSwitch"
+                                AutomationProperties.AutomationId="RegisterWithClaude"
+                                AutomationProperties.Name="{l:T Msgid='Register with Claude'}"
+                                Toggled="OnRegisterToggled" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="PendingRow" Visibility="Collapsed">
+                            <Button x:Name="RestartButton" AutomationProperties.AutomationId="RestartClaudeDesktop" Click="OnRestartClick" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+
+                    <!-- claude_code_group: Claude Code's window only -->
+                    <StackPanel x:Name="ClaudeCodeGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                        <tk:SettingsCard x:Name="ClaudeCodeRow">
+                            <tk:SettingsCard.Description>
+                                <TextBlock
+                                    x:Name="ClaudeCodeState"
+                                    AutomationProperties.AutomationId="ClaudeCodeState"
+                                    IsTextSelectionEnabled="True"
+                                    TextWrapping="Wrap" />
+                            </tk:SettingsCard.Description>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button
+                                    x:Name="ClaudeOfferButton"
+                                    AutomationProperties.AutomationId="ClaudeCodeOffer"
+                                    Click="OnClaudeOfferClick"
+                                    Visibility="Collapsed" />
+                                <Button x:Name="ClaudeChooseButton" AutomationProperties.AutomationId="ClaudeCodeChoose" Click="OnChooseClaudeClick" />
+                            </StackPanel>
+                        </tk:SettingsCard>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <Grid
+            Grid.Row="2"
+            Margin="12"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="CloseButton"
+                Grid.Column="1"
+                l:MnemonicLabel.Text="{l:T Msgid='_Close'}"
+                AutomationProperties.AutomationId="ClaudeIntegrationClose"
+                Click="OnCloseClick"
+                Style="{StaticResource AccentButtonStyle}" />
+        </Grid>
+
+        <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+    </Grid>
+</Window>

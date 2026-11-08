@@ -256,8 +256,8 @@ func (e *Editor) DropAtEnd(from int, s toolbar.Section) int {
 }
 
 // Reset is Restore Defaults: the client's default arrangement and the
-// empty list to write (the owner's decision; another client's items in
-// the key go too).
+// empty list to write (another client's items in the key go
+// too).
 func (e *Editor) Reset() []string {
 	e.stored = []string{}
 	e.layout = toolbar.DefaultFor(e.v, e.bar)

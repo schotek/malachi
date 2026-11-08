@@ -81,7 +81,7 @@ public enum CRM {
         public var saved: Bool
         /// A conversation's row (folded or not), which stands for its
         /// members in the folder rather than for one message: it offers
-        /// nothing (owner, 2026-10-17); the user unfolds it and saves the
+        /// nothing; the user unfolds it and saves the
         /// members.
         public var conversation: Bool
 

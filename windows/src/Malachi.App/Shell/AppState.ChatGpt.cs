@@ -3,6 +3,14 @@
 
 // Windows-first wiring from docs/chatgpt-integration.md; extends the port of
 // AppState.swift / ui/main.go without moving provider or OAuth rules into UI.
+// The in-app provider is chosen by the Assistant's source (Swift AppState
+// selectedProvider, GTK Provider()): Codex for ChatGPT, the daemon's
+// assistant over the chosen AI provider account (or its stand-in while the
+// account is not listed: ApiProviderOrUnavailable), null for Claude Code.
+// The consent over an account is the account's, worded by its provider
+// kind (AiAccount.ConsentTexts, the account dialog's; Swift
+// assistantConsent, GTK askAPIConsent) and recorded through the provider on
+// the account, never in a settings key.
 
 using System;
 using System.Collections.Generic;
@@ -35,8 +43,18 @@ public sealed partial class AppState
     /// <summary>The verified runtime for the application's ChatGPT grant.</summary>
     public CodexAssistantProvider Codex { get; private set; } = null!;
 
-    /// <summary>Null preserves the existing Claude execution path.</summary>
-    public IAssistantProvider? InAppProvider => Settings.AssistantProvider == AssistantProviderID.ChatGpt ? Codex : null;
+    /// <summary>
+    /// The provider the panel, the one-shot requests, the triage and Suggest
+    /// Reply run on: Codex for ChatGPT, the daemon's assistant over the
+    /// chosen ai account (its stand-in while the account cannot run yet),
+    /// null for the user's Claude Code (the existing execution path).
+    /// </summary>
+    public IAssistantProvider? InAppProvider => Assistant.Source switch
+    {
+        AssistantProviderSource.ChatGpt => Codex,
+        AssistantProviderSource.Account => Assistant.ApiProviderOrUnavailable(),
+        _ => null,
+    };
 
     /// <summary>Selection, executable, consent withdrawn or connected account changed (not a model: it applies from the next request).</summary>
     public event EventHandler? InAppProviderChanged;
@@ -91,6 +109,8 @@ public sealed partial class AppState
             // The board's own consent for the ChatGPT provider (the triage's run).
             HasBoardConsent = () => Settings.BoardChatGptConsentVersion == 1,
             AcceptBoardConsent = () => Settings.BoardChatGptConsentVersion = 1,
+            // The daemon builds the message of every turn.
+            Prompter = Prompter,
         }, ChatGpt, directories: new PrivateDirectory());
     }
 
@@ -129,17 +149,41 @@ public sealed partial class AppState
         Assistant.SetInAppProviderAvailable(found && connected, !found ? ChatGptText.MissingCodex : connected ? "" : ChatGptText.Reconnect);
     }
 
-    /// <summary>The active provider's disclosure, without reusing Anthropic's approval.</summary>
+    /// <summary>
+    /// The active provider's disclosure, without reusing Anthropic's
+    /// approval: ChatGPT's words, an ai account's by its provider kind
+    /// (<see cref="Malachi.Core.Model.AiAccount.ConsentTexts"/>), else Claude's; true allows.
+    /// Whoever asked records it (the provider's AcceptConsent, the settings'
+    /// key for Claude Code). An answer for another provider or runtime
+    /// generation than the one asked for does not count.
+    /// </summary>
     public async Task<bool> AskAssistantConsentAsync(Window? window)
     {
         var provider = Settings.AssistantProvider;
+        var generation = Assistant.ProviderGeneration;
         var runtime = InAppProvider;
         var texts = Core.Assistants.Assistant.PanelTexts();
-        var accepted = await Alerts.ConfirmAsync(window,
-            provider == AssistantProviderID.ChatGpt ? ChatGptText.ConsentHeading : texts.ConsentHeading,
-            provider == AssistantProviderID.ChatGpt ? ChatGptText.ConsentBody : texts.ConsentBody,
-            texts.Allow, Core.I18n.L10n.T("_Cancel"));
-        return accepted && !chatGptClosed && Settings.AssistantProvider == provider && ReferenceEquals(runtime, InAppProvider);
+        string heading;
+        string body;
+        switch (Assistant.Source)
+        {
+            case AssistantProviderSource.ChatGpt:
+                heading = ChatGptText.ConsentHeading;
+                body = ChatGptText.ConsentBody;
+                break;
+            case AssistantProviderSource.Account:
+                var c = Core.Model.AiAccount.ConsentTexts(Assistant.ApiAccount?.Config.Ai?.Provider ?? Core.Api.AiProvider.OpenAiCompatible);
+                heading = c.Heading;
+                body = c.Body;
+                break;
+            default:
+                heading = texts.ConsentHeading;
+                body = texts.ConsentBody;
+                break;
+        }
+        var accepted = await Alerts.ConfirmAsync(window, heading, body, texts.Allow, Core.I18n.L10n.T("_Cancel"));
+        return accepted && !chatGptClosed && Settings.AssistantProvider == provider
+            && generation == Assistant.ProviderGeneration && ReferenceEquals(runtime, InAppProvider);
     }
 
     /// <summary>Compose asks before opening the editor flyout, which a dialog would close.</summary>
@@ -148,6 +192,8 @@ public sealed partial class AppState
         var provider = InAppProvider;
         if (provider?.HasConsent ?? Settings.AssistantConsent) return true;
         if (!await AskAssistantConsentAsync(window) || !ReferenceEquals(provider, InAppProvider)) return false;
+        // The key for Claude Code; Codex's key or the account's consent
+        // (account.update through the provider) otherwise.
         if (provider is null) Settings.AssistantConsent = true;
         else provider.AcceptConsent();
         return true;

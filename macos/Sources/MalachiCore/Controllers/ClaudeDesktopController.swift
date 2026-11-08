@@ -4,8 +4,12 @@
 import Foundation
 import os
 
-/// Claude Desktop around a change of "Register with Claude" (the MCP switch
-/// of Settings → AI, `MCPRegistrationController`). Claude Desktop reads its
+/// Claude Desktop around a change of its "Register with Claude" (the switch
+/// of the Claude Desktop sheet in Settings → Integrations and its row's
+/// Unregister, `MCPRegistrationController` for client `claude-desktop`;
+/// every write here registers or unregisters the bridge in Claude Desktop
+/// only, `--client claude-desktop`, since the two Claude apps are
+/// separate integrations). Claude Desktop reads its
 /// MCP servers only when it starts and, while it runs, rewrites its
 /// configuration file (`claude_desktop_config.json`, which holds its own
 /// preferences too) from memory many times a day, so an entry that
@@ -49,20 +53,26 @@ public final class ClaudeDesktopController {
         public var quit: @MainActor (_ timeout: Duration) async -> Bool
         /// Starts Claude Desktop.
         public var launch: @MainActor () -> Void
+        /// Whether the application may quit Claude Desktop at all: not the
+        /// App Store build, whose sandbox sends it no quit event. Without
+        /// it a change is written at once and, while Claude Desktop runs,
+        /// stays pending without a Restart (`change`, `restartPending`).
+        public var canRestart: Bool
 
         public init(
             isRunning: @escaping @MainActor () -> Bool, quit: @escaping @MainActor (_ timeout: Duration) async -> Bool,
-            launch: @escaping @MainActor () -> Void
+            launch: @escaping @MainActor () -> Void, canRestart: Bool = true
         ) {
             self.isRunning = isRunning
             self.quit = quit
             self.launch = launch
+            self.canRestart = canRestart
         }
     }
 
-    /// Runs `malachi-mcp install` (true) or `uninstall` (false) and returns
-    /// the status the bridge reported afterwards, nil when the call failed
-    /// (`MCPRegistrationController.change`).
+    /// Runs `malachi-mcp install` (true) or `uninstall` (false) for Claude
+    /// Desktop and returns the status the bridge reported afterwards, nil
+    /// when the call failed (`MCPRegistrationController.change`).
     public typealias Write = @MainActor (_ registered: Bool) async -> MCPStatus?
 
     /// What the user answered to "Restart Claude Desktop?".
@@ -94,6 +104,8 @@ public final class ClaudeDesktopController {
     public var onStatus: (@MainActor (MCPStatus) -> Void)?
 
     private let platform: Platform
+    /// Whether a Restart is offered at all (`Platform.canRestart`).
+    public var canRestart: Bool { platform.canRestart }
     private let quitTimeout: Duration
     private let own: Write
     private var ownRegistration: MCPRegistrationController?
@@ -117,12 +129,12 @@ public final class ClaudeDesktopController {
 
     /// With an `MCPRegistrationController` of its own over `bridge`
     /// (`Paths.mcpBridge`; nil when there is none beside the application)
-    /// as its write: no toasts, a failure is logged.
+    /// for Claude Desktop as its write: no toasts, a failure is logged.
     public convenience init(
         bridge: String?, platform: Platform, runner: BridgeRunner = BridgeRunner(),
         timeout: Duration = MCPRegistrationController.defaultTimeout
     ) {
-        let registration = MCPRegistrationController(bridge: bridge, runner: runner, timeout: timeout)
+        let registration = MCPRegistrationController(bridge: bridge, client: MCPStatus.clientDesktop, runner: runner, timeout: timeout)
         self.init(platform: platform) { await registration.change(registered: $0) }
         ownRegistration = registration
     }
@@ -157,8 +169,9 @@ public final class ClaudeDesktopController {
         return platform.isRunning()
     }
 
-    /// The AI page's switch flipped to `want`. `status` is the page's last
-    /// status, `write` the page's own write (its switch and row follow it).
+    /// The Claude Desktop switch flipped to `want` (or its row's Unregister).
+    /// `status` is the page's last status, `write` the page's own write for
+    /// Claude Desktop (its switch and row follow it).
     /// Without the offer (`offersRestart`) the change is written at once;
     /// otherwise `ask` decides: the restart, or the write now with the
     /// change pending while Claude Desktop runs.
@@ -166,6 +179,12 @@ public final class ClaudeDesktopController {
         guard !closed else { return }
         guard offersRestart(status) else {
             await serialized { await writeNow(want, write, later: false) }
+            return
+        }
+        // Nothing to offer: the change goes in now and waits for Claude
+        // Desktop's own next start.
+        guard platform.canRestart else {
+            await serialized { await writeNow(want, write, later: true) }
             return
         }
         let answer = await ask()
@@ -182,6 +201,7 @@ public final class ClaudeDesktopController {
     /// through `write` (the page's). Nothing when nothing is pending by
     /// the time it runs.
     public func restartPending(write: Write) async {
+        guard platform.canRestart else { return }
         await serialized {
             guard let want = pending else { return }
             await restart(want, write)

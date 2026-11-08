@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"sync/atomic"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
@@ -16,9 +17,11 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/apiassistant"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/chatgpt"
+	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/mcpsetup"
 	"github.com/schotek/malachi/ui/internal/settings"
@@ -88,6 +91,10 @@ type Assistant struct {
 	// bridge is malachi-mcp; "" without one (not found, or the Flatpak
 	// build, where the Claude apps can neither see nor start it).
 	bridge string
+	// daemonBridge is malachi-mcp for the daemon's own sessions over an
+	// AI provider account (ai_provider.go), found in the Flatpak build
+	// too: the daemon starts it inside the sandbox.
+	daemonBridge string
 
 	// locator finds Claude Code for the panel (In App).
 	locator *assistantpanel.Locator
@@ -116,6 +123,21 @@ type Assistant struct {
 
 	// profile is the user's profile (assistant_profile.go).
 	profile profileState
+	// rpc is the application's RPC client once AttachBoardTriage gave it
+	// (nil before): the prompts of every assistant request come from the
+	// daemon through it (assistant_prompter.go).
+	rpc atomic.Pointer[client.Client]
+
+	// The AI provider accounts (ai_provider.go): the daemon's ai accounts
+	// as last listed (aiAccountsKnown once any listing answered,
+	// aiAccountsGen drops an older listing's late answer), the provider
+	// over the chosen one for this runtime generation, and the sessions
+	// of the daemon's assistant the window's notifications feed.
+	aiAccounts      []api.Account
+	aiAccountsKnown bool
+	aiAccountsGen   int
+	apiProvider     *apiassistant.Provider
+	apiSessions     *apiassistant.Sessions
 }
 
 // NewAssistant looks for the bridge and follows the assistant keys of s;
@@ -127,13 +149,15 @@ func NewAssistant(s *settings.Store, log *slog.Logger) *Assistant {
 		handlers:  make(map[assistant.Target]bool),
 		observers: make(map[int]func()),
 	}
-	if os.Getenv("FLATPAK_ID") == "" {
-		if p, err := mcpsetup.Locate(); err == nil {
+	if p, err := mcpsetup.Locate(); err == nil {
+		a.daemonBridge = p
+		if os.Getenv("FLATPAK_ID") == "" {
 			a.bridge = p
-		} else {
-			a.log.Debug("no MCP bridge; the Assistant stays off", "err", err)
 		}
+	} else {
+		a.log.Debug("no MCP bridge; the Assistant stays off", "err", err)
 	}
+	a.apiSessions = apiassistant.NewSessions()
 	a.locator = assistantpanel.NewLocator(s, os.Environ(), glibLoop{}, assistantDirectory(), a.log)
 	for _, key := range []string{settings.KeyAssistantMenu, settings.KeyAssistantTarget} {
 		s.OnChanged(key, a.notify)
@@ -188,14 +212,17 @@ func (a *Assistant) Refresh() {
 // supported target, and whether the panel finds Claude Code and the
 // bridge.
 func (a *Assistant) RefreshHandlers() {
-	claude := a.locator.Locate() != ""
+	claude := a.locator != nil && a.locator.Locate() != ""
 	found := make(map[assistant.Target]bool, len(assistantTargets))
 	for _, t := range assistantTargets {
 		switch {
 		case t == assistant.App:
-			if a.usesChatGPT() {
+			switch a.source() {
+			case assistant.SourceChatGPT:
 				found[t] = a.bridge != "" && a.chatGPTReady()
-			} else {
+			case assistant.SourceAccount:
+				found[t] = a.daemonBridge != "" && a.apiReady()
+			default:
 				found[t] = a.bridge != "" && claude
 			}
 		case supportedTarget(t):
@@ -261,9 +288,16 @@ func (a *Assistant) registered() bool {
 	return a.status != nil && a.status.Registered()
 }
 
+// registeredIn says whether the bridge is registered in client id
+// (mcpsetup.ClientDesktop, ClientCode), as last reported; false while no
+// status is known.
+func (a *Assistant) registeredIn(id string) bool {
+	return a.status != nil && a.status.RegisteredIn(id)
+}
+
 // shown says whether the Assistant appears at all (assistant.Shown).
 func (a *Assistant) shown() bool {
-	if a.usesChatGPT() && a.target() == assistant.App {
+	if a.source() != assistant.SourceClaude && a.target() == assistant.App {
 		return a.settings.AssistantMenu()
 	}
 	return assistant.Shown(a.settings.AssistantMenu(), a.registered())
@@ -282,8 +316,11 @@ func (a *Assistant) availability(t assistant.Target) assistant.Availability {
 	case !supportedTarget(t):
 		return assistant.Availability{}
 	case t == assistant.App:
-		if a.usesChatGPT() {
+		switch a.source() {
+		case assistant.SourceChatGPT:
 			return assistant.Availability{Handler: a.bridge != "" && a.chatGPTReady(), Registered: true}
+		case assistant.SourceAccount:
+			return assistant.Availability{Handler: a.daemonBridge != "" && a.apiReady(), Registered: true}
 		}
 		return assistant.Availability{Handler: a.handlers[t], Registered: a.registered()}
 	}
@@ -326,8 +363,11 @@ func (a *Assistant) panelShown() bool {
 // looked up; whether it is signed in is asked when a request runs. Its
 // changes come through OnChange.
 func (a *Assistant) CanRunInApp() bool {
-	if a.usesChatGPT() {
+	switch a.source() {
+	case assistant.SourceChatGPT:
 		return a.panelShown() && a.chatGPTReady()
+	case assistant.SourceAccount:
+		return a.panelShown() && a.apiReady()
 	}
 	return a.panelShown() && a.claudeFound
 }
@@ -341,7 +381,7 @@ func (a *Assistant) newRequest(provider func() assistantpanel.Provider) *assista
 	return assistantpanel.NewRequest(assistantpanel.RequestConfig{
 		Settings: a.settings, Locator: a.locator, Loop: glibLoop{}, Log: a.log,
 		Directory: assistantDirectory(), Env: os.Environ(),
-		Provider: provider,
+		Provider: provider, Prompter: a.prompter(), Language: uiLanguageTag,
 	})
 }
 
@@ -362,23 +402,34 @@ func (a *Assistant) canAskFile(contentType string) bool {
 // problem says why target t cannot run the message actions; "" when it
 // can.
 func (a *Assistant) problem(t assistant.Target) string {
-	if t == assistant.App && a.usesChatGPT() {
-		txt := assistant.ChatGPTText(tr)
-		if os.Getenv("FLATPAK_ID") != "" {
-			return txt.FlatpakUnavailable
+	if t == assistant.App {
+		switch a.source() {
+		case assistant.SourceChatGPT:
+			return a.chatGPTProblem()
+		case assistant.SourceAccount:
+			return a.apiProblem()
 		}
-		if chatgpt.Locate(a.settings.AssistantCodexPath()) == "" {
-			return txt.NativeMissingCodex
-		}
-		if !a.chatGPTReady() {
-			return txt.Reconnect
-		}
-		if a.bridge == "" {
-			return assistant.PanelTexts(tr).ToolsMissing
-		}
-		return ""
 	}
 	return assistant.Problem(tr, t, a.availability(t))
+}
+
+// chatGPTProblem says why ChatGPT (Codex) cannot run the message actions;
+// "" when it can.
+func (a *Assistant) chatGPTProblem() string {
+	txt := assistant.ChatGPTText(tr)
+	if os.Getenv("FLATPAK_ID") != "" {
+		return txt.FlatpakUnavailable
+	}
+	if chatgpt.Locate(a.settings.AssistantCodexPath()) == "" {
+		return txt.NativeMissingCodex
+	}
+	if !a.chatGPTReady() {
+		return txt.Reconnect
+	}
+	if a.bridge == "" {
+		return assistant.PanelTexts(tr).ToolsMissing
+	}
+	return ""
 }
 
 // OnChange calls f after the handlers, the status or an assistant key

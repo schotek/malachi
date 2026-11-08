@@ -93,7 +93,7 @@ public static partial class Board
     public sealed record SuggestReplyInputs
     {
         /// <summary>The in-app provider.</summary>
-        public AssistantProviderID Provider { get; init; } = AssistantProviderID.Claude;
+        public string Provider { get; init; } = Assistant.ProviderClaude;
 
         /// <summary><see cref="SuggestReplyOffered"/> for the case shown.</summary>
         public required bool Offered { get; init; }
@@ -222,7 +222,7 @@ public static partial class Board
         {
             return SuggestReplyView.Hidden;
         }
-        var chatGpt = i.Provider == AssistantProviderID.ChatGpt;
+        var local = Assistant.SourceOf(i.Provider) == AssistantProviderSource.Claude;
         var v = new SuggestReplyView
         {
             Shown = true,
@@ -243,21 +243,21 @@ public static partial class Board
             return v with
             {
                 Enabled = false,
-                Note = chatGpt ? L10n.T("Codex was not found. Choose a native Codex executable.") : Assistant.PanelTexts().NotFound,
+                Note = NotFoundWords(i.Provider, Assistant.PanelTexts().NotFound),
             };
         }
         if (i.SignedIn == false)
         {
-            return v with { Enabled = false, Note = chatGpt ? L10n.T("Reconnect to ChatGPT") : Assistant.SignInTexts().Hint };
+            return v with { Enabled = false, Note = NotSignedInWords(i.Provider, Assistant.SignInTexts().Hint) };
         }
         if (i.State is SuggestReplyState.Failed failed && failed.Case == i.CaseId)
         {
-            var note = chatGpt && failed.Failure is SuggestReplyFailure.NotFound or SuggestReplyFailure.NotSignedIn
+            var note = !local && failed.Failure is SuggestReplyFailure.NotFound or SuggestReplyFailure.NotSignedIn
                 ? L10n.T(
                     "The suggested reply failed: %s.",
                     failed.Failure == SuggestReplyFailure.NotFound
-                        ? L10n.T("Codex was not found. Choose a native Codex executable.")
-                        : L10n.T("Reconnect to ChatGPT"))
+                        ? NotFoundWords(i.Provider, "")
+                        : NotSignedInWords(i.Provider, ""))
                 : Text.SuggestReplyFailed(failed.Failure);
             return v with { Note = note, NoteIsFailure = true };
         }

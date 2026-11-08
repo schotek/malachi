@@ -16,8 +16,10 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/accountwizard"
+	"github.com/schotek/malachi/ui/internal/aiaccount"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/calendar"
+	"github.com/schotek/malachi/ui/internal/integrations"
 	"github.com/schotek/malachi/ui/internal/rules"
 	"github.com/schotek/malachi/ui/internal/rulesctl"
 	"github.com/schotek/malachi/ui/internal/toolbar"
@@ -46,7 +48,10 @@ import (
 // else of a new one; with MALACHI_RULES_SAMPLES=1 over invented rules and
 // accounts, no daemon), crm-dialog (the Save to eWay-CRM dialog over invented
 // suggestions, no daemon), eway-wizard (the eWay-CRM account assistant;
-// Next asks the daemon), toolbar-editor[:<bar>] (the toolbar editor on
+// Next asks the daemon), ai-account (the dialog that adds an
+// OpenAI-compatible AI provider account), claude-desktop-integration and
+// claude-code-integration (the settings of that Claude app),
+// chatgpt-integration (the settings of ChatGPT), toolbar-editor[:<bar>] (the toolbar editor on
 // mail, board-list, board-flow or calendar, else on the window's bar),
 // prefs-general (Preferences on the General page, its Toolbar group
 // last), print (win.print; with MALACHI_PRINT_PDF=<path> saved there as
@@ -92,6 +97,12 @@ const (
 	devRulesEditor
 	devCrmDialog
 	devEwayWizard
+	// devAIAccount opens the dialog that adds an OpenAI-compatible AI
+	// provider account; devClaudeIntegration (Text "desktop" or "code")
+	// and devChatGPTIntegration the settings of the local AI integrations.
+	devAIAccount
+	devClaudeIntegration
+	devChatGPTIntegration
 	// devToolbarEditor opens the toolbar editor on a bar (Text, "" for
 	// the window's), devPrefsGeneral Preferences → General.
 	devToolbarEditor
@@ -183,6 +194,14 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind = devCrmDialog
 		case name == "eway-wizard":
 			st.Kind = devEwayWizard
+		case name == "ai-account":
+			st.Kind = devAIAccount
+		case name == "claude-desktop-integration":
+			st.Kind, st.Text = devClaudeIntegration, "desktop"
+		case name == "claude-code-integration":
+			st.Kind, st.Text = devClaudeIntegration, "code"
+		case name == "chatgpt-integration":
+			st.Kind = devChatGPTIntegration
 		case name == "toolbar-editor" || strings.HasPrefix(name, "toolbar-editor:"):
 			st.Kind, st.Text = devToolbarEditor, strings.TrimPrefix(strings.TrimPrefix(name, "toolbar-editor"), ":")
 		case name == "prefs-general":
@@ -398,6 +417,16 @@ func (w *Window) runDevStep(n int, st devStep) {
 		d.Present(w)
 	case devEwayWizard:
 		accountwizard.NewEway(w.client, w.log).Present(w)
+	case devAIAccount:
+		aiaccount.New(w.client, w.log, api.AIOpenAICompatible, nil).Present(w)
+	case devClaudeIntegration:
+		kind := integrations.LocalClaudeCode
+		if st.Text == "desktop" {
+			kind = integrations.LocalClaudeDesktop
+		}
+		newClaudeIntegration(kind, w.settings, w.assist, w.log).Present(w)
+	case devChatGPTIntegration:
+		newChatGPTIntegration(w.settings, w.assist, w.log).Present(w)
 	case devSize:
 		w.SetDefaultSize(st.Width, st.Height)
 	case devQuit:

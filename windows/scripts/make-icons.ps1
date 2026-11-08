@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Renders the icon of MalachiMail.exe, a multi-size .ico, from
-# docs/malachi_icon.png: the counterpart of the icon target of macos/Makefile
+# data/icons/malachi_icon.png: the counterpart of the icon target of macos/Makefile
 # (sips and iconutil), with the System.Drawing that Windows PowerShell ships.
 # Run by the MalachiIcons target of Directory.Build.targets and by
 # build.ps1 icons. With -PngFile it also writes the icon the desktop

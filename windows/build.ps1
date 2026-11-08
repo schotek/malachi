@@ -12,7 +12,7 @@
 #   go       malachid.exe and malachi-mcp.exe for -Arch into build\windows\go\<arch>\,
 #            for the host's architecture also into build\ (.mcp.json, F5, make run-backend)
 #   build    build the solution (Debug)
-#   icons    render the application icon from docs\malachi_icon.png
+#   icons    render the application icon from data\icons\malachi_icon.png
 #   app      go, then publish the app and the keyring helper self-contained and assemble
 #            build\windows\<arch>\Malachi Mail\ (Release)
 #   test     every test project of the solution (Debug); the UI smoke tests
@@ -342,7 +342,7 @@ function Invoke-SolutionBuild {
 }
 
 function Invoke-Icons {
-    & (Join-Path $Here 'scripts\make-icons.ps1') -Source (Join-Path $Root 'docs\malachi_icon.png') -OutFile $IconFile
+    & (Join-Path $Here 'scripts\make-icons.ps1') -Source (Join-Path $Root 'data\icons\malachi_icon.png') -OutFile $IconFile
     Write-Host "rendered $IconFile"
 }
 

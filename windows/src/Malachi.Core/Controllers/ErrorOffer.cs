@@ -31,4 +31,13 @@ public enum ErrorOffer
     /// that is missing or lapsed (<see cref="AssistantPanelController.Reconnect"/>).
     /// </summary>
     Reconnect,
+
+    /// <summary>
+    /// "Set Up in Integrations…" (<see cref="Assistants.ApiStrings.SetUpInIntegrations"/>)
+    /// beside a failure of a session the daemon runs over an ai account that
+    /// Integrations mend: the account's consent is not given or the provider
+    /// refused its key (docs/plans/ai-api.md §7.4); the view opens the
+    /// account's settings (Swift <c>setUpInIntegrations</c>).
+    /// </summary>
+    SetUpInIntegrations,
 }

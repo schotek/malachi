@@ -78,7 +78,7 @@ extension Board {
 
     /// What `suggestReplyView` looks at.
     public struct SuggestReplyInputs: Sendable, Equatable {
-        public var provider: AssistantProviderID = .claude
+        public var provider: String = Assistant.providerClaude
         /// `suggestReplyOffered` for the case shown.
         public var offered: Bool
         /// The feature can exist: the assistant shown with the In App
@@ -97,7 +97,7 @@ extension Board {
 
         public init(
             offered: Bool, available: Bool, claudeFound: Bool, signedIn: Bool?, state: SuggestReplyState, caseID: CaseID,
-            provider: AssistantProviderID = .claude, followUp: Bool = false
+            provider: String = Assistant.providerClaude, followUp: Bool = false
         ) {
             self.provider = provider
             self.followUp = followUp
@@ -160,17 +160,17 @@ extension Board {
         }
         if !i.claudeFound {
             v.enabled = false
-            v.note = i.provider == .chatgpt ? L10n.T("Codex was not found. Choose a native Codex executable.") : Assistant.panelTexts().notFound
+            v.note = notFoundWords(i.provider, claude: Assistant.panelTexts().notFound)
             return v
         }
         if i.signedIn == false {
             v.enabled = false
-            v.note = i.provider == .chatgpt ? L10n.T("Reconnect to ChatGPT") : Assistant.signInTexts().hint
+            v.note = notSignedInWords(i.provider, claude: Assistant.signInTexts().hint)
             return v
         }
         if case .failed(let id, let f) = i.state, id == i.caseID {
-            if i.provider == .chatgpt, f == .notFound || f == .notSignedIn {
-                v.note = L10n.T("The suggested reply failed: %s.", f == .notFound ? L10n.T("Codex was not found. Choose a native Codex executable.") : L10n.T("Reconnect to ChatGPT"))
+            if Assistant.sourceOf(i.provider) != .claude, f == .notFound || f == .notSignedIn {
+                v.note = L10n.T("The suggested reply failed: %s.", f == .notFound ? notFoundWords(i.provider, claude: "") : notSignedInWords(i.provider, claude: ""))
             } else { v.note = Text.suggestReplyFailed(f) }
             v.noteIsFailure = true
         }

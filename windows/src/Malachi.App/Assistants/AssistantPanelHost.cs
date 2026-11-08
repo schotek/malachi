@@ -21,7 +21,11 @@
 // calendar's quick actions show while some account has the calendar
 // capability (followed as the sidebar's accounts change), and Show in
 // Calendar of an answer is the main window's Day view of the event's day
-// with the event's detail (docs/calendar.md §5.9).
+// with the event's detail (docs/calendar.md §5.9). Over an AI provider
+// account the footer names where the mail goes (AppState.AssistantFooter)
+// and Set Up in Integrations… opens the account's dialog, else Preferences →
+// Integrations (AppState.OpenAssistantAccount); both follow the
+// Assistant's account listing.
 
 using System;
 using System.Collections.Generic;
@@ -77,8 +81,9 @@ internal sealed class AssistantPanelHost : IDisposable
             directories: new PrivateDirectory(),
             processLogger: state.Logs.CreateLogger<ClaudeCodeProcess>());
         Controller.Provider = state.InAppProvider;
-        // Every conversation carries the user's profile, every account's note.
-        Controller.Profile = () => state.CurrentProfile;
+        // The daemon builds every prompt, the user's profile with every
+        // account's note in the system prompt of a conversation.
+        Controller.Prompter = state.Prompter;
         Controller.Consent = () => state.AskAssistantConsentAsync(window);
         Controller.ReconnectProvider = ReconnectChatGptAsync;
         state.InAppProviderChanged += OnProviderChanged;
@@ -103,6 +108,10 @@ internal sealed class AssistantPanelHost : IDisposable
                 view.UpdateQuickActions();
             }
         });
+        // Where the mail goes, and what mends an ai account (its dialog).
+        view.FooterText = () => state.AssistantFooter;
+        view.OpenIntegrations = () => state.OpenAssistantAccount(window);
+        state.Assistant.Changed += OnAssistantChanged;
         view.AttachProfile(
             state.Profile,
             text => ProfileDialogs.EditProposalAsync(state.Alerts, window, text, state.Profile.Limits.Proposal),
@@ -120,6 +129,7 @@ internal sealed class AssistantPanelHost : IDisposable
     public void Dispose()
     {
         state.InAppProviderChanged -= OnProviderChanged;
+        state.Assistant.Changed -= OnAssistantChanged;
         mailbox.EntriesChanged -= OnEntriesChanged;
         calendarToken.Cancel();
         view.DetachProfile();
@@ -143,7 +153,15 @@ internal sealed class AssistantPanelHost : IDisposable
         return true;
     }
 
-    private void OnProviderChanged(object? sender, EventArgs e) => Controller.Provider = state.InAppProvider;
+    private void OnProviderChanged(object? sender, EventArgs e)
+    {
+        Controller.Provider = state.InAppProvider;
+        view.ProviderChanged();
+    }
+
+    // The ai accounts were listed again (a name, a model, a refused key):
+    // the subtitle and the footer follow.
+    private void OnAssistantChanged(object? sender, EventArgs e) => view.ProviderChanged();
 
     // The accounts may have changed: the calendar's quick actions follow.
     private void OnEntriesChanged(object? sender, EventArgs e) => view.UpdateQuickActions();

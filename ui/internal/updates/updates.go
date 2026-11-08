@@ -237,8 +237,8 @@ func NotesFor(s *api.UpdateStatus, date func(time.Time) string, tr Translator) *
 }
 
 // NewsURL is the page More Information opens: the project's news, where
-// every release is described (the owner's choice over the release's
-// infoUrl, 2026-11-02).
+// every release is described (rather than the release's
+// infoUrl).
 const NewsURL = "https://malachimail.app/news.html"
 
 // NotesBlocks reads notes as Markdown, with links as plain text.

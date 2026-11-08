@@ -33,7 +33,7 @@ import (
 
 // SamplesEnv is the switch of the sample calendar, read once at start
 // like MALACHI_BOARD_SAMPLES: "1" gives a window NewSampleSource instead
-// of the daemon's source. A development aid, never the owner's data.
+// of the daemon's source. A development aid, never the user's data.
 const SamplesEnv = "MALACHI_CALENDAR_SAMPLES"
 
 // Write is a write as the in-memory source received it: the method's

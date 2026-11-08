@@ -74,6 +74,10 @@ public struct AccountKind: WireEnum {
     /// no folders; never shown in Mail, only on Settings → Integrations
     /// (docs/eway.md D1).
     public static let eway: AccountKind = "eway"
+    /// A model API the daemon's assistant runs over (the `ai` block; the
+    /// API key is `Credentials.password`): no mail, no folders; never
+    /// shown in Mail, only on Settings → Integrations (docs/api.md §4.18).
+    public static let ai: AccountKind = "ai"
 }
 
 /// api.GraphSource: who holds the OAuth2 session of a Graph account.
@@ -308,6 +312,10 @@ public struct Capability: WireEnum {
     /// The account can have address books (graph, caldav; docs/api.md
     /// §4.19); it does not change with consent or sync state.
     public static let contacts: Capability = "contacts"
+    /// The daemon's assistant can run over this account
+    /// (assistant.session*, docs/api.md §4.18). An ai account has exactly
+    /// this one.
+    public static let assistant: Capability = "assistant"
 }
 
 /// api.JiraDeployment: where a Jira site runs.

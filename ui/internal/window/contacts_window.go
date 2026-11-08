@@ -30,7 +30,7 @@ import (
 // contacts_detail.go and contacts_form.go). One window for the
 // application, opened by app.contacts from the main menu, Show Contact of
 // an address chip and More Details… of Add to Contacts; it has no
-// shortcut of its own (owner's answer 5). The controllers' changes come
+// shortcut of its own. The controllers' changes come
 // inside the widgets' own signals, so the view renders on the next idle.
 // Every string of a book or a contact goes through SetUseMarkup(false)
 // (rule 3); every text is ui/internal/contacts'.

@@ -18,7 +18,7 @@ import (
 // section, opens the editor over the window and, every 150 ms, moves it
 // one place with Ctrl+↓ and later Ctrl+↑ through the rows' own shortcut
 // controllers (as a key press does), then by drops, printing each step to
-// stderr. It reproduces the owner's moves of 2026-11-04 without a pointer.
+// stderr. It reproduces a manual sequence of moves without a pointer.
 func (w *Window) devToolbarWalk() {
 	if w.settings != nil {
 		w.settings.SetToolbarLayout(toolbar.BarMail, []string{"mode", "contacts", "newMessage", "flexibleSpace",

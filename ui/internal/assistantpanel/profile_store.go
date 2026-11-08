@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
-	"github.com/schotek/malachi/ui/internal/assistant"
 )
 
 // ProfileCaller calls the daemon (the window's RPC client).
@@ -23,8 +22,9 @@ type ProfileCaller interface {
 const profileTimeout = 15 * time.Second
 
 // ProfileStore is the application's copy of the user's profile
-// (docs/api.md §4.18): the profile with the names of its accounts for the
-// prompts (Profile), the pending proposals and the limits for Preferences →
+// (docs/api.md §4.18): the profile and the names of its accounts
+// (Stored, Accounts; the daemon appends the profile to the prompts
+// itself), the pending proposals and the limits for Preferences →
 // AI → About You and the panel's cards. One per application; it reads the
 // profile at start (Refresh) and again on notify.assistantProfileChanged
 // and notify.accountsChanged, and writes through Set and Resolve. A daemon
@@ -76,10 +76,9 @@ func (s *ProfileStore) Stored() api.AssistantProfile { return s.result.Profile }
 // Limits are the daemon's limits.
 func (s *ProfileStore) Limits() api.ProfileLimits { return s.result.Limits }
 
-// Profile is the profile for the prompts, with the names of its accounts.
-func (s *ProfileStore) Profile() assistant.Profile {
-	return assistant.ProfileFrom(s.result.Profile, s.accounts)
-}
+// Accounts are the accounts as last listed (account.list), for the names
+// of the profile's notes.
+func (s *ProfileStore) Accounts() []api.Account { return slices.Clone(s.accounts) }
 
 // Proposals are the pending proposals, oldest first.
 func (s *ProfileStore) Proposals() []api.ProfileProposal { return slices.Clone(s.result.Proposals) }

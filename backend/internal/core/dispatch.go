@@ -289,7 +289,7 @@ func (k *kindOutbox) Wake(accountID string) bool {
 
 // kindOrder is the order the dispatchers reach their supervisors in (Run,
 // Reload, States); a kind not listed comes after these, by name.
-var kindOrder = []api.AccountKind{api.AccountIMAP, api.AccountGraph, api.AccountJira, api.AccountCalDAV, api.AccountEway}
+var kindOrder = []api.AccountKind{api.AccountIMAP, api.AccountGraph, api.AccountJira, api.AccountCalDAV, api.AccountEway, api.AccountAI}
 
 // sortedKinds is the keys of a dispatch table in kindOrder.
 func sortedKinds[V any](by map[api.AccountKind]V) []api.AccountKind {

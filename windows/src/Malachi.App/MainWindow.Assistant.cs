@@ -117,6 +117,14 @@ public sealed partial class MainWindow
         host.FollowSelection();
     }
 
+    /// <summary>
+    /// Quitting, before the connection closes: the panel's conversation ends
+    /// for good, so the stop of a session the daemon runs over an ai account
+    /// reaches the daemon (AppState.StopAssistantSessionsAsync). Idempotent;
+    /// the window's Closed closes it again.
+    /// </summary>
+    internal void CloseAssistantConversation() => assistantHost?.Controller.Close();
+
     // assistant.go syncAssistantActions: something is selected and nothing
     // of it is queued in the Outbox (not on the server yet).
     private static bool CanAsk(Core.Controllers.ListController list)

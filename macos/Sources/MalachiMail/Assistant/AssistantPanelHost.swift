@@ -58,6 +58,7 @@ final class AssistantPanelHost {
             socket: state.paths.socket)
         self.controller = controller
         controller.provider = { [weak state] in state?.selectedProvider }
+        controller.prompter = state.prompter
         controller.reconnectProvider = { [weak state] in
             guard let state else { return false }
             do { try await state.chatGPT.signIn() } catch { return false }
@@ -65,9 +66,12 @@ final class AssistantPanelHost {
             state.triage.recheckSignIn()
             return true
         }
-        controller.profile = { [weak state] in state?.profile.profile ?? Assistant.Profile() }
         viewController = AssistantPanelViewController(controller: controller, profile: state.profile)
         viewController.onOpenProfile = { [weak state] in state?.hooks.openAISettings?() }
+        // "Set Up in Integrations…" of a failure over an `ai` account.
+        viewController.onOpenIntegrations = { [weak state] in state?.hooks.openIntegrationsSettings?() }
+        // Where the mail goes: ChatGPT's, the account's destination, Claude's.
+        viewController.footerText = { [weak state] in state?.assistantFooter ?? Assistant.panelTexts().footer }
 
         controller.consent = { [weak state, weak mainWindow] in
             await state?.assistantConsent(on: mainWindow?.window) ?? false

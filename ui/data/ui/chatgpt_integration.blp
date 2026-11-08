@@ -1,0 +1,69 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The settings of ChatGPT (Codex) (Preferences → Integrations → ChatGPT,
+// docs/plans/ai-api.md §7.2): where Codex is, the ChatGPT connection
+// (Continue with ChatGPT, Disconnect), the model and Manage usage. Object
+// IDs are looked up from ui/internal/window/chatgpt_integration.go; keep
+// them in sync. Every text comes from ui/internal/assistant (ChatGPTText),
+// set in Go.
+Adw.Dialog chatgpt_integration_dialog {
+  content-width: 560;
+  content-height: 460;
+
+  child: Adw.ToastOverlay toast_overlay {
+    child: Adw.ToolbarView {
+      [top]
+      Adw.HeaderBar {
+        title-widget: Adw.WindowTitle window_title {};
+      }
+
+      content: Adw.PreferencesPage {
+        Adw.PreferencesGroup chatgpt_group {
+          Adw.ActionRow codex_executable {
+            use-markup: false;
+            subtitle-selectable: true;
+
+            [suffix]
+            Button codex_choose {
+              valign: center;
+            }
+
+            [suffix]
+            Button codex_install {
+              valign: center;
+            }
+          }
+
+          Adw.ActionRow chatgpt_connection {
+            use-markup: false;
+
+            [suffix]
+            Button chatgpt_sign_in {
+              valign: center;
+            }
+
+            [suffix]
+            Button chatgpt_disconnect {
+              valign: center;
+            }
+          }
+
+          Adw.ComboRow chatgpt_model {
+            use-markup: false;
+          }
+
+          Adw.ActionRow chatgpt_usage {
+            use-markup: false;
+
+            [suffix]
+            Button chatgpt_manage_usage {
+              valign: center;
+            }
+          }
+        }
+      };
+    };
+  };
+}

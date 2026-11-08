@@ -8,16 +8,26 @@ import Darwin
     public let connection: ChatGPTConnection
     public let settings: Settings
     public let directory: URL
+    /// Builds the message of each turn (`assistant.prompt` of the
+    /// session's purpose); without one a turn cannot be sent.
+    public var prompter: (any AssistantPrompter)?
     private var sessions: [CodexSession] = []
+    /// assistantpanel.Provider.Name: the panel's subtitle.
+    public var name: String { ChatGPTText.name }
+    /// assistantpanel.Provider.Model: the panel's model setting.
+    public var model: String { settings.assistantChatGPTModel }
     public var available: Bool { executable != nil }
     public var connected: Bool { connection.connected }
     public var hasConsent: Bool { settings.assistantChatGPTConsentVersion == 1 }
     public func acceptConsent() { settings.assistantChatGPTConsentVersion = 1 }
-    public init(connection: ChatGPTConnection, settings: Settings, directory: URL) {
-        self.connection = connection; self.settings = settings; self.directory = directory
+    public init(connection: ChatGPTConnection, settings: Settings, directory: URL, prompter: (any AssistantPrompter)? = nil) {
+        self.connection = connection; self.settings = settings; self.directory = directory; self.prompter = prompter
         connection.onInvalidated = { [weak self] in self?.cancelAll() }
     }
+    /// The codex executable, nil in the App Store build, which never runs
+    /// it (`Distribution.allowsLocalAgents`).
     public var executable: String? {
+        guard settings.distribution.allowsLocalAgents else { return nil }
         if !settings.assistantCodexPath.isEmpty { return Self.nativeExecutable(settings.assistantCodexPath) ? settings.assistantCodexPath : nil }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [home + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex"] + (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map { String($0) + "/codex" }
@@ -47,7 +57,7 @@ import Darwin
         guard connected else { throw ChatGPTFailure("chatgpt_not_connected") }
         guard let executable else { throw ChatGPTFailure("codex_not_found") }
         var spec = spec; if spec.modelID.isEmpty && !spec.boardConsent { spec.modelID = settings.assistantChatGPTModel }
-        let session = CodexSession(executable: executable, spec: spec, connection: connection, root: directory)
+        let session = CodexSession(executable: executable, spec: spec, connection: connection, root: directory, prompter: prompter)
         sessions.append(session)
         session.cleaned = { [weak self, weak session] in self?.sessions.removeAll { $0 === session } }
         do { try await session.initialize(); return session }
@@ -81,6 +91,7 @@ import Darwin
     var running: Bool { !closing && codex?.running == true }
     private let executable: String
     private let spec: AssistantSessionSpec
+    private let prompter: (any AssistantPrompter)?
     private let root: URL
     private let directory: URL
     private let policy: CodexPolicy
@@ -94,16 +105,16 @@ import Darwin
     private var lease: Int32 = -1
     private var deadline: Task<Void, Never>?
     private var startup: Task<Void, Never>?
-    init(executable: String, spec: AssistantSessionSpec, connection: ChatGPTConnection, root: URL) {
-        self.executable = executable; self.spec = spec; self.root = root
+    init(executable: String, spec: AssistantSessionSpec, connection: ChatGPTConnection, root: URL, prompter: (any AssistantPrompter)? = nil) {
+        self.executable = executable; self.spec = spec; self.root = root; self.prompter = prompter
         directory = root.appendingPathComponent("session-" + UUID().uuidString)
         policy = CodexPolicy(allowed: spec.tools?.allowed ?? [])
         gateway = CodexInferenceGateway(connection: connection, policy: policy)
     }
     func initialize() async throws {
         // Again here, so that no path starts the bridge with arguments the
-        // gate did not pass.
-        try CodexPolicy.check(spec.tools)
+        // gate did not pass; the gate puts --in-app first.
+        let bridgeArgs = try CodexPolicy.check(spec.tools)
         startup = Task { @MainActor [weak self] in try? await Task.sleep(for: .seconds(30)); if !Task.isCancelled { self?.terminate() } }
         defer { startup?.cancel(); startup = nil }
         try privateDirectory(root)
@@ -115,8 +126,9 @@ import Darwin
         try privateDirectory(home); try privateDirectory(work)
         var catalog: [[String: Any]] = []
         if let tools = spec.tools {
-            // The application's own bridge (`Assistant.mcpConfig` does the same).
-            var args = tools.socket.isEmpty ? [] : ["--socket", tools.socket]; args += ["--in-app"]; args += tools.bridgeArgs
+            // The application's own bridge (`Assistant.mcpConfig` does the
+            // same): --socket, then the daemon's arguments of the purpose.
+            var args = tools.socket.isEmpty ? [] : ["--socket", tools.socket]; args += bridgeArgs
             let peer = try CodexJSONRPC(executable: tools.bridge, arguments: args, environment: CodexPolicy.environment(ProcessInfo.processInfo.environment), directory: work)
             bridge = peer; bridgeExited = false
             peer.onExit = { [weak self] in self?.bridgeExited = true; self?.terminate() }
@@ -165,7 +177,18 @@ import Darwin
         guard let data = result["data"] as? [[String: Any]] else { throw ChatGPTFailure("codex_model_catalog_unavailable") }
         return data.compactMap { value in guard let id = value["model"] as? String, !id.isEmpty else { return nil }; return CodexModel(id: id, name: value["displayName"] as? String ?? id) }
     }
-    func submit(_ input: String) async throws {
+    /// One turn: the message the daemon builds of `input` (the prompter,
+    /// assistant.prompt of the session's purpose); Go `session.Submit`.
+    /// `spec.input` is ignored: Codex takes its turns from here alone.
+    func submit(_ input: PromptInput) async throws {
+        guard let prompter else { throw ChatGPTFailure("chatgpt_no_prompter") }
+        let res = try await prompter.prompt(AssistantPromptParams(
+            purpose: spec.purpose, language: spec.language, accountId: spec.noteAccountID,
+            trigger: spec.trigger, runId: spec.runID, input: input))
+        try await submit(message: res.message)
+    }
+    /// Sends `message` as one turn.
+    private func submit(message input: String) async throws {
         guard running, !active, let codex else { throw ChatGPTFailure("codex_session_busy_or_closed") }
         active = true; text = ""; calls = []; usage = nil
         // A failure of an earlier turn is not this turn's.

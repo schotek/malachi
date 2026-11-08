@@ -51,6 +51,18 @@ final class AppState {
         /// Integration+Jira): the menus and the issue cards' pills ask it
         /// when they open; nil offers no status changes.
         var issueActions: (@MainActor () -> IssueActionsController?)?
+        /// Opens the Settings window on the Integrations page: the
+        /// assistant panel's "Set Up in Integrations…" over an `ai` account
+        /// (docs/plans/ai-api.md §7.4).
+        var openIntegrationsSettings: (@MainActor () -> Void)?
+        /// Opens the dialog of an AI provider account (kind `ai`); the Bool
+        /// starts it with Replace Key… (a refused key: the status bar's
+        /// Sign In, the triage's control, GTK `editAIAccount`).
+        var editAIAccount: (@MainActor (Account, Bool) -> Void)?
+        /// Opens the dialog that adds an AI provider account of the kind
+        /// (the App Store build's "Add Anthropic API…",
+        /// `WebsiteFeaturesDialog`).
+        var addAIAccount: (@MainActor (AIProvider) -> Void)?
     }
 
     let client: RPCClient
@@ -74,7 +86,7 @@ final class AppState {
     let codex: CodexProvider
     private var providerSettingsTokens: [Settings.ChangeToken] = []
     let claudeCode: ClaudeCodeLocator
-    /// Claude Desktop around a change of "Register with Claude": the offer
+    /// Claude Desktop around a change of its "Register with Claude": the offer
     /// to restart it and the change it still has to pick up, for the
     /// application's run (docs/mcp.md; macOS leads, GTK follows).
     let claudeDesktop: ClaudeDesktopController
@@ -98,6 +110,13 @@ final class AppState {
     /// board"): one request at a time for the application, started from a
     /// case's detail; the main window lists the board again after it.
     let boardReply: BoardReplyController
+    /// Builds every prompt of the assistant (docs/api.md §4.18
+    /// assistant.prompt): the panel, the compose window's rewrite and
+    /// writing bar, the search in the user's own words, the board's triage
+    /// and suggested reply ask through it, whichever provider then runs
+    /// the model (Claude Code, Codex, or the daemon itself over an `ai`
+    /// account).
+    let prompter: DaemonPrompter
     /// The calendar (Integration+Calendar): the windows' sources, the
     /// alerts, the routing of the calendar's notifications.
     let calendar: AppCalendar
@@ -129,6 +148,17 @@ final class AppState {
     /// Settings → Security follow (Integration+Signatures wires it).
     let signatures = SignatureState()
     private var boardTriageTokens: [NotificationHub.Token] = []
+    /// The daemon's notifications and the connection for the AI provider
+    /// accounts of the assistant (`AssistantController+API.swift`, GTK
+    /// window/notify.go and window.go `showConnectionState`).
+    private var assistantAPITokens: [NotificationHub.Token] = []
+    private var assistantAPIToken: AssistantController.Token?
+    /// The assistant's runtime generation as last seen by
+    /// `assistantRuntimeChanged`, and whether the change under way came
+    /// from a settings key or the ChatGPT connection, which the triage and
+    /// Suggest Reply follow themselves.
+    private var seenProviderGeneration = 0
+    private var providerChangeFromKeys = false
 
     var hooks = Hooks()
 
@@ -148,10 +178,15 @@ final class AppState {
         calendar = AppCalendar(client: client, settings: settings, hub: notifications)
         profile = ProfileStore(client: client)
         updates = UpdateController(client: client)
+        let prompter = DaemonPrompter(client: client)
+        self.prompter = prompter
         let claudeCode = ClaudeCodeLocator(settings: settings, directory: ClaudeCodeLocator.defaultDirectory)
         self.claudeCode = claudeCode
+        // The daemon's client for the `ai` accounts: they are listed when
+        // the connection comes (`wireAssistantAPI`), not here.
         let assistant = AssistantController(
-            bridge: paths.mcpBridge?.path, settings: settings, locator: claudeCode, handler: Self.handlesScheme)
+            bridge: paths.mcpBridge?.path, daemonBridge: paths.daemonBridge?.path, settings: settings,
+            locator: claudeCode, client: client, handler: Self.handlesScheme)
         self.assistant = assistant
         let service = ClaudeDesktopService()
         claudeDesktopService = service
@@ -176,7 +211,7 @@ final class AppState {
         let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("io.github.schotek.Malachi/assistant/chatgpt", isDirectory: true)
         chatGPT = ChatGPTConnection(store: ChatGPTKeychain(directory: support), browser: ChatGPTSystemBrowser(), validator: ChatGPTAppleSignature())
-        codex = CodexProvider(connection: chatGPT, settings: settings, directory: cache)
+        codex = CodexProvider(connection: chatGPT, settings: settings, directory: cache, prompter: prompter)
         assistant.chatGPT = codex
         assistant.provider = { [weak self] in self?.selectedProvider }
         configureRequest(triage.request)
@@ -193,8 +228,13 @@ final class AppState {
             guard let self, self.settings.assistantChatGPTConsentVersion != 1 else { return }
             self.providerSettingChanged(.assistantChatGPTConsentVersion)
         })
-        Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
+        // The App Store build never runs Codex, so it never reads the
+        // ChatGPT sign-in from the keychain either.
+        if settings.distribution.allowsLocalAgents {
+            Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
+        }
         wireBoardTriage()
+        wireAssistantAPI()
         wireProfile()
         wireUpdates()
         EventEditorManager.shared.state = self
@@ -202,9 +242,53 @@ final class AppState {
         rules = AppRules(state: self)
     }
 
-    var selectedProvider: (any AssistantProvider)? { settings.assistantProvider == .chatgpt ? codex : nil }
+    /// The provider the panel, the one-shot requests, the triage and
+    /// Suggest Reply run on (GTK `Provider()` / `boardProvider()`): Codex
+    /// for ChatGPT, the daemon's assistant over the chosen `ai` account
+    /// (or its stand-in while the account is not listed or has no client:
+    /// `apiProviderOrUnavailable`), nil for the user's Claude Code.
+    var selectedProvider: (any AssistantProvider)? {
+        switch assistant.source {
+        case .chatgpt: return codex
+        case .account: return assistant.apiProviderOrUnavailable()
+        case .claude: return nil
+        }
+    }
+
+    /// The assistant's consent of the provider in effect, as the compose
+    /// window asks it before its popover: the settings' key for Claude
+    /// Code and ChatGPT, the account's own for an `ai` account
+    /// (`AssistantController.apiConsent`; GTK `HasAssistantConsent`).
+    var hasAssistantConsent: Bool {
+        assistant.usesAPI ? assistant.apiConsent : settings.selectedAssistantConsent
+    }
+
+    /// Records an accepted consent for the provider in effect: the key, or
+    /// the account's through the daemon (`acceptAPIConsent`; never a key).
+    func recordAssistantConsent() {
+        if assistant.usesAPI {
+            assistant.acceptAPIConsent()
+        } else {
+            settings.selectedAssistantConsent = true
+        }
+    }
+
+    /// The assistant panel's footer: where the mail it is asked about goes
+    /// (ChatGPT's, an `ai` account's destination, else Claude's; GTK
+    /// assistant_panel.go `syncShown`).
+    var assistantFooter: String {
+        switch assistant.source {
+        case .chatgpt: return ChatGPTText.footer
+        case .account:
+            guard let acc = assistant.apiAccount else { return Assistant.panelTexts().footer }
+            return AssistantController.apiFooter(acc)
+        case .claude: return Assistant.panelTexts().footer
+        }
+    }
+
     func configureRequest(_ request: AssistantRequest) {
         request.provider = { [weak self] in self?.selectedProvider }
+        request.prompter = prompter
     }
     /// A settings key of the providers changed: Codex's sessions end only
     /// when it concerns the provider in effect (a change for ChatGPT while
@@ -220,27 +304,102 @@ final class AppState {
         if AssistantRequest.providerChangeConcernsActive(key, settings: settings) {
             codex.cancelAll()
         }
-        assistant.providerChanged()
+        // A change to or from an `ai` account is a runtime generation too
+        // (the provider over the account is built anew).
+        runtimeChanged(fromKeys: true)
     }
 
     /// The ChatGPT connection changed (connected, signed out, reconnected):
     /// what runs over it ends only while ChatGPT is the provider; the
     /// triage and Suggest Reply learn it here, as no settings key changed.
     private func chatGPTConnectionChanged() {
-        if settings.assistantProvider == .chatgpt {
+        if settings.assistantProvider == Assistant.providerChatGPT {
             codex.cancelAll()
             triage.providerChanged()
             boardReply.providerChanged()
         }
+        runtimeChanged(fromKeys: true)
+    }
+
+    /// A new runtime generation of the assistant from a settings key or
+    /// the ChatGPT connection: `assistantRuntimeChanged` must not tell the
+    /// triage and Suggest Reply again (they follow those themselves).
+    private func runtimeChanged(fromKeys: Bool) {
+        providerChangeFromKeys = fromKeys
+        defer { providerChangeFromKeys = false }
         assistant.providerChanged()
     }
+
+    /// The AI provider accounts of the assistant (`AssistantController
+    /// +API.swift`; GTK window/notify.go, window.go `showConnectionState`,
+    /// main.go): the sessions of the daemon's assistant get its events, the
+    /// accounts are listed again on notify.accountsChanged, on a usage
+    /// change (the account's state may have moved with the turn) and on
+    /// every connection made, and the sessions end with the connection.
+    private func wireAssistantAPI() {
+        let assistant = assistant
+        assistantAPITokens.append(notifications.addAssistantEvent { e in
+            assistant.apiSessions.handle(e)
+        })
+        assistantAPITokens.append(notifications.addAssistantUsageChanged { _ in
+            assistant.accountsChanged()
+        })
+        assistantAPITokens.append(notifications.addAccountsChanged {
+            assistant.accountsChanged()
+        })
+        assistantAPITokens.append(notifications.addConnectionState { s in
+            if Self.isConnected(s) {
+                assistant.accountsChanged()
+            } else {
+                assistant.apiDisconnected()
+            }
+        })
+        if Self.isConnected(notifications.connectionState) {
+            assistant.accountsChanged()
+        }
+        // A runtime generation the accounts bring (the chosen account's
+        // configuration or switch changed, the account listed or gone,
+        // GTK `runtimeChanged`): a triage run or a suggested reply under
+        // way over the old provider stops, as for a settings key.
+        seenProviderGeneration = assistant.providerGeneration
+        assistantAPIToken = assistant.onChange { [weak self] in self?.assistantRuntimeChanged() }
+    }
+
+    private func assistantRuntimeChanged() {
+        guard assistant.providerGeneration != seenProviderGeneration else { return }
+        seenProviderGeneration = assistant.providerGeneration
+        guard !providerChangeFromKeys else { return }
+        triage.providerChanged()
+        boardReply.providerChanged()
+    }
+
+    /// "Send Mail to Claude?" (the panel's consent) on `window` for the
+    /// provider in effect: ChatGPT's words, an `ai` account's by its
+    /// provider kind (`AIAccount.consentTexts`, the account dialog's; GTK
+    /// `AskAssistantConsent` / `askAPIConsent`), else Claude's; true
+    /// allows. Whoever asked records it (`recordAssistantConsent`, the
+    /// controllers' own through the provider). An answer for another
+    /// provider or runtime generation than the one asked for does not count.
     func assistantConsent(on window: NSWindow?) async -> Bool {
         let t = Assistant.panelTexts()
-        let openAI = settings.assistantProvider == .chatgpt
         let generation = assistant.providerGeneration
         let selected = settings.assistantProvider
-        let allowed = await alerts.confirm(on: window, heading: openAI ? ChatGPTText.consentHeading : t.consentHeading,
-            body: openAI ? ChatGPTText.consentBody : t.consentBody, confirmLabel: t.allow, declineLabel: t.cancel)
+        let heading: String
+        let body: String
+        switch assistant.source {
+        case .chatgpt:
+            heading = ChatGPTText.consentHeading
+            body = ChatGPTText.consentBody
+        case .account:
+            let c = AIAccount.consentTexts(for: assistant.apiAccount?.config.ai?.provider ?? .openaiCompatible)
+            heading = c.heading
+            body = c.body
+        case .claude:
+            heading = t.consentHeading
+            body = t.consentBody
+        }
+        let allowed = await alerts.confirm(
+            on: window, heading: heading, body: body, confirmLabel: t.allow, declineLabel: t.cancel)
         return allowed && generation == assistant.providerGeneration && selected == settings.assistantProvider
     }
 
@@ -282,15 +441,13 @@ final class AppState {
         if Self.isConnected(notifications.connectionState) {
             store.refresh()
         }
-        triage.profile = { [weak store] in store?.profile ?? Assistant.Profile() }
-        boardReply.profile = { [weak store] in store?.profile ?? Assistant.Profile() }
     }
 
     /// Whether the daemon can be asked in connection state `s`.
     static func isConnected(_ s: ConnectionController.ConnectionState) -> Bool {
         switch s {
         case .connected, .infoFailed: return true
-        case .connecting, .protocolMismatch, .unavailable, .stopping: return false
+        case .connecting, .protocolMismatch, .otherDaemon, .unavailable, .stopping: return false
         }
     }
 
@@ -302,10 +459,28 @@ final class AppState {
         let t = Assistant.panelTexts()
         let generation = assistant.providerGeneration
         let selected = settings.assistantProvider
+        let heading: String
+        let body: String
+        switch assistant.source {
+        case .chatgpt:
+            heading = ChatGPTText.boardHeading
+            body = ChatGPTText.boardBody
+        case .account:
+            // The board's heading with the sentence naming where the mail
+            // goes (GTK `askAPIBoardConsent`); the triage records the
+            // consent on the account through the provider.
+            heading = Board.Text.triageConsentHeading
+            if let acc = assistant.apiAccount {
+                body = AssistantController.apiBoardConsentBody(acc)
+            } else {
+                body = L10n.format(Assistant.apiText().boardConsentBody, [assistant.apiBrand])
+            }
+        case .claude:
+            heading = Board.Text.triageConsentHeading
+            body = Board.Text.triageConsentBody
+        }
         let allowed = await alerts.confirm(
-            on: window, heading: settings.assistantProvider == .chatgpt ? ChatGPTText.boardHeading : Board.Text.triageConsentHeading,
-            body: settings.assistantProvider == .chatgpt ? ChatGPTText.boardBody : Board.Text.triageConsentBody,
-            confirmLabel: t.allow, declineLabel: t.cancel)
+            on: window, heading: heading, body: body, confirmLabel: t.allow, declineLabel: t.cancel)
         return allowed && generation == assistant.providerGeneration && selected == settings.assistantProvider
     }
 
@@ -323,6 +498,11 @@ final class AppState {
         async let reply: Void = boardReply.cancelAndCleanUp()
         await triage.cancelAndEnd()
         await reply
+        // The daemon's assistant gets the sessionStop of every session
+        // ended above (the panel's, the requests', the board's) while the
+        // connection still stands (ui/main.go `WaitAPISessions`; at most
+        // `AssistantController.apiSessionStopWait`).
+        await assistant.waitAPISessions()
     }
 
     /// Whether an application handles links of `scheme` (LaunchServices),
@@ -409,6 +589,8 @@ final class NotificationHub {
     private var messagesChanged = HandlerList<MessagesChangedNotification>()
     private var boardChanged = HandlerList<BoardChangedNotification>()
     private var draftsChanged = HandlerList<DraftsChangedNotification>()
+    private var assistantEvent = HandlerList<AssistantEvent>()
+    private var assistantUsageChanged = HandlerList<AssistantUsageChangedNotification>()
     private var calendarNotification = HandlerList<CalendarNotification>()
     private var assistantProfileChanged = HandlerList<Void>()
     private var updateChanged = HandlerList<Void>()
@@ -461,6 +643,19 @@ final class NotificationHub {
     /// for their drafts again (`MailboxController.handleDraftsChanged`).
     func addDraftsChanged(_ f: @escaping @MainActor (DraftsChangedNotification) -> Void) -> Token {
         draftsChanged.add(f)
+    }
+
+    /// notify.assistantEvent: an event of a session of the daemon's
+    /// assistant over an `ai` account (docs/api.md §4.18); the session's
+    /// owner matches `sessionId`.
+    func addAssistantEvent(_ f: @escaping @MainActor (AssistantEvent) -> Void) -> Token {
+        assistantEvent.add(f)
+    }
+
+    /// notify.assistantUsageChanged: an `ai` account's usage of today
+    /// changed; whoever shows it asks assistant.usage again.
+    func addAssistantUsageChanged(_ f: @escaping @MainActor (AssistantUsageChangedNotification) -> Void) -> Token {
+        assistantUsageChanged.add(f)
     }
 
     /// notify.assistantProfileChanged: the application's `ProfileStore`
@@ -562,6 +757,10 @@ final class NotificationHub {
             boardChanged.fire(b)
         case .draftsChanged(let d):
             draftsChanged.fire(d)
+        case .assistantEvent(let e):
+            assistantEvent.fire(e)
+        case .assistantUsageChanged(let u):
+            assistantUsageChanged.fire(u)
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }

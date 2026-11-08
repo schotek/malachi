@@ -25,7 +25,7 @@ final class JiraAccountViewController: NSViewController, NSTableViewDataSource, 
     var onCancel: (() -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: "")
-    private let banner = JiraAccountBannerView()
+    private let banner = PrefsBannerView()
     private let pageView = WizardPageView()
     private let progress = JiraWizardProgress()
     private let cancelButton = WizardCancelButton()
@@ -477,56 +477,6 @@ final class JiraAccountViewController: NSViewController, NSTableViewDataSource, 
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
         false
-    }
-}
-
-/// The page's banner: a callout card with a warning symbol and the text
-/// (why the spaces could not be listed, why Save did nothing), as
-/// `WizardBannerView`, but with the text pinned between the symbol and the
-/// card's edge, so that it wraps at the width of the page whatever width
-/// the label had while the banner was hidden.
-@MainActor
-private final class JiraAccountBannerView: NSView {
-    private let label = PrefsWrappingLabel("")
-    private let symbolView = CalloutCard.symbolView()
-
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        setContentHuggingPriority(.required, for: .vertical)
-        CalloutCard.show("exclamationmark.triangle.fill", .warning, in: symbolView)
-        let content = NSView()
-        symbolView.translatesAutoresizingMaskIntoConstraints = false
-        label.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(symbolView)
-        content.addSubview(label)
-        NSLayoutConstraint.activate([
-            symbolView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            symbolView.centerYAnchor.constraint(equalTo: content.centerYAnchor),
-            symbolView.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor),
-            symbolView.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor),
-            label.leadingAnchor.constraint(equalTo: symbolView.trailingAnchor, constant: CalloutCard.spacing),
-            label.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            label.topAnchor.constraint(equalTo: content.topAnchor),
-            label.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-        ])
-        CalloutCard.install(content, in: self)
-        isHidden = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("not used")
-    }
-
-    /// Shows the banner with `text`, or hides it for nil.
-    func reveal(_ text: String?) {
-        if let text {
-            label.stringValue = text
-            isHidden = false
-        } else {
-            isHidden = true
-        }
     }
 }
 

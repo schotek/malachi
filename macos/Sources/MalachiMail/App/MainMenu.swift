@@ -373,7 +373,7 @@ enum MainMenu {
         m.addItem(item("Zoom", #selector(NSWindow.performZoom(_:))))
         m.addItem(.separator())
         // The Contacts window (docs/plans/address-book.md W2 ①), without a
-        // shortcut (the owner's answer 5).
+        // shortcut.
         let contacts = item(ContactBook.windowTitle, Action.showContacts)
         contacts.image = NSImage(systemSymbolName: "person.text.rectangle", accessibilityDescription: nil)
         m.addItem(contacts)

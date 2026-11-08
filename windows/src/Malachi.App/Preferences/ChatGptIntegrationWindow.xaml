@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/ChatGPTIntegrationSheetController.swift;
+GTK: chatgpt_integration.blp (chatgpt_integration_dialog, Adw.Dialog 560×460).
+The settings of ChatGPT (Codex), opened from the ChatGPT row of Preferences →
+Integrations and from its catalogue entry, as an owned modal window over the
+Preferences (ModalDialog): the title bar with the integration's name; one
+group (chatgpt_group) with its description, the row Codex (the codex.exe it
+runs, Get Codex… and Choose…), the row Account (Continue with ChatGPT or
+Disconnect), the row Model (the provider's default and Codex's catalogue)
+and the row Manage usage. The rows were part of the AI page until the AI
+providers through their API came (docs/plans/ai-api.md §7.2). Its texts come
+from Core (ChatGptText) and are set from code. At the bottom Close.
+-->
+<Window
+    x:Class="Malachi.App.Preferences.ChatGptIntegrationWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls">
+    <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                    <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="Header"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="ChatGptIntegrationHeader"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False" />
+
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <StackPanel
+                    MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                    Padding="{StaticResource SettingsPagePadding}"
+                    Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        x:Name="ChatGptDescription"
+                        AutomationProperties.AutomationId="ChatGptDescription"
+                        Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                    <tk:SettingsCard x:Name="CodexRow">
+                        <tk:SettingsCard.Description>
+                            <TextBlock x:Name="CodexState" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="CodexInstallButton" AutomationProperties.AutomationId="CodexInstall" Click="OnInstallCodexClick" />
+                            <Button x:Name="CodexChooseButton" AutomationProperties.AutomationId="CodexChoose" Click="OnChooseCodexClick" />
+                        </StackPanel>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="ChatGptAccountRow">
+                        <tk:SettingsCard.Description>
+                            <TextBlock x:Name="ChatGptAccountState" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="ChatGptSignInButton" AutomationProperties.AutomationId="ChatGptSignIn" Click="OnChatGptSignInClick" />
+                            <Button x:Name="ChatGptDisconnectButton" AutomationProperties.AutomationId="ChatGptDisconnect" Click="OnChatGptDisconnectClick" />
+                        </StackPanel>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="ChatGptModelRow">
+                        <ComboBox x:Name="ChatGptModelBox" MinWidth="220" AutomationProperties.AutomationId="ChatGptModel" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="ChatGptUsageRow">
+                        <Button x:Name="ChatGptUsageButton" AutomationProperties.AutomationId="ChatGptUsage" Click="OnChatGptUsageClick" />
+                    </tk:SettingsCard>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <Grid
+            Grid.Row="2"
+            Margin="12"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="CloseButton"
+                Grid.Column="1"
+                l:MnemonicLabel.Text="{l:T Msgid='_Close'}"
+                AutomationProperties.AutomationId="ChatGptIntegrationClose"
+                Click="OnCloseClick"
+                Style="{StaticResource AccentButtonStyle}" />
+        </Grid>
+
+        <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+    </Grid>
+</Window>

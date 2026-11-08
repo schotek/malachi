@@ -146,6 +146,8 @@ public struct AccountConfig: Codable, Sendable, Equatable {
     public var caldav: CalDAVConfig?
     /// Kind `eway` only.
     public var eway: EwayConfig?
+    /// Kind `ai` only (docs/api.md §4.1, §4.18).
+    public var ai: AIConfig?
     /// The calendar part of a graph or caldav account; nil on a graph
     /// account = calendar sync off.
     public var calendar: CalendarConfig?
@@ -156,7 +158,7 @@ public struct AccountConfig: Codable, Sendable, Equatable {
         name: String, email: String, displayName: String? = nil, kind: AccountKind? = nil,
         imap: ServerConfig? = nil, smtp: ServerConfig? = nil, oauth2: OAuth2Config? = nil,
         graph: GraphConfig? = nil, jira: JiraConfig? = nil, caldav: CalDAVConfig? = nil,
-        eway: EwayConfig? = nil, calendar: CalendarConfig? = nil, syncIntervalSeconds: Int? = nil
+        eway: EwayConfig? = nil, ai: AIConfig? = nil, calendar: CalendarConfig? = nil, syncIntervalSeconds: Int? = nil
     ) {
         self.name = name
         self.email = email
@@ -169,6 +171,7 @@ public struct AccountConfig: Codable, Sendable, Equatable {
         self.jira = jira
         self.caldav = caldav
         self.eway = eway
+        self.ai = ai
         self.calendar = calendar
         self.syncIntervalSeconds = syncIntervalSeconds
     }
@@ -509,7 +512,8 @@ public struct EndpointTestResult: Codable, Sendable, Equatable {
 /// carry `cloud` or `datacenter`, and `gateway` when the gateway route was
 /// used), `caldav` for a CalDAV account (its `capabilities` among
 /// `calendar-access`, `calendar-auto-schedule` and `sync-collection`),
-/// `eway` for an eWay-CRM account (one sign-in).
+/// `eway` for an eWay-CRM account (one sign-in), `ai` for an AI provider
+/// account (one listing of its models, which the result carries).
 public struct AccountTestResult: Codable, Sendable, Equatable {
     public var imap: EndpointTestResult?
     public var smtp: EndpointTestResult?
@@ -517,13 +521,16 @@ public struct AccountTestResult: Codable, Sendable, Equatable {
     public var jira: EndpointTestResult?
     public var caldav: EndpointTestResult?
     public var eway: EndpointTestResult?
+    public var ai: AITestResult?
 
     public init(
         imap: EndpointTestResult? = nil, smtp: EndpointTestResult? = nil, graph: EndpointTestResult? = nil,
-        jira: EndpointTestResult? = nil, caldav: EndpointTestResult? = nil, eway: EndpointTestResult? = nil
+        jira: EndpointTestResult? = nil, caldav: EndpointTestResult? = nil, eway: EndpointTestResult? = nil,
+        ai: AITestResult? = nil
     ) {
         self.caldav = caldav
         self.eway = eway
+        self.ai = ai
         self.imap = imap
         self.smtp = smtp
         self.graph = graph

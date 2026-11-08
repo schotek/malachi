@@ -64,8 +64,8 @@ the application rather than with Windows is not something this document
 settles.
 
 The binaries of the Windows client are therefore distributed under the
-following additional permission (decided by the owner on 2026-10-28;
-the first release that carries it is 0.1.2).
+following additional permission (granted on 2026-10-28; the first
+release that carries it is 0.1.2).
 
 ### Additional permission under GPLv3 §7
 

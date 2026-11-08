@@ -31,6 +31,11 @@ public final class ConnectionController {
         /// and nothing is loaded; `system.info` disagreeing on an
         /// authenticated connection ends here too, as a defence.
         case protocolMismatch(daemon: Int)
+        /// A test build (`TestBuild`) met a daemon of another version on
+        /// the socket (the stable app's): it is not used, the connection
+        /// is dropped and retried, and the state stays up through the
+        /// retries like a protocol mismatch until our own daemon answers.
+        case otherDaemon(version: String)
         case infoFailed(String)
         case unavailable(String)
         case stopping
@@ -44,6 +49,9 @@ public final class ConnectionController {
     public let client: RPCClient
     public let supervisor: DaemonSupervisor?
     public let reconnectInterval: Duration
+    /// The daemon version this client uses alone (a test build's own,
+    /// `Version.full`); nil uses whichever daemon answers.
+    public let requiredDaemonVersion: String?
 
     public private(set) var state: ConnectionState = .connecting
     /// Called on every state change, after `state` was updated.
@@ -74,10 +82,15 @@ public final class ConnectionController {
     ///   - supervisor: brings the daemon up before each dial; nil to only
     ///     ever dial.
     ///   - reconnectInterval: the retry period while disconnected.
-    public init(client: RPCClient, supervisor: DaemonSupervisor?, reconnectInterval: Duration = ConnectionController.defaultReconnectInterval) {
+    ///   - requiredDaemonVersion: see the property; nil for any daemon.
+    public init(
+        client: RPCClient, supervisor: DaemonSupervisor?, reconnectInterval: Duration = ConnectionController.defaultReconnectInterval,
+        requiredDaemonVersion: String? = nil
+    ) {
         self.client = client
         self.supervisor = supervisor
         self.reconnectInterval = reconnectInterval
+        self.requiredDaemonVersion = requiredDaemonVersion
     }
 
     /// Connects now and keeps retrying while disconnected. Idempotent.
@@ -94,6 +107,8 @@ public final class ConnectionController {
         notificationReader = Task { [weak self] in
             for await n in client.notifications {
                 guard let self else { return }
+                // Nothing of another version's daemon reaches the app.
+                if self.showsOtherDaemon { continue }
                 self.onNotification?(n)
             }
         }
@@ -211,7 +226,16 @@ public final class ConnectionController {
     /// Whether the state is a protocol mismatch, which `reconnectNow`
     /// keeps up and a connection ends.
     private var showsMismatch: Bool {
-        if case .protocolMismatch = state {
+        switch state {
+        case .protocolMismatch, .otherDaemon: return true
+        default: return false
+        }
+    }
+
+    /// Whether the state is a daemon of another version (`otherDaemon`),
+    /// whose notifications are dropped.
+    private var showsOtherDaemon: Bool {
+        if case .otherDaemon = state {
             return true
         }
         return false
@@ -228,7 +252,9 @@ public final class ConnectionController {
             // A connection ends a mismatch kept up through the attempts at
             // once, as GTK drops it at Connected: "Connecting…" until
             // system.info answers.
-            if showsMismatch {
+            // A daemon of another version stays up the same way until
+            // system.info says this one is ours.
+            if showsMismatch, !showsOtherDaemon {
                 report(.connecting)
             }
             checkSystemInfo()
@@ -251,13 +277,27 @@ public final class ConnectionController {
                 let info = try await client.call(API.SystemInfo.self, EmptyParams(), timeout: ConnectionController.infoTimeout)
                 // The handshake compared the version already; an answer
                 // that disagrees with it is still a mismatch, as a defence.
-                outcome = info.protocolVersion == API.protocolVersion
-                    ? .connected(info)
-                    : .protocolMismatch(daemon: info.protocolVersion)
+                if info.protocolVersion != API.protocolVersion {
+                    outcome = .protocolMismatch(daemon: info.protocolVersion)
+                } else if let want = self?.requiredDaemonVersion, info.version != want {
+                    outcome = .otherDaemon(version: info.version)
+                } else {
+                    outcome = .connected(info)
+                }
             } catch {
                 outcome = .infoFailed(describe(error))
             }
             guard let self, self.generation == gen else { return }
+            if case .otherDaemon(let version) = outcome {
+                // Shown first, so the drop below is no "unavailable"; the
+                // retry loop dials again while it stays up.
+                self.log.notice("not using malachid \(version, privacy: .public): not this build's")
+                self.report(outcome)
+                self.clientConnected = false
+                self.generation += 1
+                await client.close()
+                return
+            }
             if case .infoFailed(let reason) = outcome {
                 self.log.error("system.info: \(reason, privacy: .public)")
             }
