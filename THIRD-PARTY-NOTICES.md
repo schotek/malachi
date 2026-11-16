@@ -13,7 +13,9 @@ library and runtime, and the build of PDFium embedded in it to read the
 text of PDF attachments. Of the daemon `malachid` it lists so far only
 what the calendar added (a Go module and data from Unicode CLDR); its
 other components and the other programs in the packages are not covered
-by this file yet.
+by this file yet. The iOS app links the daemon and the bridge's server
+into itself (without the document readers and PDFium), so the Go modules
+listed for `malachi-mcp` are in it too and it ships this file.
 
 ## Components
 

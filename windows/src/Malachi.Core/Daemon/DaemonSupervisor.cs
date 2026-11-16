@@ -72,7 +72,7 @@ public sealed partial class DaemonSupervisor : IDisposable
 
     /// <summary>
     /// The user's IANA zone ("Europe/Prague"), which the daemon prefers to
-    /// its own guess from the system (backend/cmd/malachid/timezone.go: before
+    /// its own guess from the system (backend/pkg/embed/timezone.go: before
     /// TZ), so that "today" and the calendar's local times are the user's and
     /// Windows zone names from Graph map to the user's own zone.
     /// </summary>

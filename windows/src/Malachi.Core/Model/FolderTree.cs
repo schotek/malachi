@@ -94,11 +94,11 @@ public static class FolderTree
 
     /// <summary>
     /// The enabled accounts the Mail sidebar lists, keeping order: a
-    /// calendar-only CalDAV account and an eWay-CRM account have no mail and
-    /// no folders, so they are never in Mail (docs/calendar.md §5.3,
-    /// docs/eway.md D1; a CalDAV account shows in the Calendar's sidebar with
-    /// the CALDAV capsule, an eWay-CRM one only on Preferences →
-    /// Integrations). Swift <c>mailSidebarAccounts</c>.
+    /// calendar-only CalDAV account, an eWay-CRM account and an AI provider
+    /// account have no mail and no folders, so they are never in Mail
+    /// (docs/calendar.md §5.3, docs/eway.md D1, docs/api.md §4.1; a CalDAV
+    /// account shows in the Calendar's sidebar with the CALDAV capsule, an
+    /// eWay-CRM and an AI one only on Preferences → Integrations). Swift <c>mailSidebarAccounts</c>.
     /// </summary>
     public static IReadOnlyList<Account> MailSidebarAccounts(IEnumerable<Account> accounts) =>
         [.. EnabledAccounts(accounts).Where(InMail)];
@@ -106,8 +106,9 @@ public static class FolderTree
     /// <summary>
     /// Whether Mail shows account <paramref name="a"/> once it is enabled,
     /// the rule of <see cref="MailSidebarAccounts"/>: every kind with mail,
-    /// that is every kind but a calendar-only CalDAV account and an eWay-CRM
-    /// account. The mailbox asks it of switched-off accounts too, so that
+    /// that is every kind but a calendar-only CalDAV account, an eWay-CRM
+    /// account and an AI provider account (never among the board's triage
+    /// accounts either). The mailbox asks it of switched-off accounts too, so that
     /// such accounts alone count as no account in
     /// Mail (the empty sidebar, the reader's No Accounts page); the account
     /// name on an all-accounts search result, the Reply All self address
@@ -118,7 +119,7 @@ public static class FolderTree
     {
         ArgumentNullException.ThrowIfNull(a);
         var k = a.Config.ProtocolKind;
-        return k != AccountKind.CalDAV && k != AccountKind.Eway;
+        return k != AccountKind.CalDAV && k != AccountKind.Eway && k != AccountKind.Ai;
     }
 
     /// <summary>

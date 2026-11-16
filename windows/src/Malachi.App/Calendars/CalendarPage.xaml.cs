@@ -16,7 +16,9 @@
 // CalendarContentView (the sidebar, the views, the assistant panel's slot),
 // with the empty state of Core's EmptyKind over the views (Open
 // Preferences for No Calendars and Calendar Sync Is Off, as macOS
-// CalendarEmptyView), the toast layer and the calendar's query as the title
+// CalendarEmptyView; Turn On instead when the sync is off for one account
+// that offers it, CalendarController.EmptySyncOffer,
+// docs/plans/account-services.md §3.3), the toast layer and the calendar's query as the title
 // bar's search box holds it. Until the window's controller exists the page
 // shows the mode's title and the empty state alone.
 //
@@ -38,6 +40,7 @@ using System;
 using System.Linq;
 using Malachi.App.Commands;
 using Malachi.App.Main;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Boards;
 using Malachi.Core.Calendars;
 using Malachi.Core.Controllers;
@@ -47,6 +50,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI.Core;
+using AccountId = Malachi.Core.Api.AccountId;
 using WinKey = Windows.System.VirtualKey;
 
 namespace Malachi.App.Calendars;
@@ -61,6 +65,10 @@ public sealed partial class CalendarPage : UserControl
     private CalendarBar? bar;
     private CalendarContentView? content;
     private bool assistantAvailable;
+
+    // The empty state's Turn On: the one account whose calendar sync it
+    // offers; null shows Open Preferences.
+    private AccountId? emptySyncOffer;
 
     /// <summary>An empty page: the title, and the empty state of no calendars.</summary>
     public CalendarPage()
@@ -196,7 +204,7 @@ public sealed partial class CalendarPage : UserControl
         }
         bar.Update(c);
         content.Update(c);
-        ShowEmpty(CalendarContentView.ShowsEmpty(c) ? c.EmptyKind : null);
+        ShowEmpty(CalendarContentView.ShowsEmpty(c) ? c.EmptyKind : null, c.EmptySyncOffer);
         ShowTitle(c.Title, c.Subtitle);
         SyncBar();
     }
@@ -221,13 +229,16 @@ public sealed partial class CalendarPage : UserControl
     /// <summary>
     /// The empty state of <paramref name="kind"/> (macOS
     /// CalendarEmptyView.set): its title and explanation, Open Preferences
-    /// where the remedy is there; null shows the content. Before the
+    /// where the remedy is there, Turn On instead for the one account of
+    /// <paramref name="syncOffer"/>; null shows the content. Before the
     /// content came it covers the page; then it lies over the views, the
     /// sidebar (with Add Calendar…) beside it, as macOS's.
     /// </summary>
-    public void ShowEmpty(Cal.EmptyKind? kind)
+    public void ShowEmpty(Cal.EmptyKind? kind, AccountId? syncOffer = null)
     {
         Empty = kind;
+        emptySyncOffer = syncOffer;
+        OpenPreferencesButton.Content = syncOffer is null ? Cal.Text.OpenPreferences : AccountSync.TurnOn;
         if (kind is not { } k)
         {
             EmptyState.Visibility = Visibility.Collapsed;
@@ -330,8 +341,16 @@ public sealed partial class CalendarPage : UserControl
         CloseDetailRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void OnOpenPreferencesClick(object sender, RoutedEventArgs e) =>
+    // Open Preferences, or Turn On of the one account's sync offer.
+    private void OnOpenPreferencesClick(object sender, RoutedEventArgs e)
+    {
+        if (emptySyncOffer is { } account && controller is { } c)
+        {
+            c.TurnOnSync(account);
+            return;
+        }
         OpenPreferencesRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     // The calendar's keys (CalendarController.HandleKey).
     private void OnPagePreviewKeyDown(object sender, KeyRoutedEventArgs e)

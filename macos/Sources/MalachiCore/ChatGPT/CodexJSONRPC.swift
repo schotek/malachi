@@ -22,6 +22,10 @@ import Darwin
     private var waited = false
     private var eof = false
     init(executable: String, arguments: [String], environment: [String: String], directory: URL) throws {
+        #if !os(macOS)
+        // An iOS application cannot start another program.
+        throw ChatGPTFailure("codex_launch_failed")
+        #else
         var stdinPipe: [Int32] = [0, 0], stdoutPipe: [Int32] = [0, 0]
         guard pipe(&stdinPipe) == 0 else { throw ChatGPTFailure("codex_launch_failed") }
         guard pipe(&stdoutPipe) == 0 else { Darwin.close(stdinPipe[0]); Darwin.close(stdinPipe[1]); throw ChatGPTFailure("codex_launch_failed") }
@@ -74,6 +78,7 @@ import Darwin
             while waitpid(child, &status, 0) < 0 && errno == EINTR {}
             await self?.didWait()
         }
+        #endif
     }
     private func didWait() {
         waited = true; running = false

@@ -12,7 +12,11 @@
 // sign-in lacks the scope (addressBook.list with the account answers
 // contactsConsentRequired), and the status line. notify.contactsChanged and
 // notify.accountsChanged reload everything after ChangeDebounce, keeping the
-// book, the search, as many rows as were shown and the selection.
+// book, the search, as many rows as were shown and the selection. Next to
+// the consent banners, the offers to sync the contacts of an account that
+// has them off (AccountSync, docs/plans/account-services.md §3.3): Turn On
+// writes Preferences' Sync Contacts, Not Now goes to
+// account-services-dismissed.
 //
 // Windows: Swift's callbacks onChange, onSelect and onSignIn are the events
 // Changed, Selected and SignInRequested; Handle takes the notification's
@@ -24,8 +28,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Api;
 using Malachi.Core.Contacts;
+using Malachi.Core.Settings;
 
 namespace Malachi.Core.Controllers;
 
@@ -49,11 +55,23 @@ public sealed class ContactsListController
     private int changeGen;
     private bool closed;
 
+    // Turn On without its answer.
+    private readonly HashSet<AccountId> turningOn = [];
+
+    // Not Now without settings.
+    private IReadOnlyList<string> dismissedHere = [];
+
     /// <summary>A controller over <paramref name="options"/>.</summary>
-    public ContactsListController(ContactsOptions options)
+    /// <param name="options">The shared options.</param>
+    /// <param name="settings">
+    /// account-services-dismissed (the sync offers' Not Now); without it the
+    /// offers are shown and Not Now hides them until the window closes.
+    /// </param>
+    public ContactsListController(ContactsOptions options, SettingsStore? settings = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         Options = options;
+        Settings = settings;
     }
 
     /// <summary>The sidebar, the list or a state changed; the view reads it anew.</summary>
@@ -67,6 +85,9 @@ public sealed class ContactsListController
 
     /// <summary>The shared options.</summary>
     public ContactsOptions Options { get; }
+
+    /// <summary>account-services-dismissed; null keeps Not Now in the window.</summary>
+    public SettingsStore? Settings { get; }
 
     /// <summary>account.list's accounts.</summary>
     public IReadOnlyList<Account> Accounts { get; private set; } = [];
@@ -265,6 +286,68 @@ public sealed class ContactsListController
 
     /// <summary>Allow… of an account's banner.</summary>
     public void AllowConsent(AccountId id) => SignInRequested?.Invoke(this, id);
+
+    // The offer to sync
+
+    private IReadOnlyList<string> DismissedOffers => Settings?.AccountServicesDismissed ?? dismissedHere;
+
+    /// <summary>The offers to sync contacts, in account order (none before the books are listed).</summary>
+    public IReadOnlyList<ContactsSyncOffer> SyncOffers => !Loaded
+        ? []
+        : [.. AccountSync.Prompts(Accounts, AccountSync.Service.Contacts, DismissedOffers)
+            .Where(a => !turningOn.Contains(a.Id))
+            .Select(a => new ContactsSyncOffer(a.Id, AccountSync.OffLine(AccountSync.Service.Contacts, ContactBook.AccountName(a))))];
+
+    /// <summary>
+    /// Turn On of an offer: Sync Contacts as in Preferences
+    /// (<see cref="ContactsPreferencesController.SetSync"/>), one
+    /// account.update of the whole configuration; the reload then shows the
+    /// consent banner when the sign-in lacks the contacts.
+    /// </summary>
+    public void TurnOnSync(AccountId id)
+    {
+        var account = Accounts.FirstOrDefault(a => a.Id == id);
+        if (account is null || turningOn.Contains(id) || !AccountSync.ShowPrompt(account, AccountSync.Service.Contacts, []))
+        {
+            return;
+        }
+        var name = ContactBook.AccountName(account);
+        var cfg = AccountSync.Apply(account.Config, new Dictionary<AccountSync.Service, bool> { [AccountSync.Service.Contacts] = true });
+        turningOn.Add(id);
+        Error = "";
+        RaiseChanged();
+        Options.Call(API.AccountUpdate, new AccountUpdateParams { AccountId = id, Config = cfg }, ContactsOptions.WriteTimeout, r =>
+        {
+            turningOn.Remove(id);
+            if (closed)
+            {
+                return;
+            }
+            if (r.Error is { } e)
+            {
+                Error = Options.ErrorMessage(e, account: name);
+                RaiseChanged();
+                return;
+            }
+            Accounts = [.. Accounts.Select(a => a.Id == id ? a with { Config = cfg } : a)];
+            RaiseChanged();
+            Refresh();
+        });
+    }
+
+    /// <summary>Not Now of an offer: it does not come back for the account.</summary>
+    public void DismissSyncOffer(AccountId id)
+    {
+        if (Settings is { } settings)
+        {
+            settings.AccountServicesDismissed = AccountSync.Dismissing(settings.AccountServicesDismissed, id, AccountSync.Service.Contacts);
+        }
+        else
+        {
+            dismissedHere = AccountSync.Dismissing(dismissedHere, id, AccountSync.Service.Contacts);
+        }
+        RaiseChanged();
+    }
 
     private void RaiseChanged()
     {

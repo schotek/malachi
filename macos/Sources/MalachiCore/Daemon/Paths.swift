@@ -38,16 +38,26 @@ public struct Paths: Sendable {
     /// (`MALACHI_KEYRING=helper`). Nil otherwise, and the daemon then runs
     /// without a keyring.
     public let keychainHelper: URL?
+    /// The daemon's log (`--log-file`): `~/Library/Logs/Malachi Mail/malachid.log`,
+    /// where Console finds it, and `logs/malachid.log` in the data
+    /// directory of an isolated instance (`MALACHI_DATA_DIR`), so a test
+    /// run never writes into the everyday log. Nil leaves the log on
+    /// stderr.
+    public let logFile: String?
 
     public var config: String { dataDir.appendingPathComponent("config.toml").path }
     public var store: String { dataDir.appendingPathComponent("store.db").path }
 
-    public init(socket: String, dataDir: URL, mcpBridge: URL?, keychainHelper: URL? = nil, daemonBridge: URL? = nil) {
+    public init(
+        socket: String, dataDir: URL, mcpBridge: URL?, keychainHelper: URL? = nil, daemonBridge: URL? = nil,
+        logFile: String? = nil
+    ) {
         self.socket = socket
         self.dataDir = dataDir
         self.mcpBridge = mcpBridge
         self.keychainHelper = keychainHelper
         self.daemonBridge = daemonBridge ?? mcpBridge
+        self.logFile = logFile
     }
 
     /// True when `MALACHI_DATA_DIR` is set and non-empty: an isolated
@@ -75,7 +85,7 @@ public struct Paths: Sendable {
         groupContainer: URL? = Distribution.current.groupContainer
     ) -> Paths {
         // Go's os.UserHomeDir reads $HOME; do the same so both sides agree.
-        let home = env["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? FileManager.default.homeDirectoryForCurrentUser.path
+        let home = env["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
         let socket: String
         if let s = env["MALACHI_SOCKET"], !s.isEmpty {
             socket = s
@@ -88,18 +98,23 @@ public struct Paths: Sendable {
             socket = cache + "/malachi/run/rpc.sock"
         }
         let dataDir: URL
+        let logFile: String
         if let d = env["MALACHI_DATA_DIR"], !d.isEmpty {
             dataDir = URL(fileURLWithPath: d, isDirectory: true)
+            logFile = dataDir.appendingPathComponent("logs/malachid.log").path
         } else {
             let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support", isDirectory: true)
             dataDir = support.appendingPathComponent("Malachi Mail", isDirectory: true)
+            let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: home).appendingPathComponent("Library", isDirectory: true)
+            logFile = library.appendingPathComponent("Logs/Malachi Mail/malachid.log").path
         }
         let bridge = bridgeExecutable(beside: executable)
         let helper = executable?.deletingLastPathComponent().appendingPathComponent("malachi-keychain")
         return Paths(
             socket: socket, dataDir: dataDir, mcpBridge: bridge, keychainHelper: helper.flatMap(regularExecutable),
-            daemonBridge: daemonBridgeExecutable(beside: executable))
+            daemonBridge: daemonBridgeExecutable(beside: executable), logFile: logFile)
     }
 
     /// The bridge the app registers with Claude: `Contents/MacOS/malachi-mcp`

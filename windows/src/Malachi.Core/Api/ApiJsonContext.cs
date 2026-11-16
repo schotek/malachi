@@ -501,6 +501,9 @@ namespace Malachi.Core.Api;
 [JsonSerializable(typeof(MatchRange))]
 [JsonSerializable(typeof(SearchResult))]
 [JsonSerializable(typeof(SearchQueryResult))]
+[JsonSerializable(typeof(SearchServerParams))]
+[JsonSerializable(typeof(SearchServerFailure))]
+[JsonSerializable(typeof(SearchServerResult))]
 // Senders.cs
 [JsonSerializable(typeof(KnownSender))]
 [JsonSerializable(typeof(SenderListResult))]

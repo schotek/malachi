@@ -410,3 +410,11 @@ func CalendarsHeading(tr Translator) string { return tr.T("Calendars") }
 func WizardTitle(tr Translator) string {
 	return tr.T("Add Calendar and Contacts (CalDAV/CardDAV)")
 }
+
+// Call is the detail's button that dials the contact's first phone number.
+// Only the Android client offers it (a desktop has nothing to dial with).
+func Call(tr Translator) string {
+	// TRANSLATORS: the contact detail's button that dials the contact's
+	// phone number (Android).
+	return tr.T("Call")
+}

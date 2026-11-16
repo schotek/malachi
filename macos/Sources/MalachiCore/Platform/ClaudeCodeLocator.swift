@@ -472,7 +472,7 @@ public final class ClaudeCodeLocator {
     /// Claude Code, empty and private (the panel creates it on demand).
     public nonisolated static var defaultDirectory: URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches", isDirectory: true)
+            ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true).appendingPathComponent("Library/Caches", isDirectory: true)
         return caches.appendingPathComponent("Malachi Mail", isDirectory: true).appendingPathComponent("assistant", isDirectory: true)
     }
 }

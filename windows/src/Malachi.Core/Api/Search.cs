@@ -84,3 +84,52 @@ public sealed record SearchQueryResult
     [JsonPropertyName("page")]
     public required PageInfo Page { get; init; }
 }
+
+/// <summary>
+/// api.SearchServerParams: a search of the mail servers for what is older
+/// than the offlineDays window, scoped like <see cref="SearchQueryParams"/>
+/// (docs/api.md §4.6 search.server).
+/// </summary>
+public sealed record SearchServerParams
+{
+    /// <summary>The account to search; null for every enabled mail account.</summary>
+    [JsonPropertyName("accountId")]
+    public AccountId? AccountId { get; init; }
+
+    /// <summary>The folder to search; needs <see cref="AccountId"/>.</summary>
+    [JsonPropertyName("folderId")]
+    public FolderId? FolderId { get; init; }
+
+    /// <summary>The user-typed query, in the syntax of search.query.</summary>
+    [JsonPropertyName("query")]
+    public required string Query { get; init; }
+}
+
+/// <summary>api.SearchServerFailure: an account whose server could not be searched.</summary>
+public sealed record SearchServerFailure
+{
+    /// <summary>The account.</summary>
+    [JsonPropertyName("accountId")]
+    public required AccountId AccountId { get; init; }
+
+    /// <summary>Why: offline, networkError, authFailed, serverTimeout, serverError…</summary>
+    [JsonPropertyName("code")]
+    public required ErrorCode Code { get; init; }
+}
+
+/// <summary>api.SearchServerResult: the found messages, stored now, newest first.</summary>
+public sealed record SearchServerResult
+{
+    /// <summary>The results; every one is a stored message.</summary>
+    [JsonPropertyName("results")]
+    [JsonConverter(typeof(NullAsEmptyListConverter<SearchResult>))]
+    public IReadOnlyList<SearchResult> Results { get; init => field = value ?? []; } = [];
+
+    /// <summary>An account had more matches than <see cref="API.Limits.MaxServerSearchResults"/>.</summary>
+    [JsonPropertyName("truncated")]
+    public bool? Truncated { get; init; }
+
+    /// <summary>The accounts whose server could not be searched; absent when none.</summary>
+    [JsonPropertyName("failed")]
+    public IReadOnlyList<SearchServerFailure>? Failed { get; init; }
+}

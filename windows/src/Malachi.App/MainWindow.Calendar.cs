@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiMail/MainWindow/MainWindowController+Calendar.swift
 // (calendarController, startCalendar, showCalendar, restoreCalendarFocus,
-// newEvent, calendarSignIn's hand-off, showEventDetail, the window's title
+// newEvent, calendarSignIn's hand-off, askCalendarQuestion, showEventDetail, the window's title
 // in the Calendar) and of the search field of Calendar/CalendarToolbar.swift;
 // GTK: the calendar's window code follows (docs/calendar.md §6.4).
 //
@@ -133,7 +133,8 @@ public sealed partial class MainWindow
     }
 
     // The window's calendar, made on first use and not started (macOS
-    // calendarController): the toasts, the sign-in and the hand-offs wired.
+    // calendarController): the toasts, the sign-in, the sync offer's
+    // question and the hand-offs wired.
     private CalendarController EnsureCalendarController()
     {
         if (calendarController is { } existing)
@@ -149,6 +150,9 @@ public sealed partial class MainWindow
         calendarController = c;
         c.ToastRequested += (_, text) => Toasts.Show(text);
         c.SignInRequested += (_, account) => state.Integration?.CalendarSignIn(account);
+        // Turn On of a sidebar's sync offer asks for the consent (Sign In…
+        // or Cancel; macOS askCalendarQuestion, docs/plans/account-services.md §3.3).
+        c.AskQuestion = q => state.Alerts.CalendarQuestionAsync(this, q, confirmDefault: true);
         c.NewEventRequested += (_, defaults) => state.OpenNewEvent(this, defaults);
         c.OpenDetailRequested += (_, o) => ShowEventDetail(o);
         // The page's bar, sidebar and views over it, its Changed

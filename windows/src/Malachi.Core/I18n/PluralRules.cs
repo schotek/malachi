@@ -29,7 +29,7 @@ public static class PluralRules
 
     // PLURAL_CATEGORIES of po2strings.py: the languages with a known rule.
     private static readonly FrozenSet<string> Known = FrozenSet.ToFrozenSet(
-        ["en", "de", "nl", "sv", "da", "nb", "nn", "fi", "it", "es", "pt", "fr", "cs", "sk", "pl", "ru", "uk", "ro"],
+        ["en", "de", "nl", "sv", "da", "nb", "nn", "fi", "it", "es", "pt", "fr", "hu", "cs", "sk", "pl", "ru", "uk", "ro"],
         StringComparer.Ordinal);
 
     /// <summary>The gettext plural index (<c>msgstr[i]</c>) of <paramref name="n"/> in <paramref name="language"/>.</summary>

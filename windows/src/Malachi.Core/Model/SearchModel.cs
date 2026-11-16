@@ -64,6 +64,38 @@ public static class SearchModel
     }
 
     /// <summary>
+    /// What the search on the server says under the results once it is
+    /// over: how many older messages the servers found (listed already or added), that the servers hold more,
+    /// and that some accounts could not be searched (search_model.go
+    /// <c>serverSearchText</c>).
+    /// </summary>
+    public static string ServerSearchText(ServerSearch s)
+    {
+        if (s.Phase != ServerSearchPhase.Done)
+        {
+            return "";
+        }
+        var parts = new System.Collections.Generic.List<string>();
+        if (s.Found > 0)
+        {
+            parts.Add(L10n.N("%d older message found on the server.", "%d older messages found on the server.", s.Found));
+        }
+        else if (s.Failed == 0)
+        {
+            parts.Add(L10n.T("Nothing older on the server matches."));
+        }
+        if (s.Truncated)
+        {
+            parts.Add(L10n.T("The server holds more matches; narrow the search to see them."));
+        }
+        if (s.Failed > 0)
+        {
+            parts.Add(L10n.T("Some accounts could not be searched on the server."));
+        }
+        return string.Join(" ", parts);
+    }
+
+    /// <summary>
     /// The subtitle while searching: how many results there are, "more than"
     /// beyond what the daemon counts, nothing while the count is not known
     /// (search_model.go <c>searchTotalText</c>).
@@ -88,8 +120,8 @@ public static class SearchModel
     public static string SearchEmptyText(SearchScope scope) => scope switch
     {
         SearchScope.Folder => L10n.T("Nothing in this folder matches."),
-        SearchScope.Account => L10n.T("Nothing in this account matches. Trash and Junk are searched only when chosen as the folder."),
-        _ => L10n.T("Nothing in any account matches. Trash and Junk are searched only when chosen as the folder."),
+        SearchScope.Account => L10n.T("Nothing in this account matches."),
+        _ => L10n.T("Nothing in any account matches."),
     };
 
     /// <summary>

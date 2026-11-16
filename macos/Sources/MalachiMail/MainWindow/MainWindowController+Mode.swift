@@ -27,7 +27,12 @@ extension MainWindowController {
     func setMode(_ newMode: Board.Mode) {
         // A refused change (a field that keeps the keyboard) leaves the
         // switches showing the mode the window is in.
-        defer { syncModeSwitches() }
+        defer {
+            syncModeSwitches()
+            // A mode set without an event of the window (a menu of another
+            // window, a notification) gets no `windowDidUpdate`.
+            refreshTouchBar()
+        }
         guard newMode != mode, let window else { return }
         let owner = Self.focusOwner(window.firstResponder)
         // Before the views leave the window: AppKit would hand the

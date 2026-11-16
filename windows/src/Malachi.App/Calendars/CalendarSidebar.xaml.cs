@@ -3,8 +3,9 @@
 
 // Port of macos/Sources/MalachiMail/Calendar/CalendarSidebarViewController.swift
 // (update, rebuild, SidebarSectionHeading, SidebarRowButton,
-// SidebarCalendarRow, ColorSquare, SidebarStateRow, the Add Calendar…
-// menu); GTK: the calendar's sidebar follows (docs/calendar.md §6.4).
+// SidebarCalendarRow, ColorSquare, SidebarStateRow, SidebarSyncOfferRow,
+// the Add Calendar… menu); GTK: the calendar's sidebar follows
+// (docs/calendar.md §6.4).
 //
 // Everything comes from CalendarController.Sidebar: the mini month (a day
 // goes to it, the arrows change its month alone), the Unanswered row with
@@ -14,7 +15,9 @@
 // CALDAV for a CalDAV account, as macOS's accountHeaderBadge) and its
 // calendars, each with a checkbox (calendar.update visible through the
 // controller) and its colour, and the account's state row with Sign In…
-// (the re-sign-in with the calendar scopes). The rows are made again only
+// (the re-sign-in with the calendar scopes), and the offer to sync an
+// account's calendar that is off with Turn On and Not Now
+// (docs/plans/account-services.md §3.3). The rows are made again only
 // when they change, not on every step through the weeks. Add Calendar…'s
 // menu asks the window: Add CalDAV Calendar… (its window), "Sync a
 // Microsoft 365 account's calendars…" (Preferences → Calendar).
@@ -22,6 +25,7 @@
 using System;
 using Malachi.App.Main;
 using Malachi.App.Resources;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Api;
 using Malachi.Core.Calendars;
 using Malachi.Core.Controllers;
@@ -102,6 +106,10 @@ public sealed partial class CalendarSidebar : UserControl
             if (a.StateLine.Length > 0)
             {
                 Rows.Children.Add(StateRow(a));
+            }
+            if (a.SyncOffer.Length > 0)
+            {
+                Rows.Children.Add(SyncOfferRow(a));
             }
         }
     }
@@ -268,6 +276,42 @@ public sealed partial class CalendarSidebar : UserControl
             b.Click += (_, _) => controller?.SignIn(account);
             col.Children.Add(b);
         }
+        return col;
+    }
+
+    // The offer under an account whose calendar sync is off: the sentence,
+    // then Turn On and Not Now (macOS SidebarSyncOfferRow).
+    private StackPanel SyncOfferRow(CalendarController.SidebarAccount a)
+    {
+        var col = new StackPanel { Spacing = 4, Margin = new Thickness(4, 4, 0, 4) };
+        var top = new Grid { ColumnSpacing = 5 };
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var icon = Icons.Create("x-office-calendar", 12);
+        icon.Style = CalendarStyles.Get("CalendarSymbolStyle");
+        icon.VerticalAlignment = VerticalAlignment.Top;
+        icon.Margin = new Thickness(0, 2, 0, 0);
+        AutomationProperties.SetAccessibilityView(icon, AccessibilityView.Raw);
+        top.Children.Add(icon);
+        var text = new TextBlock
+        {
+            Style = CalendarStyles.Get("CalendarStateTextStyle"),
+            Text = CalendarDisplay.Clean(a.SyncOffer),
+        };
+        Grid.SetColumn(text, 1);
+        top.Children.Add(text);
+        col.Children.Add(top);
+        var account = a.AccountId;
+        var on = new Button { Content = AccountSync.TurnOn, Padding = new Thickness(8, 2, 8, 3) };
+        AutomationProperties.SetAutomationId(on, "CalendarSyncTurnOn:" + account.Value);
+        on.Click += (_, _) => controller?.TurnOnSync(account);
+        var later = new Button { Content = AccountSync.NotNow, Padding = new Thickness(8, 2, 8, 3) };
+        AutomationProperties.SetAutomationId(later, "CalendarSyncNotNow:" + account.Value);
+        later.Click += (_, _) => controller?.DismissSyncOffer(account);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        buttons.Children.Add(on);
+        buttons.Children.Add(later);
+        col.Children.Add(buttons);
         return col;
     }
 

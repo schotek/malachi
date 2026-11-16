@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/accountservices"
 	"github.com/schotek/malachi/ui/internal/contacts"
 )
 
@@ -22,7 +23,10 @@ import (
 // contactsConsentRequired), and the status line. notify.contactsChanged
 // and notify.accountsChanged reload everything after ChangeDebounce,
 // keeping the book, the search, as many rows as were shown and the
-// selection.
+// selection. Next to the consent banners, the offer to sync the contacts
+// of an account that has them off (accountservices,
+// docs/plans/account-services.md §3.3): Turn On writes Preferences' Sync
+// Contacts, Not Now goes to account-services-dismissed.
 
 // The window's timing and paging.
 const (
@@ -41,6 +45,13 @@ type ConsentNeed struct {
 	SignIn    bool
 }
 
+// SyncOffer is an offer to sync an account's contacts.
+type SyncOffer struct {
+	AccountID api.AccountID
+	// Text is "Contacts sync is off for %s".
+	Text string
+}
+
 // WindowController is the controller of the Contacts window.
 type WindowController struct {
 	Opts Options
@@ -54,6 +65,11 @@ type WindowController struct {
 	// OnSignIn is Allow… of a consent banner: the window calls
 	// account.oauthStart {accountId, contacts: true} and opens the page.
 	OnSignIn func(api.AccountID)
+	// Dismissed and SetDismissed read and write the key
+	// account-services-dismissed (the sync offers' Not Now); nil shows the
+	// offers and Not Now hides them until the window closes.
+	Dismissed    func() []string
+	SetDismissed func([]string)
 
 	accounts []api.Account
 	books    []api.AddressBook
@@ -75,6 +91,11 @@ type WindowController struct {
 	changeGen  int
 	armed      bool
 	closed     bool
+
+	// turningOn are Turn On without their answer; dismissedHere Not Now
+	// without the key.
+	turningOn     map[api.AccountID]bool
+	dismissedHere []string
 }
 
 // NewWindowController is the window's controller; Start loads it.
@@ -390,6 +411,77 @@ func (w *WindowController) AllowConsent(id api.AccountID) {
 	if w.OnSignIn != nil {
 		w.OnSignIn(id)
 	}
+}
+
+// dismissedOffers are the Not Now answers (the key's, else the window's).
+func (w *WindowController) dismissedOffers() []string {
+	if w.Dismissed != nil {
+		return w.Dismissed()
+	}
+	return w.dismissedHere
+}
+
+// SyncOffers are the offers to sync contacts, in account order (none
+// before the books are listed).
+func (w *WindowController) SyncOffers() []SyncOffer {
+	if !w.loaded {
+		return nil
+	}
+	var out []SyncOffer
+	for _, a := range accountservices.Prompts(w.accounts, accountservices.Contacts, w.dismissedOffers()) {
+		if w.turningOn[a.ID] {
+			continue
+		}
+		out = append(out, SyncOffer{AccountID: a.ID,
+			Text: accountservices.OffLine(accountservices.Contacts, contacts.AccountName(a), w.Opts.Tr)})
+	}
+	return out
+}
+
+// TurnOnSync is Turn On of an offer: Sync Contacts as in Preferences
+// (PreferencesController.SetSync), one account.update of the whole
+// configuration with empty credentials; the reload then shows the consent
+// banner when the sign-in lacks the contacts.
+func (w *WindowController) TurnOnSync(id api.AccountID) {
+	i := slices.IndexFunc(w.accounts, func(a api.Account) bool { return a.ID == id })
+	if i < 0 || w.turningOn[id] || !accountservices.ShowPrompt(w.accounts[i], accountservices.Contacts, nil) {
+		return
+	}
+	name := contacts.AccountName(w.accounts[i])
+	cfg := accountservices.Apply(w.accounts[i].Config, map[accountservices.Service]bool{accountservices.Contacts: true})
+	if w.turningOn == nil {
+		w.turningOn = map[api.AccountID]bool{}
+	}
+	w.turningOn[id] = true
+	w.err = ""
+	w.changed()
+	call(w.Opts, api.MethodAccountUpdate, api.AccountUpdateParams{AccountID: id, Config: cfg}, WriteTimeout, func(_ *api.AccountUpdateResult, e *api.Error) {
+		delete(w.turningOn, id)
+		if w.closed {
+			return
+		}
+		if e != nil {
+			w.err = w.Opts.ErrorMessage(e, name, "")
+			w.changed()
+			return
+		}
+		if j := slices.IndexFunc(w.accounts, func(a api.Account) bool { return a.ID == id }); j >= 0 {
+			w.accounts[j].Config = cfg
+		}
+		w.changed()
+		w.refresh()
+	})
+}
+
+// DismissSyncOffer is Not Now of an offer: it does not come back for the
+// account.
+func (w *WindowController) DismissSyncOffer(id api.AccountID) {
+	if w.SetDismissed != nil {
+		w.SetDismissed(accountservices.Dismissing(w.dismissedOffers(), id, accountservices.Contacts))
+	} else {
+		w.dismissedHere = accountservices.Dismissing(w.dismissedHere, id, accountservices.Contacts)
+	}
+	w.changed()
 }
 
 // consentCandidates are the Microsoft accounts with contacts on and no

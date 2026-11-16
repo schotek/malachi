@@ -37,7 +37,7 @@ public struct OpenDir: Sendable {
     /// XDG kind; the caches directory is per user and not shared.
     public static var `default`: OpenDir {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches", isDirectory: true)
+            ?? URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true).appendingPathComponent("Library/Caches", isDirectory: true)
         return OpenDir(url: caches
             .appendingPathComponent(parentName, isDirectory: true)
             .appendingPathComponent(name, isDirectory: true))

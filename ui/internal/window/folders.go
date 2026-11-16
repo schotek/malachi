@@ -107,6 +107,7 @@ func (w *Window) loadAccounts() {
 				return
 			}
 			w.model.accounts = res.Accounts
+			w.pruneAccountServices(res.Accounts)
 			w.model.folders = make(map[api.AccountID][]api.Folder, len(res.Accounts))
 			w.model.folderErr = make(map[api.AccountID]error)
 			w.hasAccounts = hasMailAccount(res.Accounts)

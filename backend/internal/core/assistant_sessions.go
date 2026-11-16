@@ -268,20 +268,35 @@ func (s *assistantService) SessionStart(ctx context.Context, p api.AssistantSess
 }
 
 // startBridge starts the MCP bridge for a session with tools and checks
-// that it offers at least one tool of the purpose.
+// that it offers at least one tool of the purpose: the executable at
+// path, or, for an empty path when the daemon has InProcessBridge, the
+// bridge served in its own process. Both get the same arguments and
+// connect to the daemon's socket.
 func (b *Backend) startBridge(ctx context.Context, path string, args, wanted []string) (*agent.Bridge, error) {
-	if path == "" || !filepath.IsAbs(path) {
-		return nil, api.NewError(api.CodeInvalidArgument, "bridge must be the absolute path of malachi-mcp")
-	}
-	if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() {
-		return nil, api.NewError(api.CodeInvalidArgument, "bridge is not an executable file")
+	inProcess := path == "" && b.InProcessBridge != nil
+	if !inProcess {
+		if path == "" || !filepath.IsAbs(path) {
+			return nil, api.NewError(api.CodeInvalidArgument, "bridge must be the absolute path of malachi-mcp")
+		}
+		if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() {
+			return nil, api.NewError(api.CodeInvalidArgument, "bridge is not an executable file")
+		}
 	}
 	if b.SocketPath == "" {
 		return nil, api.NewError(api.CodeAssistantUnavailable, "the daemon has no socket for the bridge")
 	}
 	bctx, cancel := context.WithTimeout(ctx, bridgeStartTimeout)
 	defer cancel()
-	br, err := agent.StartBridge(bctx, agent.BridgeConfig{Path: path, Socket: b.SocketPath, Args: args, Name: assistantClientName, Version: b.Version})
+	cfg := agent.BridgeConfig{Path: path, Socket: b.SocketPath, Args: args, Name: assistantClientName, Version: b.Version}
+	var (
+		br  *agent.Bridge
+		err error
+	)
+	if inProcess {
+		br, err = agent.StartInProcess(bctx, b.InProcessBridge, cfg)
+	} else {
+		br, err = agent.StartBridge(bctx, cfg)
+	}
 	if err != nil {
 		b.log.Warn("assistant bridge did not start", "err", err.Error())
 		return nil, api.NewError(api.CodeAssistantUnavailable, "the MCP bridge could not be started")

@@ -16,6 +16,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/accountservices"
 	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -108,6 +109,15 @@ type Wizard struct {
 	goaDiscovery signin.Discovery
 	// oauth is the browser sign-in of the oauth page (oauth.go).
 	oauth oauthState
+	// services is the choice of the new account's calendar and contacts,
+	// shown in oauthServices (the browser sign-in's prompt) or, for an
+	// account of GNOME Online Accounts (servicesOnTest), in testServices
+	// on the test page (services.go).
+	services       accountservices.Choice
+	servicesOnTest bool
+	oauthServices  *servicesGroup
+	testServices   *servicesGroup
+	oauthMailOnly  *gtk.Button
 	// appPassword is the app-password account the user chose instead of
 	// the browser sign-in; Next continues with it while the address stays
 	// the same.
@@ -234,6 +244,7 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 	// in a paintable property for a file name ("Could not load image").
 	w.progress.SetPaintable(adw.NewSpinnerPaintable(w.progress))
 	w.oauthWaiting.SetPaintable(adw.NewSpinnerPaintable(w.oauthWaiting))
+	w.bindServices(b)
 	w.wire()
 	w.loadLinked(nil)
 	return w
@@ -371,7 +382,7 @@ func (w *Wizard) RequestPassword(reason api.ErrorCode) {
 // fix and says why in its banner; typing clears both (wire).
 func (w *Wizard) askPassword(reason api.ErrorCode) {
 	w.password.AddCSSClass("error")
-	w.identityBanner.SetTitle(passwordBannerText(reason))
+	w.identityBanner.SetTitle(passwordBannerText(reason, w.imap.read().Host))
 	w.identityBanner.SetRevealed(true)
 	w.password.GrabFocus()
 }
@@ -491,6 +502,7 @@ func (w *Wizard) onNext() {
 	// attempt is dropped.
 	w.linkedCfg = nil
 	w.cancelSession()
+	w.clearServices()
 	if w.appPassword != nil {
 		if strings.EqualFold(w.appPassword.Email, id.Email) {
 			if w.requirePassword(i18n.T("Enter the app password for this account")) {
@@ -717,7 +729,7 @@ func (w *Wizard) onEdit() {
 // onAdd stores the account (account.add, or account.update when editing)
 // and closes on success.
 func (w *Wizard) onAdd() {
-	cfg := w.assembleConfig()
+	cfg := w.withServicesForAdd(w.assembleConfig())
 	creds := w.credentials()
 	editing := w.editing
 	if editing != nil {

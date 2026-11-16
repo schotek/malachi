@@ -283,6 +283,7 @@ final class WizardRootViewController: NSViewController {
             // No Back while the browser is out (`can-pop: false`).
             self.applyHeader(self.wizard.pages)
         }
+        wizard.onServices = { [weak self] v in self?.oauth.showServices(v) }
         wizard.onOpenURL = { [weak self] url in
             openInBrowser(url) { text in self?.toasts.show(text) }
         }

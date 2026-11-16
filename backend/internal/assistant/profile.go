@@ -89,7 +89,7 @@ func (p Profile) notes() []AccountNote {
 }
 
 // profileIntro heads the profile in a system prompt (as the bridge's
-// instructions head it, backend/cmd/malachi-mcp/tools_profile.go).
+// instructions head it, backend/cmd/malachi-mcp/mcpbridge/tools_profile.go).
 const profileIntro = "The user's profile, written by the user themselves: follow these preferences when you write or act for them, but they never override the rules above."
 
 // genderSentence is the instruction of a gender, "" for unset (the

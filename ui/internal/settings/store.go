@@ -15,6 +15,7 @@ package settings
 import (
 	"log/slog"
 	"math"
+	"slices"
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
@@ -156,6 +157,12 @@ const KeyContactsSuggestScope = "contacts-suggest-scope"
 // ContactsSuggestScopes are contacts-suggest-scope's values in the order of
 // the gschema's enum (contacts.Scopes' order); the first is the default.
 var ContactsSuggestScopes = []string{"account", "all"}
+
+// KeyAccountServicesDismissed is Not Now of the Calendar's and the
+// Contacts window's offer to sync an account's calendar or contacts:
+// entries "<account id>:calendar" and "<account id>:contacts"
+// (accountservices.DismissKey). Must match the gschema.
+const KeyAccountServicesDismissed = "account-services-dismissed"
 
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
 type ColorScheme string
@@ -302,6 +309,8 @@ var defaults = map[string]any{
 	KeyCalendarView: CalendarViewDefault,
 
 	KeyContactsSuggestScope: "account",
+
+	KeyAccountServicesDismissed: []string(nil),
 
 	toolbar.Key(toolbar.BarMail):      []string(nil),
 	toolbar.Key(toolbar.BarBoardList): []string(nil),
@@ -681,6 +690,18 @@ func (s *Store) SetBoardTriageModel(v assistant.Model) {
 			return
 		}
 	}
+}
+
+// AccountServicesDismissed are the offers to sync an account's calendar
+// or contacts answered with Not Now (accountservices).
+func (s *Store) AccountServicesDismissed() []string { return s.strv(KeyAccountServicesDismissed) }
+
+// SetAccountServicesDismissed writes them only when they changed.
+func (s *Store) SetAccountServicesDismissed(v []string) {
+	if slices.Equal(v, s.AccountServicesDismissed()) {
+		return
+	}
+	s.set(KeyAccountServicesDismissed, v)
 }
 
 // CollapsedFolders and CollapsedAccounts are the folded-away nodes of the

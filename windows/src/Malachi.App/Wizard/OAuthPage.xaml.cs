@@ -8,11 +8,17 @@
 // controller's (account.oauthStart, the browser through the app's
 // launcher, account.oauthWait until the browser comes back); this page
 // shows WizardController.OAuthView and hands the clicks back. Only the
-// prompt's button waits for account.oauthStart.
+// prompt's button waits for account.oauthStart. The prompt's group of
+// services to sync too (showServices, serviceToggled, mailOnlyClicked;
+// docs/plans/account-services.md §3.2) shows WizardController.ServicesView:
+// a check box per service, rebuilt only when the services change.
 
+using System.Linq;
 using Malachi.App.Localization;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Controllers;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using OAuthTexts = Malachi.Core.Wizard.OAuth;
 
@@ -30,10 +36,12 @@ public sealed partial class OAuthPage : UserControl
         InitializeComponent();
         wizard.OAuthViewChanged += (_, view) => Show(view);
         wizard.OAuthStartingChanged += (_, starting) => SignInButton.IsEnabled = !starting;
+        wizard.ServicesChanged += (_, view) => ShowServices(view);
         if (wizard.CurrentOAuthView is { } current)
         {
             Show(current);
         }
+        ShowServices(wizard.CurrentServicesView);
     }
 
     /// <summary>The button that takes the focus when the page comes up.</summary>
@@ -67,6 +75,48 @@ public sealed partial class OAuthPage : UserControl
         // A page behind another need not spin.
         WaitingPage.Spinning = visible == WaitingPage;
     }
+
+    // The group of services to sync too (Swift showServices); null hides it.
+    private void ShowServices(WizardController.ServicesView? v)
+    {
+        ServicesGroup.Visibility = v is null ? Visibility.Collapsed : Visibility.Visible;
+        if (v is null)
+        {
+            return;
+        }
+        ServicesTitle.Text = v.Title;
+        ServicesNote.Text = v.Note;
+        MailOnlyButton.Content = v.MailOnly ?? "";
+        MailOnlyButton.Visibility = v.MailOnly is null ? Visibility.Collapsed : Visibility.Visible;
+        var checks = ServicesChecks.Children.OfType<CheckBox>().ToList();
+        if (!checks.Select(c => (AccountSync.Service)c.Tag).SequenceEqual(v.Rows.Select(r => r.Service)))
+        {
+            ServicesChecks.Children.Clear();
+            foreach (var row in v.Rows)
+            {
+                var check = new CheckBox { Tag = row.Service };
+                AutomationProperties.SetAutomationId(check, "OAuthSync-" + AccountSync.Name(row.Service));
+                check.Click += OnServiceClick;
+                ServicesChecks.Children.Add(check);
+            }
+            checks = [.. ServicesChecks.Children.OfType<CheckBox>()];
+        }
+        foreach (var (check, row) in checks.Zip(v.Rows))
+        {
+            check.Content = row.Title;
+            check.IsChecked = row.On;
+        }
+    }
+
+    private void OnServiceClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox { Tag: AccountSync.Service service } check)
+        {
+            wizard.SetService(service, check.IsChecked == true);
+        }
+    }
+
+    private void OnMailOnlyClick(object sender, RoutedEventArgs e) => wizard.SignInWithMailOnly();
 
     private void OnSignInClick(object sender, RoutedEventArgs e) => wizard.SignInWithProvider();
 

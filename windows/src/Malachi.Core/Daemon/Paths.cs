@@ -28,6 +28,14 @@
 // Claude Desktop got EPERM, ERROR_ACCESS_DENIED): the app then hands out
 // the package's app execution alias of the bridge instead (InPackage),
 // which anyone may start and which keeps its path across updates.
+// A package without the unvirtualizedResources capability (the Store
+// refuses it) also has its writes under %LOCALAPPDATA% redirected to the
+// package's own store, which no program outside the package sees: on a
+// clean account Claude Code could not enter its working directory. What
+// the app hands to other programs (the assistant's working directory, the
+// attachments it writes for opening) then lies beside the socket's
+// directory, under the user's profile and outside AppData, where nothing
+// is redirected (OutsideAppData; the place of GTK's ~/.cache/malachi).
 
 using System;
 using System.Collections.Generic;
@@ -87,6 +95,28 @@ public sealed record Paths
     public required string DataDir { get; init; }
 
     /// <summary>
+    /// Whether <see cref="DataDir"/> came from <c>MALACHI_DATA_DIR</c>: a
+    /// test or an agent then keeps everything in it
+    /// (<see cref="OutsideAppData"/> changes nothing).
+    /// </summary>
+    public bool DataDirFromEnvironment { get; init; }
+
+    /// <summary>
+    /// Where the app keeps what programs outside it must reach, when that
+    /// is not the data directory: in an MSIX package
+    /// <c>(%XDG_CACHE_HOME% or %USERPROFILE%\.cache)\malachi</c>
+    /// (<see cref="OutsideAppData"/>). Null otherwise.
+    /// </summary>
+    public string? SharedDir { get; init; }
+
+    /// <summary>
+    /// The directory whose <c>open</c> holds the attachments written for
+    /// opening in other programs (<see cref="OpenDir.InDataDirectory"/>):
+    /// <see cref="SharedDir"/>, else the data directory.
+    /// </summary>
+    public string OpenParent => SharedDir ?? DataDir;
+
+    /// <summary>
     /// The preferences' key under HKEY_CURRENT_USER:
     /// <c>Software\</c> and the name <c>MALACHI_SETTINGS_KEY</c> gives when
     /// that is the app id itself or the app id, a dot and at least one of
@@ -128,11 +158,13 @@ public sealed record Paths
     /// The working directory of the user's Claude Code for the assistant
     /// panel and its one-shot requests, empty and private
     /// (<c>%LOCALAPPDATA%\Malachi Mail\assistant</c>, or under
-    /// <c>MALACHI_DATA_DIR</c>; Swift's <c>ClaudeCodeLocator.defaultDirectory</c>
-    /// in the Caches directory, GTK's <c>~/.cache/malachi/assistant</c>).
+    /// <c>MALACHI_DATA_DIR</c>; in an MSIX package under
+    /// <see cref="SharedDir"/>, where Claude Code can enter it; Swift's
+    /// <c>ClaudeCodeLocator.defaultDirectory</c> in the Caches directory,
+    /// GTK's <c>~/.cache/malachi/assistant</c>).
     /// Created private on demand, by whoever runs Claude Code there.
     /// </summary>
-    public string AssistantDir => Path.Combine(DataDir, "assistant");
+    public string AssistantDir => Path.Combine(SharedDir ?? DataDir, "assistant");
 
     /// <summary>The daemon's connection key beside the socket (api.KeyPath).</summary>
     public string KeyFile => RpcAuth.KeyPath(Socket);
@@ -160,6 +192,26 @@ public sealed record Paths
     public Paths InPackage(string? alias) =>
         McpBridge is not null && !string.IsNullOrEmpty(alias) && IsProgram(alias) ? this with { McpBridge = alias } : this;
 
+    /// <summary>
+    /// These paths for an app that runs in an MSIX package without
+    /// unvirtualized resources: what other programs must reach
+    /// (<see cref="AssistantDir"/>, <see cref="OpenParent"/>) moves out of
+    /// %LOCALAPPDATA%, whose new files only the package sees, to
+    /// <c>(%XDG_CACHE_HOME% or %USERPROFILE%\.cache)\malachi</c>, the
+    /// parent of the default socket's directory. A data directory named by
+    /// <c>MALACHI_DATA_DIR</c> keeps everything.
+    /// </summary>
+    public Paths OutsideAppData(IReadOnlyDictionary<string, string?> environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        if (DataDirFromEnvironment)
+        {
+            return this;
+        }
+        var cache = ProcessEnvironment.NonEmpty(environment, "XDG_CACHE_HOME") ?? Join(Home(environment), ".cache");
+        return this with { SharedDir = Join(cache, "malachi") };
+    }
+
     /// <summary>The paths of this process: its environment and the directory of the app.</summary>
     public static Paths Resolve() => Resolve(ProcessEnvironment.Current(), AppContext.BaseDirectory);
 
@@ -186,7 +238,8 @@ public sealed record Paths
             var cache = ProcessEnvironment.NonEmpty(environment, "XDG_CACHE_HOME") ?? Join(Home(environment), ".cache");
             socket = Join(cache, "malachi", "run", "rpc.sock");
         }
-        var dataDir = ProcessEnvironment.NonEmpty(environment, "MALACHI_DATA_DIR")
+        var dataDirFromEnvironment = ProcessEnvironment.NonEmpty(environment, "MALACHI_DATA_DIR");
+        var dataDir = dataDirFromEnvironment
             ?? Path.Combine(
                 ProcessEnvironment.NonEmpty(environment, "LOCALAPPDATA")
                     ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -198,6 +251,7 @@ public sealed record Paths
             Socket = socket,
             SocketFromEnvironment = fromEnvironment is not null,
             DataDir = dataDir,
+            DataDirFromEnvironment = dataDirFromEnvironment is not null,
             SettingsKey = settingsKeyTaken ? SettingsKeyParent + settingsKey : DefaultSettingsKey,
             IgnoredSettingsKey = settingsKeyTaken ? null : settingsKey,
             McpBridge = Beside(baseDirectory, McpBridgeName),

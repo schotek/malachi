@@ -38,6 +38,16 @@ Code assigns these styles; it never reads a brush from the resources.
         <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
     </Style>
 
+    <!-- The card of a block quote in an answer of the assistant: a tinted
+         surface with a bar of the accent colour at its leading edge. -->
+    <Style x:Key="QuoteCardBorderStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="10,6,10,6" />
+    </Style>
+
     <!-- An icon in the dim text colour (.dim-label). -->
     <Style x:Key="DimIconStyle" TargetType="FontIcon">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />

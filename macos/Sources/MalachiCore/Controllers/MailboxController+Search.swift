@@ -6,6 +6,10 @@ import os
 
 private let searchLog = Logger(subsystem: "io.github.schotek.Malachi", category: "search")
 
+/// How long the client waits for search.server: the daemon's own limit of
+/// 30 s and some room for the answer.
+private let serverSearchTimeout: Duration = .seconds(45)
+
 /// The search over the message list (ui/internal/window/search.go): while
 /// a search is on the list shows search.query results for the text, in
 /// the chosen scope, instead of the selected folder. The daemon searches
@@ -84,6 +88,7 @@ extension ListController {
         mailbox.model.search.focusFirst = false
         mailbox.model.search.params = SearchQueryParams(query: "")
         mailbox.model.search.text = ""
+        mailbox.model.search.server = .idle
         _ = mailbox.model.bumpList()
         mailbox.model.loading = false
         mailbox.model.loadingMore = false
@@ -118,6 +123,7 @@ extension ListController {
             _ = mailbox.model.bumpList()
             mailbox.model.search.params = SearchQueryParams(query: "")
             mailbox.model.search.shown = false
+            mailbox.model.search.server = .idle
             mailbox.model.search.focusFirst = false
             mailbox.model.loading = false
             mailbox.model.listErr = nil
@@ -137,6 +143,7 @@ extension ListController {
         mailbox.model.search.params = params
         mailbox.model.search.effective = effective
         mailbox.model.search.shown = false
+        mailbox.model.search.server = .idle
         let gen = mailbox.model.bumpList()
         mailbox.model.loading = true
         mailbox.model.loadingMore = false
@@ -211,7 +218,51 @@ extension ListController {
         if m.loading || !st.shown {
             return .status(icon: "", title: L10n.T("Searching…"), description: "", retry: false)
         }
-        return .status(icon: "edit-find-symbolic", title: L10n.T("No Results"), description: searchEmptyText(st.effective), retry: false)
+        var description = searchEmptyText(st.effective)
+        if case .done = st.server {
+            description += "\n" + serverSearchText(st.server)
+        }
+        return .searchEmpty(description: description, server: m.serverSearchOffer)
+    }
+
+    /// Swift-first: the offer under the results was taken: the servers of
+    /// the mail accounts in the search's scope are asked for mail older
+    /// than the window (search.server). What they find is stored by the
+    /// daemon and added under the results; an account whose server failed
+    /// is counted in the note, and a search that failed whole is offered
+    /// again. The answer is dropped when the results it belongs to are no
+    /// longer on show.
+    public func searchServer() {
+        guard mailbox.model.serverSearchOffer == .offer else { return }
+        let asked = mailbox.model.search.params
+        let gen = mailbox.model.listGen
+        mailbox.model.search.server = .searching
+        showListState()
+        showLoadMore()
+        let params = SearchServerParams(accountId: asked.accountId, folderId: asked.folderId, query: asked.query)
+        mailbox.perform(API.SearchServer.self, params, timeout: serverSearchTimeout) { [weak self] outcome in
+            guard let self, gen == self.mailbox.model.listGen, self.mailbox.model.search.active,
+                  self.mailbox.model.search.server == .searching else { return }
+            switch outcome {
+            case .failure(let err):
+                self.mailbox.model.search.server = .idle
+                // A newer search of the servers took over: nothing to say.
+                if (err as? RPCError)?.code != .unavailable {
+                    searchLog.warning("search.server: \(String(describing: err), privacy: .public)")
+                    self.mailbox.toast(rpcErrorText(L10n.T("Searching on the server"), err))
+                }
+            case .success(let res):
+                let added = self.mailbox.model.appendServerResults(res)
+                self.mailbox.model.search.server = .done(
+                    found: res.results.count, truncated: res.truncated ?? false, failed: res.failed?.count ?? 0)
+                if added > 0 {
+                    self.reconcile(.keep)
+                }
+                self.mailbox.refreshListTitle()
+            }
+            self.showListState()
+            self.showLoadMore()
+        }
     }
 
     /// Announces the scope bar for the current selection while searching.

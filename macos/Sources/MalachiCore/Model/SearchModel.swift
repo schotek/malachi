@@ -35,8 +35,26 @@ public struct SearchState: Sendable {
     /// names; unknown until that answered.
     public var offlineDays = 0
     public var offlineKnown = false
+    /// The search of the servers for mail older than the window, for the
+    /// results of `params`.
+    public var server: ServerSearch = .idle
 
     public init() {}
+}
+
+/// Swift-first: where the search on the server (search.server) for the
+/// results on show stands. `done` counts the messages the servers found
+/// (listed already or added); `failed` the accounts whose server could not be searched.
+public enum ServerSearch: Sendable, Equatable {
+    case idle
+    case searching
+    case done(found: Int, truncated: Bool, failed: Int)
+}
+
+/// Swift-first: what the list offers of the search on the server: nothing,
+/// the button, or the spinner while it runs.
+public enum ServerSearchOffer: Sendable, Equatable {
+    case none, offer, searching
 }
 
 /// What a result shows beyond its summary: the excerpt around the match
@@ -121,6 +139,43 @@ extension MailModel {
         return results.map(\.message)
     }
 
+    /// Swift-first: what the list offers of the search on the server. The
+    /// button is there once every local result is listed, when the store
+    /// holds a window only (so that older mail exists on the servers) and
+    /// a mail account is in the scope; never before config.get said how
+    /// long the window is.
+    public var serverSearchOffer: ServerSearchOffer {
+        let st = search
+        guard st.active, st.shown, (nextCursor ?? "").isEmpty else { return .none }
+        switch st.server {
+        case .searching:
+            return .searching
+        case .done:
+            return .none
+        case .idle:
+            break
+        }
+        guard st.offlineKnown, st.offlineDays > 0 else { return .none }
+        let mail: (Account) -> Bool = { $0.enabled && Integrations.showsInAccounts($0) }
+        if let id = st.params.accountId {
+            return account(id).map(mail) == true ? .offer : .none
+        }
+        return accounts.contains(where: mail) ? .offer : .none
+    }
+
+    /// Swift-first: adds what the servers found under the local results
+    /// and returns how many of them were new to the list.
+    @discardableResult
+    public mutating func appendServerResults(_ res: SearchServerResult) -> Int {
+        let fresh = res.results.filter { index[$0.message.id] == nil }
+        let known = total
+        let added = appendMessages(takeHits(fresh), page: PageInfo(nextCursor: nil, total: known))
+        if known >= 0 {
+            total = known + added
+        }
+        return added
+    }
+
     /// Empties the list of results.
     public mutating func clearSearchResults() {
         clearMessages()
@@ -187,11 +242,11 @@ extension MailModel {
         let f = selected.flatMap { folder($0) }
         let folderTip = f.map { L10n.T("Search in %s", folderTitle($0)) } ?? L10n.T("Select a folder to search in it")
         let accountTip = selected.flatMap { account($0.account) }.map {
-            L10n.T("Search every folder of %s except Trash and Junk", accountLabel($0))
+            L10n.T("Search every folder of %s", accountLabel($0))
         } ?? ""
         return SearchBarState(
             scope: search.scope, narrowEnabled: f != nil, folderTooltip: folderTip, accountTooltip: accountTip,
-            allTooltip: L10n.T("Search every account except Trash and Junk")
+            allTooltip: L10n.T("Search every account")
         )
     }
 }
@@ -212,6 +267,26 @@ public func searchRetentionText(days: Int, known: Bool) -> String {
     )
 }
 
+/// Swift-first: what the search on the server says under the results once
+/// it is over: how many older messages the servers found (listed already or added), that the servers hold
+/// more, and that some accounts could not be searched.
+public func serverSearchText(_ s: ServerSearch) -> String {
+    guard case .done(let found, let truncated, let failed) = s else { return "" }
+    var parts: [String] = []
+    if found > 0 {
+        parts.append(L10n.N("%d older message found on the server.", "%d older messages found on the server.", found))
+    } else if failed == 0 {
+        parts.append(L10n.T("Nothing older on the server matches."))
+    }
+    if truncated {
+        parts.append(L10n.T("The server holds more matches; narrow the search to see them."))
+    }
+    if failed > 0 {
+        parts.append(L10n.T("Some accounts could not be searched on the server."))
+    }
+    return parts.joined(separator: " ")
+}
+
 /// The subtitle while searching: how many results there are, "more than"
 /// beyond what the daemon counts, nothing while the count is not known
 /// (search_model.go `searchTotalText`).
@@ -230,9 +305,9 @@ public func searchEmptyText(_ scope: Settings.SearchScope) -> String {
     case .folder:
         return L10n.T("Nothing in this folder matches.")
     case .account:
-        return L10n.T("Nothing in this account matches. Trash and Junk are searched only when chosen as the folder.")
+        return L10n.T("Nothing in this account matches.")
     case .all:
-        return L10n.T("Nothing in any account matches. Trash and Junk are searched only when chosen as the folder.")
+        return L10n.T("Nothing in any account matches.")
     }
 }
 

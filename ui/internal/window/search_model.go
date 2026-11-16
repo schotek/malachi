@@ -10,6 +10,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/integrations"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -41,7 +42,38 @@ type searchState struct {
 	// retention note names; unknown until that answered.
 	offlineDays  int
 	offlineKnown bool
+	// server is the search of the servers for mail older than the window,
+	// for the results of params.
+	server serverSearch
 }
+
+// serverSearch is where the search on the server (search.server) for the
+// results on show stands; once done, found counts the messages the servers found
+// (listed already or added) and failed the accounts whose server could not be searched.
+type serverSearch struct {
+	phase     serverPhase
+	found     int
+	truncated bool
+	failed    int
+}
+
+type serverPhase int
+
+const (
+	serverIdle serverPhase = iota
+	serverSearching
+	serverDone
+)
+
+// serverOffer is what the list offers of the search on the server:
+// nothing, the button, or the spinner while it runs.
+type serverOffer int
+
+const (
+	serverOfferNone serverOffer = iota
+	serverOfferButton
+	serverOfferSearching
+)
 
 // searchHit is what a result shows beyond its summary: the excerpt around
 // the match and the matched words in it.
@@ -107,6 +139,60 @@ func (m *mailModel) takeHits(results []api.SearchResult) []api.MessageSummary {
 	return list
 }
 
+// serverSearchOffer is what the list offers of the search on the server.
+// The button is there once every local result is listed, when the store
+// holds a window only (so that older mail exists on the servers) and a
+// mail account is in the scope; never before config.get said how long the
+// window is.
+func (m *mailModel) serverSearchOffer() serverOffer {
+	st := &m.search
+	if !st.active || !st.shown || m.nextCursor != "" {
+		return serverOfferNone
+	}
+	switch st.server.phase {
+	case serverSearching:
+		return serverOfferSearching
+	case serverDone:
+		return serverOfferNone
+	}
+	if !st.offlineKnown || st.offlineDays <= 0 {
+		return serverOfferNone
+	}
+	mail := func(a api.Account) bool { return a.Enabled && integrations.ShowsInAccounts(a) }
+	if st.params.AccountID != "" {
+		if a, ok := m.account(st.params.AccountID); ok && mail(a) {
+			return serverOfferButton
+		}
+		return serverOfferNone
+	}
+	for _, a := range m.accounts {
+		if mail(a) {
+			return serverOfferButton
+		}
+	}
+	return serverOfferNone
+}
+
+// appendServerResults adds what the servers found under the local results
+// and returns how many of them were new to the list.
+func (m *mailModel) appendServerResults(res api.SearchServerResult) int {
+	if m.search.hits == nil {
+		m.search.hits = make(map[api.MessageID]searchHit, len(res.Results))
+	}
+	fresh := make([]api.SearchResult, 0, len(res.Results))
+	for _, r := range res.Results {
+		if _, _, listed := m.message(r.Message.ID); !listed {
+			fresh = append(fresh, r)
+		}
+	}
+	known := m.total
+	added := m.appendMessages(m.takeHits(fresh), api.PageInfo{Total: known})
+	if known >= 0 {
+		m.total = known + added
+	}
+	return added
+}
+
 // clearSearchResults empties the list of results.
 func (m *mailModel) clearSearchResults() {
 	m.clearMessages()
@@ -169,6 +255,30 @@ func searchRetentionText(days int, known bool) string {
 		"Searches the mail of the last %d days stored on this computer.", days), days)
 }
 
+// serverSearchText is what the search on the server says under the
+// results once it is over: how many older messages the servers found (listed already or added), that the
+// servers hold more, and that some accounts could not be searched.
+func serverSearchText(s serverSearch) string {
+	if s.phase != serverDone {
+		return ""
+	}
+	var parts []string
+	switch {
+	case s.found > 0:
+		parts = append(parts, fmt.Sprintf(i18n.N("%d older message found on the server.",
+			"%d older messages found on the server.", s.found), s.found))
+	case s.failed == 0:
+		parts = append(parts, i18n.T("Nothing older on the server matches."))
+	}
+	if s.truncated {
+		parts = append(parts, i18n.T("The server holds more matches; narrow the search to see them."))
+	}
+	if s.failed > 0 {
+		parts = append(parts, i18n.T("Some accounts could not be searched on the server."))
+	}
+	return strings.Join(parts, " ")
+}
+
 // searchTotalText is the subtitle of the list while searching: how many
 // results there are, "more than" beyond what the daemon counts, nothing
 // while the count is not known.
@@ -183,15 +293,15 @@ func searchTotalText(total int, shown bool) string {
 }
 
 // searchEmptyText explains an empty result in its scope; the wider ones
-// say that Trash and Junk were left out.
+// name the scope that was searched.
 func searchEmptyText(scope settings.SearchScope) string {
 	switch scope {
 	case settings.SearchFolder:
 		return i18n.T("Nothing in this folder matches.")
 	case settings.SearchAccount:
-		return i18n.T("Nothing in this account matches. Trash and Junk are searched only when chosen as the folder.")
+		return i18n.T("Nothing in this account matches.")
 	}
-	return i18n.T("Nothing in any account matches. Trash and Junk are searched only when chosen as the folder.")
+	return i18n.T("Nothing in any account matches.")
 }
 
 // searchOutside reports whether a result may lie outside the searched

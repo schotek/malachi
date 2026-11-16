@@ -39,7 +39,7 @@
   sorts what waits for you and what waits for others.
 - **An assistant on your own account** (Claude or ChatGPT) that summarises,
   finds tasks and drafts replies, and only when you ask.
-- English and Czech.
+- English, Czech, Slovak, Polish, Hungarian, Ukrainian, German, French, Spanish, Italian, Brazilian Portuguese and Dutch.
 
 The full tour is on [malachimail.app](https://malachimail.app/features.html).
 

@@ -10,7 +10,9 @@ import MalachiCore
 /// the kind capsule (`accountHeaderBadge`: M365, GOOGLE, CALDAV) and its
 /// calendars, each with a checkbox (`calendar.update visible` through the
 /// controller) and its colour, a state row with Sign In… when the
-/// account's state needs it, and at the bottom Add Calendar… with its
+/// account's state needs it, the offer to sync an account's calendar that
+/// is off (Turn On, Not Now; docs/plans/account-services.md §3.3), and at
+/// the bottom Add Calendar… with its
 /// menu. Everything comes from `CalendarController.sidebar`; account and
 /// calendar names are shown through `stringValue` only.
 @MainActor
@@ -30,6 +32,7 @@ final class CalendarSidebarViewController: NSViewController {
     private var shown: CalendarController.Sidebar?
     private var shownFilter: CalendarController.Filter?
     private var unansweredRow: SidebarRowButton?
+    private var syncOfferRows: [SidebarSyncOfferRow] = []
 
     override func loadView() {
         let root = NSView()
@@ -87,6 +90,7 @@ final class CalendarSidebarViewController: NSViewController {
             stack.removeArrangedSubview(v)
             v.removeFromSuperview()
         }
+        syncOfferRows = []
         stack.addArrangedSubview(miniMonth)
         stack.setCustomSpacing(10, after: miniMonth)
 
@@ -112,6 +116,14 @@ final class CalendarSidebarViewController: NSViewController {
                 let account = a.accountId
                 let r = SidebarStateRow(text: a.stateLine, signIn: a.offersSignIn)
                 r.onSignIn = { [weak self] in self?.controller?.signIn(account) }
+                stack.addArrangedSubview(r)
+            }
+            if !a.syncOffer.isEmpty {
+                let account = a.accountId
+                let r = SidebarSyncOfferRow(text: a.syncOffer)
+                r.onTurnOn = { [weak self] in self?.controller?.turnOnSync(account) }
+                r.onNotNow = { [weak self] in self?.controller?.dismissSyncOffer(account) }
+                syncOfferRows.append(r)
                 stack.addArrangedSubview(r)
             }
             if let last = stack.arrangedSubviews.last {
@@ -166,6 +178,9 @@ final class CalendarSidebarViewController: NSViewController {
         var lines = ["  calendar mini month \(r(miniMonth)) '\(miniMonth.month?.title ?? "")'"]
         if let unansweredRow {
             lines.append("  calendar unanswered row \(r(unansweredRow))")
+        }
+        for row in syncOfferRows {
+            lines.append("  calendar sync offer \(r(row)) '\(row.text)'")
         }
         lines.append("  calendar sidebar rows \(stack.arrangedSubviews.count) height \(Int(stack.fittingSize.height))")
         return lines
@@ -401,5 +416,64 @@ final class SidebarStateRow: NSView {
 
     @objc private func signInClicked() {
         onSignIn?()
+    }
+}
+
+/// The offer under an account whose calendar sync is off: the sentence,
+/// then Turn On and Not Now.
+@MainActor
+final class SidebarSyncOfferRow: NSView {
+    var onTurnOn: (() -> Void)?
+    var onNotNow: (() -> Void)?
+    let text: String
+
+    init(text: String) {
+        self.text = text
+        super.init(frame: .zero)
+        let icon = calendarSymbol("calendar.badge.plus", pointSize: 11, color: .secondaryLabelColor)
+        let label = NSTextField(wrappingLabelWithString: "")
+        label.stringValue = text
+        label.font = .systemFont(ofSize: SidebarMetrics.captionFontSize)
+        label.textColor = .secondaryLabelColor
+        label.isSelectable = false
+        label.preferredMaxLayoutWidth = 180
+        let top = NSStackView(views: [icon, label])
+        top.orientation = .horizontal
+        top.alignment = .top
+        top.spacing = 5
+        let on = NSButton(title: AccountServices.turnOn, target: self, action: #selector(turnOnClicked))
+        on.controlSize = .small
+        on.bezelStyle = .push
+        let later = NSButton(title: AccountServices.notNow, target: self, action: #selector(notNowClicked))
+        later.controlSize = .small
+        later.bezelStyle = .push
+        let buttons = NSStackView(views: [on, later])
+        buttons.orientation = .horizontal
+        buttons.spacing = 6
+        let col = NSStackView(views: [top, buttons])
+        col.orientation = .vertical
+        col.alignment = .leading
+        col.spacing = 4
+        col.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(col)
+        NSLayoutConstraint.activate([
+            col.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            col.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            col.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            col.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    @objc private func turnOnClicked() {
+        onTurnOn?()
+    }
+
+    @objc private func notNowClicked() {
+        onNotNow?()
     }
 }

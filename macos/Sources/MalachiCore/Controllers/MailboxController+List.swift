@@ -12,6 +12,9 @@ import os
 public enum ListState: Equatable, Sendable {
     case messages
     case status(icon: String, title: String, description: String, retry: Bool)
+    /// A search without results in the store: the explanation, and what
+    /// the page offers of the search on the server.
+    case searchEmpty(description: String, server: ServerSearchOffer)
 }
 
 /// The Load More footer under the rows (messages.go `showLoadMore`): the
@@ -22,11 +25,15 @@ public struct LoadMoreState: Equatable, Sendable {
     public var spinner: Bool
     public var button: Bool
     public var note: String
+    /// Under the last page of search results: the offer to search the
+    /// servers for older mail, or the spinner while that runs.
+    public var server: ServerSearchOffer
 
-    public init(spinner: Bool = false, button: Bool = false, note: String = "") {
+    public init(spinner: Bool = false, button: Bool = false, note: String = "", server: ServerSearchOffer = .none) {
         self.spinner = spinner
         self.button = button
         self.note = note
+        self.server = server
     }
 }
 
@@ -496,9 +503,14 @@ public final class ListController {
         let cursor = m.nextCursor ?? ""
         // Under the last page of results: how far back search reaches.
         let st = m.search
-        let note = st.active && st.shown && cursor.isEmpty && !m.loadingMore && m.rowCount > 0
-            ? searchRetentionText(days: st.offlineDays, known: st.offlineKnown) : ""
-        let state = LoadMoreState(spinner: m.loadingMore, button: !m.loadingMore && !cursor.isEmpty && m.listErr == nil, note: note)
+        let last = st.active && st.shown && cursor.isEmpty && !m.loadingMore && m.rowCount > 0
+        var note = last ? searchRetentionText(days: st.offlineDays, known: st.offlineKnown) : ""
+        if last, case .done = st.server {
+            note = serverSearchText(st.server)
+        }
+        let state = LoadMoreState(
+            spinner: m.loadingMore, button: !m.loadingMore && !cursor.isEmpty && m.listErr == nil, note: note,
+            server: last ? m.serverSearchOffer : .none)
         guard state != loadMoreState else { return }
         loadMoreState = state
         onLoadMore?(state)

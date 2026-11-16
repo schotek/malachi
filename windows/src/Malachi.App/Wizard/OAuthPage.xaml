@@ -14,6 +14,12 @@ Client Configured", the provider's text and Use an App Password Instead
 when the provider has one). Each child's buttons are a column 12 px apart,
 centred. The page has no bottom bar in the Blueprint; the window's close
 button and Escape close the wizard and cancel a sign-in that waits.
+Over the prompt's button, for a new Microsoft 365 account, the group "Also
+Sync from This Account" (ServicesGroup, 340 px wide, left-aligned, 20 px
+above the button): its title, a check box per service, the note, and Try
+Again with Mail Only after a sign-in that asked for one did not succeed
+(WizardController.ServicesView, docs/plans/account-services.md §3.2; the
+check boxes are built in code).
 -->
 <UserControl
     x:Class="Malachi.App.Wizard.OAuthPage"
@@ -28,6 +34,30 @@ button and Escape close the wizard and cancel a sign-in that waits.
             IconName="web-browser-symbolic"
             Title="{l:T Msgid='Sign In Through Your Browser'}">
             <StackPanel HorizontalAlignment="Center" Spacing="12">
+                <StackPanel
+                    x:Name="ServicesGroup"
+                    Width="340"
+                    Margin="0,0,0,8"
+                    HorizontalAlignment="Center"
+                    Spacing="6"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="ServicesTitle"
+                        Margin="0,0,0,-2"
+                        Style="{StaticResource HeadingLabelStyle}"
+                        TextWrapping="Wrap" />
+                    <StackPanel x:Name="ServicesChecks" Spacing="2" />
+                    <TextBlock
+                        x:Name="ServicesNote"
+                        Style="{StaticResource DimCaptionLabelStyle}"
+                        TextWrapping="Wrap" />
+                    <Button
+                        x:Name="MailOnlyButton"
+                        Margin="0,4,0,0"
+                        AutomationProperties.AutomationId="OAuthMailOnly"
+                        Click="OnMailOnlyClick"
+                        Visibility="Collapsed" />
+                </StackPanel>
                 <Button
                     x:Name="SignInButton"
                     HorizontalAlignment="Center"

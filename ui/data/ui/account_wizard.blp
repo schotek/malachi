@@ -344,6 +344,26 @@ Adw.Dialog account_wizard {
                   spacing: 12;
                   halign: center;
 
+                  // A new Microsoft 365 account's calendar and contacts
+                  // (docs/plans/account-services.md §3.2): the switches,
+                  // their title and note are set from Go (services.go).
+                  Adw.PreferencesGroup oauth_services_group {
+                    width-request: 360;
+                    margin-bottom: 12;
+                    visible: false;
+                  }
+
+                  // After a sign-in that asked for the calendar or the
+                  // contacts did not succeed; its label is set from Go.
+                  Button oauth_mail_only_button {
+                    halign: center;
+                    visible: false;
+
+                    styles [
+                      "pill",
+                    ]
+                  }
+
                   Button oauth_signin_button {
                     use-underline: true;
 
@@ -448,58 +468,69 @@ Adw.Dialog account_wizard {
                 child: Adw.Clamp {
                   maximum-size: 480;
 
-                  child: ListBox result_rows {
-                    selection-mode: none;
+                  child: Box {
+                    orientation: vertical;
+                    spacing: 24;
 
-                    styles [
-                      "boxed-list",
-                    ]
+                    ListBox result_rows {
+                      selection-mode: none;
 
-                    Adw.ActionRow imap_result_row {
-                      title: _("Incoming (IMAP)");
-                      use-markup: false;
+                      styles [
+                        "boxed-list",
+                      ]
 
-                      [prefix]
-                      Image imap_result_icon {}
+                      Adw.ActionRow imap_result_row {
+                        title: _("Incoming (IMAP)");
+                        use-markup: false;
 
-                      // Shown from Go when the server's certificate can
-                      // be trusted (certtrust.Trustable).
-                      [suffix]
-                      Button imap_trust_button {
-                        // TRANSLATORS: button in a test result row
-                        label: _("_Trust Certificate…");
-                        use-underline: true;
-                        valign: center;
+                        [prefix]
+                        Image imap_result_icon {}
+
+                        // Shown from Go when the server's certificate can
+                        // be trusted (certtrust.Trustable).
+                        [suffix]
+                        Button imap_trust_button {
+                          // TRANSLATORS: button in a test result row
+                          label: _("_Trust Certificate…");
+                          use-underline: true;
+                          valign: center;
+                          visible: false;
+                        }
+                      }
+
+                      Adw.ActionRow smtp_result_row {
+                        title: _("Outgoing (SMTP)");
+                        use-markup: false;
+
+                        [prefix]
+                        Image smtp_result_icon {}
+
+                        // Shown from Go when the server's certificate can
+                        // be trusted (certtrust.Trustable).
+                        [suffix]
+                        Button smtp_trust_button {
+                          // TRANSLATORS: button in a test result row
+                          label: _("_Trust Certificate…");
+                          use-underline: true;
+                          valign: center;
+                          visible: false;
+                        }
+                      }
+
+                      Adw.ActionRow graph_result_row {
+                        title: _("Microsoft 365");
+                        use-markup: false;
                         visible: false;
+
+                        [prefix]
+                        Image graph_result_icon {}
                       }
                     }
 
-                    Adw.ActionRow smtp_result_row {
-                      title: _("Outgoing (SMTP)");
-                      use-markup: false;
-
-                      [prefix]
-                      Image smtp_result_icon {}
-
-                      // Shown from Go when the server's certificate can
-                      // be trusted (certtrust.Trustable).
-                      [suffix]
-                      Button smtp_trust_button {
-                        // TRANSLATORS: button in a test result row
-                        label: _("_Trust Certificate…");
-                        use-underline: true;
-                        valign: center;
-                        visible: false;
-                      }
-                    }
-
-                    Adw.ActionRow graph_result_row {
-                      title: _("Microsoft 365");
-                      use-markup: false;
+                    // An account of GNOME Online Accounts: its calendar and
+                    // contacts, set from Go (services.go).
+                    Adw.PreferencesGroup testing_services_group {
                       visible: false;
-
-                      [prefix]
-                      Image graph_result_icon {}
                     }
                   };
                 };

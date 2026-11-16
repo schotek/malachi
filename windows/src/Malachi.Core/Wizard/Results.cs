@@ -59,16 +59,36 @@ public static class Results
     /// <summary>
     /// accountwizard.passwordBannerText: the identity page's banner when the
     /// password is what to fix: authRequired means none is stored, anything
-    /// else (authFailed) that the server refused it.
+    /// else (authFailed) that the server refused it. imapHost is the incoming
+    /// server of the account: Google's refuses the password of the account
+    /// itself and takes an app password only, which the banner then says.
     /// </summary>
-    public static string PasswordBannerText(ErrorCode reason)
+    public static string PasswordBannerText(ErrorCode reason, string imapHost)
     {
         if (reason == ErrorCode.AuthRequired)
         {
             // TRANSLATORS: wizard banner on the identity page
             return L10n.T("No password is stored for this account. Enter it to continue.");
         }
+        if (GoogleHost(imapHost))
+        {
+            return L10n.T("Google rejected the sign-in. It does not accept the account's password here: create an app password in your Google Account and enter that one. For a work or school account, the administrator has to allow app passwords and IMAP.");
+        }
         return L10n.T("The server rejected the user name or password");
+    }
+
+    /// <summary>
+    /// accountwizard.GoogleHost: a mail server of Gmail and Google Workspace,
+    /// as typed or discovered: the case and the spaces around it do not matter.
+    /// </summary>
+    public static bool GoogleHost(string? host)
+    {
+        var h = (host ?? "").Trim().ToLowerInvariant();
+        if (h.EndsWith('.'))
+        {
+            h = h[..^1];
+        }
+        return h is "imap.gmail.com" or "smtp.gmail.com" or "imap.googlemail.com" or "smtp.googlemail.com";
     }
 
     /// <summary>

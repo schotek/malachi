@@ -208,7 +208,7 @@ public sealed partial class AppState : IDisposable
 
         var directories = new PrivateDirectory();
         // Attachments a previous run wrote for opening (docs/security.md §8).
-        var openDir = OpenDir.InDataDirectory(paths.DataDir, directories, TimeProvider.System, AnsiLookAlikes.OfThisMachine);
+        var openDir = OpenDir.InDataDirectory(paths.OpenParent, directories, TimeProvider.System, AnsiLookAlikes.OfThisMachine);
         PurgeOpenDir(openDir, log);
         try
         {

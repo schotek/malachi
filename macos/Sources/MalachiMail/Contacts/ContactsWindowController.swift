@@ -56,7 +56,8 @@ final class ContactsWindowController: NSWindowController, NSWindowDelegate, NSTo
 
     init(contacts: AppContacts) {
         self.contacts = contacts
-        list = ContactsListController(options: contacts.options)
+        // The samples' accounts are invented: their Not Now stays in the window.
+        list = ContactsListController(options: contacts.options, settings: contacts.samples ? nil : contacts.state.settings)
         detail = ContactsDetailController(options: contacts.options)
         sidebarPane = ContactsSidebarViewController()
         listPane = ContactsListViewController()

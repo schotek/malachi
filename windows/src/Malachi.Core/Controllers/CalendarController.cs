@@ -27,12 +27,20 @@
 // must not hold IdleAsync), the calls are tracked. "From 2 characters"
 // counts text elements, as Swift's String.count counts characters. Create
 // it, and call it, on the UI thread.
+//
+// The sidebar's offer to sync an account's calendar that is off
+// (docs/plans/account-services.md §3.3): Turn On runs Preferences' switch
+// through a CalendarAccountController of the account (its consent question
+// through AskQuestion, its re-sign-in as SignInRequested, its refusal as a
+// toast), Not Now goes to account-services-dismissed.
 
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
 using Malachi.Core.Calendars;
@@ -60,6 +68,14 @@ public sealed partial class CalendarController : IDisposable
     private readonly Cal.Weekday localeFirstDay;
     private readonly Cal.Sleep sleep;
     private readonly ControllerScope scope;
+
+    // Turn On of a sync offer: the account's Preferences controller, kept
+    // while the calendar runs so that its consent question can follow the
+    // account's state.
+    private readonly Dictionary<AccountId, CalendarAccountController> syncSwitches = [];
+
+    // The refusal of each Turn On last reported through ToastRequested.
+    private readonly Dictionary<AccountId, string> syncErrors = [];
 
     private BoardObserverToken? observer;
     private int loadGeneration;
@@ -125,6 +141,13 @@ public sealed partial class CalendarController : IDisposable
     /// with <c>calendar: true</c> (<c>account.oauthStart</c>; Swift <c>onSignIn</c>).
     /// </summary>
     public event EventHandler<AccountId>? SignInRequested;
+
+    /// <summary>
+    /// Asks a question for Turn On of a sync offer (the consent explanation
+    /// of <see cref="CalendarAccountController"/>) and completes with the
+    /// answer; null answers Cancel (Swift <c>onQuestion</c>).
+    /// </summary>
+    public Func<Cal.Question, Task<Cal.Answer>>? AskQuestion { get; set; }
 
     /// <summary>The calendar's data and writes.</summary>
     public ICalendarDataSource Source { get; }
@@ -199,6 +222,11 @@ public sealed partial class CalendarController : IDisposable
         scope.VerifyAccess();
         observer?.Cancel();
         observer = null;
+        foreach (var c in syncSwitches.Values)
+        {
+            c.Stop();
+        }
+        syncSwitches.Clear();
         loadGeneration++;
         CancelSearch();
     }
@@ -363,6 +391,12 @@ public sealed partial class CalendarController : IDisposable
             var accounts = s.ActiveCalendarAccounts.Select(a =>
             {
                 var (line, signIn) = StateRow(a.State);
+                var offer = "";
+                if (!a.Sync && s.FindAccount(a.AccountId) is { } account
+                    && AccountSync.ShowPrompt(account, AccountSync.Service.Calendar, DismissedOffers))
+                {
+                    offer = AccountSync.OffLine(AccountSync.Service.Calendar, s.AccountName(a.AccountId));
+                }
                 return new SidebarAccount
                 {
                     AccountId = a.AccountId,
@@ -372,6 +406,7 @@ public sealed partial class CalendarController : IDisposable
                     Calendars = [.. a.Calendars.Select(c => new SidebarCalendar(c.Id, Cal.CleanLine(c.Name), c.Color, c.Visible, Cal.Prefs.CalendarRowNote(c)))],
                     StateLine = line,
                     OffersSignIn = signIn,
+                    SyncOffer = offer,
                 };
             });
             return new SidebarModel
@@ -525,6 +560,74 @@ public sealed partial class CalendarController : IDisposable
     {
         scope.VerifyAccess();
         scope.Raise(SignInRequested, this, account);
+    }
+
+    // The offer to sync (docs/plans/account-services.md §3.3)
+
+    // The Not Now answers of account-services-dismissed (none without settings).
+    private IReadOnlyList<string> DismissedOffers => settings?.AccountServicesDismissed ?? [];
+
+    /// <summary>
+    /// The empty page's offer (<see cref="Cal.EmptyKind.SyncOff"/>): the one
+    /// account whose calendar sync the sidebar offers, null when there is
+    /// none or more (Open Preferences then).
+    /// </summary>
+    public AccountId? EmptySyncOffer
+    {
+        get
+        {
+            if (EmptyKind != Cal.EmptyKind.SyncOff)
+            {
+                return null;
+            }
+            var offers = Sidebar.Accounts.Where(a => a.SyncOffer.Length > 0).ToList();
+            return offers.Count == 1 ? offers[0].AccountId : (AccountId?)null;
+        }
+    }
+
+    /// <summary>
+    /// Turn On of a sync offer: Preferences' Sync This Account's Calendars
+    /// (<see cref="CalendarAccountController.SetSync"/>), with its consent
+    /// question and re-sign-in when the grant lacks the calendar.
+    /// </summary>
+    public void TurnOnSync(AccountId account)
+    {
+        scope.VerifyAccess();
+        if (!syncSwitches.TryGetValue(account, out var c))
+        {
+            c = new CalendarAccountController(Source, account, pending: scope.Pending)
+            {
+                AskQuestion = q => AskQuestion?.Invoke(q) ?? Task.FromResult(Cal.Answer.Cancel),
+            };
+            c.SignInRequested += (_, id) => SignIn(id);
+            c.Changed += (_, _) =>
+            {
+                if (c.Error == syncErrors.GetValueOrDefault(account, ""))
+                {
+                    return;
+                }
+                syncErrors[account] = c.Error;
+                if (c.Error.Length > 0)
+                {
+                    scope.Raise(ToastRequested, this, c.Error);
+                }
+            };
+            syncSwitches[account] = c;
+            c.Start();
+        }
+        c.SetSync(true);
+    }
+
+    /// <summary>Not Now of a sync offer: it does not come back for the account.</summary>
+    public void DismissSyncOffer(AccountId account)
+    {
+        scope.VerifyAccess();
+        if (settings is null)
+        {
+            return;
+        }
+        settings.AccountServicesDismissed = AccountSync.Dismissing(settings.AccountServicesDismissed, account, AccountSync.Service.Calendar);
+        RaiseChanged();
     }
 
     // Selection

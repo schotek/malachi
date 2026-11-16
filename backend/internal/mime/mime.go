@@ -313,7 +313,8 @@ func (p *parser) finish() {
 	// Trailing whitespace carries nothing and differs between a root body
 	// (keeps its final CRLF) and a multipart part (the CRLF before the
 	// boundary belongs to the delimiter); normalise it away.
-	out.Text = strings.TrimRight(out.Text, " \t\n")
+	// A text part that is really HTML markup is read as HTML (LooksLikeHTML).
+	out.Text = PlainText(out.Text, p.limits.MaxTextBytes)
 	if out.Text == "" && out.HasHTML {
 		out.Text = HTMLToText(out.RawHTML, p.limits.MaxTextBytes)
 	}

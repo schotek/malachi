@@ -22,11 +22,6 @@ const searchExcerptRunes = 200
 // it.
 var searchTimeZone = time.Local
 
-// searchExcludedRoles are left out of a search that names no folder
-// (neither folderId nor in:): deleted and junk mail would crowd the
-// results.
-var searchExcludedRoles = []api.FolderRole{api.RoleTrash, api.RoleJunk}
-
 // searchRoleNames are the in: keywords that name a folder by its role.
 var searchRoleNames = map[string]api.FolderRole{
 	"inbox":   api.RoleInbox,
@@ -124,10 +119,11 @@ func (s *searchService) Query(ctx context.Context, p api.SearchQueryParams) (*ap
 		if len(ids) == 0 {
 			return empty, nil
 		}
-		f.FolderIDs = ids // naming a folder reaches Trash and Junk too
-	case p.FolderID == "":
-		f.ExcludeRoles = searchExcludedRoles
+		f.FolderIDs = ids
 	}
+	// No role is left out: Trash and Junk are searched like any folder
+	// (decided 2026-11-15, as Outlook searches the whole mailbox; a
+	// search of the account or of every account used to skip them).
 
 	rows, next, total, err := s.b.store.SearchMessages(ctx, f, p.Page.Cursor, limit)
 	switch {

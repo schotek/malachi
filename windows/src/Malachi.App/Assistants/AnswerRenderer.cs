@@ -15,7 +15,10 @@
 //
 // Windows differences: a code span has the monospaced face without GTK's
 // tinted background (a Run has none in WinUI), a code block the same with
-// GTK's left margin; the list indent and the heading sizes are GTK's.
+// GTK's left margin; the list indent and the heading sizes are GTK's. A
+// block quote is a card of its own inside the text (a Paragraph has no
+// background either): a Border with the accent bar and a TextBlock whose
+// Text is the quote, as wide as its text needs.
 
 using System;
 using System.Collections.Generic;
@@ -56,6 +59,24 @@ internal static class AnswerRenderer
         foreach (var block in blocks)
         {
             var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 6) };
+            if (block.Kind == MarkdownBlockKind.Quote)
+            {
+                var quote = new TextBlock
+                {
+                    Text = block.Spans.Count > 0 ? block.Spans[0].Text : "",
+                    TextWrapping = TextWrapping.Wrap,
+                    IsTextSelectionEnabled = true,
+                    FontSize = baseSize,
+                };
+                var card = new Border
+                {
+                    Child = quote,
+                    Style = (Style)Application.Current.Resources["QuoteCardBorderStyle"],
+                };
+                paragraph.Inlines.Add(new InlineUIContainer { Child = card });
+                view.Blocks.Add(paragraph);
+                continue;
+            }
             var prefix = "";
             switch (block.Kind)
             {

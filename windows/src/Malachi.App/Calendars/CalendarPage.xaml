@@ -158,8 +158,7 @@ over it all (ToastLayer). The page's keys: CalendarController.HandleKey.
                         Margin="0,6,0,0"
                         HorizontalAlignment="Center"
                         AutomationProperties.AutomationId="CalendarOpenPreferences"
-                        Click="OnOpenPreferencesClick"
-                        Content="{l:T Msgid='Open Preferences'}" />
+                        Click="OnOpenPreferencesClick" />
                 </StackPanel>
             </ScrollViewer>
         </Grid>

@@ -29,7 +29,7 @@ import Darwin
     public var executable: String? {
         guard settings.distribution.allowsLocalAgents else { return nil }
         if !settings.assistantCodexPath.isEmpty { return Self.nativeExecutable(settings.assistantCodexPath) ? settings.assistantCodexPath : nil }
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = NSHomeDirectory()
         let candidates = [home + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex"] + (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map { String($0) + "/codex" }
         return candidates.first(where: Self.nativeExecutable)
     }

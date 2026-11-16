@@ -70,10 +70,10 @@ func assistantDirectory() string {
 	return filepath.Join(glib.GetUserCacheDir(), "malachi", "assistant")
 }
 
-// catalogLanguages are the languages po/LINGUAS ships, as BCP 47 tags; a
-// language added there belongs here too. The daemon turns the tag into
-// the English name its prompts say (assistant.prompt's language).
-var catalogLanguages = map[string]bool{"cs": true}
+// catalogLanguages are the languages po/LINGUAS ships, by the names glib.GetLanguageNames
+// gives (pt_BR, never pt for it); a language added there belongs here too. The daemon turns
+// the name into the English name its prompts say (assistant.prompt's language).
+var catalogLanguages = map[string]bool{"cs": true, "de": true, "es": true, "fr": true, "hu": true, "it": true, "nl": true, "pl": true, "pt_BR": true, "sk": true, "uk": true}
 
 // uiLanguageTag is the language the UI shows as a BCP 47 tag for the
 // daemon's prompts: the first of the user's languages with a catalog,
@@ -863,6 +863,16 @@ func newAnswerView(tv *gtk.TextView) *answerView {
 		})
 	}
 	add("codeblock", map[string]any{"family": "monospace", "left-margin": int32(6), "paragraph-background": "rgba(127,127,127,0.12)"})
+	// A block quote is a tinted card: a text view's tags have no bar to
+	// draw at its edge, so the accent colour is its background. The space
+	// above and below its lines is inside the card; quotegap is the small
+	// empty line that keeps the next block off it.
+	add("quote", map[string]any{
+		"left-margin": int32(10), "right-margin": int32(8),
+		"pixels-above-lines": int32(6), "pixels-below-lines": int32(6),
+		"paragraph-background": quoteBackground(),
+	})
+	add("quotegap", map[string]any{"scale": 0.4})
 	add("bold", map[string]any{"weight": int32(700)})
 	add("italic", map[string]any{"font": "Italic"})
 	add("code", map[string]any{"family": "monospace", "background": "rgba(127,127,127,0.15)"})
@@ -903,6 +913,9 @@ func (a *answerView) renderBlocks(blocks []assistant.Block) {
 	for i, b := range blocks {
 		if i > 0 {
 			a.insert("\n")
+			if blocks[i-1].Kind == assistant.BlockQuote {
+				a.insert("\n", a.tags["quotegap"])
+			}
 		}
 		var block []*gtk.TextTag
 		prefix := ""
@@ -917,6 +930,8 @@ func (a *answerView) renderBlocks(blocks []assistant.Block) {
 			prefix = fmt.Sprintf("%d. ", b.Number)
 		case assistant.BlockCode:
 			block = append(block, a.tags["codeblock"])
+		case assistant.BlockQuote:
+			block = append(block, a.tags["quote"])
 		default:
 			block = append(block, a.tags["para"])
 		}
@@ -969,6 +984,15 @@ func (a *answerView) insert(text string, tags ...*gtk.TextTag) {
 
 // linkColor is the accent colour links are drawn in, "" when libadwaita
 // does not say.
+// quoteBackground is the background of a block quote's card: the accent
+// colour, faint enough for the text of either colour scheme.
+func quoteBackground() string {
+	if c := adw.StyleManagerGetDefault().AccentColorRGBA(); c != nil {
+		return fmt.Sprintf("rgba(%d,%d,%d,0.14)", int(c.Red()*255+0.5), int(c.Green()*255+0.5), int(c.Blue()*255+0.5))
+	}
+	return "rgba(127,127,127,0.14)"
+}
+
 func linkColor() string {
 	if c := adw.StyleManagerGetDefault().AccentColorRGBA(); c != nil {
 		return c.String()

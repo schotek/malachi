@@ -518,6 +518,10 @@ func (stubSearch) Query(context.Context, api.SearchQueryParams) (*api.SearchQuer
 	return nil, api.ErrNotImplemented
 }
 
+func (stubSearch) Server(context.Context, api.SearchServerParams) (*api.SearchServerResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
 type stubSync struct{}
 
 func (stubSync) Status(context.Context, api.SyncStatusParams) (*api.SyncStatusResult, error) {

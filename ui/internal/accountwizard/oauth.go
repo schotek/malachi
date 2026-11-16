@@ -70,6 +70,7 @@ func (w *Wizard) showOAuthPrompt(provider string, cfg, passwordAlt *api.AccountC
 		email = cfg.Email
 	}
 	w.oauth = oauthState{name: providerLabel(provider, email), cfg: cfg, passwordAlt: passwordAlt}
+	w.offerServicesForSignIn(cfg)
 	// TRANSLATORS: %s is a provider such as "Google" or "Microsoft 365".
 	w.oauthPrompt.SetDescription(glib.MarkupEscapeText(fmt.Sprintf(i18n.T("Your browser will open so you can sign in to %s. Malachi Mail never sees your password; it only receives permission to read and send your mail."), w.oauth.name)))
 	// TRANSLATORS: %s is a provider such as "Google" or "Microsoft 365".
@@ -101,12 +102,16 @@ func (w *Wizard) oauthShown() bool {
 // and the page waits for the daemon.
 func (w *Wizard) onOAuthSignIn() {
 	w.cancelSession()
+	w.services.Started()
+	w.showServices()
 	params := api.AccountOAuthStartParams{BrowserPage: BrowserPage()}
 	switch {
 	case w.editing != nil:
 		params.AccountID = w.editing.ID
 	case w.oauth.cfg != nil:
-		cfg := withIdentity(*w.oauth.cfg, w.readIdentity())
+		// The daemon asks for the scopes of the services switched on
+		// here itself, so one consent covers them all.
+		cfg := w.services.Apply(withIdentity(*w.oauth.cfg, w.readIdentity()))
 		params.Config = &cfg
 	default:
 		return
@@ -216,6 +221,7 @@ func (w *Wizard) oauthComplete(cfg api.AccountConfig) {
 func (w *Wizard) oauthFailed(err error) {
 	w.log.Info("browser sign-in failed", "err", err)
 	w.cancelSession()
+	w.servicesSignInFailed()
 	w.showOAuthStack(oauthStackPrompt)
 	w.toast(oauthErrorText(w.oauth.name, err))
 }
@@ -233,6 +239,9 @@ func (w *Wizard) onOAuthReopen() {
 func (w *Wizard) onOAuthCancel() {
 	w.op++
 	w.cancelSession()
+	// The provider's page may have asked for an administrator's approval
+	// of the calendar or the contacts.
+	w.servicesSignInFailed()
 	w.showOAuthStack(oauthStackPrompt)
 }
 

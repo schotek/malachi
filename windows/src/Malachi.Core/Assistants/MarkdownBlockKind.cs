@@ -23,4 +23,10 @@ public enum MarkdownBlockKind
 
     /// <summary>A code block between two lines of three backticks.</summary>
     Code,
+
+    /// <summary>
+    /// A block quote, lines that start with "&gt;": the text of a draft or
+    /// of a message that the answer shows word for word, never parsed.
+    /// </summary>
+    Quote,
 }

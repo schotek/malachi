@@ -125,12 +125,19 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 		next = pg.NextLink
 		progress(0.3 * min(1, float64(pages)/float64(pages+1)))
 	}
+	// Rows kept outside the window (found by a search on the server) are
+	// not what the enumeration lists; they stay until their time is over or
+	// the service reports them removed.
+	kept, err := s.deps.Store.KeptRemoteIDs(ctx, f.ID, s.now())
+	if err != nil {
+		return nil, storageError(err)
+	}
 	if initial {
 		// Everything the enumeration did not mention is gone or outside
 		// the window — except a row the user moved here whose move is
 		// still queued: the server does not hold it here yet.
 		for id := range known {
-			if !seen[id] && !queued[id] {
+			if !seen[id] && !queued[id] && !kept[id] {
 				removed[id] = true
 			}
 		}
@@ -140,7 +147,9 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 			return nil, storageError(err)
 		}
 		for _, id := range old {
-			removed[id] = true
+			if !kept[id] {
+				removed[id] = true
+			}
 		}
 	}
 	tombstones := make([]string, 0, len(removed))
@@ -217,8 +226,13 @@ func (s *Syncer) initialDeltaURL(f store.Folder, since time.Time) string {
 // messageRow is the store row of a listed message (headers only; the body
 // comes later).
 func (s *Syncer) messageRow(f store.Folder, m message) *store.Message {
+	return messageRow(s.account.ID, f, m)
+}
+
+// messageRow is the row of a listed message in a folder of the account.
+func messageRow(accountID string, f store.Folder, m message) *store.Message {
 	row := &store.Message{
-		AccountID: s.account.ID, FolderID: f.ID, RemoteID: m.ID,
+		AccountID: accountID, FolderID: f.ID, RemoteID: m.ID,
 		Flags:          flagsOf(m),
 		To:             addressesOf(m.ToRecipients),
 		CC:             addressesOf(m.CCRecipients),

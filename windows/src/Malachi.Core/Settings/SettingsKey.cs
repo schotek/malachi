@@ -158,6 +158,9 @@ public enum SettingsKey
     /// <summary><c>contacts-suggest-scope</c>: <see cref="SettingsStore.ContactsSuggestScope"/>.</summary>
     ContactsSuggestScope,
 
+    /// <summary><c>account-services-dismissed</c>: <see cref="SettingsStore.AccountServicesDismissed"/>.</summary>
+    AccountServicesDismissed,
+
     /// <summary><c>toolbar-mail</c>: the user's arrangement of the Mail toolbar (<see cref="SettingsStore.ToolbarLayout"/>).</summary>
     ToolbarMail,
 

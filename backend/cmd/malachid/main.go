@@ -9,29 +9,22 @@
 // Every connection first proves that it holds the key the daemon makes at
 // every start and writes beside the socket, as PATH.key for --socket PATH
 // (docs/api.md §1.4). There is no way to turn this off.
+//
+// The daemon itself is pkg/embed; this command parses the flags, opens the
+// log file of --log-file and stops it on SIGINT and SIGTERM.
 package main
 
 import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
+	"io"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-	"time"
-	// Embedded IANA tzdata, the same on every platform (Windows has no
-	// system zoneinfo): docs/calendar.md D4.
-	_ "time/tzdata"
 
-	"github.com/schotek/malachi/backend/internal/auth"
-	"github.com/schotek/malachi/backend/internal/auth/helper"
-	"github.com/schotek/malachi/backend/internal/auth/secretservice"
 	"github.com/schotek/malachi/backend/internal/config"
-	"github.com/schotek/malachi/backend/internal/core"
-	"github.com/schotek/malachi/backend/internal/rpc"
-	"github.com/schotek/malachi/backend/internal/store"
+	"github.com/schotek/malachi/backend/pkg/embed"
 )
 
 // version is injected at build time: -ldflags "-X main.version=…".
@@ -50,7 +43,7 @@ func main() {
 	}
 }
 
-func run() error {
+func run() (retErr error) {
 	paths, err := config.ResolvePaths()
 	if err != nil {
 		return err
@@ -61,12 +54,15 @@ func run() error {
 		flagStore   = flag.String("store", paths.StoreFile(), "SQLite database")
 		flagSocket  = flag.String("socket", paths.SocketFile(), "JSON-RPC unix socket; its connection key is written beside it as PATH.key")
 		flagVersion = flag.Bool("version", false, "print version and exit")
+		flagLogFile = flag.String("log-file", "", "write the log to this file (0600, rotated at 5 MiB to FILE.1) instead of stderr")
 	)
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
 		flag.PrintDefaults()
-		fmt.Fprintln(flag.CommandLine.Output(), "\nEnvironment:\n  "+envTimeZone+
-			"\n    \tthe user's IANA time zone (e.g. Europe/Prague), which the client passes; else TZ, else /etc/localtime")
+		fmt.Fprintln(flag.CommandLine.Output(), "\nEnvironment:\n  "+embed.EnvTimeZone+
+			"\n    \tthe user's IANA time zone (e.g. Europe/Prague), which the client passes; else TZ, else /etc/localtime"+
+			"\n  "+embed.EnvDNSServers+
+			"\n    \tDNS servers for MX, TXT and SRV lookups (e.g. 192.0.2.53,[2001:db8::53]:53), which the client passes where /etc/resolv.conf is missing")
 	}
 	flag.Parse()
 
@@ -75,178 +71,32 @@ func run() error {
 		return nil
 	}
 
-	log := newLogger()
-	log.Info("starting malachid", "version", version, "pid", os.Getpid())
-
+	var logOut io.Writer = os.Stderr
+	if *flagLogFile != "" {
+		lf, err := openLogFile(*flagLogFile)
+		if err != nil {
+			return err
+		}
+		defer lf.Close()
+		logOut = lf
+		// A panic or fatal error goes to the file too: the stderr of a
+		// daemon started by a desktop app is often /dev/null.
+		_ = lf.CrashOutput()
+	}
+	log := embed.NewLoggerTo(logOut)
+	defer func() {
+		if retErr != nil {
+			log.Error("malachid stopped", "err", retErr)
+		}
+	}()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-
-	cfg, found, err := config.Load(*flagConfig)
-	if err != nil {
-		return err
-	}
-	if found {
-		log.Info("configuration loaded", "path", *flagConfig, "accounts", len(cfg.Accounts),
-			"oauthClients", oauthClients(cfg))
-		config.WarnExposedSecret(log, *flagConfig, cfg)
-	} else {
-		log.Info("no configuration file, using defaults", "path", *flagConfig)
-	}
-
-	// One daemon per store, and before it touches the store or the socket:
-	// a second one would sync, send and write the same data, and its
-	// socket check can be fooled into taking a live daemon's socket.
-	lock, err := store.Lock(ctx, *flagStore)
-	if err != nil {
-		return err
-	}
-	defer func() { // runs last: the store is closed by then
-		if err := lock.Close(); err != nil {
-			log.Error("release store lock", "err", err)
-		}
-	}()
-	log.Debug("store locked", "lock", lock.Path())
-
-	st, err := store.Open(ctx, *flagStore, log)
-	if err != nil {
-		return fmt.Errorf("open store: %w", err)
-	}
-	defer func() {
-		if err := st.Close(); err != nil {
-			log.Error("close store", "err", err)
-		}
-	}()
-	log.Info("store ready", "path", st.Path())
-
-	setPreferredZone(log)
-	backend := core.New(version, st, cfg, log)
-	defer backend.Close() // idempotent; also on the early returns below
-	backend.Updates.Channel = updateChannel
-	if v, ok := os.LookupEnv("MALACHI_UPDATE_CHANNEL"); ok {
-		backend.Updates.Channel = v
-	}
-	if c := backend.Updates.Channel; c != "" {
-		log.Info("update channel", "channel", c)
-	}
-	switch v := strings.ToLower(os.Getenv("MALACHI_KEYRING")); v {
-	case "", "secretservice":
-		ks := secretservice.New(log)
-		defer ks.Close()
-		backend.Keyring = ks
-	case "helper":
-		ks, err := helper.New(os.Getenv(helper.PathEnv), log)
-		if err != nil {
-			return fmt.Errorf("MALACHI_KEYRING=helper: %w", err)
-		}
-		log.Info("keyring: external helper", "path", os.Getenv(helper.PathEnv))
-		backend.Keyring = ks
-	case "none":
-		log.Warn("MALACHI_KEYRING=none: passwords and sign-ins cannot be stored; adding an account with a password or the backend's own OAuth2 sign-in fails with keyringError")
-		backend.Keyring = auth.UnavailableKeyring{}
-	default:
-		return fmt.Errorf("unknown MALACHI_KEYRING %q (secretservice|helper|none)", v)
-	}
-	// Defaults of preferences the starting process chose (the macOS app);
-	// StartSync stores the ones without a value.
-	defaults, envErr := core.RuntimeDefaultsFromEnv(os.LookupEnv)
-	if envErr != nil {
-		log.Warn("ignoring an invalid preference default", "err", envErr)
-	}
-	backend.SetRuntimeDefaults(defaults)
-	if err := backend.ImportConfigAccounts(ctx); err != nil {
-		return fmt.Errorf("import accounts from %s: %w", *flagConfig, err)
-	}
-	srv := rpc.NewServer(backend, log)
-	backend.SetNotifier(srv)
-	if err := srv.Listen(*flagSocket); err != nil {
-		return err
-	}
-	// Idempotent; removes the key file and the socket on every way out.
-	defer srv.Close()
-	// The assistant's bridge connects where the clients do.
-	backend.SocketPath = *flagSocket
-	syncDone := backend.StartSync(ctx)
-	maintainDone := make(chan struct{})
-	go func() {
-		defer close(maintainDone)
-		backend.Maintain(ctx)
-	}()
-
-	// Say why the daemon stops before the server logs its own shutdown:
-	// Serve's context ends only after this line.
-	serveCtx, endServe := context.WithCancel(context.WithoutCancel(ctx))
-	stopLog := context.AfterFunc(ctx, func() {
-		log.Info("shutting down", "reason", ctxReason(ctx))
-		endServe()
+	return embed.Run(ctx, embed.Options{
+		Version:       version,
+		UpdateChannel: updateChannel,
+		Config:        *flagConfig,
+		Store:         *flagStore,
+		Socket:        *flagSocket,
+		Log:           log,
 	})
-	err = srv.Serve(serveCtx)
-	if stopLog() { // Serve ended although ctx did not
-		log.Info("shutting down", "reason", ctxReason(ctx))
-	}
-	endServe()
-	srv.Close()     // idempotent; removes the key file and the socket, closes connections
-	backend.Close() // ends waiting sign-ins and closes their listeners
-
-	// Let the syncers log out and finish their current store writes, and
-	// the maintenance its current batch, before the deferred store close;
-	// a hung connection must not hold the exit.
-	deadline := time.After(syncStopTimeout)
-	select {
-	case <-syncDone:
-	case <-deadline:
-		log.Warn("sync supervisor did not stop in time", "timeout", syncStopTimeout)
-		return err
-	}
-	select {
-	case <-maintainDone:
-	case <-deadline:
-		log.Warn("maintenance did not stop in time", "timeout", syncStopTimeout)
-	}
-	return err
-}
-
-// oauthClients names the providers config.toml has an OAuth client for
-// (the ids themselves are not logged).
-func oauthClients(cfg config.Config) []string {
-	var out []string
-	if cfg.OAuth2.Google.ClientID != "" {
-		out = append(out, "google")
-	}
-	if cfg.OAuth2.Microsoft.ClientID != "" {
-		out = append(out, "microsoft")
-	}
-	return out
-}
-
-// syncStopTimeout caps how long shutdown waits for the sync supervisor and
-// the maintenance together.
-const syncStopTimeout = 10 * time.Second
-
-func newLogger() *slog.Logger {
-	level := slog.LevelInfo
-	switch strings.ToLower(os.Getenv("MALACHI_LOG_LEVEL")) {
-	case "debug":
-		level = slog.LevelDebug
-	case "warn", "warning":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
-	case "info", "":
-	default:
-		fmt.Fprintln(os.Stderr, "malachid: unknown MALACHI_LOG_LEVEL, using info")
-	}
-	var h slog.Handler
-	if os.Getenv("MALACHI_LOG_FORMAT") == "json" {
-		h = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})
-	} else {
-		h = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
-	}
-	return slog.New(h)
-}
-
-func ctxReason(ctx context.Context) string {
-	if err := context.Cause(ctx); err != nil {
-		return err.Error()
-	}
-	return "server stopped"
 }

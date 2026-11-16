@@ -1,3 +1,35 @@
+Version 0.6.0
+~~~~~~~~~~~~~
+Released: 2026-11-16
+
+Features:
+ * Search reaches the mail server too. When the search runs out of what
+   is stored on this computer, Search on the Server Too looks through
+   older mail of IMAP and Microsoft 365 accounts; a message found there
+   opens like any other and stays for 30 days.
+ * Search in an account or in all accounts covers the whole mailbox,
+   Trash and Junk included.
+ * Ten more languages: German, Spanish, French, Hungarian, Italian,
+   Dutch, Polish, Brazilian Portuguese, Slovak and Ukrainian.
+ * On a MacBook Pro with a Touch Bar, the main window has one for Mail,
+   the Board and the Calendar; it can be customized from the View menu.
+ * Adding a Microsoft 365 or CalDAV account offers to sync its calendar
+   and contacts right away.
+ * The assistant shows the text of a draft or a quoted message as a card,
+   apart from its own words.
+ * A password refused by Google's servers explains the app password
+   Gmail asks for.
+ * On Windows, the Microsoft Store edition starts at sign-in through the
+   system's startup task.
+ * The background service keeps a log file, which makes a problem report
+   easier to follow.
+
+Bugfixes:
+ * A message whose plain-text part holds HTML is shown as HTML, not as
+   its markup.
+ * Accounts of AI providers no longer show up in Mail on macOS and
+   Windows.
+
 Version 0.5.0
 ~~~~~~~~~~~~~
 Released: 2026-11-08

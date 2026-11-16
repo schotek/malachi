@@ -11,6 +11,10 @@
 // contactsConsentRequired), and the status line. notify.contactsChanged and
 // notify.accountsChanged reload everything after `changeDebounce`, keeping
 // the book, the search, as many rows as were shown and the selection.
+// Next to the consent banners, the offer to sync the contacts of an
+// account that has them off (`AccountServices`, docs/plans/
+// account-services.md §3.3): Turn On writes Preferences' Sync Contacts,
+// Not Now goes to account-services-dismissed.
 
 import Foundation
 
@@ -23,6 +27,16 @@ public final class ContactsListController {
     public static let pageSize = API.Limits.defaultContactListLimit
 
     public let options: ContactsOptions
+    /// account-services-dismissed (the sync offers' Not Now); without it
+    /// the offers are shown and Not Now hides them until the window closes.
+    public let settings: Settings?
+
+    /// An offer to sync an account's contacts.
+    public struct SyncOffer: Sendable, Equatable {
+        public var accountId: AccountID
+        /// "Contacts sync is off for %s".
+        public var text: String
+    }
 
     // MARK: Outputs
 
@@ -68,9 +82,14 @@ public final class ContactsListController {
     private var searchGen = 0
     private var changeGen = 0
     private var closed = false
+    /// Turn On without its answer.
+    private var turningOn: Set<AccountID> = []
+    /// Not Now without settings.
+    private var dismissedHere: [String] = []
 
-    public init(options: ContactsOptions) {
+    public init(options: ContactsOptions, settings: Settings? = nil) {
         self.options = options
+        self.settings = settings
     }
 
     /// Loads the accounts, the books and the first page.
@@ -307,6 +326,61 @@ public final class ContactsListController {
     /// Allow… of an account's banner.
     public func allowConsent(_ id: AccountID) {
         onSignIn?(id)
+    }
+
+    // MARK: The offer to sync
+
+    private var dismissedOffers: [String] { settings?.accountServicesDismissed ?? dismissedHere }
+
+    /// The offers to sync contacts, in account order (none before the
+    /// books are listed).
+    public var syncOffers: [SyncOffer] {
+        guard loaded else { return [] }
+        return AccountServices.prompts(accounts, .contacts, dismissed: dismissedOffers)
+            .filter { !turningOn.contains($0.id) }
+            .map { SyncOffer(accountId: $0.id, text: AccountServices.offLine(.contacts, account: ContactBook.accountName($0))) }
+    }
+
+    /// Turn On of an offer: Sync Contacts as in Preferences
+    /// (`ContactsPreferencesController.setSync`), one account.update of the
+    /// whole configuration; the reload then shows the consent banner when
+    /// the sign-in lacks the contacts.
+    public func turnOnSync(_ id: AccountID) {
+        guard let i = accounts.firstIndex(where: { $0.id == id }), !turningOn.contains(id),
+              AccountServices.showPrompt(accounts[i], .contacts, dismissed: []) else { return }
+        let name = ContactBook.accountName(accounts[i])
+        let cfg = AccountServices.apply(accounts[i].config, on: [.contacts: true])
+        turningOn.insert(id)
+        error = ""
+        changed()
+        options.call(API.AccountUpdate.self, AccountUpdateParams(accountId: id, config: cfg),
+                     timeout: ContactsOptions.writeTimeout) { [weak self] r in
+            guard let self else { return }
+            self.turningOn.remove(id)
+            if self.closed {
+                return
+            }
+            if case .failure(let e) = r {
+                self.error = self.options.errorMessage(e, account: name)
+                self.changed()
+                return
+            }
+            if let j = self.accounts.firstIndex(where: { $0.id == id }) {
+                self.accounts[j].config = cfg
+            }
+            self.changed()
+            self.refresh()
+        }
+    }
+
+    /// Not Now of an offer: it does not come back for the account.
+    public func dismissSyncOffer(_ id: AccountID) {
+        if let settings {
+            settings.accountServicesDismissed = AccountServices.dismissing(settings.accountServicesDismissed, id, .contacts)
+        } else {
+            dismissedHere = AccountServices.dismissing(dismissedHere, id, .contacts)
+        }
+        changed()
     }
 
     /// Asks each candidate's books alone; a contactsConsentRequired makes a

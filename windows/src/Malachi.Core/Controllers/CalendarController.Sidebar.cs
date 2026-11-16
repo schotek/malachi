@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Controllers/CalendarController.swift
-// (CalendarController.Filter, SidebarCalendar, SidebarAccount, Sidebar);
+// (CalendarController.Filter, SidebarCalendar, SidebarAccount with its
+// syncOffer, Sidebar);
 // Swift-first, no GTK counterpart yet (docs/calendar.md §5.3–5.4).
 //
 // What the calendar page's content filters by and the sidebar's model the
@@ -13,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
 using Malachi.Core.Calendars;
@@ -67,11 +69,18 @@ public sealed partial class CalendarController
         /// <summary>The state row offers Sign In… (<see cref="SignIn"/>).</summary>
         public bool OffersSignIn { get; init; }
 
+        /// <summary>
+        /// The offer to sync the account's calendar, which is off ("Calendar
+        /// sync is off for %s" with Turn On and Not Now;
+        /// <see cref="AccountSync.ShowPrompt"/>); "" none.
+        /// </summary>
+        public string SyncOffer { get; init; } = "";
+
         /// <summary>Whether both hold the same, the calendars compared in order.</summary>
         public bool Equals(SidebarAccount? other) =>
             other is not null && AccountId == other.AccountId && Account == other.Account && Name == other.Name
             && Source == other.Source && Board.SameList(Calendars, other.Calendars) && StateLine == other.StateLine
-            && OffersSignIn == other.OffersSignIn;
+            && OffersSignIn == other.OffersSignIn && SyncOffer == other.SyncOffer;
 
         /// <inheritdoc/>
         public override int GetHashCode() => HashCode.Combine(AccountId, Name, Source, Calendars.Count, StateLine, OffersSignIn);

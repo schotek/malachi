@@ -5,6 +5,8 @@
 // (LoadMoreState); GTK: ui/internal/window/messages.go (showLoadMore) and
 // ui/data/ui/window.blp (load_more, search_note).
 
+using Malachi.Core.Model;
+
 namespace Malachi.Core.Controllers;
 
 /// <summary>
@@ -26,4 +28,10 @@ public sealed record LoadMoreState
 
     /// <summary>Under the last page of results: how far back search reaches; empty otherwise.</summary>
     public string Note { get; init => field = value ?? ""; } = "";
+
+    /// <summary>
+    /// Under the last page of search results: the offer to search the
+    /// servers for older mail, or the spinner while that runs.
+    /// </summary>
+    public ServerSearchOffer Server { get; init; }
 }

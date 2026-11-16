@@ -5,8 +5,10 @@ package window
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -32,6 +34,12 @@ func (w *Window) setupSearch(b *gtk.Builder) {
 	w.searchEntry = b.GetObject("search_entry").Cast().(*gtk.SearchEntry)
 	w.searchScope = b.GetObject("search_scope").Cast().(*adw.ToggleGroup)
 	w.searchNote = b.GetObject("search_note").Cast().(*gtk.Label)
+	w.serverButton = b.GetObject("server_search_button").Cast().(*gtk.Button)
+	w.serverSpinner = b.GetObject("server_search_spinner").Cast().(*adw.Spinner)
+	w.serverEmptyButton = b.GetObject("server_search_empty_button").Cast().(*gtk.Button)
+	w.serverEmptySpinner = b.GetObject("server_search_empty_spinner").Cast().(*adw.Spinner)
+	w.serverButton.ConnectClicked(w.searchServer)
+	w.serverEmptyButton.ConnectClicked(w.searchServer)
 
 	// Escape in the entry closes the bar.
 	w.searchBar.ConnectEntry(w.searchEntry)
@@ -113,6 +121,7 @@ func (w *Window) onSearchModeChanged() {
 	w.syncPanelActions()
 	st.shown, st.focusFirst = false, false
 	st.params = api.SearchQueryParams{}
+	st.server = serverSearch{}
 	w.model.bumpList()
 	w.model.loading, w.model.loadingMore, w.model.listErr = false, false, nil
 	w.model.clearSearchResults()
@@ -197,6 +206,7 @@ func (w *Window) runSearch(force bool) {
 	if !searchReady(st.text) {
 		w.model.bumpList()
 		st.params, st.shown, st.focusFirst = api.SearchQueryParams{}, false, false
+		st.server = serverSearch{}
 		w.model.loading, w.model.listErr = false, nil
 		if w.model.rowCount() > 0 {
 			w.model.clearSearchResults()
@@ -211,6 +221,7 @@ func (w *Window) runSearch(force bool) {
 		return
 	}
 	st.params, st.effective, st.shown = params, effective, false
+	st.server = serverSearch{}
 	gen := w.model.bumpList()
 	w.model.loading, w.model.loadingMore, w.model.listErr = true, false, nil
 	w.showListState()
@@ -315,6 +326,7 @@ func (w *Window) showSearchState() {
 	m := &w.model
 	st := &m.search
 	retry := false
+	offer := serverOfferNone
 	switch {
 	case !searchReady(st.text):
 		setStatusPage(w.listStatusPage, "edit-find-symbolic", i18n.T("Search Mail"),
@@ -326,10 +338,77 @@ func (w *Window) showSearchState() {
 	case m.loading || !st.shown:
 		setStatusPage(w.listStatusPage, "", i18n.T("Searching…"), "")
 	default:
-		setStatusPage(w.listStatusPage, "edit-find-symbolic", i18n.T("No Results"), searchEmptyText(st.effective))
+		description := searchEmptyText(st.effective)
+		if st.server.phase == serverDone {
+			description += "\n" + serverSearchText(st.server)
+		}
+		setStatusPage(w.listStatusPage, "edit-find-symbolic", i18n.T("No Results"), description)
+		offer = m.serverSearchOffer()
 	}
 	w.listRetryButton.SetVisible(retry)
+	w.showServerOffer(offer, w.serverEmptyButton, w.serverEmptySpinner)
 	w.listStack.SetVisibleChildName("status")
+}
+
+// showServerOffer shows the offer to search the servers, the spinner
+// while that runs, or neither.
+func (w *Window) showServerOffer(offer serverOffer, button *gtk.Button, spinner *adw.Spinner) {
+	button.SetVisible(offer == serverOfferButton)
+	spinner.SetVisible(offer == serverOfferSearching)
+}
+
+// serverSearchTimeout is how long the client waits for search.server: the
+// daemon's own limit of 30 s and some room for the answer.
+const serverSearchTimeout = 45 * time.Second
+
+// searchServer takes the offer under the results: the servers of the mail
+// accounts in the search's scope are asked for mail older than the window
+// (search.server). What they find is stored by the daemon and added under
+// the results; an account whose server failed is counted in the note, and
+// a search that failed whole is offered again. The answer is dropped when
+// the results it belongs to are no longer on show.
+func (w *Window) searchServer() {
+	st := &w.model.search
+	if w.model.serverSearchOffer() != serverOfferButton {
+		return
+	}
+	gen := w.model.listGen
+	st.server = serverSearch{phase: serverSearching}
+	w.showListState()
+	w.showLoadMore()
+	params := api.SearchServerParams{AccountID: st.params.AccountID, FolderID: st.params.FolderID, Query: st.params.Query}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), serverSearchTimeout)
+		defer cancel()
+		var res api.SearchServerResult
+		err := w.client.Call(ctx, api.MethodSearchServer, params, &res)
+		glib.IdleAdd(func() {
+			if gen != w.model.listGen || !st.active || st.server.phase != serverSearching {
+				return
+			}
+			if err != nil {
+				st.server = serverSearch{}
+				// A newer search of the servers took over: nothing to say.
+				var e *api.Error
+				if !errors.As(err, &e) || e.Code != api.CodeUnavailable {
+					// The query is what the user typed: never logged.
+					w.log.Warn("search.server", "err", err)
+					w.Toast(widget.RPCErrorText(i18n.T("Searching on the server"), err))
+				}
+			} else {
+				added := w.model.appendServerResults(res)
+				st.server = serverSearch{phase: serverDone, found: len(res.Results), truncated: res.Truncated, failed: len(res.Failed)}
+				for _, s := range w.model.messages[len(w.model.messages)-added:] {
+					r := w.newMessageRow(s)
+					w.rows[listKey{Message: s.ID}] = r
+					w.messageList.Append(r)
+				}
+				w.refreshListTitle()
+			}
+			w.showListState()
+			w.showLoadMore()
+		})
+	}()
 }
 
 // refreshSearchScope keeps the scope toggles in step with the selection:
@@ -356,9 +435,9 @@ func (w *Window) refreshSearchScope() {
 	}
 	if a, ok := w.model.account(k.Account); ok {
 		// TRANSLATORS: tooltip of the Account search scope; %s is an account.
-		accountToggle.SetTooltip(glib.MarkupEscapeText(fmt.Sprintf(i18n.T("Search every folder of %s except Trash and Junk"), accountLabel(a))))
+		accountToggle.SetTooltip(glib.MarkupEscapeText(fmt.Sprintf(i18n.T("Search every folder of %s"), accountLabel(a))))
 	} else {
 		accountToggle.SetTooltip("")
 	}
-	allToggle.SetTooltip(glib.MarkupEscapeText(i18n.T("Search every account except Trash and Junk")))
+	allToggle.SetTooltip(glib.MarkupEscapeText(i18n.T("Search every account")))
 }

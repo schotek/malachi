@@ -10,7 +10,19 @@ import "strings"
 // a language added there belongs here too. The prompts say the name
 // ("Answer in Czech"); English, which has no catalog, is "" and the
 // prompts' default.
-var languageNames = map[string]string{"cs": "Czech"}
+var languageNames = map[string]string{
+	"cs": "Czech",
+	"de": "German",
+	"es": "Spanish",
+	"fr": "French",
+	"hu": "Hungarian",
+	"it": "Italian",
+	"nl": "Dutch",
+	"pl": "Polish",
+	"pt": "Portuguese",
+	"sk": "Slovak",
+	"uk": "Ukrainian",
+}
 
 // LanguageName is the English name of the UI language the prompts take
 // (SystemPrompt, TriageSystemPrompt) for a BCP 47 tag the client sent

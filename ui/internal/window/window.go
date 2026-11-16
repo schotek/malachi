@@ -213,23 +213,30 @@ type Window struct {
 	// statusTexts).
 	statusNote *gtk.Label
 
-	refreshButton   *gtk.Button
-	searchButton    *gtk.ToggleButton
-	searchBar       *gtk.SearchBar
-	searchEntry     *gtk.SearchEntry
-	searchScope     *adw.ToggleGroup
-	searchNote      *gtk.Label
-	banner          *adw.Banner
-	authBanner      *adw.Banner
-	certBanner      *adw.Banner
-	messageFilter   *adw.ToggleGroup
-	listStack       *gtk.Stack
-	listScroller    *gtk.ScrolledWindow
-	messageList     *gtk.ListBox
-	loadMoreButton  *gtk.Button
-	loadMoreSpinner *adw.Spinner
-	listStatusPage  *adw.StatusPage
-	listRetryButton *gtk.Button
+	refreshButton *gtk.Button
+	searchButton  *gtk.ToggleButton
+	searchBar     *gtk.SearchBar
+	searchEntry   *gtk.SearchEntry
+	searchScope   *adw.ToggleGroup
+	searchNote    *gtk.Label
+	// The offer to search the servers for mail older than the store holds,
+	// under the last page of results and on the page of a search without
+	// results, and the spinner while that search runs (search.go).
+	serverButton       *gtk.Button
+	serverSpinner      *adw.Spinner
+	serverEmptyButton  *gtk.Button
+	serverEmptySpinner *adw.Spinner
+	banner             *adw.Banner
+	authBanner         *adw.Banner
+	certBanner         *adw.Banner
+	messageFilter      *adw.ToggleGroup
+	listStack          *gtk.Stack
+	listScroller       *gtk.ScrolledWindow
+	messageList        *gtk.ListBox
+	loadMoreButton     *gtk.Button
+	loadMoreSpinner    *adw.Spinner
+	listStatusPage     *adw.StatusPage
+	listRetryButton    *gtk.Button
 
 	toasts       *adw.ToastOverlay
 	messageStack *gtk.Stack

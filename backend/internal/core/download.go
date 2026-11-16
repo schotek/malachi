@@ -428,7 +428,7 @@ func (b *Backend) fetchRaw(ctx context.Context, a store.Account, m store.Message
 		client := graph.NewClient(graph.Options{
 			Token:      func(ctx context.Context) (string, error) { return b.GraphTokenFor(ctx, id) },
 			Invalidate: func() { b.invalidateGraphTokenFor(id) },
-			Log:        b.log,
+			Log:        b.log.With("component", "graph", "account", id),
 		})
 		return graph.FetchMessage(ctx, client, loc.RemoteID, fn)
 	}

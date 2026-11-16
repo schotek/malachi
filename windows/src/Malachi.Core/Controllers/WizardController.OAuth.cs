@@ -19,9 +19,12 @@
 // and forget and goes out even while the wizard closes (PerformPastClose).
 // The provider's page is opened by the injected ILauncher (Swift's
 // onOpenURL); a launch that fails says why in a toast, as GTK's launch does.
+// A new account's sign-in asks for the calendar and the contacts the
+// prompt's group left checked (WizardController.Services.cs).
 
 using System;
 using System.Threading;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
@@ -50,6 +53,7 @@ public sealed partial class WizardController
             return;
         }
         CancelSession();
+        failedWithServices = false;
         var parameters = new AccountOAuthStartParams { BrowserPage = OAuthTexts.BrowserPage() };
         if (Editing is { } editing)
         {
@@ -57,7 +61,9 @@ public sealed partial class WizardController
         }
         else if (st.Config is { } cfg)
         {
-            parameters = parameters with { Config = LinkedRules.WithIdentity(cfg, Identity) };
+            // The daemon asks for the scopes of the services switched on
+            // here itself, so one consent covers them all.
+            parameters = parameters with { Config = AccountSync.Apply(LinkedRules.WithIdentity(cfg, Identity), ChosenServices) };
         }
         else
         {
@@ -128,6 +134,9 @@ public sealed partial class WizardController
         }
         Op++;
         CancelSession();
+        // The provider's page may have asked for an administrator's
+        // approval of the calendar or the contacts.
+        SignInDidNotSucceed();
         ShowOAuthView(PromptView(OAuth?.Name ?? ""));
     }
 
@@ -161,6 +170,7 @@ public sealed partial class WizardController
         CurrentOAuthView = view;
         SetOAuthStarting(false);
         OAuthViewChanged?.Invoke(this, view);
+        UpdateServices();
     }
 
     // Opens the browser sign-in's prompt (oauth.go showOAuthPrompt): config
@@ -171,6 +181,7 @@ public sealed partial class WizardController
     {
         CancelSession();
         var name = OAuthTexts.OAuthProviderLabel(provider, config?.Email ?? Identity.Email);
+        failedWithServices = false;
         OAuth = new OAuthState { Provider = provider, Name = name, Config = config, PasswordAlt = passwordAlt };
         ShowOAuthView(PromptView(name));
         Replace(SignInMode ? [WizardPage.OAuth] : [WizardPage.Identity, WizardPage.OAuth]);
@@ -263,6 +274,7 @@ public sealed partial class WizardController
     private void OAuthFailed(string text)
     {
         CancelSession();
+        SignInDidNotSucceed();
         ShowOAuthView(PromptView(OAuth?.Name ?? ""));
         ToastRequested?.Invoke(this, text);
     }

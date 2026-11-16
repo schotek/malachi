@@ -140,6 +140,8 @@ final class Integration {
         }
         list.onActionFlagsChanged = { [weak self] _ in
             self?.mainWindow?.mailToolbar.validateVisibleItems()
+            // The selection changed, maybe after the daemon answered.
+            self?.mainWindow?.refreshTouchBar()
         }
         // The context menus (ui/internal/contextmenu): a message's acts on
         // the selection a right click made, a folder's on the folder.

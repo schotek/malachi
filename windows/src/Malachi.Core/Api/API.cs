@@ -338,6 +338,13 @@ public static class API
     public static readonly RpcMethod<SearchQueryParams, SearchQueryResult> SearchQuery =
         new("search.query", RpcTimeouts.Default, Wire.SearchQueryParams, Wire.SearchQueryResult);
 
+    /// <summary>
+    /// <c>search.server</c>: the mail older than the offlineDays window, on
+    /// the servers; the daemon takes at most 30 s.
+    /// </summary>
+    public static readonly RpcMethod<SearchServerParams, SearchServerResult> SearchServer =
+        new("search.server", TimeSpan.FromSeconds(45), Wire.SearchServerParams, Wire.SearchServerResult);
+
     // Sync
 
     /// <summary><c>sync.status</c>.</summary>
@@ -761,7 +768,7 @@ public static class API
         DraftSave, DraftList, DraftDelete, DraftCreate, DraftOpen,
         DraftMarkdown, DraftGet,
         AttachmentImport, AttachmentRemove, AttachmentGet,
-        SearchQuery,
+        SearchQuery, SearchServer,
         SyncStatus, SyncTrigger,
         ConfigGet, ConfigSet,
         SenderList, SenderAdd, SenderRemove,
@@ -978,6 +985,12 @@ public static class API
 
         /// <summary>api.MaxSearchTotal.</summary>
         public const int MaxSearchTotal = 1000;
+
+        /// <summary>api.MaxServerSearchResults: the most results of one account of search.server.</summary>
+        public const int MaxServerSearchResults = 200;
+
+        /// <summary>api.ServerSearchKeepDays: how long a message search.server stored is kept outside the window.</summary>
+        public const int ServerSearchKeepDays = 30;
 
         /// <summary>JiraConfig.Spaces.</summary>
         public const int MaxJiraSpaces = 200;

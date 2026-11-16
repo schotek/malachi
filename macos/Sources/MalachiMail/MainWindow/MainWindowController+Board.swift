@@ -42,6 +42,9 @@ extension MainWindowController {
     /// launch (`board-last-style` once the user picked a style in this run,
     /// `board-account-filter` whenever the account changed).
     func boardDidChange(_ changes: BoardController.Changes = []) {
+        // The selected case or its state changed without an event of the
+        // window (the daemon's answer): the Touch Bar follows.
+        defer { refreshTouchBar() }
         rememberBoardView(changes)
         boardToolbars.update()
         if mode == .board {

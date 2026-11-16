@@ -17,7 +17,8 @@
 // IdentityChanged, onApplyConfig ConfigApplied, onLinked LinkedChanged,
 // onGOAHint GoaHintShown, onOAuth OAuthViewChanged, onOAuthStarting
 // OAuthStartingChanged, onTesting TestingChanged, onFocus FocusRequested,
-// onToast ToastRequested, onDone Done, onPins PinsChanged, and the async
+// onToast ToastRequested, onDone Done, onPins PinsChanged, onServices
+// ServicesChanged (its servicesView CurrentServicesView), and the async
 // onConfirmTrust is the ConfirmTrust hook. onOpenURL is the injected
 // ILauncher (docs/windows-port.md §10: the app opens the https address
 // through its launcher), whose failure is a toast, as in GTK's launch. The
@@ -199,6 +200,13 @@ public sealed partial class WizardController : ObservableObject, IDisposable
 
     /// <summary>The browser sign-in page's content (Swift <c>onOAuth</c>).</summary>
     public event EventHandler<OAuthView>? OAuthViewChanged;
+
+    /// <summary>
+    /// The prompt's group of services to sync too; null hides it (editing,
+    /// an account without any, a page other than the prompt; Swift
+    /// <c>onServices</c>).
+    /// </summary>
+    public event EventHandler<ServicesView?>? ServicesChanged;
 
     /// <summary>
     /// <c>account.oauthStart</c> runs (true) or answered (false): only the
@@ -412,6 +420,7 @@ public sealed partial class WizardController : ObservableObject, IDisposable
         {
             OAuthViewChanged?.Invoke(this, view);
         }
+        ServicesChanged?.Invoke(this, CurrentServicesView);
         PagesChanged?.Invoke(this, Pages);
         started = true;
         ShowPasswordRequest();
@@ -698,7 +707,7 @@ public sealed partial class WizardController : ObservableObject, IDisposable
     // it; typing clears both (SetIdentity).
     private void AskPassword(ErrorCode reason)
     {
-        ShowIdentityProblems(new IdentityProblems { Password = true }, Results.PasswordBannerText(reason));
+        ShowIdentityProblems(new IdentityProblems { Password = true }, Results.PasswordBannerText(reason, Imap.Host));
         FocusRequested?.Invoke(this, IdentityField.Password);
     }
 

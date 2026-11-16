@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/accountservices"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/calendardata"
@@ -62,6 +63,10 @@ type SidebarAccount struct {
 	StateLine string
 	// OffersSignIn: the state row offers Sign In… (SignIn).
 	OffersSignIn bool
+	// SyncOffer is the offer to sync the account's calendar, which is off
+	// ("Calendar sync is off for %s" with Turn On and Not Now;
+	// accountservices.ShowPrompt); "" none.
+	SyncOffer string
 }
 
 // Sidebar is the sidebar's model.
@@ -111,6 +116,14 @@ type CalendarController struct {
 	// OnSignIn: Sign In… of a state row: the account's re-sign-in with
 	// calendar access (account.oauthStart calendar: true).
 	OnSignIn func(api.AccountID)
+	// OnQuestion asks a question for Turn On of a sync offer (the consent
+	// explanation of CalendarAccountController); nil answers Cancel.
+	OnQuestion func(q calendar.Question, answer func(Answer))
+	// Dismissed and SetDismissed read and write the key
+	// account-services-dismissed (settings.Store.AccountServicesDismissed);
+	// nil remembers no Not Now (the offer stays).
+	Dismissed    func() []string
+	SetDismissed func([]string)
 
 	source calendardata.DataSource
 	opts   Options
@@ -132,6 +145,13 @@ type CalendarController struct {
 	loadGen       int
 	searchGen     int
 	searchPending bool
+
+	// syncSwitches are Turn On of a sync offer: the account's Preferences
+	// controller, kept while the calendar runs so that its consent
+	// question can follow the account's state; syncErrors the refusal of
+	// each last reported through OnError.
+	syncSwitches map[api.AccountID]*CalendarAccountController
+	syncErrors   map[api.AccountID]string
 }
 
 // NewCalendarController is the page's controller over source, at today in
@@ -161,6 +181,10 @@ func (c *CalendarController) Stop() {
 		c.observer.Cancel()
 		c.observer = nil
 	}
+	for _, s := range c.syncSwitches {
+		s.Stop()
+	}
+	c.syncSwitches = nil
 	c.loadGen++
 	c.searchGen++
 	c.searchPending = false
@@ -394,8 +418,12 @@ func (c *CalendarController) Sidebar() Sidebar {
 		if x, ok := s.Account(a.AccountID); ok {
 			acc = &x
 		}
+		offer := ""
+		if !a.Sync && acc != nil && accountservices.ShowPrompt(*acc, accountservices.Calendar, c.dismissedOffers()) {
+			offer = accountservices.OffLine(accountservices.Calendar, s.AccountName(a.AccountID), tr)
+		}
 		accounts = append(accounts, SidebarAccount{AccountID: a.AccountID, Account: acc, Name: s.AccountName(a.AccountID),
-			Source: a.Source, Calendars: cals, StateLine: line, OffersSignIn: signIn})
+			Source: a.Source, Calendars: cals, StateLine: line, OffersSignIn: signIn, SyncOffer: offer})
 	}
 	r := c.Range()
 	return Sidebar{
@@ -536,6 +564,84 @@ func (c *CalendarController) SignIn(id api.AccountID) {
 	if c.OnSignIn != nil {
 		c.OnSignIn(id)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// The offer to sync (docs/plans/account-services.md §3.3)
+// ---------------------------------------------------------------------------
+
+// dismissedOffers are the Not Now answers of account-services-dismissed
+// (none without the key).
+func (c *CalendarController) dismissedOffers() []string {
+	if c.Dismissed == nil {
+		return nil
+	}
+	return c.Dismissed()
+}
+
+// EmptySyncOffer is the empty page's offer (calendar.EmptySyncOff): the
+// one account whose calendar sync the sidebar offers; false when there is
+// none or more (Open Preferences then).
+func (c *CalendarController) EmptySyncOffer() (api.AccountID, bool) {
+	if k, ok := c.EmptyKind(); !ok || k != calendar.EmptySyncOff {
+		return "", false
+	}
+	var offers []api.AccountID
+	for _, a := range c.Sidebar().Accounts {
+		if a.SyncOffer != "" {
+			offers = append(offers, a.AccountID)
+		}
+	}
+	if len(offers) != 1 {
+		return "", false
+	}
+	return offers[0], true
+}
+
+// TurnOnSync is Turn On of a sync offer: Preferences' Sync This Account's
+// Calendars (CalendarAccountController.SetSync), with its consent
+// question and re-sign-in when the grant lacks the calendar.
+func (c *CalendarController) TurnOnSync(id api.AccountID) {
+	s, ok := c.syncSwitches[id]
+	if !ok {
+		s = NewCalendarAccountController(c.source, id, c.opts)
+		s.OnQuestion = func(q calendar.Question, answer func(Answer)) {
+			if c.OnQuestion == nil {
+				answer(AnswerCancel)
+				return
+			}
+			c.OnQuestion(q, answer)
+		}
+		s.OnSignIn = c.SignIn
+		s.OnChange = func() {
+			if s.Error() == c.syncErrors[id] {
+				return
+			}
+			if c.syncErrors == nil {
+				c.syncErrors = map[api.AccountID]string{}
+			}
+			c.syncErrors[id] = s.Error()
+			if s.Error() != "" && c.OnError != nil {
+				c.OnError(s.Error())
+			}
+		}
+		if c.syncSwitches == nil {
+			c.syncSwitches = map[api.AccountID]*CalendarAccountController{}
+		}
+		c.syncSwitches[id] = s
+		s.Start()
+	}
+	s.SetSync(true)
+}
+
+// DismissSyncOffer is Not Now of a sync offer: it does not come back for
+// the account. Nothing without the key.
+func (c *CalendarController) DismissSyncOffer(id api.AccountID) {
+	if c.SetDismissed == nil {
+		return
+	}
+	c.SetDismissed(accountservices.Dismissing(c.dismissedOffers(), id, accountservices.Calendar))
+	c.changed()
 }
 
 // ---------------------------------------------------------------------------

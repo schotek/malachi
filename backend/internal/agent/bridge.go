@@ -5,9 +5,11 @@
 // (docs/api.md §4.18; docs/security.md §10.4; the design is
 // docs/plans/ai-api.md D2 and D5): a Session keeps one conversation with
 // a model (internal/llm), executes the model's tool calls through the
-// MCP bridge malachi-mcp, which the daemon starts as a child process and
-// which connects back to the daemon like any client, and reports what
-// happens as api.AssistantEvents. A Manager keeps the open sessions per
+// MCP bridge malachi-mcp, which the daemon starts as a child process (or,
+// where the daemon runs in a process that may not start one, serves on a
+// goroutine of its own over an in-memory transport) and which connects
+// back to the daemon's socket like any client, and reports what happens
+// as api.AssistantEvents. A Manager keeps the open sessions per
 // RPC connection. The package knows nothing of mail: every tool result
 // is the bridge's text, passed on verbatim, and nothing of a conversation
 // is logged.
@@ -65,7 +67,17 @@ type BridgeConfig struct {
 type Bridge struct {
 	cs    *mcp.ClientSession
 	tools []llm.Tool
+	// stop and served end the server of a bridge served in this process
+	// (StartInProcess); nil for a child process.
+	stop   context.CancelFunc
+	served <-chan struct{}
 }
+
+// ServeFunc serves the bridge in this process: with the command line
+// args (malachi-mcp's flags), over t, until ctx ends or the client
+// closes t (mcpbridge.ServeArgs). It must not return before the session
+// it served has ended.
+type ServeFunc func(ctx context.Context, args []string, t mcp.Transport) error
 
 // StartBridge starts the bridge as a child process with a minimal
 // environment, connects to it over stdio, initialises the session and
@@ -84,6 +96,55 @@ func StartBridge(ctx context.Context, cfg BridgeConfig) (*Bridge, error) {
 		cmd.Stderr = io.Discard
 	}
 	return Connect(ctx, &mcp.CommandTransport{Command: cmd, TerminateDuration: KillGrace}, cfg.Name, cfg.Version)
+}
+
+// StartInProcess serves the bridge on a goroutine of this process with
+// the arguments a child process would get (--socket and cfg.Args;
+// cfg.Path and cfg.Stderr are not used), connects to it over an in-memory
+// transport, initialises the session and lists its tools. The bridge is
+// still a client of the daemon's socket with the handshake of
+// docs/api.md §1.4; only the MCP frames between the daemon and the bridge
+// stay in memory. Close ends it and waits for the goroutine.
+func StartInProcess(ctx context.Context, serve ServeFunc, cfg BridgeConfig) (*Bridge, error) {
+	switch {
+	case serve == nil:
+		return nil, errors.New("agent: no in-process bridge")
+	case cfg.Socket == "":
+		return nil, errors.New("agent: no socket")
+	}
+	// The server's context is the bridge's own, not ctx: ctx bounds only
+	// the start (the RPC request that asked for the session).
+	srvCtx, stop := context.WithCancel(context.Background())
+	served := make(chan struct{})
+	st, ct := mcp.NewInMemoryTransports()
+	go func() {
+		defer close(served)
+		_ = serve(srvCtx, append([]string{"--socket", cfg.Socket}, cfg.Args...), st)
+		// Close the server's end, whether or not serve used it: a client
+		// writing to a pipe nobody reads would block for good.
+		if c, err := st.Connect(context.Background()); err == nil {
+			_ = c.Close()
+		}
+	}()
+	// A server that ends before it answered (a command line it refused)
+	// fails the connection at once rather than at ctx's deadline.
+	connCtx, endConn := context.WithCancel(ctx)
+	defer endConn()
+	go func() {
+		select {
+		case <-served:
+			endConn()
+		case <-connCtx.Done():
+		}
+	}()
+	b, err := Connect(connCtx, ct, cfg.Name, cfg.Version)
+	if err != nil {
+		stop()
+		<-served
+		return nil, err
+	}
+	b.stop, b.served = stop, served
+	return b, nil
 }
 
 // Connect connects to a bridge over t (a started command, or an
@@ -142,8 +203,18 @@ func (b *Bridge) Call(ctx context.Context, name string, input json.RawMessage) (
 }
 
 // Close ends the bridge: its stdin closes and, after KillGrace, the
-// process is terminated.
-func (b *Bridge) Close() error { return b.cs.Close() }
+// process is terminated. A bridge served in this process ends its server
+// and returns once the server's goroutine has: its calls to the daemon
+// end with its context, and none is longer than the bridge's own
+// timeouts.
+func (b *Bridge) Close() error {
+	err := b.cs.Close()
+	if b.stop != nil {
+		b.stop()
+		<-b.served
+	}
+	return err
+}
 
 // childEnv is the bridge's environment: the variables a process needs to
 // run (the path, the home, the locale, the temporary directory, what

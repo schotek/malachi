@@ -13,6 +13,10 @@
 // opens), and a switch the user turned off in Windows Settings is shown as
 // such and never overwritten (docs/windows-port.md §8, §10). The registry
 // root is injectable: the tests work under a key of their own.
+// The app in an MSIX package uses the package's startup task instead
+// (PackagedLaunchAtLogin) and only removes the Run value an earlier test
+// package wrote (RemoveOfAPackage: its command names a WindowsApps folder,
+// which went with that package's version).
 
 using System;
 using System.IO;
@@ -32,7 +36,7 @@ namespace Malachi.Platform.Windows.Startup;
 /// <see cref="System.Security.SecurityException"/>); the caller shows it,
 /// as macOS shows what <c>SMAppService</c> throws.
 /// </remarks>
-public sealed class LaunchAtLogin
+public sealed class LaunchAtLogin : ILaunchAtLogin
 {
     /// <summary>The Run key under HKEY_CURRENT_USER.</summary>
     public const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -122,6 +126,9 @@ public sealed class LaunchAtLogin
     /// is never touched: turning on an entry the user turned off there
     /// writes the value and answers <see cref="LaunchAtLoginOutcome.RequiresApproval"/>.
     /// </summary>
+    public LaunchAtLoginOutcome SetEnabled(bool enabled) => Set(enabled);
+
+    /// <summary><see cref="SetEnabled"/>, under the name of Swift's <c>set</c>.</summary>
     public LaunchAtLoginOutcome Set(bool on)
     {
         if (on)
@@ -168,6 +175,31 @@ public sealed class LaunchAtLogin
     }
 
     /// <summary>
+    /// Whether the Run value is one an MSIX package of the app wrote before
+    /// its manifest declared a startup task: its command names an
+    /// executable in a <c>WindowsApps</c> folder
+    /// (<see cref="MailtoRegistration.IsFromAPackage"/>'s rule).
+    /// </summary>
+    public bool IsFromAPackage =>
+        RegisteredCommand is { } command && command.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Removes the Run value when <see cref="IsFromAPackage"/>; true when it
+    /// was removed. An unpackaged copy's value is left alone, and so is the
+    /// user's switch.
+    /// </summary>
+    public bool RemoveOfAPackage()
+    {
+        if (!IsFromAPackage)
+        {
+            return false;
+        }
+        using var run = root.OpenSubKey(runPath, writable: true);
+        run?.DeleteValue(ValueName, throwOnMissingValue: false);
+        return true;
+    }
+
+    /// <summary>
     /// Sets the <c>launch-at-login</c> key to <see cref="IsEnabled"/>, which
     /// it only mirrors (Swift <c>refreshLaunchAtLogin</c>), and returns it.
     /// Call it on the UI thread.
@@ -190,10 +222,22 @@ public sealed class LaunchAtLogin
     /// <summary>
     /// What the Launch at Login row says under its title for
     /// <paramref name="status"/>: that the user turned it off in Windows
-    /// Settings (where only they can turn it on again); null otherwise.
+    /// Settings (where only they can turn it on again), or that the
+    /// organisation's policy did; null otherwise.
     /// </summary>
-    public static string? StatusText(LaunchAtLoginStatus status) =>
-        status == LaunchAtLoginStatus.DisabledByUser ? "Turned off in Windows Settings" : null; // Windows-only string
+    public static string? StatusText(LaunchAtLoginStatus status) => status switch
+    {
+        LaunchAtLoginStatus.DisabledByUser => "Turned off in Windows Settings", // Windows-only string
+        LaunchAtLoginStatus.DisabledByPolicy => "Turned off by your organization", // Windows-only string
+        _ => null,
+    };
+
+    /// <summary>
+    /// Whether the row offers Settings → Apps → Startup for
+    /// <paramref name="status"/>: where the user turned it off, not where a
+    /// policy did (nothing there turns that on).
+    /// </summary>
+    public static bool OffersSettings(LaunchAtLoginStatus status) => status == LaunchAtLoginStatus.DisabledByUser;
 
     /// <summary>
     /// The toast for an outcome that leaves the switch where it was

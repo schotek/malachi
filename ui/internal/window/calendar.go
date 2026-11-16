@@ -104,6 +104,10 @@ type calendarPage struct {
 	banner      *adw.Banner
 	empty       *adw.StatusPage
 	emptyButton *gtk.Button
+	// emptyOffer is the account the empty page's button turns calendar
+	// sync on for, instead of Open Preferences ("" none;
+	// calendar_sync_offer.go).
+	emptyOffer api.AccountID
 
 	statusTimer glib.SourceHandle
 
@@ -322,6 +326,7 @@ func (p *calendarPage) wireController() {
 	p.ctl.OnNewEvent = func(d calendar.Defaults) { w.openEventEditor(&d, "") }
 	p.ctl.OnClosePopover = w.closeEventDetail
 	p.ctl.OnSignIn = w.calendarSignIn
+	p.wireSyncOffer()
 }
 
 // start makes the controller follow the source, once.
@@ -479,6 +484,7 @@ func (p *calendarPage) apply() {
 		p.empty.SetTitle(calendar.EmptyTitle(kind, i18n.Tr))
 		p.empty.SetDescription(calendar.EmptyBody(kind, i18n.Tr))
 		p.emptyButton.SetVisible(kind == calendar.EmptySyncOff || kind == calendar.EmptyNoAccounts)
+		p.applyEmptySyncOffer()
 	}
 	p.applyBanner()
 	p.sidebar.update(c.Sidebar())

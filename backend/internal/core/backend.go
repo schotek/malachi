@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/agent"
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/auth/goa"
 	"github.com/schotek/malachi/backend/internal/auth/oauth2flow"
@@ -151,6 +152,12 @@ type Backend struct {
 	// starts is told to connect there.
 	AIProvider func(llm.Config) (llm.Provider, error)
 	SocketPath string
+	// InProcessBridge, when set, serves the MCP bridge of a session that
+	// names no bridge executable (assistant.sessionStart without bridge)
+	// on a goroutine of the daemon's process, for a host that cannot
+	// start processes (pkg/embed Options.Bridge). Nil: every session with
+	// tools starts the executable its bridge names.
+	InProcessBridge agent.ServeFunc
 	// assist is the daemon's own assistant: its sessions per connection
 	// (assistant_sessions.go).
 	assist assistantState
@@ -205,6 +212,12 @@ type Backend struct {
 	// graphLimMu.
 	graphLimMu    sync.Mutex
 	graphLimiters map[string]*graph.Limiter
+
+	// serverSearches ends a running search.server when a new one begins;
+	// serverSearch replaces the search of one account's server in tests
+	// (nil = searchAccountServer).
+	serverSearches serverSearches
+	serverSearch   serverSearchFn
 	// jiraSync is the Jira supervisor New installed behind Supervisor:
 	// message.download rebuilds a Jira message through it
 	// (jira.Supervisor.FetchMessage), whatever a test put in Supervisor.
@@ -499,7 +512,7 @@ func (b *Backend) graphDeliverFor(a store.Account) outbox.DeliverFunc {
 	client := graph.NewClient(graph.Options{
 		Token:      func(ctx context.Context) (string, error) { return b.GraphTokenFor(ctx, id) },
 		Invalidate: func() { b.invalidateGraphTokenFor(id) },
-		Log:        b.log,
+		Log:        b.log.With("component", "graph", "account", id),
 		Limiter:    b.graphLimiter(id),
 	})
 	return func(ctx context.Context, _ api.ServerConfig, _ string, from string, rcpts []string, r io.Reader, size int64) error {
@@ -719,7 +732,8 @@ func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
 // seeding of recipient completion, the upgrade passes that link, index and
 // classify (bulk mail) the messages stored before threading, search and
-// bulk mail existed, and the board's first evaluation (backfillBoard),
+// bulk mail existed, the one that reads HTML markup in text parts as HTML
+// (backfillHTMLText), and the board's first evaluation (backfillBoard),
 // then the raw
 // maintenance loop (maintainRaw) beside the orphan attachment sweep and
 // the evaluation of the notification mail of issue-tracker accounts
@@ -737,6 +751,9 @@ func (b *Backend) Maintain(ctx context.Context) {
 	}
 	if err := b.backfillBulk(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill bulk classification", "err", err)
+	}
+	if err := b.backfillHTMLText(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill html text", "err", err)
 	}
 	if err := b.backfillBoard(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill board", "err", err)
@@ -952,7 +969,7 @@ func (b *Backend) graphCalendarProvider(ctx context.Context, a store.Account) (c
 		HTTP:       b.CalendarGraphHTTP,
 		Token:      func(ctx context.Context) (string, error) { return b.GraphTokenFor(ctx, id) },
 		Invalidate: func() { b.invalidateGraphTokenFor(id) },
-		Log:        b.log,
+		Log:        b.log.With("component", "graph", "account", id),
 		Limiter:    b.graphLimiter(id),
 	})
 	personal := false

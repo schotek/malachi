@@ -86,6 +86,7 @@ type AttachmentService interface {
 
 type SearchService interface {
 	Query(ctx context.Context, p SearchQueryParams) (*SearchQueryResult, error)
+	Server(ctx context.Context, p SearchServerParams) (*SearchServerResult, error)
 }
 
 type SyncService interface {

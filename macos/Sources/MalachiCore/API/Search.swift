@@ -84,3 +84,42 @@ public struct SearchQueryResult: Codable, Sendable, Equatable {
         self.page = page
     }
 }
+
+/// api.SearchServerParams: a search of the mail servers for what is older
+/// than the offlineDays window, scoped like `SearchQueryParams`
+/// (docs/api.md §4.6 search.server).
+public struct SearchServerParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID?
+    public var folderId: FolderID?
+    public var query: String
+
+    public init(accountId: AccountID? = nil, folderId: FolderID? = nil, query: String) {
+        self.accountId = accountId
+        self.folderId = folderId
+        self.query = query
+    }
+}
+
+/// api.SearchServerFailure: an account whose server could not be searched.
+public struct SearchServerFailure: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var code: ErrorCode
+
+    public init(accountId: AccountID, code: ErrorCode) {
+        self.accountId = accountId
+        self.code = code
+    }
+}
+
+/// api.SearchServerResult: the found messages, stored now, newest first.
+public struct SearchServerResult: Codable, Sendable, Equatable {
+    @NullAsEmpty public var results: [SearchResult]
+    public var truncated: Bool?
+    public var failed: [SearchServerFailure]?
+
+    public init(results: [SearchResult], truncated: Bool? = nil, failed: [SearchServerFailure]? = nil) {
+        self.results = results
+        self.truncated = truncated
+        self.failed = failed
+    }
+}

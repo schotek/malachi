@@ -181,6 +181,25 @@ func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*ap
 	if err != nil {
 		return nil, err
 	}
+	// A message a search on the server found is stored with its headers
+	// only, and its folder's syncer may be long in coming (offline, backing
+	// off, a large folder): the body is downloaded now, as message.download
+	// does, so that opening a result shows it. Any other message without a
+	// body is new mail the syncer is downloading already.
+	if m.BodyState == store.BodyNone {
+		kept, err := s.b.store.IsKept(ctx, m.ID, serverSearchNow())
+		if err != nil {
+			return nil, api.NewError(api.CodeStorageError, "%v", err)
+		}
+		if kept {
+			if err := s.b.ensureWhole(ctx, a, m); err != nil {
+				return nil, err
+			}
+			if m, err = s.b.getMessage(ctx, a.ID, string(p.MessageID)); err != nil {
+				return nil, err
+			}
+		}
+	}
 	// Resolve the policy now so an invalid override or a broken allow-list
 	// fails the call the same way it will once the sanitiser consumes it.
 	policy, err := s.b.RemoteContentFor(ctx, p.RemoteContent, m.From, false)

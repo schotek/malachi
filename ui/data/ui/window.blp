@@ -401,6 +401,28 @@ Adw.ApplicationWindow main_window {
                             "dim-label",
                           ]
                         }
+
+                        // Under the note: the offer to search the servers for
+                        // mail older than the store holds, and the spinner
+                        // while that search runs (window/search.go).
+                        Box {
+                          orientation: horizontal;
+                          halign: center;
+                          margin-bottom: 6;
+
+                          Button server_search_button {
+                            label: _("Search on the Server Too");
+                            visible: false;
+
+                            styles [
+                              "flat",
+                            ]
+                          }
+
+                          Adw.Spinner server_search_spinner {
+                            visible: false;
+                          }
+                        }
                       };
                     }
 
@@ -408,14 +430,37 @@ Adw.ApplicationWindow main_window {
                       name: "status";
 
                       child: Adw.StatusPage list_status_page {
-                        child: Button list_retry_button {
-                          label: _("Try Again");
-                          visible: false;
+                        child: Box {
+                          orientation: vertical;
+                          spacing: 12;
                           halign: center;
 
-                          styles [
-                            "pill",
-                          ]
+                          Button list_retry_button {
+                            label: _("Try Again");
+                            visible: false;
+                            halign: center;
+
+                            styles [
+                              "pill",
+                            ]
+                          }
+
+                          // A search without results in the store offers the
+                          // servers (window/search.go).
+                          Button server_search_empty_button {
+                            label: _("Search on the Server Too");
+                            visible: false;
+                            halign: center;
+
+                            styles [
+                              "pill",
+                            ]
+                          }
+
+                          Adw.Spinner server_search_empty_spinner {
+                            visible: false;
+                            halign: center;
+                          }
                         };
                       };
                     }

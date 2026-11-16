@@ -373,6 +373,9 @@ extension MainWindowController {
         if DevelopmentToolbar.step(step, in: self) {
             return
         }
+        if DevelopmentTouchBar.step(step, in: self) {
+            return
+        }
         if step.hasPrefix("size=") {
             developmentResize(String(step.dropFirst(5)))
             return

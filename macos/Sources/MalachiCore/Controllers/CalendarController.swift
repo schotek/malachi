@@ -73,6 +73,10 @@ public final class CalendarController {
         public var stateLine: String
         /// The state row offers Sign In… (`signIn(_:)`).
         public var offersSignIn: Bool
+        /// The offer to sync the account's calendar, which is off
+        /// ("Calendar sync is off for %s" with Turn On and Not Now;
+        /// `AccountServices.showPrompt`); "" none.
+        public var syncOffer: String = ""
     }
 
     /// The sidebar's model.
@@ -124,6 +128,9 @@ public final class CalendarController {
     /// Sign In… of a state row: the existing re-sign-in flow of the
     /// account with `calendar: true` (`account.oauthStart`).
     public var onSignIn: (@MainActor (AccountID) -> Void)?
+    /// Asks a question for Turn On of a sync offer (the consent
+    /// explanation of `CalendarAccountController`); nil answers Cancel.
+    public var onQuestion: (@MainActor (Cal.Question) async -> Cal.Answer)?
 
     // MARK: State
 
@@ -154,6 +161,12 @@ public final class CalendarController {
     private var loadGeneration = 0
     private var searchTask: Task<Void, Never>?
     private var searchGeneration = 0
+    /// Turn On of a sync offer: the account's Preferences controller,
+    /// kept while the calendar runs so that its consent question can
+    /// follow the account's state.
+    private var syncSwitches: [AccountID: CalendarAccountController] = [:]
+    /// The refusal of each Turn On last reported through `onError`.
+    private var syncErrors: [AccountID: String] = [:]
 
     public init(
         source: any CalendarDataSource, settings: Settings? = nil, env: Cal.Env = Cal.Env(zone: .current, locale: .current),
@@ -186,6 +199,8 @@ public final class CalendarController {
     public func stop() {
         observer?.cancel()
         observer = nil
+        syncSwitches.values.forEach { $0.stop() }
+        syncSwitches = [:]
         loadGeneration += 1
         searchTask?.cancel()
         searchTask = nil
@@ -313,9 +328,14 @@ public final class CalendarController {
             default:
                 break
             }
+            var offer = ""
+            if !a.sync, let account = s.account(a.accountId),
+               AccountServices.showPrompt(account, .calendar, dismissed: dismissedOffers) {
+                offer = AccountServices.offLine(.calendar, account: s.accountName(a.accountId))
+            }
             return SidebarAccount(
                 accountId: a.accountId, account: s.account(a.accountId), name: s.accountName(a.accountId), source: a.source,
-                calendars: calendars, stateLine: line, offersSignIn: signIn)
+                calendars: calendars, stateLine: line, offersSignIn: signIn, syncOffer: offer)
         }
         return Sidebar(
             miniMonth: Cal.MiniMonth(anchor: miniMonthAnchor, weekStart: weekStart, now: now(), shown: range, env: env),
@@ -420,6 +440,52 @@ public final class CalendarController {
     /// Sign In… of a state row.
     public func signIn(_ account: AccountID) {
         onSignIn?(account)
+    }
+
+    // MARK: The offer to sync (docs/plans/account-services.md §3.3)
+
+    /// The Not Now answers of account-services-dismissed (none without
+    /// settings).
+    private var dismissedOffers: [String] { settings?.accountServicesDismissed ?? [] }
+
+    /// The empty page's offer (`EmptyKind.syncOff`): the one account whose
+    /// calendar sync the sidebar offers, nil when there is none or more
+    /// (Open Preferences then).
+    public var emptySyncOffer: AccountID? {
+        guard emptyKind == .syncOff else { return nil }
+        let offers = sidebar.accounts.filter { !$0.syncOffer.isEmpty }
+        return offers.count == 1 ? offers[0].accountId : nil
+    }
+
+    /// Turn On of a sync offer: Preferences' Sync This Account's Calendars
+    /// (`CalendarAccountController.setSync`), with its consent question
+    /// and re-sign-in when the grant lacks the calendar.
+    public func turnOnSync(_ account: AccountID) {
+        let c: CalendarAccountController
+        if let existing = syncSwitches[account] {
+            c = existing
+        } else {
+            c = CalendarAccountController(source: source, accountId: account)
+            c.onQuestion = { [weak self] q in await self?.onQuestion?(q) ?? .cancel }
+            c.onSignIn = { [weak self] id in self?.signIn(id) }
+            c.onChange = { [weak self, weak c] in
+                guard let self, let c, c.error != self.syncErrors[account] else { return }
+                self.syncErrors[account] = c.error
+                if !c.error.isEmpty {
+                    self.onError?(c.error)
+                }
+            }
+            syncSwitches[account] = c
+            c.start()
+        }
+        c.setSync(true)
+    }
+
+    /// Not Now of a sync offer: it does not come back for the account.
+    public func dismissSyncOffer(_ account: AccountID) {
+        guard let settings else { return }
+        settings.accountServicesDismissed = AccountServices.dismissing(settings.accountServicesDismissed, account, .calendar)
+        changed()
     }
 
     // MARK: Selection

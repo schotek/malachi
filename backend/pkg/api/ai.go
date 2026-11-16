@@ -282,7 +282,9 @@ type AssistantPromptParams struct {
 
 // AssistantSessionStartParams opens a session over an ai account. Bridge
 // is the absolute path of the MCP bridge the daemon starts for the
-// tools (purposes with tools); NoteAccountID the mail or Jira account
+// tools (purposes with tools); empty, a daemon that serves the bridge in
+// its own process (an embedded one, docs/api.md §4.18) uses that one,
+// any other refuses the session. NoteAccountID the mail or Jira account
 // whose profile note is appended (a compose window's account; absent =
 // none); RunID the board run of a triage session (board.runStart);
 // Input, when given, is sent as the first turn at once (a one-shot

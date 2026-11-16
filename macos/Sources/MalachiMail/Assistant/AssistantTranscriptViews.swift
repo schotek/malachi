@@ -28,6 +28,16 @@ enum AssistantMarkdownRenderer {
     static var bodySize: CGFloat { Typo.bodySize }
     /// The indentation of one list level, and of the text after a marker.
     static let listIndent: CGFloat = 14
+    /// Marks the text of a block quote; `AssistantTextView` draws a card
+    /// with a bar at its leading edge behind it.
+    static let quoteKey = NSAttributedString.Key("io.github.schotek.Malachi.assistantQuote")
+    /// The card of a block quote: the space between its edge and its text
+    /// above and below, the text's indentation from its sides, and its bar.
+    static let quotePadding: CGFloat = 6
+    static let quoteLeading: CGFloat = 13
+    static let quoteTrailing: CGFloat = 8
+    static let quoteBar: CGFloat = 3
+    static let quoteRadius: CGFloat = 6
 
     static func render(_ markdown: String) -> NSAttributedString {
         render(blocks: Assistant.markdown(markdown))
@@ -70,6 +80,14 @@ enum AssistantMarkdownRenderer {
             base = .monospacedSystemFont(ofSize: bodySize - 1, weight: .regular)
             para.firstLineHeadIndent = 6
             para.headIndent = 6
+        case .quote:
+            // The card reaches quotePadding beyond the text, so the text
+            // keeps that much more from its neighbours.
+            para.firstLineHeadIndent = quoteLeading
+            para.headIndent = quoteLeading
+            para.tailIndent = -quoteTrailing
+            para.paragraphSpacingBefore = quotePadding
+            para.paragraphSpacing = 6 + quotePadding
         }
         let out = NSMutableAttributedString()
         let attrs: [NSAttributedString.Key: Any] = [.font: base, .foregroundColor: NSColor.labelColor, .paragraphStyle: para]
@@ -81,6 +99,9 @@ enum AssistantMarkdownRenderer {
         }
         if b.kind == .code, out.length > 0 {
             out.addAttribute(.backgroundColor, value: NSColor.quaternarySystemFill, range: NSRange(location: 0, length: out.length))
+        }
+        if b.kind == .quote, out.length > 0 {
+            out.addAttribute(quoteKey, value: true, range: NSRange(location: 0, length: out.length))
         }
         return out
     }
@@ -168,8 +189,64 @@ final class AssistantTextView: NSTextView {
 
     /// Shows `markdown`, rendered by `AssistantMarkdownRenderer`.
     func setMarkdown(_ markdown: String) {
-        textStorage?.setAttributedString(AssistantMarkdownRenderer.render(markdown))
+        let text = AssistantMarkdownRenderer.render(markdown)
+        textStorage?.setAttributedString(text)
+        // TextKit gives the first paragraph no space before it and the last
+        // none after: a quote at either end gets the room of its card from
+        // the container's inset.
+        let key = AssistantMarkdownRenderer.quoteKey
+        let atEdge = text.length > 0
+            && (text.attribute(key, at: 0, effectiveRange: nil) != nil
+                || text.attribute(key, at: text.length - 1, effectiveRange: nil) != nil)
+        textContainerInset = NSSize(width: 0, height: atEdge ? AssistantMarkdownRenderer.quotePadding : 0)
         invalidateIntrinsicContentSize()
+        needsDisplay = true
+    }
+
+    // MARK: Block quotes
+
+    /// The cards of the block quotes, in view coordinates: the lines of
+    /// each quote, as wide as the view, with the padding around them.
+    private func quoteCards() -> [NSRect] {
+        guard let layoutManager, let textContainer, let storage = textStorage, storage.length > 0 else { return [] }
+        var cards: [NSRect] = []
+        let origin = textContainerOrigin
+        let pad = AssistantMarkdownRenderer.quotePadding
+        storage.enumerateAttribute(
+            AssistantMarkdownRenderer.quoteKey, in: NSRange(location: 0, length: storage.length)
+        ) { value, range, _ in
+            guard value != nil else { return }
+            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            var top = CGFloat.greatestFiniteMagnitude
+            var bottom = -CGFloat.greatestFiniteMagnitude
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphs) { _, used, container, _, _ in
+                guard container === textContainer else { return }
+                top = min(top, used.minY)
+                bottom = max(bottom, used.maxY)
+            }
+            guard top < bottom else { return }
+            cards.append(NSRect(x: 0, y: origin.y + top - pad, width: bounds.width, height: bottom - top + 2 * pad))
+        }
+        return cards
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        for card in quoteCards() where card.intersects(dirtyRect) {
+            NSGraphicsContext.saveGraphicsState()
+            let radius = AssistantMarkdownRenderer.quoteRadius
+            NSBezierPath(roundedRect: card, xRadius: radius, yRadius: radius).addClip()
+            NSColor.quaternarySystemFill.setFill()
+            card.fill()
+            NSColor.controlAccentColor.setFill()
+            var bar = card
+            bar.size.width = AssistantMarkdownRenderer.quoteBar
+            if userInterfaceLayoutDirection == .rightToLeft {
+                bar.origin.x = card.maxX - bar.width
+            }
+            bar.fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        super.draw(dirtyRect)
     }
 
     override var intrinsicContentSize: NSSize {
@@ -183,7 +260,7 @@ final class AssistantTextView: NSTextView {
         }
         layoutManager.ensureLayout(for: textContainer)
         let used = layoutManager.usedRect(for: textContainer)
-        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(used.height))
+        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(used.height + 2 * textContainerInset.height))
     }
 
     override func setFrameSize(_ newSize: NSSize) {

@@ -128,6 +128,7 @@ func (w *Wizard) startLinked(cfg api.AccountConfig) {
 	w.appPassword = nil
 	cfg = withIdentity(cfg, w.readIdentity())
 	w.linkedCfg = &cfg
+	w.offerServicesForLinked(cfg)
 	w.password.SetText("")
 	w.nav.ReplaceWithTags([]string{tagIdentity, tagTesting})
 	w.runTest()

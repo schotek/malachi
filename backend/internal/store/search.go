@@ -42,8 +42,8 @@ type SearchFilter struct {
 	// the folder lacks), each Message-ID once. The caller sets it only for
 	// a folder in Store.SentScope.
 	SentOf string
-	// ExcludeRoles are folder roles left out (Trash and Junk outside an
-	// explicit folder).
+	// ExcludeRoles are folder roles left out of the search; the core sets
+	// none since 2026-11-15 (Trash and Junk are searched like any folder).
 	ExcludeRoles []api.FolderRole
 	Unread       bool
 	Flagged      bool

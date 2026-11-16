@@ -273,9 +273,16 @@ func (c *Client) request(ctx context.Context, method, u string, body func() (io.
 		if err != nil {
 			return err
 		}
+		started := time.Now()
 		resp, err := c.once(ctx, method, u, body, contentType, length, token, timeout)
 		if err != nil {
+			if ctx.Err() == nil {
+				c.logFailure(method, u, 0, nil, time.Since(started), err)
+			}
 			return err
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			c.logFailure(method, u, resp.StatusCode, resp.Header, time.Since(started), nil)
 		}
 		switch {
 		case resp.StatusCode == http.StatusUnauthorized && !refreshed:
@@ -318,6 +325,46 @@ func (c *Client) request(ctx context.Context, method, u string, body func() (io.
 		}
 		return nil
 	}
+}
+
+// logFailure records a request that did not succeed: the method, the
+// endpoint's path without the query (a nextLink or deltaLink carries
+// opaque tokens of the service there), how long it took, the status and
+// the ids Microsoft support asks for. A server failure (5xx) or a
+// transport failure is a warning; any other status is debug, since a 404
+// of a message deleted meanwhile is routine. Bodies and tokens are never
+// logged.
+func (c *Client) logFailure(method, u string, status int, h http.Header, took time.Duration, err error) {
+	attrs := []any{
+		"method", method,
+		"path", requestPath(c.URL(u)),
+		"took", took.Round(time.Millisecond),
+	}
+	level := slog.LevelDebug
+	if err != nil {
+		level = slog.LevelWarn
+		attrs = append(attrs, "err", transport.CleanMessage(err.Error()))
+	} else {
+		if status >= 500 {
+			level = slog.LevelWarn
+		}
+		attrs = append(attrs, "status", status)
+		for _, k := range []string{"request-id", "client-request-id", "x-ms-ags-diagnostic"} {
+			if v := transport.CleanMessage(h.Get(k)); v != "" {
+				attrs = append(attrs, k, v)
+			}
+		}
+	}
+	c.log.Log(context.Background(), level, "graph request failed", attrs...)
+}
+
+// requestPath is u without scheme, host and query: "/v1.0/me/mailFolders/…".
+func requestPath(u string) string {
+	p, err := url.Parse(u)
+	if err != nil {
+		return "?"
+	}
+	return transport.CleanMessage(p.EscapedPath())
 }
 
 // acquire takes a request slot: from the shared Limiter when there is

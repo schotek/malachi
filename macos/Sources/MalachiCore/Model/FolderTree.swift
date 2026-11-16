@@ -53,10 +53,11 @@ public func enabledAccounts(_ accounts: [Account]) -> [Account] {
 }
 
 /// The enabled accounts the Mail sidebar lists, keeping order: a
-/// calendar-only CalDAV account and an eWay-CRM account have no mail and no
-/// folders, so they are never in Mail (docs/calendar.md D16, docs/eway.md
-/// D1; a CalDAV account shows in the Calendar's sidebar with the CALDAV
-/// capsule, an eWay-CRM one only on Settings → Integrations). model.go `mailSidebarAccounts`, Windows
+/// calendar-only CalDAV account, an eWay-CRM account and an AI provider
+/// account have no mail and no folders, so they are never in Mail
+/// (docs/calendar.md D16, docs/eway.md D1, docs/api.md §4.1; a CalDAV
+/// account shows in the Calendar's sidebar with the CALDAV capsule, an
+/// eWay-CRM and an AI one only on Settings → Integrations). model.go `mailSidebarAccounts`, Windows
 /// `FolderTree.MailSidebarAccounts`.
 public func mailSidebarAccounts(_ accounts: [Account]) -> [Account] {
     enabledAccounts(accounts).filter(inMail)
@@ -64,7 +65,8 @@ public func mailSidebarAccounts(_ accounts: [Account]) -> [Account] {
 
 /// Whether Mail shows account `a` once it is enabled, the rule of
 /// `mailSidebarAccounts`: every kind with mail, that is every kind but a
-/// calendar-only CalDAV account and an eWay-CRM account. Mail asks it of
+/// calendar-only CalDAV account, an eWay-CRM account and an AI provider
+/// account (never among the board's triage accounts either). Mail asks it of
 /// switched-off accounts too, so that such accounts alone count as no account in Mail (the empty sidebar, the reader's No
 /// Accounts page); the account name on an all-accounts search result, the
 /// Reply All self address and the board's accounts (its account filter,
@@ -72,7 +74,7 @@ public func mailSidebarAccounts(_ accounts: [Account]) -> [Account] {
 /// Windows `FolderTree.InMail`).
 public func inMail(_ a: Account) -> Bool {
     let k = a.config.protocolKind
-    return k != .caldav && k != .eway
+    return k != .caldav && k != .eway && k != .ai
 }
 
 /// The folders the sidebar lists: an empty outbox is dropped (the folder

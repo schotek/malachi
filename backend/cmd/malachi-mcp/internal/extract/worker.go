@@ -92,50 +92,6 @@ const (
 	replySlack = 64
 )
 
-// Outcome is how one Run ended.
-type Outcome int
-
-// The outcomes. Only OK carries text, only Refused a *Refusal.
-const (
-	OK           Outcome = iota // the text is in the Result
-	Refused                     // the worker refused the document; the *Refusal says why
-	Timeout                     // the parent's deadline killed the worker, or its own deadline ended it
-	Memory                      // the memory watchdog ended the worker
-	Crashed                     // the worker died: a Go fatal error, an unrecovered panic, a signal
-	BadReply                    // the reply broke the protocol; as bad as a crash
-	SpawnFailed                 // the worker could not be started
-	Cancelled                   // ctx was cancelled (not timed out) before the worker ended
-	Mismatch                    // the worker speaks another protocol: the binary was replaced while the bridge ran
-	EngineFailed                // the reader's engine could not be started: the machine's doing, not the document's
-)
-
-// String is a short code for logs.
-func (o Outcome) String() string {
-	switch o {
-	case OK:
-		return "ok"
-	case Refused:
-		return "refused"
-	case Timeout:
-		return "timeout"
-	case Memory:
-		return "memory"
-	case Crashed:
-		return "crashed"
-	case BadReply:
-		return "badReply"
-	case SpawnFailed:
-		return "spawnFailed"
-	case Cancelled:
-		return "cancelled"
-	case Mismatch:
-		return "mismatch"
-	case EngineFailed:
-		return "engineFailed"
-	}
-	return "Outcome(" + strconv.Itoa(int(o)) + ")"
-}
-
 // replyHeader is the first line of a reply.
 type replyHeader struct {
 	V         int    `json:"v"`

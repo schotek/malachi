@@ -106,6 +106,7 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.BoardChatGptConsentVersion, "board-triage-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
         new(SettingsKey.CalendarView, "calendar-view", "s", "week", choices: Nicks<Cal.View>.All),
         new(SettingsKey.ContactsSuggestScope, "contacts-suggest-scope", "s", "account", choices: ContactBook.ScopeNicks),
+        new(SettingsKey.AccountServicesDismissed, "account-services-dismissed", "as", Array.Empty<string>()),
         new(SettingsKey.ToolbarMail, "toolbar-mail", "as", Array.Empty<string>()),
         new(SettingsKey.ToolbarBoardList, "toolbar-board-list", "as", Array.Empty<string>()),
         new(SettingsKey.ToolbarBoardFlow, "toolbar-board-flow", "as", Array.Empty<string>()),
@@ -620,6 +621,18 @@ public sealed class SettingsStore : IDisposable
                 SetString(SettingsKey.ContactsSuggestScope, value.Value);
             }
         }
+    }
+
+    /// <summary>
+    /// Not Now of the Calendar's and the Contacts window's offers to sync an
+    /// account's calendar or contacts: entries "&lt;account id&gt;:calendar"
+    /// and "&lt;account id&gt;:contacts" (<c>AccountSync.DismissKey</c>,
+    /// docs/plans/account-services.md K4); an unchanged list is not written.
+    /// </summary>
+    public IReadOnlyList<string> AccountServicesDismissed
+    {
+        get => GetStringList(SettingsKey.AccountServicesDismissed);
+        set => SetStringList(SettingsKey.AccountServicesDismissed, value);
     }
 
     // Toolbars (ui/internal/toolbar, docs/plans/toolbar-customization.md §17)

@@ -36,9 +36,13 @@ const (
 	BlockBullet
 	BlockNumbered
 	BlockCode
+	// BlockQuote is a block quote: the text of a draft or of a message
+	// that the answer shows word for word.
+	BlockQuote
 )
 
-// Block is a paragraph, a heading, a list item or a code block.
+// Block is a paragraph, a heading, a list item, a code block or a block
+// quote.
 type Block struct {
 	Kind BlockKind
 	// Level is a heading's level (1–3) or a list item's nesting (0 to
@@ -47,7 +51,8 @@ type Block struct {
 	// Number is a numbered item's number as written; 0 otherwise.
 	Number int
 	// Spans are the block's text; a code block has one code span with
-	// its lines, nothing parsed inside (none when it is empty).
+	// its lines, nothing parsed inside (none when it is empty); a quote
+	// one plain span with its lines.
 	Spans []Span
 }
 
@@ -77,6 +82,13 @@ const maxListLevel = 3
 // `code`, [text](http(s)://…) and bare http(s):// URLs at a word's start.
 // A marker without its closing half, and a link to anything but http or
 // https, stays literal text.
+//
+// A block quote is a run of lines that start, after at most three
+// spaces, with ">": the markers (">>" is still one level) and one space
+// after them are dropped, the lines stay lines, and the text is literal,
+// since it is a message's or a draft's: no bold, no link, no list inside.
+// Any other line ends it. Blank lines at its edges are dropped, and a
+// quote without text shows nothing.
 //
 // A table (a paragraph's line of cells between "|", a delimiter row of as
 // many ---, :---, ---: or :---: cells, then rows) is read as one bullet
@@ -139,6 +151,10 @@ type mdParser struct {
 	// bytes.
 	header []string
 	budget int
+	// quote is the open block quote's lines (without their markers);
+	// inQuote while one is open.
+	inQuote bool
+	quote   []string
 }
 
 func (p *mdParser) line(l string) {
@@ -151,6 +167,17 @@ func (p *mdParser) line(l string) {
 		p.code = append(p.code, l)
 		return
 	}
+	if indent <= 3 && strings.HasPrefix(rest, ">") {
+		if !p.inQuote {
+			p.header = nil
+			p.flush()
+			p.indents = nil
+			p.inQuote = true
+		}
+		p.quote = append(p.quote, quoteText(rest))
+		return
+	}
+	p.closeQuote()
 	if p.header != nil {
 		fenceOrHeading := false
 		if indent <= 3 {
@@ -336,7 +363,46 @@ func (p *mdParser) end() {
 	if p.inCode {
 		p.closeCode()
 	}
+	p.closeQuote()
 	p.flush()
+}
+
+// quoteText is a quote line without its markers: every ">" at its start
+// (spaces and tabs between them too), one space after the last, and the
+// spaces and tabs at its end.
+func quoteText(rest string) string {
+	lo := 0
+scan:
+	for i := 0; i < len(rest); i++ {
+		switch rest[i] {
+		case '>':
+			lo = i + 1
+		case ' ', '\t':
+		default:
+			break scan
+		}
+	}
+	rest = strings.TrimPrefix(rest[lo:], " ")
+	return strings.TrimRight(rest, " \t")
+}
+
+// closeQuote ends the open block quote: one plain span of its lines.
+func (p *mdParser) closeQuote() {
+	if !p.inQuote {
+		return
+	}
+	lines := p.quote
+	p.inQuote, p.quote = false, nil
+	for len(lines) > 0 && lines[0] == "" {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return
+	}
+	p.blocks = append(p.blocks, Block{Kind: BlockQuote, Spans: []Span{{Text: strings.Join(lines, "\n")}}})
 }
 
 // listLevel is the level of a list item indented by indent columns.

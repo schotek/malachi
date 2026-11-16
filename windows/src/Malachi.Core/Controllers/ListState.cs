@@ -7,6 +7,8 @@
 // (showSearchState). Swift's enum with an associated value is a closed
 // record hierarchy here, as DaemonNotification is.
 
+using Malachi.Core.Model;
+
 namespace Malachi.Core.Controllers;
 
 /// <summary>
@@ -35,4 +37,13 @@ public abstract record ListState
     /// <param name="Description">The sentence under it.</param>
     /// <param name="Retry">Whether the page offers Try Again (<see cref="ListController.Retry"/>).</param>
     public sealed record Status(string Icon, string Title, string Description, bool Retry) : ListState;
+
+    /// <summary>
+    /// A search without results in the store (Swift
+    /// <c>.searchEmpty(description:server:)</c>): the explanation, and what
+    /// the page offers of the search on the server.
+    /// </summary>
+    /// <param name="Description">The sentence under the title.</param>
+    /// <param name="Server">The offer of the search on the server.</param>
+    public sealed record SearchEmpty(string Description, ServerSearchOffer Server) : ListState;
 }

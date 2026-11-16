@@ -29,6 +29,9 @@ extension Assistant {
     /// assistant.BlockKind.
     public enum BlockKind: Sendable, Equatable {
         case paragraph, heading, bullet, numbered, code
+        /// Swift-first: a block quote, the text of a draft or of a message
+        /// that the answer shows word for word.
+        case quote
     }
 
     /// assistant.Span: a run of text in one style. `link` is an http or
@@ -54,7 +57,7 @@ extension Assistant {
     /// (0 to `maxListLevel`), 0 otherwise; `number` a numbered item's
     /// number as written, 0 otherwise; `spans` the block's text (a code
     /// block has one code span with its lines, nothing parsed inside, and
-    /// none when it is empty).
+    /// none when it is empty; a quote one plain span with its lines).
     public struct Block: Sendable, Equatable {
         public var kind: BlockKind
         public var level = 0
@@ -89,6 +92,13 @@ extension Assistant {
     /// [text](http(s)://…) and bare http(s):// URLs at a word's start. A
     /// marker without its closing half, and a link to anything but http or
     /// https, stays literal text.
+    ///
+    /// A block quote (Swift-first) is a run of lines that start, after at
+    /// most three spaces, with ">": the markers (">>" is still one level)
+    /// and one space after them are dropped, the lines stay lines, and the
+    /// text is literal, since it is a message's or a draft's: no bold, no
+    /// link, no list inside. Any other line ends it. Blank lines at its
+    /// edges are dropped, and a quote without text shows nothing.
     ///
     /// A table (a paragraph's line of cells between "|", a delimiter row of
     /// as many ---, :---, ---: or :---: cells, then rows) is read as one
@@ -222,6 +232,9 @@ private struct MarkdownParser {
     /// what the rows so far leave for the header labels, in bytes.
     var header: [[UInt8]]?
     var budget = 0
+    /// The open block quote's lines (without their markers), nil when none
+    /// is open.
+    var quote: [Range<Int>]?
 
     init(s: UnsafeBufferPointer<UInt8>) {
         self.s = s
@@ -251,6 +264,18 @@ private struct MarkdownParser {
             code.append(lo..<hi)
             return
         }
+        if indent <= 3, r < hi, s[r] == 0x3E {
+            if quote == nil {
+                header = nil
+                flush()
+                indents = []
+                quote = []
+            }
+            let text = quoteText(r, hi)
+            quote?.append(text)
+            return
+        }
+        closeQuote()
         if header != nil {
             let fenceOrHeading = indent <= 3 && (isFence(r, hi) || heading(r, hi) != nil)
             if !fenceOrHeading, hasPipe(r, hi) {
@@ -471,7 +496,49 @@ private struct MarkdownParser {
         if inCode {
             closeCode()
         }
+        closeQuote()
         flush()
+    }
+
+    /// quoteText: a quote line without its markers: every ">" at its start
+    /// (spaces and tabs between them too), one space after the last, and
+    /// the spaces and tabs at its end.
+    func quoteText(_ r: Int, _ hi: Int) -> Range<Int> {
+        var lo = r
+        var i = r
+        while i < hi {
+            if s[i] == 0x3E {
+                lo = i + 1
+            } else if s[i] != 0x20, s[i] != 0x09 {
+                break
+            }
+            i += 1
+        }
+        if lo < hi, s[lo] == 0x20 {
+            lo += 1
+        }
+        var end = hi
+        while end > lo, s[end - 1] == 0x20 || s[end - 1] == 0x09 {
+            end -= 1
+        }
+        return lo..<end
+    }
+
+    /// Ends the open block quote: one plain span of its lines.
+    mutating func closeQuote() {
+        guard let lines = quote else { return }
+        quote = nil
+        var lo = 0
+        var hi = lines.count
+        while lo < hi, lines[lo].isEmpty {
+            lo += 1
+        }
+        while hi > lo, lines[hi - 1].isEmpty {
+            hi -= 1
+        }
+        guard lo < hi else { return }
+        blocks.append(Assistant.Block(
+            kind: .quote, spans: [Assistant.Span(text: String(decoding: joined(Array(lines[lo..<hi])), as: UTF8.self))]))
     }
 
     /// The lines joined with "\n".

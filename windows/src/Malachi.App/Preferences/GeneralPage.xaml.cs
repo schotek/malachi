@@ -17,7 +17,8 @@
 // says (StorageUsageController: now, after every confirmed change and
 // every 5 s while the window is open), hidden for a daemon without it.
 //
-// Launch at Login is the Run value (PlatformServices.LaunchAtLogin), which
+// Launch at Login is the Run value, or in an MSIX package the package's
+// startup task (PlatformServices.LaunchAtLogin), which
 // is authoritative as the Background portal and SMAppService are: the
 // switch and the mirror key follow its status whenever the page comes up,
 // and a change the registry or the user's choice in Windows Settings
@@ -167,6 +168,7 @@ public sealed partial class GeneralPage : UserControl
         var text = LaunchAtLogin.StatusText(status);
         StartupApprovalText.Text = text ?? "";
         StartupApproval.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        StartupSettingsLink.Visibility = LaunchAtLogin.OffersSettings(status) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // preferences.go bindLaunchAtLogin, GeneralPaneViewController
@@ -181,7 +183,7 @@ public sealed partial class GeneralPage : UserControl
         var want = LaunchAtLoginSwitch.IsOn;
         try
         {
-            var outcome = PlatformServices.LaunchAtLogin.Set(want);
+            var outcome = PlatformServices.LaunchAtLogin.SetEnabled(want);
             if (LaunchAtLogin.RefusalText(outcome) is { } refused)
             {
                 SetLoginSwitch(!want);

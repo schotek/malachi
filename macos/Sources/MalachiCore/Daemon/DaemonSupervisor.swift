@@ -23,13 +23,29 @@ public actor DaemonSupervisor {
         /// The bundled `malachi-keychain` (`Paths.keychainHelper`), which
         /// the daemon gets as its keyring; nil runs it without one.
         public var keychainHelper: URL?
+        /// The daemon's log file (`Paths.logFile`, `--log-file`); nil leaves
+        /// its log on the app's stderr.
+        public var logFile: String?
 
-        public init(executable: URL, socket: String, config: String, store: String, keychainHelper: URL? = nil) {
+        public init(
+            executable: URL, socket: String, config: String, store: String, keychainHelper: URL? = nil,
+            logFile: String? = nil
+        ) {
             self.executable = executable
             self.socket = socket
             self.config = config
             self.store = store
             self.keychainHelper = keychainHelper
+            self.logFile = logFile
+        }
+
+        /// The daemon's command line.
+        public var arguments: [String] {
+            var args = ["--socket", socket, "--config", config, "--store", store]
+            if let logFile, !logFile.isEmpty {
+                args += ["--log-file", logFile]
+            }
+            return args
         }
     }
 
@@ -202,11 +218,12 @@ public actor DaemonSupervisor {
     private func spawn(_ l: Launch) throws {
         let p = Process()
         p.executableURL = l.executable
-        p.arguments = ["--socket", l.socket, "--config", l.config, "--store", l.store]
+        p.arguments = l.arguments
         p.environment = Self.environment(base: ProcessInfo.processInfo.environment, launch: l)
-        // The daemon's logs go where the app's do. No process group of its
-        // own: a Ctrl+C in the terminal reaches both, and the daemon shuts
-        // down cleanly on SIGINT.
+        // The daemon logs to its --log-file; what it writes before opening
+        // it (a bad flag) goes where the app's output does. No process group
+        // of its own: a Ctrl+C in the terminal reaches both, and the daemon
+        // shuts down cleanly on SIGINT.
         p.standardOutput = FileHandle.standardError
         p.standardError = FileHandle.standardError
         p.terminationHandler = { [weak self] proc in

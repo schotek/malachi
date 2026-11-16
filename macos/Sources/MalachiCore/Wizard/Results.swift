@@ -48,13 +48,26 @@ public func passwordMissing(_ error: (any Error)?, linked: Bool) -> Bool {
 
 /// accountwizard.passwordBannerText: the identity page's banner when the
 /// password is what to fix: `authRequired` means none is stored, anything
-/// else (`authFailed`) that the server refused it.
-public func passwordBannerText(_ reason: ErrorCode) -> String {
+/// else (`authFailed`) that the server refused it. `imapHost` is the
+/// incoming server of the account: Google's refuses the password of the
+/// account itself and takes an app password only, which the banner then says.
+public func passwordBannerText(_ reason: ErrorCode, imapHost: String) -> String {
     if reason == .authRequired {
         // TRANSLATORS: wizard banner on the identity page
         return L10n.T("No password is stored for this account. Enter it to continue.")
     }
+    if googleHost(imapHost) {
+        return L10n.T("Google rejected the sign-in. It does not accept the account's password here: create an app password in your Google Account and enter that one. For a work or school account, the administrator has to allow app passwords and IMAP.")
+    }
     return L10n.T("The server rejected the user name or password")
+}
+
+/// accountwizard.GoogleHost: a mail server of Gmail and Google Workspace, as
+/// typed or discovered: the case and the spaces around it do not matter.
+public func googleHost(_ host: String) -> Bool {
+    var h = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if h.hasSuffix(".") { h.removeLast() }
+    return ["imap.gmail.com", "smtp.gmail.com", "imap.googlemail.com", "smtp.googlemail.com"].contains(h)
 }
 
 /// accountwizard.EndpointSummary: the row icon (a GTK icon name) and

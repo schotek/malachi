@@ -22,7 +22,10 @@
 // (ContactPhotos, docs/plans/address-book.md §9) are made here too: one
 // ContactsPhotosController for the application, told every
 // notify.contactsChanged and reset when the connection comes (a restarted
-// daemon). Nothing here logs a contact.
+// daemon). Nothing here logs a contact. Its refresh also forgets the Not
+// Now answers of the calendar and contacts offers of accounts that are gone
+// (account-services-dismissed, docs/plans/account-services.md K4), the one
+// place that does, as macOS's AppContacts.refresh.
 
 using System;
 using System.Collections.Generic;
@@ -30,6 +33,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Malachi.App.Shell;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.Contacts;
@@ -289,6 +293,14 @@ public sealed partial class AppContacts : IDisposable
         if (a is not null)
         {
             Accounts = a.Accounts;
+            if (samples is null)
+            {
+                // Not Now of the calendar and contacts offers goes with its
+                // account (docs/plans/account-services.md, K4); the samples'
+                // accounts are invented.
+                state.Settings.AccountServicesDismissed = AccountSync.Pruned(
+                    state.Settings.AccountServicesDismissed, a.Accounts.Select(x => x.Id));
+            }
         }
         if (b is not null)
         {

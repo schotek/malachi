@@ -174,6 +174,7 @@ func newContactsWindow(w *Window) *ContactsWindow {
 	cw.ctl.OnChange = cw.schedule
 	cw.ctl.OnSelect = func(id api.ContactID) { cw.contact.Open(id) }
 	cw.ctl.OnSignIn = cw.signIn
+	cw.wireSyncOffers()
 	cw.contact.OnChange = cw.schedule
 	cw.contact.OnQuestion = cw.ask
 	cw.contact.OnCreated = func(api.ContactID) { cw.ctl.Reload() }
@@ -379,7 +380,8 @@ func (cw *ContactsWindow) onBookSelected(row *gtk.ListBoxRow) {
 
 func (cw *ContactsWindow) renderBanners() {
 	need := cw.ctl.Consent()
-	key := fmt.Sprint(need)
+	offers := cw.ctl.SyncOffers()
+	key := fmt.Sprint(need, offers)
 	if key == cw.bannersKey {
 		return
 	}
@@ -405,6 +407,7 @@ func (cw *ContactsWindow) renderBanners() {
 			cw.banners.Append(online)
 		}
 	}
+	cw.appendSyncOffers(offers)
 }
 
 // signIn is Allow… of a consent banner (account.oauthStart with

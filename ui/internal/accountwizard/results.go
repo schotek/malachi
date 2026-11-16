@@ -6,6 +6,7 @@ package accountwizard
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -79,11 +80,26 @@ func PasswordMissing(err error, linked bool) bool {
 
 // passwordBannerText is the identity page's banner when the password is
 // what to fix: reason authRequired means none is stored, anything else
-// (authFailed) that the server refused it.
-func passwordBannerText(reason api.ErrorCode) string {
+// (authFailed) that the server refused it. imapHost is the incoming server
+// of the account: Google's refuses the password of the account itself and
+// takes an app password only, which the banner then says.
+func passwordBannerText(reason api.ErrorCode, imapHost string) string {
 	if reason == api.CodeAuthRequired {
 		// TRANSLATORS: banner on the identity page of the account assistant
 		return i18n.T("No password is stored for this account. Enter it to continue.")
 	}
+	if GoogleHost(imapHost) {
+		return i18n.T("Google rejected the sign-in. It does not accept the account's password here: create an app password in your Google Account and enter that one. For a work or school account, the administrator has to allow app passwords and IMAP.")
+	}
 	return i18n.T("The server rejected the user name or password")
+}
+
+// GoogleHost reports a mail server of Gmail and Google Workspace, as typed
+// or discovered: the case and the spaces around it do not matter.
+func GoogleHost(host string) bool {
+	switch strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), ".")) {
+	case "imap.gmail.com", "smtp.gmail.com", "imap.googlemail.com", "smtp.googlemail.com":
+		return true
+	}
+	return false
 }

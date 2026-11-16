@@ -51,6 +51,7 @@ PLURAL_CATEGORIES: dict[str, list[str]] = {
     "es": ["one", "other"],
     "pt": ["one", "other"],
     "fr": ["one", "other"],
+    "hu": ["one", "other"],
     "cs": ["one", "few", "other"],
     "sk": ["one", "few", "other"],
     "pl": ["one", "few", "many"],

@@ -39,7 +39,8 @@
   třídí, co čeká na vás a co na ostatní.
 - **Asistent na vašem vlastním účtu** (Claude nebo ChatGPT): shrne,
   najde úkoly a připraví odpověď, a to jen když o to požádáte.
-- Česky a anglicky.
+- Česky, slovensky, polsky, maďarsky, ukrajinsky, německy, francouzsky,
+  španělsky, italsky, brazilskou portugalštinou, nizozemsky a anglicky.
 
 Celou prohlídku najdete na
 [malachimail.app](https://malachimail.app/cs/features.html).

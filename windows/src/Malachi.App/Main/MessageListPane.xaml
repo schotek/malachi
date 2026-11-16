@@ -269,16 +269,34 @@ inbox sections are collapsed (as macOS).
                         IsActive="False"
                         Visibility="Collapsed" />
                 </StackPanel>
-                <!-- search_note: how far back the local store reaches. -->
-                <TextBlock
-                    x:Name="SearchNote"
+                <!-- search_note: how far back the local store reaches, and
+                     under it the offer to search the servers for older mail
+                     with the spinner while that search runs. -->
+                <StackPanel
                     Grid.Row="2"
                     Margin="12,0,12,6"
-                    AutomationProperties.AutomationId="SearchNote"
-                    Style="{StaticResource DimCaptionLabelStyle}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap"
-                    Visibility="Collapsed" />
+                    Spacing="6">
+                    <TextBlock
+                        x:Name="SearchNote"
+                        AutomationProperties.AutomationId="SearchNote"
+                        Style="{StaticResource DimCaptionLabelStyle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+                    <Button
+                        x:Name="ServerSearchButton"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.AutomationId="ServerSearchButton"
+                        Content="{l:T Msgid='Search on the Server Too'}"
+                        Visibility="Collapsed" />
+                    <ProgressRing
+                        x:Name="ServerSearchSpinner"
+                        Width="16"
+                        Height="16"
+                        HorizontalAlignment="Center"
+                        IsActive="False"
+                        Visibility="Collapsed" />
+                </StackPanel>
             </Grid>
             <main:PaneStatusPage x:Name="ListStatusPage" Visibility="Collapsed" />
         </Grid>

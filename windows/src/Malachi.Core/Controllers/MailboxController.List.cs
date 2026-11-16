@@ -761,14 +761,18 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         var cursor = Model.NextCursor ?? "";
         // Under the last page of results: how far back search reaches.
         var st = Model.Search;
-        var note = st.Active && st.Shown && cursor.Length == 0 && !Model.LoadingMore && Model.RowCount > 0
-            ? SearchModel.SearchRetentionText(st.OfflineDays, st.OfflineKnown)
-            : "";
+        var last = st.Active && st.Shown && cursor.Length == 0 && !Model.LoadingMore && Model.RowCount > 0;
+        var note = last ? SearchModel.SearchRetentionText(st.OfflineDays, st.OfflineKnown) : "";
+        if (last && st.Server.Phase == ServerSearchPhase.Done)
+        {
+            note = SearchModel.ServerSearchText(st.Server);
+        }
         var state = new LoadMoreState
         {
             Spinner = Model.LoadingMore,
             Button = !Model.LoadingMore && cursor.Length > 0 && Model.ListErr is null,
             Note = note,
+            Server = last ? Model.ServerSearchOffer : ServerSearchOffer.None,
         };
         if (state == LoadMoreState)
         {

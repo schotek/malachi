@@ -379,6 +379,12 @@ public enum API {
         public static let name = "search.query"
     }
 
+    public enum SearchServer: RPCMethod {
+        public typealias Params = SearchServerParams
+        public typealias Result = SearchServerResult
+        public static let name = "search.server"
+    }
+
     // MARK: Sync
 
     public enum SyncStatus: RPCMethod {
@@ -594,7 +600,7 @@ public enum API {
         DraftSave.self, DraftList.self, DraftDelete.self, DraftCreate.self, DraftOpen.self,
         DraftMarkdown.self, DraftGet.self,
         AttachmentImport.self, AttachmentRemove.self, AttachmentGet.self,
-        SearchQuery.self,
+        SearchQuery.self, SearchServer.self,
         SyncStatus.self, SyncTrigger.self,
         ConfigGet.self, ConfigSet.self,
         SenderList.self, SenderAdd.self, SenderRemove.self,

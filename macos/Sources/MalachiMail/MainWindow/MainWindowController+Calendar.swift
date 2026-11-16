@@ -58,6 +58,9 @@ extension MainWindowController {
         c.onSignIn = { [weak self] account in
             self?.calendarSignIn(account)
         }
+        c.onQuestion = { [weak self] q in
+            await self?.askCalendarQuestion(q) ?? .cancel
+        }
         return c
     }
 
@@ -144,6 +147,8 @@ extension MainWindowController {
         guard mode == .calendar else { return }
         applyTitle()
         updateCalendarStatus()
+        // The selection or the view changed without an event of the window.
+        refreshTouchBar()
     }
 
     /// The status bar's texts for the mode: in Calendar the calendars'
@@ -188,6 +193,21 @@ extension MainWindowController {
                 openInBrowser(url) { [weak self] text in self?.toasts.show(text) }
             case .failed(let text):
                 self?.toasts.show(text)
+            }
+        }
+    }
+
+    /// Turn On of a sync offer asks for the consent (Sign In… or Cancel).
+    private func askCalendarQuestion(_ q: Cal.Question) async -> Cal.Answer {
+        guard let window else { return .cancel }
+        let alert = NSAlert()
+        alert.messageText = q.heading
+        alert.informativeText = q.body
+        alert.addButton(withTitle: q.confirm)
+        alert.addButton(withTitle: wizardLabel("_Cancel"))
+        return await withCheckedContinuation { cont in
+            alert.beginSheetModal(for: window) { response in
+                cont.resume(returning: response == .alertFirstButtonReturn ? .confirm : .cancel)
             }
         }
     }
@@ -247,3 +267,40 @@ extension MainWindowController {
         }
     }
 }
+
+extension MainWindowController {
+    /// The Calendar's Touch Bar buttons (docs/plans/touch-bar.md §4.4):
+    /// what the Calendar's toolbar does (Today, the steps, the views, ✦),
+    /// and on the selected occurrence what its detail popover does (Join
+    /// Video Call, Edit, an answer, with the popover's questions) and Show
+    /// Invitation in Mail.
+    func touchBarCalendar(_ cmd: MainTouchBar.CalendarCommand) {
+        guard mode == .calendar else { return }
+        let c = calendarController
+        switch cmd {
+        case .today:
+            c.today()
+        case let .step(delta):
+            c.step(delta)
+        case let .view(v):
+            c.setView(v)
+        case .assistant:
+            toggleCalendarAssistant()
+        case .showInMail:
+            if let ref = c.selectedOccurrence?.invitation {
+                showInvitationInMail(ref)
+            }
+        case .join, .edit, .respond:
+            guard let o = c.selectedOccurrence else { return }
+            EventDetailPopover.act(on: o, in: self) { detail in
+                switch cmd {
+                case .join: detail.joinVideoCall()
+                case .edit: detail.edit()
+                case let .respond(r): detail.respond(r)
+                default: break
+                }
+            }
+        }
+    }
+}
+

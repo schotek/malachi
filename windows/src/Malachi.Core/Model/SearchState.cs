@@ -55,6 +55,12 @@ public sealed class SearchState
     /// <summary>Whether <see cref="OfflineDays"/> is known.</summary>
     public bool OfflineKnown { get; set; }
 
+    /// <summary>
+    /// The search of the servers for mail older than the window, for the
+    /// results of <see cref="Params"/>.
+    /// </summary>
+    public ServerSearch Server { get; set; }
+
     /// <summary>An independent copy (what a Swift assignment of the struct makes).</summary>
     public SearchState Clone()
     {
@@ -69,6 +75,7 @@ public sealed class SearchState
             FocusFirst = FocusFirst,
             OfflineDays = OfflineDays,
             OfflineKnown = OfflineKnown,
+            Server = Server,
         };
         foreach (var (id, hit) in Hits)
         {

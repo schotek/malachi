@@ -86,3 +86,9 @@ __pycache__/
 
 # Cloudflare wrangler state of the website (web/wrangler.jsonc)
 .wrangler/
+
+# iOS client: the daemon library ios/scripts/build-core.sh builds
+/ios/build/
+# and what Xcode keeps per user inside the project
+/ios/MalachiMail.xcodeproj/project.xcworkspace/
+/ios/MalachiMail.xcodeproj/xcuserdata/

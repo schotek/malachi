@@ -121,6 +121,25 @@ public final class WizardController {
         case unavailable(description: String, passwordAlternative: Bool)
     }
 
+    /// The sign-in prompt's group "Also Sync from This Account"
+    /// (docs/plans/account-services.md §3.2): a switch per service the new
+    /// account can sync (`AccountServices.offeredForNew`), checked by
+    /// default; `mailOnly` offers "Try Again with Mail Only" after a sign-in
+    /// that asked for one of them did not succeed.
+    public struct ServicesView: Sendable, Equatable {
+        public struct Row: Sendable, Equatable {
+            public var service: AccountServices.Service
+            public var title: String
+            public var on: Bool
+        }
+
+        public var title: String
+        public var rows: [Row]
+        public var note: String
+        /// The label of the mail-only retry; nil hides it.
+        public var mailOnly: String?
+    }
+
     /// The browser sign-in the page is about (oauth.go `oauthState`).
     public struct OAuthState: Sendable, Equatable {
         /// Whose account it is.
@@ -177,6 +196,9 @@ public final class WizardController {
     public var onGOAHint: (@MainActor (_ text: String, _ browser: Bool) -> Void)?
     /// The browser sign-in page's content.
     public var onOAuth: (@MainActor (OAuthView) -> Void)?
+    /// The prompt's group of services to sync too; nil hides it (editing,
+    /// an account without any, a page other than the prompt).
+    public var onServices: (@MainActor (ServicesView?) -> Void)?
     /// account.oauthStart runs (true) or answered (false): only the
     /// prompt's Sign In button waits for it (oauth.go sets `oauth_sign_in`
     /// insensitive); the other pages and Back stay usable.
@@ -230,6 +252,15 @@ public final class WizardController {
     public private(set) var busy = false
     /// account.oauthStart is under way (`onOAuthStarting`).
     public private(set) var oauthStarting = false
+    /// The prompt's group of services, as last delivered through
+    /// `onServices`.
+    public private(set) var servicesView: ServicesView?
+    /// The user's choice of the services to sync too; a service not in it
+    /// is checked (K1). It stays while the wizard is open.
+    public private(set) var serviceChoice: [AccountServices.Service: Bool] = [:]
+    /// The last sign-in asked for a service and did not succeed: the group
+    /// offers "Try Again with Mail Only".
+    private var failedWithServices = false
 
     private var lastResults: ResultsView?
     /// The endpoint configuration each pin was set for (certtrust
@@ -360,6 +391,7 @@ public final class WizardController {
         if let oauthView {
             onOAuth?(oauthView)
         }
+        onServices?(servicesView)
         onPages?(pages)
         started = true
         showPasswordRequest()
@@ -393,7 +425,7 @@ public final class WizardController {
     /// the thing to fix, says why in its banner (`passwordBannerText`) and
     /// focuses it; typing clears both (`setIdentity`).
     private func askPassword(_ reason: ErrorCode) {
-        showIdentityProblems(IdentityProblems(password: true), banner: passwordBannerText(reason))
+        showIdentityProblems(IdentityProblems(password: true), banner: passwordBannerText(reason, imapHost: imap.host))
         onFocus?(.password)
     }
 
@@ -846,6 +878,62 @@ public final class WizardController {
         oauthView = v
         setOAuthStarting(false)
         onOAuth?(v)
+        updateServices()
+    }
+
+    // MARK: Calendar and contacts of a new account (account-services.md)
+
+    /// The services the new account of the sign-in can sync; none when
+    /// editing (Preferences keep the switches) or without a new account.
+    private var offeredServices: [AccountServices.Service] {
+        guard editing == nil, let cfg = oauth?.config else { return [] }
+        return AccountServices.offeredForNew(cfg)
+    }
+
+    /// The choice of the offered services: checked unless unchecked.
+    private var chosenServices: [AccountServices.Service: Bool] {
+        Dictionary(uniqueKeysWithValues: offeredServices.map { ($0, serviceChoice[$0] ?? true) })
+    }
+
+    /// Delivers the group of the prompt (nil off the prompt).
+    private func updateServices() {
+        var v: ServicesView?
+        let offered = offeredServices
+        if case .prompt = oauthView, !offered.isEmpty {
+            let chosen = chosenServices
+            v = ServicesView(
+                title: AccountServices.groupTitle,
+                rows: offered.map { .init(service: $0, title: AccountServices.switchTitle($0), on: chosen[$0] ?? true) },
+                note: AccountServices.laterNote,
+                mailOnly: failedWithServices && chosen.values.contains(true) ? AccountServices.mailOnly : nil)
+        }
+        guard v != servicesView else { return }
+        servicesView = v
+        onServices?(v)
+    }
+
+    /// A switch of the group.
+    public func setService(_ s: AccountServices.Service, on: Bool) {
+        guard offeredServices.contains(s) else { return }
+        serviceChoice[s] = on
+        updateServices()
+    }
+
+    /// "Try Again with Mail Only": unchecks every service and signs in again.
+    public func signInWithMailOnly() {
+        guard servicesView?.mailOnly != nil else { return }
+        for s in offeredServices {
+            serviceChoice[s] = false
+        }
+        failedWithServices = false
+        updateServices()
+        signInWithProvider()
+    }
+
+    /// A sign-in ended without success: when it asked for a service, the
+    /// group offers the mail-only retry.
+    private func signInDidNotSucceed() {
+        failedWithServices = chosenServices.values.contains(true)
     }
 
     /// Opens the browser sign-in's prompt (oauth.go `showOAuthPrompt`):
@@ -855,6 +943,7 @@ public final class WizardController {
     private func showOAuthPrompt(provider: LinkedProvider?, config: AccountConfig?, passwordAlt: AccountConfig?) {
         cancelSession()
         let name = oauthProviderLabel(provider, email: config?.email ?? identity.email)
+        failedWithServices = false
         oauth = OAuthState(provider: provider, name: name, config: config, passwordAlt: passwordAlt)
         showOAuthView(promptView(name))
         replace(signInMode ? [.oauth] : [.identity, .oauth])
@@ -867,11 +956,14 @@ public final class WizardController {
     public func signInWithProvider() {
         guard let st = oauth, !oauthStarting else { return }
         cancelSession()
+        failedWithServices = false
         var params = AccountOAuthStartParams(browserPage: browserPage())
         if let editing {
             params.accountId = editing.id
         } else if let cfg = st.config {
-            params.config = withIdentity(cfg, identity)
+            // The daemon asks for the scopes of the services switched on
+            // here itself, so one consent covers them all.
+            params.config = AccountServices.apply(withIdentity(cfg, identity), on: chosenServices)
         } else {
             return
         }
@@ -993,6 +1085,7 @@ public final class WizardController {
     /// back and the toast says why.
     private func oauthFailed(_ text: String) {
         cancelSession()
+        signInDidNotSucceed()
         showOAuthView(promptView(oauth?.name ?? ""))
         onToast?(text)
     }
@@ -1026,6 +1119,9 @@ public final class WizardController {
         guard oauthView == .waiting else { return }
         op += 1
         cancelSession()
+        // The provider's page may have asked for an administrator's
+        // approval of the calendar or the contacts.
+        signInDidNotSucceed()
         showOAuthView(promptView(oauth?.name ?? ""))
     }
 

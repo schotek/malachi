@@ -75,7 +75,7 @@ public static partial class PlatformServices
     private static IDisposable? newMessage;
     private static BackgroundTray? tray;
     private static bool background;
-    private static LaunchAtLogin? launchAtLogin;
+    private static ILaunchAtLogin? launchAtLogin;
     private static MailtoRegistration? mailto;
 
     /// <summary>
@@ -273,8 +273,15 @@ public static partial class PlatformServices
         service?.Unregister();
     }
 
-    /// <summary>Launch at login of this executable, for Preferences (read afresh on every call).</summary>
-    public static LaunchAtLogin LaunchAtLogin => launchAtLogin ??= new LaunchAtLogin(ExecutablePath);
+    /// <summary>
+    /// Launch at login of this app, for Preferences (read afresh on every
+    /// call): the Run value of this executable, or in an MSIX package the
+    /// package's startup task (a Run value written there would land in the
+    /// package's own registry, which Windows does not read at sign-in).
+    /// </summary>
+    public static ILaunchAtLogin LaunchAtLogin => launchAtLogin ??= PackageIdentity.IsPackaged
+        ? new PackagedLaunchAtLogin(new PackageStartupTask())
+        : new LaunchAtLogin(ExecutablePath);
 
     /// <summary>The <c>mailto:</c> registration of this executable, for Preferences and an uninstaller.</summary>
     public static MailtoRegistration Mailto => mailto ??= new MailtoRegistration(ExecutablePath);
@@ -322,7 +329,17 @@ public static partial class PlatformServices
     {
         try
         {
-            if (repair && LaunchAtLogin.RepairMovedExecutable())
+            if (PackageIdentity.IsPackaged)
+            {
+                // The package's manifest declares a startup task; a Run
+                // value of an earlier test package names a folder that
+                // went with its version.
+                if (repair && new LaunchAtLogin(ExecutablePath).RemoveOfAPackage())
+                {
+                    LogRunRemoved(logger);
+                }
+            }
+            else if (repair && new LaunchAtLogin(ExecutablePath).RepairMovedExecutable())
             {
                 LogRunRepaired(logger);
             }
@@ -412,6 +429,9 @@ public static partial class PlatformServices
 
     [LoggerMessage(Level = LogLevel.Information, Message = "platform: the Run value pointed at a moved app folder and was rewritten")]
     private static partial void LogRunRepaired(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "platform: removed the Run value an earlier MSIX package wrote")]
+    private static partial void LogRunRemoved(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "platform: mailto: registration written")]
     private static partial void LogMailtoRegistered(ILogger logger);

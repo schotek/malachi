@@ -125,8 +125,11 @@ public static partial class Program
         {
             // An MSIX package: no process outside it may start the bridge in
             // its folder, so the app hands out the package's alias of it.
+            // What other programs must reach (the assistant's working
+            // directory, attachments written for opening) lies outside
+            // AppData, whose new files only the package sees.
             var alias = Paths.BridgeAlias(ProcessEnvironment.Current());
-            paths = paths.InPackage(alias);
+            paths = paths.InPackage(alias).OutsideAppData(ProcessEnvironment.Current());
             LogPackaged(logger, alias is not null && paths.McpBridge == alias);
         }
 
@@ -189,6 +192,10 @@ public static partial class Program
             case ExtendedActivationKind.Protocol:
                 var uri = (activation.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs)?.Uri?.AbsoluteUri;
                 return ActivationRequest.FromArguments(ActivationKind.Protocol, uri is null ? [] : [uri], redirected);
+            case ExtendedActivationKind.StartupTask:
+                // The package's startup task at sign-in: the unpackaged
+                // app's Run value passes --background (LaunchAtLogin).
+                return ActivationRequest.FromArguments(ActivationKind.Launch, [ActivationRequest.BackgroundOption], redirected);
             default:
                 return ActivationRequest.FromArguments(ActivationKind.Other, [], redirected);
         }

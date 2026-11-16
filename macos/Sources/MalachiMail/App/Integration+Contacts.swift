@@ -88,6 +88,12 @@ final class AppContacts {
             guard let self, gen == self.refreshGen else { return }
             if let a {
                 self.accounts = a.accounts
+                if !self.samples {
+                    // Not Now of the calendar and contacts offers goes with
+                    // its account (docs/plans/account-services.md, K4).
+                    self.state.settings.accountServicesDismissed = AccountServices.pruned(
+                        self.state.settings.accountServicesDismissed, accounts: a.accounts.map(\.id))
+                }
             }
             if let b {
                 self.books = b.books

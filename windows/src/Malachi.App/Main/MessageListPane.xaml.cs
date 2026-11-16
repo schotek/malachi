@@ -98,6 +98,8 @@ public sealed partial class MessageListPane : UserControl
     private const int MaxFocusAttempts = 8;
 
     private readonly Button retryButton;
+    private readonly Button emptyServerButton;
+    private readonly ProgressRing emptyServerSpinner;
     private readonly AfterRelease afterRelease;
     private readonly MailDateList dateList = new();
     private readonly CollectionViewSource groupedSource;
@@ -161,7 +163,32 @@ public sealed partial class MessageListPane : UserControl
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(retryButton, "ListRetryButton");
         retryButton.Click += (_, _) => list?.Retry();
-        ListStatusPage.Child = retryButton;
+        // A search without results in the store offers the servers: the
+        // button, and the ring while that search runs.
+        emptyServerButton = new Button
+        {
+            Content = L10n.T("Search on the Server Too"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            CornerRadius = new CornerRadius(16),
+            Padding = new Thickness(20, 6, 20, 6),
+            Visibility = Visibility.Collapsed,
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(emptyServerButton, "ServerSearchEmptyButton");
+        emptyServerButton.Click += (_, _) => list?.SearchServer();
+        emptyServerSpinner = new ProgressRing
+        {
+            Width = 20,
+            Height = 20,
+            IsActive = false,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
+        var statusActions = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
+        statusActions.Children.Add(retryButton);
+        statusActions.Children.Add(emptyServerButton);
+        statusActions.Children.Add(emptyServerSpinner);
+        ListStatusPage.Child = statusActions;
+        ServerSearchButton.Click += (_, _) => list?.SearchServer();
         LoadMoreButton.Click += (_, _) => list?.RetryLoadMore();
         // The list's viewer exists once its template is applied, which a
         // list collapsed under a status page has not had yet.
@@ -554,6 +581,7 @@ public sealed partial class MessageListPane : UserControl
             // An empty icon is the Loading… page, which has none.
             ListStatusPage.Show(page.Icon, page.Title, page.Description);
             retryButton.Visibility = page.Retry ? Visibility.Visible : Visibility.Collapsed;
+            ShowServerOffer(ServerSearchOffer.None, emptyServerButton, emptyServerSpinner);
             ListStatusPage.Visibility = Visibility.Visible;
             MessagesPage.Visibility = Visibility.Collapsed;
             if (page.Icon.Length > 0)
@@ -563,9 +591,27 @@ public sealed partial class MessageListPane : UserControl
             }
             return;
         }
+        if (state is ListState.SearchEmpty empty)
+        {
+            ListStatusPage.Show("edit-find-symbolic", L10n.T("No Results"), empty.Description);
+            retryButton.Visibility = Visibility.Collapsed;
+            ShowServerOffer(empty.Server, emptyServerButton, emptyServerSpinner);
+            ListStatusPage.Visibility = Visibility.Visible;
+            MessagesPage.Visibility = Visibility.Collapsed;
+            EndFocusRequest();
+            return;
+        }
         ListStatusPage.Visibility = Visibility.Collapsed;
         MessagesPage.Visibility = Visibility.Visible;
         TryFocusPending();
+    }
+
+    // The offer to search the servers, the ring while that runs, or neither.
+    private static void ShowServerOffer(ServerSearchOffer offer, Button button, ProgressRing ring)
+    {
+        button.Visibility = offer == ServerSearchOffer.Offer ? Visibility.Visible : Visibility.Collapsed;
+        ring.IsActive = offer == ServerSearchOffer.Searching;
+        ring.Visibility = offer == ServerSearchOffer.Searching ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // FocusList's request, once rows are shown: the selected row's
@@ -661,6 +707,7 @@ public sealed partial class MessageListPane : UserControl
         LoadMoreBox.Visibility = state.Spinner || showButton ? Visibility.Visible : Visibility.Collapsed;
         SearchNote.Text = state.Note;
         SearchNote.Visibility = state.Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShowServerOffer(state.Server, ServerSearchButton, ServerSearchSpinner);
     }
 
     // search.go refreshSearchScope (SearchScopeBar.show): the scope, Folder

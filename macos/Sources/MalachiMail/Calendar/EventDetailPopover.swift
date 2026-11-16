@@ -56,6 +56,25 @@ enum EventDetailPopover {
         present(c, window: wc, relativeTo: rect, of: view)
     }
 
+    /// The Touch Bar's event actions (docs/plans/touch-bar.md §4.4): the
+    /// detail controller of occurrence `o` with the popover's questions
+    /// and hand-offs, but no popover; `act` runs once the event loaded
+    /// (Join Video Call, Edit, an answer). One at a time.
+    static func act(on o: Occurrence, in wc: MainWindowController, _ act: @escaping @MainActor (EventDetailController) -> Void) {
+        let calendar = wc.calendarController
+        let settings = wc.state.settings
+        guard let c = EventDetailController(
+            source: calendar.source, occurrence: o, env: calendar.env, confirmDelete: { settings.confirmDelete })
+        else { return }
+        headless?.controller.stop()
+        let p = Presenter(controller: c, window: wc)
+        headless = p
+        p.runHeadless(act)
+    }
+
+    /// The Touch Bar's last action, kept until the next one.
+    private static var headless: Presenter?
+
     /// Whether a detail popover is open (Escape's `Cal.escapeFor`).
     static var isShown: Bool { current?.popover.isShown ?? false }
 
@@ -104,6 +123,29 @@ enum EventDetailPopover {
             popover.contentViewController = viewController
             popover.delegate = self
             wire()
+        }
+
+        /// What `runHeadless` runs once the event loaded.
+        private var headlessAct: (@MainActor (EventDetailController) -> Void)?
+
+        /// Loads the event and runs `act` on the controller once it is
+        /// there; the questions are sheets on the main window as from the
+        /// popover.
+        func runHeadless(_ act: @escaping @MainActor (EventDetailController) -> Void) {
+            headlessAct = act
+            let update = controller.onChange
+            controller.onChange = { [weak self] in
+                update?()
+                self?.runHeadlessAct()
+            }
+            controller.start()
+            runHeadlessAct()
+        }
+
+        private func runHeadlessAct() {
+            guard controller.event != nil, let act = headlessAct else { return }
+            headlessAct = nil
+            act(controller)
         }
 
         func show(relativeTo rect: NSRect, of view: NSView) {

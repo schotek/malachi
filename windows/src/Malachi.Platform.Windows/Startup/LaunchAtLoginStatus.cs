@@ -23,4 +23,11 @@ public enum LaunchAtLoginStatus
     /// app never overwrites that choice).
     /// </summary>
     DisabledByUser,
+
+    /// <summary>
+    /// The startup task of an MSIX package that the organisation's policy
+    /// turned off: it does not start and nothing the user or the app does
+    /// turns it on. The unpackaged app's Run value never has this state.
+    /// </summary>
+    DisabledByPolicy,
 }

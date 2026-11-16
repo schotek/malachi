@@ -480,7 +480,7 @@ func (b *Backend) graphContactsProvider(ctx context.Context, a store.Account) (c
 		HTTP:       b.CalendarGraphHTTP,
 		Token:      func(ctx context.Context) (string, error) { return b.GraphTokenFor(ctx, id) },
 		Invalidate: func() { b.invalidateGraphTokenFor(id) },
-		Log:        b.log,
+		Log:        b.log.With("component", "graph", "account", id),
 		Limiter:    b.graphLimiter(id),
 	})
 	return &graphContacts{accountID: api.AccountID(id), signIn: signIn, client: client}, nil

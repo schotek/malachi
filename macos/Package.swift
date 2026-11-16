@@ -10,13 +10,17 @@
 // AppKit layer; MalachiKeychain is the small helper the daemon runs as its
 // keyring (MALACHI_KEYRING=helper). No SwiftPM resources on purpose: the
 // hand-assembled .app carries them in Contents/Resources (see Makefile).
+// MalachiCore is also the core of the iOS client (ios/), which takes it as
+// the library product; what starts other programs there cannot (Platform/
+// ProcessUnavailable.swift).
 import PackageDescription
 
 let package = Package(
     name: "MalachiMail",
     defaultLocalization: "en",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
+        .library(name: "MalachiCore", targets: ["MalachiCore"]),
         .executable(name: "MalachiMail", targets: ["MalachiMail"]),
         .executable(name: "malachi-keychain", targets: ["MalachiKeychain"]),
     ],

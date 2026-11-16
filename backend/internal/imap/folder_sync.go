@@ -56,6 +56,22 @@ func (s *Syncer) syncFolder(ctx context.Context, sess *session, f store.Folder, 
 		return storageError(err)
 	}
 	gone, fresh, common := diffUIDs(local, server)
+	// Rows kept outside the window (found by a search on the server) are
+	// not in the window's listing: the server is asked which of them it
+	// still holds, and those stay and have their flags read with the rest.
+	kept, err := s.deps.Store.KeptUIDs(ctx, f.ID, s.now())
+	if err != nil {
+		return storageError(err)
+	}
+	if spared := intersectUIDs(gone, kept); len(spared) > 0 {
+		alive, err := s.aliveUIDs(ctx, sess, spared)
+		if err != nil {
+			return err
+		}
+		gone = subtractUIDs(gone, alive)
+		common = append(common, alive...)
+		sort.Slice(common, func(i, j int) bool { return common[i] < common[j] })
+	}
 	// A message the user moved or deleted locally whose operation is still
 	// queued (enqueued after this pass pushed the operations) is on the
 	// server yet: not new, and not fetched back — it would reappear, a
@@ -80,6 +96,7 @@ func (s *Syncer) syncFolder(ctx context.Context, sess *session, f store.Folder, 
 		if err != nil {
 			return storageError(err)
 		}
+		old = subtractUIDs(old, kept)
 		if len(old) > 0 {
 			gone = append(gone, old...)
 			common = subtractUIDs(common, old)
@@ -299,6 +316,51 @@ func uidBatches(uids []uint32, maxCount, maxBytes int) [][]uint32 {
 	return out
 }
 
+// intersectUIDs returns the members of the ascending list a that b has.
+func intersectUIDs(a, b []uint32) []uint32 {
+	if len(a) == 0 || len(b) == 0 {
+		return nil
+	}
+	has := make(map[uint32]struct{}, len(b))
+	for _, u := range b {
+		has[u] = struct{}{}
+	}
+	var out []uint32
+	for _, u := range a {
+		if _, ok := has[u]; ok {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// aliveUIDs returns, ascending, the UIDs of the list the selected mailbox
+// still holds (UID SEARCH UID, in bounded sets).
+func (s *Syncer) aliveUIDs(ctx context.Context, sess *session, uids []uint32) ([]uint32, error) {
+	var alive []uint32
+	for _, batch := range uidBatches(uids, envelopeBatch, maxSetBytes) {
+		err := sess.do(ctx, commandTimeout, func() error {
+			data, err := sess.UIDSearch(&imap.SearchCriteria{UID: []imap.UIDSet{uidSet(batch)}}, nil).Wait()
+			if err != nil {
+				return err
+			}
+			set, _ := data.All.(imap.UIDSet)
+			found, err := uidsFromSet(set)
+			if err != nil {
+				return err
+			}
+			alive = append(alive, found...)
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Only what was asked for: a server's answer is not trusted further.
+	alive = intersectUIDs(uids, alive)
+	return alive, nil
+}
+
 // subtractUIDs removes every UID of drop from the ascending list in.
 func subtractUIDs(in, drop []uint32) []uint32 {
 	skip := make(map[uint32]struct{}, len(drop))
@@ -447,7 +509,13 @@ func (s *Syncer) fetchEnvelopes(ctx context.Context, sess *session, f store.Fold
 // messageFromFetch consumes one FETCH response into a store row. Every
 // string is cleaned and capped; literals are drained.
 func (s *Syncer) messageFromFetch(md *imapclient.FetchMessageData, f store.Folder) *store.Message {
-	m := &store.Message{AccountID: s.account.ID, FolderID: f.ID, Flags: []api.Flag{}, BodyState: store.BodyNone}
+	return messageFromFetch(md, s.account.ID, f)
+}
+
+// messageFromFetch is the row of one FETCH response of envelopeOptions for
+// a folder of the account.
+func messageFromFetch(md *imapclient.FetchMessageData, accountID string, f store.Folder) *store.Message {
+	m := &store.Message{AccountID: accountID, FolderID: f.ID, Flags: []api.Flag{}, BodyState: store.BodyNone}
 	for item := md.Next(); item != nil; item = md.Next() {
 		switch it := item.(type) {
 		case imapclient.FetchItemDataUID:

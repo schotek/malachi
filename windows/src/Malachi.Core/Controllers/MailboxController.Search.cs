@@ -214,6 +214,7 @@ public sealed partial class ListController
         Model.Search.FocusFirst = false;
         Model.Search.Params = new SearchQueryParams { Query = "" };
         Model.Search.Text = "";
+        Model.Search.Server = default;
         Model.BumpList();
         Model.Loading = false;
         Model.LoadingMore = false;
@@ -262,6 +263,7 @@ public sealed partial class ListController
             Model.BumpList();
             Model.Search.Params = new SearchQueryParams { Query = "" };
             Model.Search.Shown = false;
+            Model.Search.Server = default;
             Model.Search.FocusFirst = false;
             Model.Loading = false;
             Model.ListErr = null;
@@ -285,6 +287,7 @@ public sealed partial class ListController
         Model.Search.Params = parameters;
         Model.Search.Effective = effective;
         Model.Search.Shown = false;
+        Model.Search.Server = default;
         var gen = Model.BumpList();
         Model.Loading = true;
         Model.LoadingMore = false;
@@ -373,7 +376,66 @@ public sealed partial class ListController
         {
             return new ListState.Status("", L10n.T("Searching…"), "", false);
         }
-        return new ListState.Status("edit-find-symbolic", L10n.T("No Results"), SearchModel.SearchEmptyText(st.Effective), false);
+        var description = SearchModel.SearchEmptyText(st.Effective);
+        if (st.Server.Phase == ServerSearchPhase.Done)
+        {
+            description += "\n" + SearchModel.ServerSearchText(st.Server);
+        }
+        return new ListState.SearchEmpty(description, Model.ServerSearchOffer);
+    }
+
+    /// <summary>
+    /// The offer under the results was taken: the servers of the mail
+    /// accounts in the search's scope are asked for mail older than the
+    /// window (search.server). What they find is stored by the daemon and
+    /// added under the results; an account whose server failed is counted
+    /// in the note, and a search that failed whole is offered again. The
+    /// answer is dropped when the results it belongs to are no longer on
+    /// show (search.go <c>searchServer</c>).
+    /// </summary>
+    public void SearchServer()
+    {
+        Scope.VerifyAccess();
+        if (Model.ServerSearchOffer != ServerSearchOffer.Offer)
+        {
+            return;
+        }
+        var asked = Model.Search.Params;
+        var gen = Model.ListGen;
+        Model.Search.Server = new ServerSearch(ServerSearchPhase.Searching);
+        ShowListState();
+        ShowLoadMore();
+        var parameters = new SearchServerParams { AccountId = asked.AccountId, FolderId = asked.FolderId, Query = asked.Query };
+        Mailbox.Perform(API.SearchServer, parameters, outcome =>
+        {
+            if (gen != Model.ListGen || !Model.Search.Active || Model.Search.Server.Phase != ServerSearchPhase.Searching)
+            {
+                return;
+            }
+            if (!outcome.TryGetValue(out var res, out var err))
+            {
+                Model.Search.Server = default;
+                // A newer search of the servers took over: nothing to say.
+                if (err is not RpcException { Code: var code } || code != ErrorCode.Unavailable)
+                {
+                    // The query is what the user typed: never logged.
+                    LogSearchServerFailed(logger, FailureOf(err!));
+                    Mailbox.Toast(RpcErrorText.Text(L10n.T("Searching on the server"), err));
+                }
+            }
+            else
+            {
+                var added = Model.AppendServerResults(res);
+                Model.Search.Server = new ServerSearch(ServerSearchPhase.Done, res.Results.Count, res.Truncated ?? false, res.Failed?.Count ?? 0);
+                if (added > 0)
+                {
+                    Reconcile(SelectionHint.Keep);
+                }
+                Mailbox.RefreshListTitle();
+            }
+            ShowListState();
+            ShowLoadMore();
+        });
     }
 
     /// <summary>Announces the scope bar for the current selection while searching.</summary>
@@ -435,6 +497,9 @@ public sealed partial class ListController
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "search.query failed: {Reason}")]
     private static partial void LogSearchFailed(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "search.server failed: {Reason}")]
+    private static partial void LogSearchServerFailed(ILogger logger, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "search.query (more) failed: {Reason}")]
     private static partial void LogSearchMoreFailed(ILogger logger, string reason);

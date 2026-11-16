@@ -5,7 +5,8 @@ import AppKit
 import MalachiCore
 
 /// The Contacts window's list (W1, W5 b, c): Microsoft's consent banners on
-/// top (Allow…, or the Online Accounts advice), then the contacts of the
+/// top (Allow…, or the Online Accounts advice) and the offers to sync the
+/// contacts of an account that has them off (Turn On, Not Now), then the contacts of the
 /// selected book under their index letters (`ContactsListController.rows`;
 /// a search is flat), each with its initials, its name and its company or
 /// address; the next page is asked near the end. An empty book or search
@@ -21,6 +22,7 @@ final class ContactsListViewController: NSViewController, NSTableViewDataSource,
     private let empty = StatusPageView(illustration: .symbol("person.crop.circle"), title: "", description: "")
     private var rows: [ContactBook.Row] = []
     private var shownConsent: [ContactsConsentNeed] = []
+    private var shownOffers: [ContactsListController.SyncOffer] = []
     private var applying = false
 
     static let rowHeight: CGFloat = 48
@@ -84,9 +86,10 @@ final class ContactsListViewController: NSViewController, NSTableViewDataSource,
             reportPhotos()
         }
         showSelection(c.selected)
-        if c.consent != shownConsent {
+        if c.consent != shownConsent || c.syncOffers != shownOffers {
             shownConsent = c.consent
-            rebuildBanners(c.consent)
+            shownOffers = c.syncOffers
+            rebuildBanners(c.consent, offers: c.syncOffers)
         }
         let e = c.listEmpty
         let (title, body) = ContactBook.emptyText(e)
@@ -152,7 +155,7 @@ final class ContactsListViewController: NSViewController, NSTableViewDataSource,
         }
     }
 
-    private func rebuildBanners(_ needs: [ContactsConsentNeed]) {
+    private func rebuildBanners(_ needs: [ContactsConsentNeed], offers: [ContactsListController.SyncOffer]) {
         for v in banners.arrangedSubviews {
             banners.removeArrangedSubview(v)
             v.removeFromSuperview()
@@ -160,6 +163,12 @@ final class ContactsListViewController: NSViewController, NSTableViewDataSource,
         for n in needs {
             let b = ContactsConsentBanner(need: n)
             b.onAllow = { [weak self] in self?.window?.list.allowConsent(n.accountId) }
+            banners.addArrangedSubview(b)
+        }
+        for o in offers {
+            let b = ContactsSyncOfferBanner(text: o.text)
+            b.onTurnOn = { [weak self] in self?.window?.list.turnOnSync(o.accountId) }
+            b.onNotNow = { [weak self] in self?.window?.list.dismissSyncOffer(o.accountId) }
             banners.addArrangedSubview(b)
         }
     }
@@ -382,5 +391,54 @@ final class ContactsConsentBanner: NSView {
 
     @objc private func allow(_ sender: Any?) {
         onAllow?()
+    }
+}
+
+/// The offer to sync the contacts of an account that has them off, as the
+/// consent banner: the sentence over Turn On and Not Now.
+@MainActor
+final class ContactsSyncOfferBanner: NSView {
+    var onTurnOn: (@MainActor () -> Void)?
+    var onNotNow: (@MainActor () -> Void)?
+
+    init(text: String) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        let symbol = CalloutCard.symbolView()
+        CalloutCard.show("person.crop.circle.badge.plus", .info, in: symbol)
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = Typo.body
+        label.isSelectable = false
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let on = NSButton(title: AccountServices.turnOn, target: self, action: #selector(turnOn(_:)))
+        on.bezelStyle = .push
+        let later = NSButton(title: AccountServices.notNow, target: self, action: #selector(notNow(_:)))
+        later.bezelStyle = .push
+        let buttons = NSStackView(views: [later, on])
+        buttons.orientation = .horizontal
+        buttons.spacing = 6
+        let column = NSStackView(views: [label, buttons])
+        column.orientation = .vertical
+        column.alignment = .trailing
+        column.spacing = 6
+        label.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
+        let row = NSStackView(views: [symbol, column])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = CalloutCard.spacing
+        _ = CalloutCard.install(row, in: self)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    @objc private func turnOn(_ sender: Any?) {
+        onTurnOn?()
+    }
+
+    @objc private func notNow(_ sender: Any?) {
+        onNotNow?()
     }
 }

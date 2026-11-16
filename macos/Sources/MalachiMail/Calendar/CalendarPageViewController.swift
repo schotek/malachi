@@ -291,7 +291,8 @@ final class CalendarContentViewController: NSViewController {
             agenda.update(controller: c)
             shown = agenda.view
         } else if let kind = c.emptyKind {
-            emptyView.set(kind)
+            emptyView.set(kind, syncOffer: c.emptySyncOffer)
+            emptyView.controller = c
             shown = emptyView
         } else {
             switch v {
@@ -336,12 +337,15 @@ final class CalendarContentViewController: NSViewController {
 
 /// The page's empty state: why there is nothing to show
 /// (`Cal.Text.emptyTitle`/`emptyBody`), with Open Preferences where the
-/// remedy is there.
+/// remedy is there, or Turn On when one account's calendar sync is off
+/// (`CalendarController.emptySyncOffer`).
 @MainActor
 final class CalendarEmptyView: NSView {
     private let title = NSTextField(labelWithString: "")
     private let body = NSTextField(wrappingLabelWithString: "")
     private let button = NSButton(title: "", target: nil, action: nil)
+    weak var controller: CalendarController?
+    private var syncOffer: AccountID?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -373,15 +377,22 @@ final class CalendarEmptyView: NSView {
         fatalError("not used")
     }
 
-    /// Open Preferences: the Calendar tab.
+    /// Open Preferences: the Calendar tab; Turn On of the one account's
+    /// sync offer.
     @objc private func openPreferences(_ sender: Any?) {
+        if let syncOffer, let controller {
+            controller.turnOnSync(syncOffer)
+            return
+        }
         AppState.current?.showCalendarPreferences()
     }
 
-    func set(_ kind: Cal.EmptyKind) {
+    func set(_ kind: Cal.EmptyKind, syncOffer: AccountID? = nil) {
+        self.syncOffer = syncOffer
         title.stringValue = Cal.Text.emptyTitle(kind)
         body.stringValue = Cal.Text.emptyBody(kind)
         body.isHidden = body.stringValue.isEmpty
+        button.title = syncOffer == nil ? Cal.Text.openPreferences : AccountServices.turnOn
         button.isHidden = !(kind == .syncOff || kind == .noAccounts)
     }
 }

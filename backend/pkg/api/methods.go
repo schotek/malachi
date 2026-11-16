@@ -71,7 +71,8 @@ const (
 	MethodAttachmentGet    = "attachment.get"
 
 	// Search.
-	MethodSearchQuery = "search.query"
+	MethodSearchQuery  = "search.query"
+	MethodSearchServer = "search.server"
 
 	// Sync.
 	MethodSyncStatus  = "sync.status"
@@ -244,7 +245,7 @@ var AllMethods = []string{
 	MethodDraftSave, MethodDraftList, MethodDraftDelete, MethodDraftCreate, MethodDraftOpen,
 	MethodDraftMarkdown, MethodDraftGet,
 	MethodAttachmentImport, MethodAttachmentRemove, MethodAttachmentGet,
-	MethodSearchQuery,
+	MethodSearchQuery, MethodSearchServer,
 	MethodSyncStatus, MethodSyncTrigger,
 	MethodConfigGet, MethodConfigSet,
 	MethodSenderList, MethodSenderAdd, MethodSenderRemove,

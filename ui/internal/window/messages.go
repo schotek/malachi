@@ -264,6 +264,7 @@ func (w *Window) showListState() {
 			i18n.T("This folder is empty."))
 	}
 	w.listRetryButton.SetVisible(retry)
+	w.showServerOffer(serverOfferNone, w.serverEmptyButton, w.serverEmptySpinner)
 	w.listStack.SetVisibleChildName("status")
 }
 
@@ -281,10 +282,17 @@ func (w *Window) showLoadMore() {
 	w.loadMoreButton.SetVisible(!m.loadingMore && m.nextCursor != "" && m.listErr == nil)
 	// Under the last page of results: how far back search reaches.
 	note := m.search.active && m.search.shown && m.nextCursor == "" && !m.loadingMore && m.rowCount() > 0
+	offer := serverOfferNone
 	if note {
-		w.searchNote.SetLabel(searchRetentionText(m.search.offlineDays, m.search.offlineKnown))
+		text := searchRetentionText(m.search.offlineDays, m.search.offlineKnown)
+		if m.search.server.phase == serverDone {
+			text = serverSearchText(m.search.server)
+		}
+		w.searchNote.SetLabel(text)
+		offer = m.serverSearchOffer()
 	}
 	w.searchNote.SetVisible(note)
+	w.showServerOffer(offer, w.serverButton, w.serverSpinner)
 }
 
 // selectedMessage is the summary behind the selected row, if any: on a

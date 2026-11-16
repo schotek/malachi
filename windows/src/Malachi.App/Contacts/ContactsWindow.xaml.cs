@@ -17,7 +17,8 @@
 // the title bar's box (Ctrl+E and Ctrl+F, the window's Search command), the
 // detail's actions a CommandBar, a list row has a context menu (Write
 // Email, Show Mail, Copy Address), Microsoft's consent is an InfoBar per
-// account, the questions are ContentDialogs in the order of a Windows dialog
+// account, and so is the offer to sync an account's contacts that are off
+// (Turn On, Not Now; docs/plans/account-services.md §3.3), the questions are ContentDialogs in the order of a Windows dialog
 // (AlertService), the window folds at 900 and 600 effective pixels as the
 // main window does, and it opens from the "…" menus' Contacts without a
 // key. Ctrl+W, the close button and Alt+F4 ask "Discard Changes?" before an
@@ -29,6 +30,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Malachi.App.Shell;
+using Malachi.Core.AccountServices;
 using Malachi.Core.Api;
 using Malachi.Core.Contacts;
 using Malachi.Core.Controllers;
@@ -128,7 +130,8 @@ public sealed partial class ContactsWindow : Window
         Tracked.Commands.Search.CanExecute = () => true;
         Tracked.Commands.CloseWindow.Handler = RequestClose;
 
-        list = new ContactsListController(contacts.Options);
+        // The samples' accounts are invented: their Not Now stays in the window.
+        list = new ContactsListController(contacts.Options, contacts.Samples ? null : state.Settings);
         detail = new ContactsDetailController(contacts.Options, list.Book);
         BuildTexts();
         Wire();
@@ -588,11 +591,15 @@ public sealed partial class ContactsWindow : Window
     }
 
     // Microsoft's consent: an InfoBar per account, Allow… when a new sign-in
-    // can give it, else the Online Accounts advice.
+    // can give it, else the Online Accounts advice; after them the offers to
+    // sync the contacts of an account that has them off, with Turn On and
+    // Not Now (macOS ContactsSyncOfferBanner, docs/plans/account-services.md §3.3).
     private void RenderConsent()
     {
         var needs = list.Consent;
-        var key = string.Join('\n', needs.Select(n => $"{n.AccountId.Value}|{n.Account}|{n.SignIn}"));
+        var offers = list.SyncOffers;
+        var key = string.Join('\n', needs.Select(n => $"{n.AccountId.Value}|{n.Account}|{n.SignIn}"))
+            + "\n--\n" + string.Join('\n', offers.Select(o => $"{o.AccountId.Value}|{o.Text}"));
         if (key == consentKey)
         {
             return;
@@ -618,6 +625,29 @@ public sealed partial class ContactsWindow : Window
                 allow.Click += (_, _) => list.AllowConsent(account);
                 bar.ActionButton = allow;
             }
+            ConsentBars.Children.Add(bar);
+        }
+        foreach (var offer in offers)
+        {
+            var account = offer.AccountId;
+            var on = new Button { Content = AccountSync.TurnOn, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            AutomationProperties.SetAutomationId(on, "ContactsSyncTurnOn:" + account.Value);
+            on.Click += (_, _) => list.TurnOnSync(account);
+            var later = new Button { Content = AccountSync.NotNow };
+            AutomationProperties.SetAutomationId(later, "ContactsSyncNotNow:" + account.Value);
+            later.Click += (_, _) => list.DismissSyncOffer(account);
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(0, 0, 0, 12) };
+            buttons.Children.Add(on);
+            buttons.Children.Add(later);
+            var bar = new InfoBar
+            {
+                IsOpen = true,
+                IsClosable = false,
+                Severity = InfoBarSeverity.Informational,
+                Title = offer.Text,
+                Content = buttons,
+            };
+            AutomationProperties.SetAutomationId(bar, "ContactsSyncOffer:" + account.Value);
             ConsentBars.Children.Add(bar);
         }
     }

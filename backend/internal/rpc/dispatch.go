@@ -105,6 +105,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodAttachmentGet] = wrap(att.Get)
 
 	s.handlers[api.MethodSearchQuery] = wrap(srch.Query)
+	s.handlers[api.MethodSearchServer] = wrap(srch.Server)
 
 	s.handlers[api.MethodSyncStatus] = wrap(sync.Status)
 	s.handlers[api.MethodSyncTrigger] = wrap(sync.Trigger)

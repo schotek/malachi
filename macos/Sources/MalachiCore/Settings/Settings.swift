@@ -104,6 +104,10 @@ public final class Settings {
         /// `ContactSearchScope`'s values, `account` (default) or `all`;
         /// passed as contact.search's `scope`.
         case contactsSuggestScope = "contacts-suggest-scope"
+        /// Not Now of the Calendar's and the Contacts window's offer to sync
+        /// an account's calendar or contacts: entries "<account id>:calendar"
+        /// and "<account id>:contacts" (`AccountServices.dismissKey`).
+        case accountServicesDismissed = "account-services-dismissed"
         /// The user's arrangement of the main window's toolbars
         /// (`Toolbar`, ui/internal/toolbar): the token list, empty for the
         /// default toolbar (`toolbarLayout(_:)`).
@@ -203,6 +207,7 @@ public final class Settings {
             Key.boardAccountFilter.rawValue: "",
             Key.calendarView.rawValue: Cal.defaultView.nick,
             Key.contactsSuggestScope.rawValue: ContactSearchScope.account.rawValue,
+            Key.accountServicesDismissed.rawValue: [String](),
             Key.toolbarMail.rawValue: [String](),
             Key.toolbarBoardList.rawValue: [String](),
             Key.toolbarBoardFlow.rawValue: [String](),
@@ -408,6 +413,16 @@ public final class Settings {
     public var favouriteFolders: [String] {
         get { stringList(.favouriteFolders) }
         set { set(.favouriteFolders, newValue) }
+    }
+
+    /// Not Now of the offers to sync an account's calendar or contacts
+    /// (`AccountServices`); written only when it changes.
+    public var accountServicesDismissed: [String] {
+        get { stringList(.accountServicesDismissed) }
+        set {
+            guard newValue != stringList(.accountServicesDismissed) else { return }
+            set(.accountServicesDismissed, newValue)
+        }
     }
 
     // MARK: Assistant

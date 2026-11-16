@@ -1988,6 +1988,42 @@ type SearchQueryResult struct {
 	Page    PageInfo       `json:"page"`
 }
 
+// Limits of search.server (docs/api.md): the most results of one account,
+// and how long the messages it stored are kept outside the offlineDays
+// window.
+const (
+	MaxServerSearchResults = 200
+	ServerSearchKeepDays   = 30
+)
+
+// SearchServerParams scopes a search on the mail servers as
+// SearchQueryParams scopes one of the store; Query has the same syntax and
+// limits.
+type SearchServerParams struct {
+	AccountID AccountID `json:"accountId,omitempty"`
+	FolderID  FolderID  `json:"folderId,omitempty"`
+	Query     string    `json:"query"`
+}
+
+// SearchServerResult is what the servers found among the mail older than
+// the offlineDays window, newest first; every result is a stored message
+// now (headers only until its body is downloaded) and its Snippet is the
+// message's own, without match ranges. Truncated says that an account had
+// more matches than MaxServerSearchResults; Failed names the accounts
+// whose server could not be searched, the others' results still stand.
+type SearchServerResult struct {
+	Results   []SearchResult        `json:"results"`
+	Truncated bool                  `json:"truncated,omitempty"`
+	Failed    []SearchServerFailure `json:"failed,omitempty"`
+}
+
+// SearchServerFailure is an account whose server could not be searched
+// and the code of why (offline, networkError, authFailed, serverError…).
+type SearchServerFailure struct {
+	AccountID AccountID `json:"accountId"`
+	Code      ErrorCode `json:"code"`
+}
+
 // ---------------------------------------------------------------------------
 // Sync
 // ---------------------------------------------------------------------------
@@ -2227,9 +2263,9 @@ type AuthRequiredNotification struct {
 	AuthURL string `json:"authUrl,omitempty"`
 }
 
-// AccountsChangedNotification is emitted after account.add, account.remove
-// and account.setEnabled, to every client including the caller. It carries
-// no payload: clients re-run account.list.
+// AccountsChangedNotification is emitted after account.add, account.remove,
+// account.setEnabled, account.update and account.reorder, to every client
+// including the caller. It carries no payload: clients re-run account.list.
 type AccountsChangedNotification struct{}
 
 // MessagesChangedNotification says that messages of the account's folders

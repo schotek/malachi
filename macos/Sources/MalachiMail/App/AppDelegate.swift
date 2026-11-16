@@ -34,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         TestBuild.overlayPreferences()
         // Translations first: every string built from here on is localised.
         L10n.catalogue = Catalogue.default()
+        // View ▸ Customize Touch Bar… on a Mac with a Touch Bar
+        // (docs/plans/touch-bar.md T6).
+        NSApp.isAutomaticCustomizeTouchBarMenuItemEnabled = true
         // Settings() registers the gschema defaults with UserDefaults.standard.
         let settings = Settings()
         // The text size of this run, before any view exists; a change in
@@ -64,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let exe = try DaemonSupervisor.locate() {
                 launch = DaemonSupervisor.Launch(
                     executable: exe, socket: paths.socket, config: paths.config, store: paths.store,
-                    keychainHelper: paths.keychainHelper)
+                    keychainHelper: paths.keychainHelper, logFile: paths.logFile)
             }
         } catch {
             log.warning("not starting malachid; expecting one to be started by other means: \(String(describing: error), privacy: .public)")

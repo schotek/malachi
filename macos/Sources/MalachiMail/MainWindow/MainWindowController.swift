@@ -193,6 +193,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     var developmentMailbox: MailboxController?
 
     private let toolbarDelegate: MainToolbar
+    /// The window's Touch Bar (docs/plans/touch-bar.md, MainTouchBar).
+    let touchBars = MainTouchBar()
     /// The toolbar's Assistant menu (ui/internal/assistant), with Summarize
     /// Unread in This Folder.
     private let assistantMenu: AssistantMenu
@@ -249,6 +251,79 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         toolbarDelegate.actionEnabled = { [weak self] action in
             guard let self else { return false }
             return self.mode == .mail && (self.allows(action, self.flags) ?? true)
+        }
+        // The Touch Bar asks the responder chain, as the toolbar does.
+        touchBars.allows = { [weak self] action in
+            self?.touchBarAllows(action) ?? false
+        }
+        touchBars.boardEnabled = { [weak self] in
+            self?.boardEnabled ?? true
+        }
+        // The popovers mirror the toolbar's menus (T2 of the plan): Move
+        // To, the Assistant (the panel with In App, as ✦), and Change
+        // Status for an issue, validated by this window as the menus are.
+        touchBars.validateMenuItem = { [weak self] item in
+            self?.touchBarValidates(item) ?? false
+        }
+        touchBars.moveToMenu = { [weak self] in
+            self?.toolbarDelegate.moveToMenu?()
+        }
+        touchBars.assistantMenu = { [weak self] in
+            self?.assistantMenu.menu
+        }
+        touchBars.assistantShown = { [weak self] in
+            self?.state.assistant.shown ?? false
+        }
+        touchBars.assistantInstead = { [weak self] in
+            guard let self, Assistant.buttonOpensPanel(self.state.settings.assistantTarget, hasPanel: true) else { return false }
+            self.openAssistantPanel()
+            return true
+        }
+        let statusMenu = IssueTransitionMenu(state: state) { [weak self] in
+            self?.transitionSubject
+        }
+        touchBars.statusMenu = { statusMenu.menu }
+        // The Board's (T3): asked only while the window shows it, so
+        // that the board's controller is not made for the Touch Bar.
+        touchBars.boardDetail = { [weak self] in
+            guard let self, self.mode == .board else { return nil }
+            return self.board.view.detail
+        }
+        touchBars.boardStyle = { [weak self] in
+            guard let self, self.mode == .board else { return .list }
+            return self.board.state.style
+        }
+        touchBars.triageTitle = { [weak self] in
+            guard let self, self.mode == .board else { return nil }
+            let t = self.triageToolbarItem
+            return t.shown ? t.title : nil
+        }
+        touchBars.remindMenu = { [weak self] in
+            guard let self, self.mode == .board, let d = self.board.view.detail else { return nil }
+            return self.boardActions.remindMenu(for: d.id)
+        }
+        // The Calendar's (T4), also asked only while it shows.
+        touchBars.calendarSelection = { [weak self] in
+            guard let self, self.mode == .calendar else { return nil }
+            return self.calendarController.selectedOccurrence
+        }
+        touchBars.calendarView = { [weak self] in
+            guard let self, self.mode == .calendar else { return .week }
+            return self.calendarController.view
+        }
+        touchBars.calendarAssistantShown = { [weak self] in
+            self?.state.assistant.panelShown ?? false
+        }
+        touchBars.calendarDo = { [weak self] cmd in
+            self?.touchBarCalendar(cmd)
+        }
+        touchBars.caseStateMenu = { [weak self] in
+            guard let self, self.mode == .board, let d = self.board.view.detail else { return nil }
+            return BoardCaseMenu.stateMenu(for: d.id, controller: self.board)
+        }
+        touchBars.status = { [weak self] in
+            guard let self, statusMenu.isOffered else { return nil }
+            return (self.messageActions as? MessageActionsController)?.list.selectedRow?.message.issue?.info.status ?? ""
         }
         toolbarDelegate.undoEnabled = { [weak self] in
             (self?.window as? MainWindow)?.toolbarUndoEnabled ?? false
@@ -543,6 +618,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         return frameSize
     }
 
+    /// After every event the window handled (where AppKit validates the
+    /// toolbar): the Touch Bar follows the mode and the selection, and is
+    /// made anew when its items changed (`MainTouchBar.refresh`). Nothing
+    /// on a Mac without a Touch Bar.
+    func windowDidUpdate(_ notification: Foundation.Notification) {
+        refreshTouchBar()
+    }
+
+    /// The Touch Bar in step with the mode and the selection.
+    func refreshTouchBar() {
+        if touchBars.refresh(mode: mode, flags: flags) {
+            touchBar = nil
+        }
+    }
+
     func windowDidBecomeKey(_ notification: Foundation.Notification) {
         state.toasts.presenter = toasts
         onBecomeKey?()
@@ -560,6 +650,40 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             return target
         }
         return super.supplementalTarget(forAction: action, sender: sender)
+    }
+
+    // MARK: Touch Bar
+
+    /// The bar of the mode (docs/plans/touch-bar.md §4.1); AppKit asks for
+    /// it again after `touchBar = nil` (`windowDidUpdate`).
+    override func makeTouchBar() -> NSTouchBar? {
+        touchBars.make(mode: mode, flags: flags)
+    }
+
+    /// Whether the responder that would handle `action` allows it, as
+    /// AppKit asks it for a toolbar item (T3 of the plan): this window's
+    /// `allows` for the message actions, the application's for New
+    /// Message.
+    private func touchBarAllows(_ action: Selector) -> Bool {
+        guard let target = NSApp.target(forAction: action, to: nil, from: nil) else { return false }
+        guard let validator = target as? NSUserInterfaceValidations else { return true }
+        return validator.validateUserInterfaceItem(touchBars.validationItem(action))
+    }
+
+    /// Whether the responder that would handle a popover's menu item
+    /// enables it, asked as AppKit asks for a menu: `validateMenuItem`
+    /// first, then `validateUserInterfaceItem` (which may retitle or hide
+    /// the item, as for the toolbar's Assistant menu).
+    private func touchBarValidates(_ item: NSMenuItem) -> Bool {
+        guard let action = item.action,
+              let target = NSApp.target(forAction: action, to: item.target, from: item) else { return false }
+        if let v = target as? NSMenuItemValidation {
+            return v.validateMenuItem(item)
+        }
+        if let v = target as? NSUserInterfaceValidations {
+            return v.validateUserInterfaceItem(item)
+        }
+        return item.isEnabled
     }
 
     // MARK: Quick Look

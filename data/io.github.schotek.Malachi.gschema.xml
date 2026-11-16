@@ -343,5 +343,10 @@
       <summary>What the toolbars' items show</summary>
       <description>Icons only, icons with their labels or labels only, for every toolbar of the main window.</description>
     </key>
+    <key name="account-services-dismissed" type="as">
+      <default>[]</default>
+      <summary>Calendar and contacts offers the user turned down</summary>
+      <description>An account id and calendar or contacts, joined by a colon, for each offer to sync answered with Not Now; the Calendar and the Contacts window no longer show it.</description>
+    </key>
   </schema>
 </schemalist>

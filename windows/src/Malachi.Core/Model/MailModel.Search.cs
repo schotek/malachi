@@ -68,6 +68,60 @@ public sealed partial class MailModel
         return AppendMessages(TakeHits(fresh), res.Page);
     }
 
+    /// <summary>
+    /// What the list offers of the search on the server: the button once
+    /// every local result is listed, when the store holds a window only (so
+    /// that older mail exists on the servers) and a mail account is in the
+    /// scope; never before config.get said how long the window is
+    /// (search_model.go <c>serverSearchOffer</c>).
+    /// </summary>
+    public ServerSearchOffer ServerSearchOffer
+    {
+        get
+        {
+            var st = Search;
+            if (!st.Active || !st.Shown || !string.IsNullOrEmpty(NextCursor))
+            {
+                return ServerSearchOffer.None;
+            }
+            switch (st.Server.Phase)
+            {
+                case ServerSearchPhase.Searching:
+                    return ServerSearchOffer.Searching;
+                case ServerSearchPhase.Done:
+                    return ServerSearchOffer.None;
+            }
+            if (!st.OfflineKnown || st.OfflineDays <= 0)
+            {
+                return ServerSearchOffer.None;
+            }
+            static bool Mail(Account a) => a.Enabled && Integrations.ShowsInAccounts(a);
+            if (st.Params.AccountId is { } id)
+            {
+                return Account(id) is { } a && Mail(a) ? ServerSearchOffer.Offer : ServerSearchOffer.None;
+            }
+            return Accounts.Any(Mail) ? ServerSearchOffer.Offer : ServerSearchOffer.None;
+        }
+    }
+
+    /// <summary>
+    /// Adds what the servers found under the local results and returns how
+    /// many of them were new to the list (search_model.go
+    /// <c>appendServerResults</c>).
+    /// </summary>
+    public int AppendServerResults(SearchServerResult res)
+    {
+        ArgumentNullException.ThrowIfNull(res);
+        SearchResult[] fresh = [.. res.Results.Where(r => !index.ContainsKey(r.Message.Id))];
+        var known = Total;
+        var added = AppendMessages(TakeHits(fresh), new PageInfo { Total = known });
+        if (known >= 0)
+        {
+            Total = known + added;
+        }
+        return added;
+    }
+
     /// <summary>Empties the list of results.</summary>
     public void ClearSearchResults()
     {
@@ -152,7 +206,7 @@ public sealed partial class MailModel
             ? L10n.T("Search in %s", DisplayText.Isolate(FolderTree.FolderTitle(f)))
             : L10n.T("Select a folder to search in it");
         var accountTip = Selected is { } sk && Account(sk.Account) is { } a
-            ? L10n.T("Search every folder of %s except Trash and Junk", FolderTree.AccountLabel(a))
+            ? L10n.T("Search every folder of %s", FolderTree.AccountLabel(a))
             : "";
         return new SearchBarState
         {
@@ -160,7 +214,7 @@ public sealed partial class MailModel
             NarrowEnabled = f is not null,
             FolderTooltip = folderTip,
             AccountTooltip = accountTip,
-            AllTooltip = L10n.T("Search every account except Trash and Junk"),
+            AllTooltip = L10n.T("Search every account"),
         };
     }
 

@@ -236,7 +236,12 @@ public static partial class Assistant
         // The indentations of the open list's levels, outermost first.
         private readonly List<int> indents = [];
 
+        // The open block quote's lines (without their markers); inQuote
+        // while one is open.
+        private readonly List<(int Lo, int Hi)> quote = [];
+
         private bool inCode;
+        private bool inQuote;
         private MarkdownBlock? open;
 
         // The open table's header cells, null when no table is open; budget
@@ -284,6 +289,19 @@ public static partial class Assistant
                 code.Add((lo, hi));
                 return;
             }
+            if (indent <= 3 && r < hi && s[r] == 0x3E)
+            {
+                if (!inQuote)
+                {
+                    header = null;
+                    Flush();
+                    indents.Clear();
+                    inQuote = true;
+                }
+                quote.Add(QuoteText(r, hi));
+                return;
+            }
+            CloseQuote();
             if (header is not null)
             {
                 var fenceOrHeading = indent <= 3 && (IsFence(r, hi) || Heading(r, hi, out _, out _));
@@ -341,7 +359,64 @@ public static partial class Assistant
             {
                 CloseCode();
             }
+            CloseQuote();
             Flush();
+        }
+
+        // quoteText: a quote line without its markers: every ">" at its
+        // start (spaces and tabs between them too), one space after the
+        // last, and the spaces and tabs at its end.
+        private (int Lo, int Hi) QuoteText(int r, int hi)
+        {
+            var lo = r;
+            for (var i = r; i < hi; i++)
+            {
+                if (s[i] == 0x3E)
+                {
+                    lo = i + 1;
+                }
+                else if (s[i] != 0x20 && s[i] != 0x09)
+                {
+                    break;
+                }
+            }
+            if (lo < hi && s[lo] == 0x20)
+            {
+                lo++;
+            }
+            var end = hi;
+            while (end > lo && (s[end - 1] == 0x20 || s[end - 1] == 0x09))
+            {
+                end--;
+            }
+            return (lo, end);
+        }
+
+        // Ends the open block quote: one plain span of its lines, without
+        // the blank ones at its edges; a quote without text adds nothing.
+        private void CloseQuote()
+        {
+            if (!inQuote)
+            {
+                return;
+            }
+            inQuote = false;
+            var first = 0;
+            var last = quote.Count;
+            while (first < last && quote[first].Lo == quote[first].Hi)
+            {
+                first++;
+            }
+            while (last > first && quote[last - 1].Lo == quote[last - 1].Hi)
+            {
+                last--;
+            }
+            if (first < last)
+            {
+                var text = Joined(quote.GetRange(first, last - first));
+                Blocks.Add(new MarkdownBlock { Kind = MarkdownBlockKind.Quote, Spans = [new MarkdownSpan { Text = FromUtf8(text) }] });
+            }
+            quote.Clear();
         }
 
         // startTable: reads s[r..hi) as a delimiter row under the open

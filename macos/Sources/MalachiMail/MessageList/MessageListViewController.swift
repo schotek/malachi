@@ -81,6 +81,15 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// The note with its margins; hidden with it, so no empty strip stays
     /// under the rows.
     private let noteBox = NSStackView()
+    /// The offer to search the servers for mail older than the store
+    /// holds, under the last page of results and on the page of a search
+    /// without results, and the spinner while that search runs.
+    private let serverButton = NSButton(title: L10n.T("Search on the Server Too"), target: nil, action: nil)
+    private let serverSpinner = Spinner(size: 16)
+    private let emptyServerButton = NSButton(title: L10n.T("Search on the Server Too"), target: nil, action: nil)
+    private let emptyServerSpinner = Spinner(size: 16)
+    /// The Try Again button and the server offer of the status page.
+    private let statusActions = NSStackView()
 
     /// The table's rows, by position, and what each key shows.
     private var keys: [MailDateItem] = [] {
@@ -196,6 +205,17 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         searchNote.alignment = .center
         searchNote.isSelectable = false
         noteBox.addArrangedSubview(searchNote)
+        serverButton.bezelStyle = .push
+        serverButton.controlSize = .small
+        serverButton.font = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
+        serverButton.target = self
+        serverButton.action = #selector(searchServerClicked(_:))
+        serverButton.isHidden = true
+        serverSpinner.isHidden = true
+        noteBox.addArrangedSubview(serverButton)
+        noteBox.addArrangedSubview(serverSpinner)
+        noteBox.alignment = .centerX
+        noteBox.spacing = Self.loadMoreSpacing
         noteBox.isHidden = true
         noteBox.orientation = .vertical
         noteBox.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: Self.loadMoreMargin, right: 12)
@@ -212,7 +232,19 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         retryButton.target = self
         retryButton.action = #selector(retryClicked(_:))
         retryButton.isHidden = true
-        statusPage.setChild(retryButton)
+        emptyServerButton.bezelStyle = .rounded
+        emptyServerButton.controlSize = .large
+        emptyServerButton.target = self
+        emptyServerButton.action = #selector(searchServerClicked(_:))
+        emptyServerButton.isHidden = true
+        emptyServerSpinner.isHidden = true
+        statusActions.orientation = .vertical
+        statusActions.alignment = .centerX
+        statusActions.spacing = 8
+        statusActions.addArrangedSubview(retryButton)
+        statusActions.addArrangedSubview(emptyServerButton)
+        statusActions.addArrangedSubview(emptyServerSpinner)
+        statusPage.setChild(statusActions)
         statusPage.isHidden = true
 
         let pages = NSView()
@@ -662,9 +694,34 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
             statusPage.title = title
             statusPage.descriptionText = description
             retryButton.isHidden = !retry
+            showServerOffer(.none, button: emptyServerButton, spinner: emptyServerSpinner)
+            messagesPage.isHidden = true
+            statusPage.isHidden = false
+        case .searchEmpty(let description, let server):
+            statusPage.illustration = .icon("edit-find-symbolic")
+            statusPage.title = L10n.T("No Results")
+            statusPage.descriptionText = description
+            retryButton.isHidden = true
+            showServerOffer(server, button: emptyServerButton, spinner: emptyServerSpinner)
             messagesPage.isHidden = true
             statusPage.isHidden = false
         }
+    }
+
+    /// Shows the offer to search the servers, the spinner while that runs,
+    /// or neither.
+    private func showServerOffer(_ offer: ServerSearchOffer, button: NSButton, spinner: Spinner) {
+        button.isHidden = offer != .offer
+        spinner.isHidden = offer != .searching
+        if offer == .searching {
+            spinner.start()
+        } else {
+            spinner.stop()
+        }
+    }
+
+    @objc private func searchServerClicked(_ sender: Any?) {
+        list.searchServer()
     }
 
     private func showLoadMore(_ state: LoadMoreState) {
@@ -684,7 +741,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         loadMoreButton.isHidden = !failed && !(usesDateGroups && !collapsedDates.isEmpty && state.button)
         updateLoadMoreBox()
         searchNote.stringValue = state.note
-        noteBox.isHidden = state.note.isEmpty
+        searchNote.isHidden = state.note.isEmpty
+        showServerOffer(state.server, button: serverButton, spinner: serverSpinner)
+        noteBox.isHidden = state.note.isEmpty && state.server == .none
         if state.button, !failed {
             DispatchQueue.main.async { [weak self] in self?.fillPane() }
         }

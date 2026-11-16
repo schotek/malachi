@@ -17,6 +17,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/accountservices"
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/calendarctl"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -27,7 +28,9 @@ import (
 // sidebar_bin: the mini month, Invitations ▸ Unanswered with its count
 // badge, a section per calendar account (its name and kind capsule, a
 // check button per calendar with its colour square and note, the state
-// row with Sign In…), and Add Calendar… with its menu. Everything comes
+// row with Sign In…, the offer to sync an account's calendar that is off
+// with Turn On and Not Now, docs/plans/account-services.md §3.3), and Add
+// Calendar… with its menu. Everything comes
 // from CalendarController.Sidebar; names only through labels without
 // markup. Port of macos CalendarSidebarViewController.swift and
 // MiniMonthView.swift; the static CSS is style/calendar_sidebar.go.
@@ -69,6 +72,7 @@ type calendarSidebar struct {
 	unansweredBadge *gtk.Label
 	calRows         []sidebarCalendarRow
 	stateRows       []sidebarStateRow
+	offerRows       []sidebarOfferRow
 	// syncing is set while the sidebar sets the check buttons itself.
 	syncing bool
 	// selecting is set while the sidebar changes the list's selection
@@ -278,6 +282,13 @@ type sidebarStateRow struct {
 	signIn *gtk.Button
 }
 
+// sidebarOfferRow is an account's offer to sync its calendar (hidden
+// without one) and its sentence updated in place.
+type sidebarOfferRow struct {
+	row   *gtk.ListBoxRow
+	label *gtk.Label
+}
+
 // sidebarShape is the structural key of sb: the accounts in order with
 // their names and capsules, their calendars in order with ids, names,
 // colours and notes. The Unanswered row, the state rows and Add
@@ -385,6 +396,13 @@ func (s *calendarSidebar) refresh(sb calendarctl.Sidebar) {
 		r.row.SetVisible(a.StateLine != "")
 		r.signIn.SetVisible(a.OffersSignIn)
 	}
+	for _, r := range s.offerRows {
+		a := states[api.AccountID(r.row.Name())]
+		if r.label.Text() != a.SyncOffer {
+			r.label.SetText(a.SyncOffer)
+		}
+		r.row.SetVisible(a.SyncOffer != "")
+	}
 
 	s.selecting = true
 	if s.page.ctl.Filter() == calendarctl.FilterUnanswered {
@@ -408,7 +426,7 @@ func (s *calendarSidebar) rebuild(sb calendarctl.Sidebar, key string) {
 	s.selecting = true
 	s.list.RemoveAll()
 	s.selecting = false
-	s.calRows, s.stateRows = nil, nil
+	s.calRows, s.stateRows, s.offerRows = nil, nil, nil
 
 	s.list.Append(calendarSidebarHeading(sb.InvitationsTitle, "", false))
 	s.unanswered, s.unansweredLabel, s.unansweredBadge = calendarUnansweredRow(sb.UnansweredTitle)
@@ -426,6 +444,10 @@ func (s *calendarSidebar) rebuild(sb calendarctl.Sidebar, key string) {
 		st.row.SetName(string(id))
 		s.stateRows = append(s.stateRows, st)
 		s.list.Append(st.row)
+		of := calendarOfferRow(func() { s.page.ctl.TurnOnSync(id) }, func() { s.page.ctl.DismissSyncOffer(id) })
+		of.row.SetName(string(id))
+		s.offerRows = append(s.offerRows, of)
+		s.list.Append(of.row)
 	}
 }
 
@@ -567,6 +589,50 @@ func calendarStateRow(tr calendar.Translator, onSignIn func()) sidebarStateRow {
 	col.Append(b)
 	row.SetChild(col)
 	return sidebarStateRow{row: row, label: label, signIn: b}
+}
+
+// calendarOfferRow is an account's offer to sync its calendar ("Calendar
+// sync is off for %s") with Turn On and Not Now, shown by refresh
+// (macos SidebarSyncOfferRow).
+func calendarOfferRow(onTurnOn, onNotNow func()) sidebarOfferRow {
+	tr := i18n.Tr
+	row := gtk.NewListBoxRow()
+	row.SetSelectable(false)
+	row.SetActivatable(false)
+	row.SetVisible(false)
+	row.AddCSSClass("cal-state-row")
+	row.AddCSSClass("cal-sync-offer-row")
+	col := gtk.NewBox(gtk.OrientationVertical, 4)
+	top := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	icon := gtk.NewImageFromIconName("x-office-calendar-symbolic")
+	icon.SetVAlign(gtk.AlignStart)
+	icon.AddCSSClass("dim-label")
+	top.Append(icon)
+	label := gtk.NewLabel("")
+	label.SetUseMarkup(false)
+	label.SetXAlign(0)
+	label.SetWrap(true)
+	label.SetWrapMode(pango.WrapWordChar)
+	label.SetHExpand(true)
+	label.AddCSSClass("caption")
+	label.AddCSSClass("dim-label")
+	top.Append(label)
+	col.Append(top)
+	buttons := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	on := gtk.NewButtonWithLabel(accountservices.TurnOn(tr))
+	on.AddCSSClass("pill")
+	on.AddCSSClass("cal-sign-in")
+	on.ConnectClicked(onTurnOn)
+	buttons.Append(on)
+	later := gtk.NewButtonWithLabel(accountservices.NotNow(tr))
+	later.AddCSSClass("pill")
+	later.AddCSSClass("flat")
+	later.AddCSSClass("cal-sign-in")
+	later.ConnectClicked(onNotNow)
+	buttons.Append(later)
+	col.Append(buttons)
+	row.SetChild(col)
+	return sidebarOfferRow{row: row, label: label}
 }
 
 // calendarAccountBadge is the capsule after an account's heading: CALDAV

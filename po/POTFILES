@@ -133,3 +133,5 @@ ui/internal/rules/text.go
 ui/internal/window/rules_editor.go
 ui/internal/window/preferences_rules.go
 ui/internal/signature/text.go
+ui/internal/accountservices/accountservices.go
+ui/internal/window/calendar_sync_offer.go
