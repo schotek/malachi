@@ -53,8 +53,28 @@ func viewerCSS(columnPadding: String) -> String {
     pre { white-space: pre-wrap; }
     table { max-width: 100%; }
     blockquote { margin: 0.5em 0 0.5em 1em; padding-left: 0.75em; border-left: 2px solid #c0c0c0; }
-    """
+    """ + "\n" + viewerFoldCSS
 }
+
+/// The folded quoted history (message.body `foldQuoted`, docs/api.md): the
+/// daemon puts a `<details class="malachi-quoted">` toggle where the
+/// history starts and marks its nodes `malachi-quoted-more`; this sheet
+/// hides them while the toggle is closed and draws the toggle as the small
+/// "•••" button, so a click shows the history in place, without asking the
+/// daemon or loading the document again. !important, because the mail's
+/// own <style> comes later.
+let viewerFoldCSS = """
+    html:has(details.malachi-quoted:not([open])) .malachi-quoted-more { display: none !important; }
+    details.malachi-quoted { display: block !important; margin: 10px 0 !important; padding: 0 !important; border: 0 !important; }
+    details.malachi-quoted > summary { display: inline-block !important; list-style: none !important; margin: 0 !important; padding: 2px 9px 4px !important; border: 0 !important; border-radius: 6px !important; background: #e9e9ee !important; color: #5c5c66 !important; font: 700 12px/1 system-ui, sans-serif !important; letter-spacing: 1px !important; cursor: default !important; -webkit-user-select: none !important; user-select: none !important; }
+    details.malachi-quoted > summary::-webkit-details-marker { display: none !important; }
+    details.malachi-quoted > summary:hover { background: #dedee5 !important; }
+    details.malachi-quoted[open] > summary { background: #d4d4dc !important; }
+    details.malachi-quoted > summary:focus { outline: none !important; }
+    details.malachi-quoted > summary:focus-visible { outline: 2px solid Highlight !important; outline-offset: 1px !important; }
+    details.malachi-quoted > summary > a { color: inherit !important; text-decoration: none !important; cursor: default !important; outline: none !important; }
+    details.malachi-quoted > summary > a:focus-visible { outline: 2px solid Highlight !important; outline-offset: 3px !important; }
+    """
 
 /// What a chat bubble's document takes of the text bubbles
 /// (`viewerChatCSS`): their text and link colours in the dark appearance as
@@ -91,6 +111,7 @@ public let viewerChatBackgroundCSS =
 
 /// The sizing rules of a chat bubble's document (`viewerChatCSS`).
 public let viewerChatFitCSS = """
+    details.malachi-quoted { display: none !important; }
     html, body { overflow: hidden !important; margin: 0 !important; }
     #malachi-column { display: flow-root !important; }
     #malachi-column > :first-child { margin-top: 0 !important; }
@@ -120,14 +141,76 @@ func viewerChatCSS(_ colours: ViewerChatColours) -> String {
         + "@media (prefers-color-scheme: dark) { * { color: \(colours.text) !important; } a, a * { color: \(colours.link) !important; } }\n"
 }
 
+/// The fold of a quoted history in a body (`viewerFoldCSS`) as the view
+/// shows it: open or closed, and the toggle's tooltip and accessibility
+/// label in either state (Show Quoted Text, Hide Quoted Text), which the
+/// view's own script swaps when the user toggles it.
+public struct ViewerFold: Sendable, Equatable {
+    public var open: Bool
+    public var show: String
+    public var hide: String
+
+    public init(open: Bool, show: String, hide: String) {
+        self.open = open
+        self.show = show
+        self.hide = hide
+    }
+
+    /// The fold with the application's labels.
+    public static func labelled(open: Bool) -> ViewerFold {
+        ViewerFold(
+            open: open, show: Conversation.quotedTextLabel(shown: false), hide: Conversation.quotedTextLabel(shown: true))
+    }
+}
+
+/// The toggle of a folded quoted history exactly as the sanitiser writes
+/// it (backend/internal/sanitize/fold.go). Only the sanitiser writes the
+/// class, so only its toggle matches.
+let viewerFoldToggle = "<details class=\"malachi-quoted\"><summary>\u{2022}\u{2022}\u{2022}</summary>"
+
+/// `body` with its fold (if any) in the state and with the labels of
+/// `fold`: the `open` attribute, and the summary's `title`, `aria-label`
+/// and the two labels for the view's script (`data-malachi-show`,
+/// `data-malachi-hide`; the sanitiser drops every `data-` attribute of the
+/// mail, so these are the application's). Only the first toggle is the
+/// sanitiser's fold; a body without one is returned as it is.
+func viewerFolded(_ body: String, _ fold: ViewerFold) -> String {
+    guard let r = body.range(of: viewerFoldToggle) else { return body }
+    let label = fold.open ? fold.hide : fold.show
+    let toggle = "<details class=\"malachi-quoted\"" + (fold.open ? " open=\"\"" : "") + "><summary title=\""
+        + attributeEscaped(label) + "\" aria-label=\"" + attributeEscaped(label)
+        + "\" data-malachi-show=\"" + attributeEscaped(fold.show) + "\" data-malachi-hide=\""
+        + attributeEscaped(fold.hide) + "\">\u{2022}\u{2022}\u{2022}</summary>"
+    return body.replacingCharacters(in: r, with: toggle)
+}
+
+/// `s` escaped for a double-quoted attribute value.
+private func attributeEscaped(_ s: String) -> String {
+    var out = ""
+    for c in s {
+        switch c {
+        case "&": out += "&amp;"
+        case "\"": out += "&quot;"
+        case "<": out += "&lt;"
+        case ">": out += "&gt;"
+        default: out.append(c)
+        }
+    }
+    return out
+}
+
 /// htmlview.Document: wraps a sanitised body fragment in the page the view
 /// loads. The fragment is inserted verbatim: it is the sanitiser's output
 /// and nothing else may ever be passed here. `compact` takes the sheet of
 /// a conversation card (`viewerCompactCSS`); `chat` the sheet of a chat
 /// bubble with its dark colours (`viewerChatCSS`, over `compact`); the
-/// policy is the same.
-public func viewerDocument(body: String, compact: Bool = false, chat: ViewerChatColours? = nil) -> String {
+/// policy is the same. `fold` gives a folded quoted history its state and
+/// labels (`viewerFolded`); nil leaves the body as it is.
+public func viewerDocument(
+    body: String, compact: Bool = false, chat: ViewerChatColours? = nil, fold: ViewerFold? = nil
+) -> String {
     let css = chat.map(viewerChatCSS) ?? (compact ? viewerCompactCSS : viewerBaseCSS)
+    let body = fold.map { viewerFolded(body, $0) } ?? body
     return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\""
         + viewerCSP + "\"><style>" + css
         + "</style></head><body><div id=\"malachi-column\">" + body + "</div></body></html>"

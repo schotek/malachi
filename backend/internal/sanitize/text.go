@@ -44,12 +44,16 @@ type textRenderer struct {
 	tab     bool // b ends with a cell separator
 	pre     int
 	quote   int // <blockquote> depth: lines inside are prefixed with "> " each
+	// unfolded leaves out the folded quoted history.
+	unfolded bool
 }
 
 // renderText walks the tree that is about to be serialised, so it can only
 // ever see what the sanitiser kept.
-func renderText(root *html.Node, max int) string {
-	r := &textRenderer{max: max}
+// With unfolded, what the quote toggle folds away (fold.go) is left out:
+// the text shows what the closed fold shows.
+func renderText(root *html.Node, max int, unfolded bool) string {
+	r := &textRenderer{max: max, unfolded: unfolded}
 	r.walk(root)
 	s := strings.TrimRight(r.b.String(), " \t\n")
 	if max > 0 && len(s) > max {
@@ -79,6 +83,9 @@ func (r *textRenderer) walk(n *html.Node) {
 		return
 	}
 	name := n.Data
+	if r.unfolded && folded(n) {
+		return
+	}
 	switch name {
 	case "style":
 		return

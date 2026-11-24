@@ -252,12 +252,26 @@ public enum QuotedTextOffer: Sendable, Equatable {
     }
 }
 
+/// The variant of the body a view asks for (`MessageCache.fetch`'s
+/// `quoted`) when the user revealed its quoted history (`revealed`): the
+/// whole body, unless the HTML on display has the history folded in it
+/// (`quotedFolded`), which the view opens in place and which stays the
+/// variant asked for. The reveal of such a body is the fold's state.
+@MainActor
+public func quotedVariant(_ lm: LoadedMessage?, revealed: Bool) -> Bool {
+    guard revealed else { return false }
+    return lm?.body?.isQuotedFolded != true
+}
+
 /// The button for what `lm` shows (nil: none): Hide while the whole body
 /// shows (or is on its way, or failed: the way back to the trimmed one),
 /// Show when the daemon cut the quoted history from the body on display.
 @MainActor
 public func quotedTextOffer(_ lm: LoadedMessage?) -> QuotedTextOffer? {
     guard let lm else { return nil }
+    if lm.body?.isQuotedFolded == true {
+        return nil // the HTML has its own toggle
+    }
     if lm.quotedShown {
         return .hide
     }

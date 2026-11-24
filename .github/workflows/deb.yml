@@ -73,6 +73,9 @@ jobs:
           cat .version
 
       - name: Build the package
+        # The daemon's built-in Google OAuth client (the Makefile reads it).
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: ./scripts/build-deb.sh
 
       - name: Check it against the archive rules

@@ -11,7 +11,8 @@
 // (docs/api.md §1.4). There is no way to turn this off.
 //
 // The daemon itself is pkg/embed; this command parses the flags, opens the
-// log file of --log-file and stops it on SIGINT and SIGTERM.
+// log file of --log-file and stops it on SIGINT and SIGTERM, and with
+// --exit-on-stdin-close when its standard input closes.
 package main
 
 import (
@@ -55,6 +56,7 @@ func run() (retErr error) {
 		flagSocket  = flag.String("socket", paths.SocketFile(), "JSON-RPC unix socket; its connection key is written beside it as PATH.key")
 		flagVersion = flag.Bool("version", false, "print version and exit")
 		flagLogFile = flag.String("log-file", "", "write the log to this file (0600, rotated at 5 MiB to FILE.1) instead of stderr")
+		flagStdin   = flag.Bool("exit-on-stdin-close", false, "stop when standard input reaches end of file: the app that starts the daemon holds a pipe to it open while it runs, and its end, even a crash, closes it")
 	)
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
@@ -91,6 +93,11 @@ func run() (retErr error) {
 	}()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if *flagStdin {
+		var cancel context.CancelFunc
+		ctx, cancel = stopOnClose(ctx, os.Stdin, log)
+		defer cancel()
+	}
 	return embed.Run(ctx, embed.Options{
 		Version:       version,
 		UpdateChannel: updateChannel,

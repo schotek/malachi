@@ -73,6 +73,7 @@ func (v *messageView) bindQuotedButton(b *gtk.Builder) {
 // showQuotedButton puts the "•••" row in offer o: hidden for none.
 func (v *messageView) showQuotedButton(o conversation.QuotedOffer) {
 	v.quotedNow = o
+	v.fit.setButton(o != conversation.QuotedNone)
 	if v.quotedRow == nil {
 		return
 	}

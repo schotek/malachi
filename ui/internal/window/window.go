@@ -30,6 +30,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/conversation"
+	"github.com/schotek/malachi/ui/internal/htmlview"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/maildate"
 	"github.com/schotek/malachi/ui/internal/quickreply"
@@ -452,6 +453,12 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}
 	w.pane.toast = w.Toast
 	w.pane.onQuoted = w.setPaneQuoted
+	// The fold of a quoted history in the HTML: its state is the pane's
+	// reveal, forgotten with another message like the "•••" button's.
+	htmlview.FoldLabels.Show = conversation.QuotedTextLabel(false, i18n.Tr)
+	htmlview.FoldLabels.Hide = conversation.QuotedTextLabel(true, i18n.Tr)
+	w.pane.foldOpen = w.paneQuoted.IsRevealed
+	w.pane.onFold = w.paneQuoted.Set
 	w.registerActions()
 	w.setupPrint(b)
 	w.crmState = newCrmState()

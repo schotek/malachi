@@ -54,7 +54,8 @@ body { font-family: sans-serif; line-height: 1.35; overflow-wrap: anywhere; }
 img { max-width: 100%; }
 pre { white-space: pre-wrap; }
 table { max-width: 100%; }
-blockquote { margin: 0.5em 0 0.5em 1em; padding-left: 0.75em; border-left: 2px solid #c0c0c0; }`
+blockquote { margin: 0.5em 0 0.5em 1em; padding-left: 0.75em; border-left: 2px solid #c0c0c0; }
+` + foldCSS
 }
 
 // Document wraps a sanitised body fragment in the page the view loads. The
@@ -159,7 +160,8 @@ const chatNeutralCSS = `html, body, *, *::before, *::after { background-color: t
 // makes the column contain its children's margins (flow-root): without
 // the cards' padding a last paragraph's bottom margin would collapse
 // through the column, past where sizeScript measures it ends.
-const chatFitCSS = `html, body { overflow: hidden !important; margin: 0 !important; }
+const chatFitCSS = `details.malachi-quoted { display: none !important; }
+html, body { overflow: hidden !important; margin: 0 !important; }
 #malachi-column { display: flow-root !important; }`
 
 // chatCSS is the sheet of a chat bubble's document: the cards' sheet with

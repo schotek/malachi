@@ -178,13 +178,31 @@ func quotedOffer(lm *loadedMessage) conversation.QuotedOffer {
 	if lm == nil {
 		return conversation.QuotedNone
 	}
+	if lm.folded() {
+		return conversation.QuotedNone // the HTML has its own toggle
+	}
 	return conversation.OfferQuoted(lm.quotedShown, lm.err != nil, lm.body != nil && lm.body.QuotedTrimmed)
 }
 
+// folded reports whether the body on display has its quoted history
+// folded in its HTML (message.body quotedFolded), which the view opens in
+// place; false for nil.
+func (lm *loadedMessage) folded() bool {
+	return lm != nil && lm.body != nil && lm.body.QuotedFolded
+}
+
+// quotedVariant is the variant of the body of lm a view asks for when the
+// user revealed its quoted history (conversation.QuotedVariant).
+func quotedVariant(lm *loadedMessage, revealed bool) bool {
+	return conversation.QuotedVariant(lm.folded(), revealed)
+}
+
 // bodyParams are the message.body parameters for the variant quoted of
-// the body of message id: without trimQuoted only for the whole body.
+// the body of message id: without trimQuoted only for the whole body. The
+// HTML always comes with its quoted history folded (foldQuoted), which the
+// view opens in place; the variants only matter for a body shown as text.
 func bodyParams(acc api.AccountID, id api.MessageID, quoted bool, policy api.RemoteContentPolicy) api.MessageBodyParams {
-	return api.MessageBodyParams{AccountID: acc, MessageID: id, RemoteContent: policy, TrimQuoted: !quoted}
+	return api.MessageBodyParams{AccountID: acc, MessageID: id, RemoteContent: policy, TrimQuoted: !quoted, FoldQuoted: true}
 }
 
 // messageView is one message display, shared in shape by the main pane and
@@ -282,6 +300,12 @@ type messageView struct {
 	quotedButton *gtk.Button
 	quotedNow    conversation.QuotedOffer
 	onQuoted     func(on bool)
+	// foldOpen says whether the fold of the quoted history in the HTML of
+	// message id is open for the owner (the choice the user made there),
+	// onFold records the user's click on it; nil on the view of an
+	// attached message.
+	foldOpen func(id api.MessageID) bool
+	onFold   func(id api.MessageID, open bool)
 
 	links []api.Link // of the body on display, for link activation
 
@@ -426,6 +450,11 @@ func (v *messageView) htmlView() *htmlview.View {
 		v.html.OnLink = func(uri string) { v.win.openLink(v.parent, uri, v.links) }
 		v.html.SetZoom(v.win.settings.TextZoom())
 		v.html.OnSize = v.fit.setHTMLHeight
+		v.html.OnFold = func(open bool) {
+			if v.onFold != nil && v.shown.ID != "" {
+				v.onFold(v.shown.ID, open)
+			}
+		}
 		v.fit.size = func(px int) { v.html.SetSizeRequest(-1, px) }
 		v.slot.Append(v.html)
 	}
@@ -546,7 +575,9 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 	if showsHTML(b) {
 		v.links = b.Links
 		v.hint.SetVisible(false)
-		v.htmlView().Load(b.HTML)
+		html := v.htmlView()
+		html.FoldOpen = v.foldOpen != nil && v.foldOpen(v.shown.ID)
+		html.Load(b.HTML)
 		v.setBodyPage("html")
 		renderRemoteBar(v, lm)
 		renderPicturesBar(v, lm)
@@ -755,9 +786,28 @@ func (w *Window) switchQuoted(id api.MessageID, lm *loadedMessage, quoted bool) 
 	if !lm.showQuoted(quoted) {
 		return
 	}
+	w.followQuoted(id, quoted)
 	pruneLoaded(w.loaded, maxLoaded, maxLoadedBytes)
 	if lm.body != nil {
 		w.showLoaded(id, lm)
+	}
+}
+
+// followQuoted: the cache entry of message id, which every view of the
+// message shares, now shows the variant quoted. Every view that shows the
+// message (the pane, its own window, a card of the conversation) records
+// that as its choice, so none switches the entry back the next time it
+// asks for its body: the "•••" of a message window would otherwise be
+// undone by the conversation in the main window at once.
+func (w *Window) followQuoted(id api.MessageID, quoted bool) {
+	if w.pane != nil && w.pane.shown.ID == id {
+		w.paneQuoted.Set(id, quoted)
+	}
+	if mw, ok := w.openMessages[id]; ok {
+		mw.quoted.Set(id, quoted)
+	}
+	if w.conv != nil {
+		w.conv.ctrl.followQuoted(id, quoted)
 	}
 }
 

@@ -74,9 +74,9 @@ public static class LoadedMessageText
     /// </summary>
     public static QuotedTextOffer? QuotedTextOfferFor(LoadedMessage? lm)
     {
-        if (lm is null)
+        if (lm is null || lm.Body is { IsQuotedFolded: true })
         {
-            return null;
+            return null; // a folded body's HTML has its own toggle
         }
         if (lm.QuotedShown)
         {
@@ -84,4 +84,14 @@ public static class LoadedMessageText
         }
         return lm.Err is null && lm.Body is { IsQuotedTrimmed: true } ? QuotedTextOffer.Show : null;
     }
+
+    /// <summary>
+    /// The variant of the body of <paramref name="lm"/> a view asks for when
+    /// the user revealed its quoted history (Swift <c>quotedVariant</c>, Go
+    /// <c>conversation.QuotedVariant</c>): the whole body, unless the HTML on
+    /// display has the history folded in it, which the view opens in place
+    /// and which stays the variant asked for; the reveal of such a body is
+    /// its fold's state.
+    /// </summary>
+    public static bool QuotedVariant(LoadedMessage? lm, bool revealed) => revealed && lm?.Body is not { IsQuotedFolded: true };
 }

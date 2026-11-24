@@ -29,6 +29,12 @@ the headers and the body, under the window's own toast overlay.
             Grid.RowSpan="2"
             Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
             Visibility="Collapsed" />
+        <!-- The message view's layer, under the title bar too (the view
+             draws none in a window of its own). -->
+        <Border
+            x:Name="LayerBackground"
+            Grid.RowSpan="2"
+            Background="{ThemeResource LayerFillColorDefaultBrush}" />
         <TitleBar
             x:Name="WindowTitleBar"
             IsBackButtonVisible="False"

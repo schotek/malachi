@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-15 09:15+0000\n"
+"POT-Creation-Date: 2026-11-24 17:58+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -2614,7 +2614,7 @@ msgstr "Uložit do eWay-CRM…"
 msgid "More Actions"
 msgstr "Další akce"
 
-#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1149
+#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1156
 #: ui/data/ui/window.ui:178
 msgid "Search"
 msgstr "Hledat"
@@ -3206,6 +3206,12 @@ msgstr[2] "Seznam pojme nejvýš %d položek"
 msgid "Add %s"
 msgstr "Přidat %s"
 
+#. TRANSLATORS: a switch in a Jira account's settings (Android, iOS):
+#. on, the cases of Jira issues show on the Board.
+#: ui/internal/jira/settings.go:879
+msgid "Show Issues on the Board"
+msgstr "Zobrazovat úkoly na nástěnce"
+
 #. TRANSLATORS: a status change of a Jira issue asks for more on the site and cannot be made here.
 #: ui/internal/jira/transitions.go:93
 msgid "Needs fields in Jira"
@@ -3611,7 +3617,7 @@ msgid "Removed from eWay-CRM"
 msgstr "Odebráno z eWay-CRM"
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:863
-#: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:625
+#: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:656
 #: ui/internal/window/notify.go:159
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -8109,11 +8115,11 @@ msgstr "Uložit _jako…"
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:637
+#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:668
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:639
+#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:670
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -8194,7 +8200,7 @@ msgid "Preparing the reply"
 msgstr "Příprava odpovědi"
 
 #: ui/internal/window/conversation_card.go:758
-#: ui/internal/window/message_view.go:339
+#: ui/internal/window/message_view.go:363
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -8217,8 +8223,8 @@ msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napí
 msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
 
-#: ui/internal/window/conversation_card.go:1005
-#: ui/internal/window/message_view.go:543
+#: ui/internal/window/conversation_card.go:1010
+#: ui/internal/window/message_view.go:572
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
@@ -8342,12 +8348,12 @@ msgstr "Složky se objeví po první synchronizaci."
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr "Most MCP se nepodařilo odregistrovat: %s"
 
-#: ui/internal/window/message_view.go:631
-#: ui/internal/window/message_view.go:643
+#: ui/internal/window/message_view.go:662
+#: ui/internal/window/message_view.go:674
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:635
+#: ui/internal/window/message_view.go:666
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
@@ -8890,11 +8896,11 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:1069
+#: ui/internal/window/window.go:1076
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:1155 ui/data/ui/window.ui:148
+#: ui/internal/window/window.go:1162 ui/data/ui/window.ui:148
 msgid "Messages"
 msgstr "Zprávy"
 

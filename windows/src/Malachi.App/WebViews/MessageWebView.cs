@@ -218,7 +218,7 @@ public sealed partial class MessageWebView : HardenedWebView
         loadedGeneration = null;
         measureTimer.Stop();
         SetContentHeight(null);
-        var document = ViewerZoom.Apply(ViewerDocument.Document(body), zoom);
+        var document = ViewerZoom.Apply(ViewerDocument.Document(FoldedBody(body)), zoom);
         LoadDocument(Encoding.UTF8.GetBytes(document), "text/html; charset=utf-8", ViewerDocument.Csp);
     }
 
@@ -310,7 +310,55 @@ public sealed partial class MessageWebView : HardenedWebView
 
     private protected override void OnWebViewReplaced(WebView2 web) => SetAccessibleName(web);
 
-    private protected override void OnLinkCandidate(string uri, bool newWindow) => _ = ResolveLinkAsync(uri, newWindow);
+    private protected override void OnLinkCandidate(string uri, bool newWindow)
+    {
+        if (string.Equals(uri, ViewerDocument.FoldToggleUri, StringComparison.Ordinal))
+        {
+            if (!newWindow)
+            {
+                _ = ToggleFoldAsync();
+            }
+            return;
+        }
+        _ = ResolveLinkAsync(uri, newWindow);
+    }
+
+    /// <summary>
+    /// The state the fold of the quoted history (message.body quotedFolded,
+    /// <see cref="ViewerDocument.Folded"/>) starts in at the next Load: the
+    /// owner sets it before Load from what the user chose for the message,
+    /// and the view keeps it with the user's clicks. A change by itself
+    /// loads nothing.
+    /// </summary>
+    public bool FoldOpen { get; set; }
+
+    /// <summary>The user opened (true) or closed the fold in the document; <see cref="FoldOpen"/> follows it already.</summary>
+    public Action<bool>? OnFold { get; set; }
+
+    // The page of body with its fold as FoldOpen says.
+    private string FoldedBody(string body) =>
+        ViewerDocument.Folded(body, FoldOpen, Malachi.Core.Model.Conversation.QuotedTextLabel(false), Malachi.Core.Model.Conversation.QuotedTextLabel(true));
+
+    // A click on the fold's toggle (its link, ViewerDocument.FoldToggleUri):
+    // no script of the page runs, so the host opens or closes the fold and
+    // measures the document again.
+    private async Task ToggleFoldAsync()
+    {
+        var generation = Gate.Generation;
+        var json = await EvaluateAsync(ViewerDocument.FoldToggleScript);
+        if (generation != Gate.Generation || IsClosed || json is not ("true" or "false"))
+        {
+            return;
+        }
+        var open = json == "true";
+        if (open != FoldOpen)
+        {
+            FoldOpen = open;
+            OnFold?.Invoke(open);
+        }
+        ScheduleMeasure();
+    }
+
 
     // PartSchemeHandler.start: the part the URL names, if it is a picture and
     // the view still shows the document that asked for it.

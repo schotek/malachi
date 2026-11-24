@@ -110,6 +110,8 @@ jobs:
         # licences checked, and its installer:
         # build\windows\Malachi-Mail-<version>-windows-x64-setup.exe.
         working-directory: windows
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 installer -Arch x64
 
       - uses: actions/upload-artifact@v4
@@ -195,6 +197,8 @@ jobs:
         # them fails here with build.ps1's hint; the helper is never
         # published without NativeAOT.
         working-directory: windows
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 installer -Arch arm64
 
       - uses: actions/upload-artifact@v4

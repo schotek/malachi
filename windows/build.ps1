@@ -322,6 +322,11 @@ function Invoke-GoBuild {
             if ($command -eq 'malachid' -and $Target -eq 'installer') {
                 $ldflags = "$ldflags -X main.updateChannel=windows-setup-$Arch"
             }
+            # The secret of the built-in Google OAuth client, from the
+            # environment in release builds (docs/releasing.md).
+            if ($command -eq 'malachid' -and $env:GOOGLE_OAUTH_CLIENT_SECRET) {
+                $ldflags = "$ldflags -X github.com/schotek/malachi/backend/internal/auth/oauth2flow.googleClientSecret=$($env:GOOGLE_OAUTH_CLIENT_SECRET)"
+            }
             Invoke-Native $go @('build', '-trimpath', '-ldflags', $ldflags,
                 '-o', (Join-Path $out "$command.exe"), "./cmd/$command") (Join-Path $Root 'backend')
         }

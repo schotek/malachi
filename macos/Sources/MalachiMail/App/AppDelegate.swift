@@ -335,8 +335,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         paragraph("malachimail.app", before: 10, [.link: AppLinks.website])
         // window.blp's Report an Issue (Adw.AboutDialog words its own).
         paragraph(L10n.T("Report an Issue"), before: 4, [.link: AppLinks.reportIssue])
-        // The update check's status line (updates.AboutLine), plain text.
-        let line = state.map { Updates.aboutLine($0.updates.status, date: AppState.updateTime) } ?? ""
+        // The update check's status line (updates.AboutLine), plain text,
+        // where the app shows the update check (`Distribution.offersUpdates`).
+        let line = Distribution.current.offersUpdates
+            ? state.map { Updates.aboutLine($0.updates.status, date: AppState.updateTime) } ?? ""
+            : ""
         if !line.isEmpty {
             paragraph(line, before: 10, [.foregroundColor: NSColor.secondaryLabelColor])
         }

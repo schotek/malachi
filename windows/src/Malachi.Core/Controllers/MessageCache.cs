@@ -319,9 +319,11 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
     }
 
     // The message.body parameters for the variant quoted of the body of s:
-    // without trimQuoted only for the whole body.
+    // without trimQuoted only for the whole body. The HTML always comes with
+    // its quoted history folded (foldQuoted), which the view opens in place;
+    // the variants only matter for a body shown as text.
     private static MessageBodyParams BodyParams(AccountId accountId, MessageId id, bool quoted, RemoteContentPolicy? remoteContent = null) =>
-        new() { AccountId = accountId, MessageId = id, RemoteContent = remoteContent, TrimQuoted = !quoted };
+        new() { AccountId = accountId, MessageId = id, RemoteContent = remoteContent, TrimQuoted = !quoted, FoldQuoted = true };
 
     // Queues done for the next settle of lm.
     private void Wait(LoadedMessage lm, Action<LoadedMessage> done)

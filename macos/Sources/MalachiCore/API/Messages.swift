@@ -370,20 +370,26 @@ public struct MessageGetResult: Codable, Sendable, Equatable {
 /// for this call only: `block` or `allow`; `knownSenders` is invalidArgument.
 /// `trimQuoted` asks for the body without the quoted history under the new
 /// text (the result's `quotedTrimmed` says whether any was cut); nil, never
-/// false, asks for the whole body, so the key is left out.
+/// false, asks for the whole body, so the key is left out. `foldQuoted`
+/// keeps that history in the HTML, folded behind a toggle the view opens
+/// in place (the result's `quotedFolded`); it wins over `trimQuoted` for
+/// HTML, a body shown as text follows `trimQuoted`. nil, never false.
 public struct MessageBodyParams: Codable, Sendable, Equatable {
     public var accountId: AccountID
     public var messageId: MessageID
     public var remoteContent: RemoteContentPolicy?
     public var trimQuoted: Bool?
+    public var foldQuoted: Bool?
 
     public init(
-        accountId: AccountID, messageId: MessageID, remoteContent: RemoteContentPolicy? = nil, trimQuoted: Bool? = nil
+        accountId: AccountID, messageId: MessageID, remoteContent: RemoteContentPolicy? = nil, trimQuoted: Bool? = nil,
+        foldQuoted: Bool? = nil
     ) {
         self.accountId = accountId
         self.messageId = messageId
         self.remoteContent = remoteContent
         self.trimQuoted = trimQuoted == true ? true : nil
+        self.foldQuoted = foldQuoted == true ? true : nil
     }
 }
 
@@ -468,12 +474,21 @@ public struct MessageBodyResult: Codable, Sendable, Equatable {
     /// above describes the body without it. Absent (an older daemon, or
     /// nothing to cut) is false (`isQuotedTrimmed`).
     public var quotedTrimmed: Bool?
+    /// Asked with `foldQuoted`: the quoted history is in `html`, folded;
+    /// `text` is what shows with the fold closed. Absent is false
+    /// (`isQuotedFolded`).
+    public var quotedFolded: Bool?
+    /// Asked with `trimQuoted` and `foldQuoted`: the quoted history cut off
+    /// a body shown as text, for the view to show under `text` in place.
+    /// Absent when nothing was cut and for a body whose `html` shows.
+    public var quotedText: String?
 
     public init(
         messageId: MessageID, bodyState: BodyState, hasHtml: Bool, html: String? = nil, htmlWithheld: Bool? = nil,
         text: String, blocked: BlockedContent = BlockedContent(), links: [Link] = [],
         inlineParts: [String: String]? = nil, remotePictures: Int? = nil, remoteContent: RemoteContentPolicy,
-        sanitizerVersion: String, quotedTrimmed: Bool? = nil
+        sanitizerVersion: String, quotedTrimmed: Bool? = nil, quotedFolded: Bool? = nil,
+        quotedText: String? = nil
     ) {
         self.messageId = messageId
         self.bodyState = bodyState
@@ -488,10 +503,15 @@ public struct MessageBodyResult: Codable, Sendable, Equatable {
         self.remoteContent = remoteContent
         self.sanitizerVersion = sanitizerVersion
         self.quotedTrimmed = quotedTrimmed
+        self.quotedFolded = quotedFolded
+        self.quotedText = quotedText
     }
 
     /// `quotedTrimmed` as Go reads it: absent is false.
     public var isQuotedTrimmed: Bool { quotedTrimmed == true }
+
+    /// `quotedFolded` as Go reads it: absent is false.
+    public var isQuotedFolded: Bool { quotedFolded == true }
 
     /// `remotePictures` as Go reads it: absent is 0.
     public var remotePictureCount: Int { max(remotePictures ?? 0, 0) }

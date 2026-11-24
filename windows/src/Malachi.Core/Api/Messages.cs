@@ -549,6 +549,15 @@ public sealed record MessageBodyParams
     /// <summary>Cut the quoted history off; false is stored as null.</summary>
     [JsonPropertyName("trimQuoted")]
     public bool? TrimQuoted { get; init => field = value == true ? true : null; }
+
+    /// <summary>
+    /// Keep the quoted history in the HTML, folded behind a toggle the view
+    /// opens in place (the result's <see cref="MessageBodyResult.QuotedFolded"/>);
+    /// it wins over <see cref="TrimQuoted"/> for HTML, a body shown as text
+    /// follows <see cref="TrimQuoted"/>. False is stored as null.
+    /// </summary>
+    [JsonPropertyName("foldQuoted")]
+    public bool? FoldQuoted { get; init => field = value == true ? true : null; }
 }
 
 /// <summary>
@@ -710,6 +719,18 @@ public sealed record MessageBodyResult
     /// <summary><see cref="QuotedTrimmed"/> as Go reads it: absent is false.</summary>
     [JsonIgnore]
     public bool IsQuotedTrimmed => QuotedTrimmed == true;
+
+    /// <summary>
+    /// Asked with <see cref="MessageBodyParams.FoldQuoted"/>: the quoted
+    /// history is in <see cref="Html"/>, folded; <see cref="Text"/> is what
+    /// shows with the fold closed. Absent is false (<see cref="IsQuotedFolded"/>).
+    /// </summary>
+    [JsonPropertyName("quotedFolded")]
+    public bool? QuotedFolded { get; init; }
+
+    /// <summary><see cref="QuotedFolded"/> as Go reads it: absent is false.</summary>
+    [JsonIgnore]
+    public bool IsQuotedFolded => QuotedFolded == true;
 }
 
 /// <summary>

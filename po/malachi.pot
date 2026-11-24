@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-15 09:15+0000\n"
+"POT-Creation-Date: 2026-11-24 17:58+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2458,7 +2458,7 @@ msgstr ""
 msgid "More Actions"
 msgstr ""
 
-#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1149
+#: ui/internal/toolbar/text.go:160 ui/internal/window/window.go:1156
 #: ui/data/ui/window.ui:178
 msgid "Search"
 msgstr ""
@@ -3040,6 +3040,12 @@ msgstr[1] ""
 msgid "Add %s"
 msgstr ""
 
+#. TRANSLATORS: a switch in a Jira account's settings (Android, iOS):
+#. on, the cases of Jira issues show on the Board.
+#: ui/internal/jira/settings.go:879
+msgid "Show Issues on the Board"
+msgstr ""
+
 #. TRANSLATORS: a status change of a Jira issue asks for more on the site and cannot be made here.
 #: ui/internal/jira/transitions.go:93
 msgid "Needs fields in Jira"
@@ -3425,7 +3431,7 @@ msgid "Removed from eWay-CRM"
 msgstr ""
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:863
-#: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:625
+#: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:656
 #: ui/internal/window/notify.go:159
 msgid "(No subject)"
 msgstr ""
@@ -7767,11 +7773,11 @@ msgstr ""
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:637
+#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:668
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:639
+#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:670
 msgid "This message could not be read."
 msgstr ""
 
@@ -7851,7 +7857,7 @@ msgid "Preparing the reply"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:758
-#: ui/internal/window/message_view.go:339
+#: ui/internal/window/message_view.go:363
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -7872,8 +7878,8 @@ msgstr ""
 msgid "_Download Pictures"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:1005
-#: ui/internal/window/message_view.go:543
+#: ui/internal/window/conversation_card.go:1010
+#: ui/internal/window/message_view.go:572
 msgid "Loading the message"
 msgstr ""
 
@@ -7995,12 +8001,12 @@ msgstr ""
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
 
-#: ui/internal/window/message_view.go:631
-#: ui/internal/window/message_view.go:643
+#: ui/internal/window/message_view.go:662
+#: ui/internal/window/message_view.go:674
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:635
+#: ui/internal/window/message_view.go:666
 msgid "Downloading…"
 msgstr ""
 
@@ -8533,11 +8539,11 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1069
+#: ui/internal/window/window.go:1076
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1155 ui/data/ui/window.ui:148
+#: ui/internal/window/window.go:1162 ui/data/ui/window.ui:148
 msgid "Messages"
 msgstr ""
 

@@ -63,7 +63,91 @@ public static class ViewerDocument
         + "img { max-width: 100%; }\n"
         + "pre { white-space: pre-wrap; }\n"
         + "table { max-width: 100%; }\n"
-        + "blockquote { margin: 0.5em 0 0.5em 1em; padding-left: 0.75em; border-left: 2px solid #c0c0c0; }";
+        + "blockquote { margin: 0.5em 0 0.5em 1em; padding-left: 0.75em; border-left: 2px solid #c0c0c0; }\n"
+        + FoldCss;
+
+    /// <summary>
+    /// htmlview.foldCSS: the folded quoted history of a body (message.body
+    /// foldQuoted, docs/api.md): the daemon puts a
+    /// <c>&lt;details class="malachi-quoted"&gt;</c> toggle where the history
+    /// starts and marks its nodes <c>malachi-quoted-more</c>; this sheet hides
+    /// them while the toggle is closed and draws the toggle as the small
+    /// "•••" button. A bubble of the chat hides the toggle too
+    /// (<see cref="ChatFitCss"/>). On Windows the toggle's face is a link
+    /// (<see cref="Folded"/>): the view's page script is off, so the host
+    /// opens and closes it (<see cref="FoldToggleScript"/>). The link covers
+    /// the whole button and the summary takes neither a click nor the focus:
+    /// a summary toggles its details by itself, which the host would never
+    /// hear of, and the card would keep the height of the other state.
+    /// </summary>
+    public const string FoldCss =
+        "html:has(details.malachi-quoted:not([open])) .malachi-quoted-more { display: none !important; }\n"
+        + "details.malachi-quoted { display: block !important; margin: 10px 0 !important; padding: 0 !important; border: 0 !important; }\n"
+        + "details.malachi-quoted > summary { display: inline-block !important; list-style: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 6px !important; background: #e9e9ee !important; color: #5c5c66 !important; font: 700 12px/1 sans-serif !important; letter-spacing: 1px !important; cursor: default !important; -webkit-user-select: none !important; user-select: none !important; pointer-events: none !important; }\n"
+        + "details.malachi-quoted > summary::-webkit-details-marker { display: none !important; }\n"
+        + "details.malachi-quoted > summary:hover { background: #dedee5 !important; }\n"
+        + "details.malachi-quoted[open] > summary { background: #d4d4dc !important; }\n"
+        + "details.malachi-quoted > summary:focus { outline: none !important; }\n"
+        + "details.malachi-quoted > summary:focus-visible { outline: 2px solid Highlight !important; outline-offset: 1px !important; }\n"
+        + "details.malachi-quoted > summary > a { display: inline-block !important; padding: 2px 9px 4px !important; border-radius: 6px !important; color: inherit !important; text-decoration: none !important; cursor: default !important; outline: none !important; pointer-events: auto !important; }\n"
+        + "details.malachi-quoted > summary > a:focus-visible { outline: 2px solid Highlight !important; outline-offset: 3px !important; }";
+
+    /// <summary>
+    /// The address of the toggle's link (<see cref="Folded"/>): a reserved
+    /// name (<c>.invalid</c>), which the view never loads; a navigation to it
+    /// is the user's click on the toggle, and the view answers it with
+    /// <see cref="FoldToggleScript"/>.
+    /// </summary>
+    public const string FoldToggleUri = "https://fold.malachi.invalid/";
+
+    // The toggle exactly as the sanitiser writes it
+    // (backend/internal/sanitize/fold.go). Only the sanitiser writes the
+    // class, so only its toggle matches.
+    private const string FoldToggle = "<details class=\"malachi-quoted\"><summary>\u2022\u2022\u2022</summary>";
+
+    /// <summary>
+    /// htmlview.Folded: <paramref name="body"/> with its fold (if any) open or
+    /// closed and labelled: the <c>open</c> attribute, the summary's
+    /// <c>title</c> and <c>aria-label</c>, and the two labels for
+    /// <see cref="FoldToggleScript"/> (<c>data-malachi-show</c>,
+    /// <c>data-malachi-hide</c>; the sanitiser drops every <c>data-</c>
+    /// attribute of the mail, so these are the application's). The three
+    /// bullets are a link to <see cref="FoldToggleUri"/>, whose activation
+    /// the host turns into the toggle, since no script of the page runs.
+    /// Only the first toggle is the sanitiser's fold; a body without one is
+    /// returned as it is.
+    /// </summary>
+    public static string Folded(string body, bool open, string show, string hide)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        var i = body.IndexOf(FoldToggle, StringComparison.Ordinal);
+        if (i < 0)
+        {
+            return body;
+        }
+        var label = open ? hide : show;
+        var toggle = "<details class=\"malachi-quoted\"" + (open ? " open=\"\"" : "") + "><summary tabindex=\"-1\" title=\"" + Escape(label)
+            + "\" data-malachi-show=\"" + Escape(show) + "\" data-malachi-hide=\"" + Escape(hide) + "\"><a href=\"" + FoldToggleUri
+            + "\" aria-label=\"" + Escape(label) + "\">\u2022\u2022\u2022</a></summary>";
+        return string.Concat(body.AsSpan(0, i), toggle, body.AsSpan(i + FoldToggle.Length));
+    }
+
+    /// <summary>
+    /// The host's script for a click on the toggle's link: it opens or closes
+    /// the fold, swaps the tooltip and the link's accessible name, and
+    /// returns whether the fold is open now (JSON <c>true</c>/<c>false</c>,
+    /// <c>null</c> without a fold).
+    /// </summary>
+    public const string FoldToggleScript =
+        "(function () { var d = document.querySelector('details.malachi-quoted'); if (!d) { return null; } d.open = !d.open; "
+        + "var s = d.querySelector('summary'); var a = s ? s.querySelector('a') : null; "
+        + "var l = s ? s.getAttribute(d.open ? 'data-malachi-hide' : 'data-malachi-show') : null; "
+        + "if (l) { s.setAttribute('title', l); if (a) { a.setAttribute('aria-label', l); } } return d.open; })()";
+
+    // A label for a double-quoted attribute.
+    private static string Escape(string s) =>
+        s.Replace("&", "&amp;", StringComparison.Ordinal).Replace("\"", "&quot;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal).Replace(">", "&gt;", StringComparison.Ordinal);
 
     /// <summary>
     /// htmlview.Document: wraps a sanitised body fragment in the page the view
@@ -99,7 +183,8 @@ public static class ViewerDocument
     /// CardSize, which measures the column, covers the whole document.
     /// </summary>
     public const string ChatFitCss =
-        "html, body { overflow: hidden !important; margin: 0 !important; }\n"
+        "details.malachi-quoted { display: none !important; }\n"
+        + "html, body { overflow: hidden !important; margin: 0 !important; }\n"
         + "#malachi-column { display: flow-root !important; }";
 
     /// <summary>

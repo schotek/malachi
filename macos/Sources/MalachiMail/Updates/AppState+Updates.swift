@@ -15,7 +15,10 @@ import os
 extension AppState {
     /// The status follows the connection (also after a reconnect) and the
     /// daemon's notification; a security release asks on the main window.
+    /// Nothing where the app shows no update check
+    /// (`Distribution.offersUpdates`): the status stays nil.
     func wireUpdates() {
+        guard settings.distribution.offersUpdates else { return }
         let updates = updates
         updateTokens.append(notifications.addConnectionState { s in
             if Self.isConnected(s) {

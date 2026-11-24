@@ -53,10 +53,41 @@ var providerScopes = map[Provider][]string{
 // http://127.0.0.1, delegated Graph Mail.ReadWrite, Mail.Send, User.Read,
 // offline_access). It is not publisher-verified, so users of organisations
 // that restrict consent need their administrator to approve it once.
-// Google: none; the restricted Gmail scope needs Google's verification and
-// a yearly security assessment before a client can be shipped.
+// Google: the "Malachi Mail Desktop" client of the project's Google Cloud
+// project (type "Desktop app", loopback redirect, PKCE). Google's token
+// endpoint wants a client secret from a desktop client too, although it
+// does not treat it as confidential; the secret is not in the source tree
+// but linked in by release builds (googleClientSecret). A build without it
+// has no built-in Google client and reports oauthClientMissing as before.
 var builtinClients = map[Provider]Client{
 	Microsoft: {ID: "af56e4e6-c2ea-4ad8-bbee-bd52597f5b4e"},
+}
+
+// googleClientID is the built-in Google client; a public identifier.
+const googleClientID = "668254626006-i4e9m6agnkd6ag2mk43t2u2sad458di8.apps.googleusercontent.com"
+
+// googleClientSecret is set at link time:
+//
+//	-ldflags "-X github.com/schotek/malachi/backend/internal/auth/oauth2flow.googleClientSecret=…"
+//
+// The root Makefile and windows/build.ps1 pass the environment variable
+// GOOGLE_OAUTH_CLIENT_SECRET when it is set (docs/releasing.md).
+var googleClientSecret = ""
+
+func init() {
+	if c, ok := builtinGoogle(googleClientSecret); ok {
+		builtinClients[Google] = c
+	}
+}
+
+// builtinGoogle is the built-in Google client for a linked-in secret; none
+// without one, since the token exchange would only fail.
+func builtinGoogle(secret string) (Client, bool) {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return Client{}, false
+	}
+	return Client{ID: googleClientID, Secret: secret}, true
 }
 
 func knownProvider(p Provider) bool {

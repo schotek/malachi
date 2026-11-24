@@ -868,3 +868,13 @@ func keys(kind ListKind, list []string, anyOrder bool) []string {
 	}
 	return out
 }
+
+// ShowOnBoard is the switch of the mobile clients' Jira settings that lets
+// the cases of Jira issues show on the Board. Only the Android and iOS
+// clients offer it: it filters what they show, the daemon makes the cases
+// either way, and the desktop lists every case.
+func ShowOnBoard(tr Translator) string {
+	// TRANSLATORS: a switch in a Jira account's settings (Android, iOS):
+	// on, the cases of Jira issues show on the Board.
+	return tr.T("Show Issues on the Board")
+}

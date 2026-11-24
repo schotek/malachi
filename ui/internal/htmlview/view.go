@@ -64,6 +64,14 @@ type View struct {
 	// loading and its height is not known yet. The view never takes the
 	// height itself: it scrolls its document in whatever height it gets.
 	OnSize func(px int)
+	// FoldOpen is the state the fold of the quoted history (fold.go)
+	// starts in at the next Load; the owner sets it before Load from what
+	// the user chose for the message, and the view keeps it with the
+	// user's clicks.
+	FoldOpen bool
+	// OnFold is called when the user opens (true) or closes the fold in
+	// the document; FoldOpen follows it already.
+	OnFold func(open bool)
 }
 
 // New builds a viewer from data/ui/html_view.blp. fetch serves the
@@ -105,11 +113,16 @@ func New(log *slog.Logger, fetch PartFetcher) *View {
 	// The card's measurement, in the same isolated world (size.go): the
 	// handler connected before it is registered, both before the script
 	// and the first document.
-	v.message = v.ucm.ConnectScriptMessageReceived(v.sizeMessage)
+	v.message = v.ucm.ConnectScriptMessageReceived(v.scriptMessage)
 	if !v.ucm.RegisterScriptMessageHandler(sizeHandler, sizeWorld) {
 		v.log.Warn("size handler not registered; the body keeps the whole area")
 	}
+	if !v.ucm.RegisterScriptMessageHandler(foldHandler, sizeWorld) {
+		v.log.Warn("fold handler not registered; the fold forgets its state on reload")
+	}
 	v.ucm.AddScript(webkit.NewUserScriptForWorld(sizeScript,
+		webkit.UserContentInjectTopFrame, webkit.UserScriptInjectAtDocumentEnd, sizeWorld, nil, nil))
+	v.ucm.AddScript(webkit.NewUserScriptForWorld(foldScript,
 		webkit.UserContentInjectTopFrame, webkit.UserScriptInjectAtDocumentEnd, sizeWorld, nil, nil))
 	v.web.ConnectLoadChanged(func(e webkit.LoadEvent) {
 		if e == webkit.LoadCommitted {
@@ -144,7 +157,7 @@ func (v *View) Load(body string) {
 	if v.OnSize != nil {
 		v.OnSize(-1)
 	}
-	v.web.LoadHtml(Document(body), "")
+	v.web.LoadHtml(Document(Folded(body, v.FoldOpen)), "")
 }
 
 // Clear drops the current document (and its pictures).
@@ -159,13 +172,14 @@ func (v *View) Clear() {
 // runs out of namespaces and WebKit aborts). The view shows nothing
 // afterwards.
 func (v *View) Close() {
-	v.OnLink, v.OnSize = nil, nil
+	v.OnLink, v.OnSize, v.OnFold = nil, nil, nil
 	v.closed = true
 	if v.message != 0 {
 		v.ucm.HandlerDisconnect(v.message)
 		v.message = 0
 	}
 	v.ucm.UnregisterScriptMessageHandler(sizeHandler, sizeWorld)
+	v.ucm.UnregisterScriptMessageHandler(foldHandler, sizeWorld)
 	v.ucm.RemoveAllScripts()
 	v.web.StopLoading()
 	v.web.TerminateWebProcess()
@@ -183,6 +197,22 @@ func (v *View) SetZoom(percent int) {
 
 // sizeMessage is a message of the view's script: the height, validated
 // (readSize), goes to OnSize at the text zoom. Anything else is dropped.
+// scriptMessage is a message of the view's scripts, told apart by shape:
+// the fold's is a boolean (readFold), the size's an object (readSize).
+func (v *View) scriptMessage(val *javascriptcore.Value) {
+	if open, ok := readFold(val); ok {
+		if !v.committed || v.closed || open == v.FoldOpen {
+			return
+		}
+		v.FoldOpen = open
+		if v.OnFold != nil {
+			v.OnFold(open)
+		}
+		return
+	}
+	v.sizeMessage(val)
+}
+
 func (v *View) sizeMessage(val *javascriptcore.Value) {
 	if !v.committed || v.closed {
 		return // the previous document's, or none any more

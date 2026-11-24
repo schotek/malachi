@@ -78,6 +78,14 @@ type Card struct {
 	// the report followed a change of the view's height alone (viewport),
 	// and whether the view's width changed since the last report.
 	OnSize func(css float64, viewport, widthChanged bool)
+	// FoldOpen is the state the fold of the quoted history (fold.go)
+	// starts in at the next Load; the owner sets it before Load from what
+	// the user chose for the message, and the view keeps it with the
+	// user's clicks. A change by itself loads nothing.
+	FoldOpen bool
+	// OnFold is called when the user opens (true) or closes the fold in
+	// the document; FoldOpen follows it already.
+	OnFold func(open bool)
 }
 
 // NewCard builds a card's view from data/ui/html_card.blp. fetch serves the
@@ -101,11 +109,16 @@ func NewCard(log *slog.Logger, fetch PartFetcher, zoom int) *Card {
 
 	// The handler is connected before it is registered (WebKit's advice),
 	// and both before the script and the first document.
-	c.message = c.ucm.ConnectScriptMessageReceived(c.sizeMessage)
+	c.message = c.ucm.ConnectScriptMessageReceived(c.scriptMessage)
 	if !c.ucm.RegisterScriptMessageHandler(sizeHandler, sizeWorld) {
 		c.log.Warn("size handler not registered; the card keeps its height")
 	}
+	if !c.ucm.RegisterScriptMessageHandler(foldHandler, sizeWorld) {
+		c.log.Warn("fold handler not registered; the fold forgets its state on reload")
+	}
 	c.ucm.AddScript(webkit.NewUserScriptForWorld(sizeScript,
+		webkit.UserContentInjectTopFrame, webkit.UserScriptInjectAtDocumentEnd, sizeWorld, nil, nil))
+	c.ucm.AddScript(webkit.NewUserScriptForWorld(foldScript,
 		webkit.UserContentInjectTopFrame, webkit.UserScriptInjectAtDocumentEnd, sizeWorld, nil, nil))
 
 	c.web.ConnectDecidePolicy(func(d webkit.PolicyDecisioner, t webkit.PolicyDecisionType) bool {
@@ -146,6 +159,9 @@ func (c *Card) Widget() gtk.Widgetter { return c.web }
 // on display is not loaded again unless reload says so (its pictures kept
 // on the mail server were downloaded: the same malachi-cid: URLs have
 // something to serve now) or the web process went away.
+// The fold of the quoted history starts as FoldOpen says; the comparison
+// with the body on display leaves the fold out, so the user's click,
+// which FoldOpen follows, reloads nothing.
 func (c *Card) Load(body string, reload bool) {
 	doc := CompactDocument(body)
 	if c.chat != nil {
@@ -156,6 +172,9 @@ func (c *Card) Load(body string, reload bool) {
 	}
 	c.loaded, c.hasLoaded, c.needsReload = doc, true, false
 	c.committed = false
+	if c.chat == nil {
+		doc = CompactDocument(Folded(body, c.FoldOpen))
+	}
 	c.web.LoadHtml(doc, "")
 }
 
@@ -207,7 +226,8 @@ func (c *Card) SetHeight(px int) {
 // handed on costs no new process, as the single-message view keeps one
 // for every message it shows.
 func (c *Card) Reset() {
-	c.OnLink, c.OnHover, c.OnSize = nil, nil, nil
+	c.OnLink, c.OnHover, c.OnSize, c.OnFold = nil, nil, nil, nil
+	c.FoldOpen = false
 	c.hasLoaded, c.committed = false, false
 	c.width = 0
 	c.SetHeight(0)
@@ -225,15 +245,32 @@ func (c *Card) Release() {
 		return
 	}
 	c.released = true
-	c.OnLink, c.OnHover, c.OnSize = nil, nil, nil
+	c.OnLink, c.OnHover, c.OnSize, c.OnFold = nil, nil, nil, nil
 	if c.message != 0 {
 		c.ucm.HandlerDisconnect(c.message)
 		c.message = 0
 	}
 	c.ucm.UnregisterScriptMessageHandler(sizeHandler, sizeWorld)
+	c.ucm.UnregisterScriptMessageHandler(foldHandler, sizeWorld)
 	c.ucm.RemoveAllScripts()
 	c.web.StopLoading()
 	c.web.TerminateWebProcess()
+}
+
+// scriptMessage is a message of the card's scripts, told apart by shape:
+// the fold's is a boolean (readFold), the size's an object (readSize).
+func (c *Card) scriptMessage(v *javascriptcore.Value) {
+	if open, ok := readFold(v); ok {
+		if !c.committed || c.released || open == c.FoldOpen {
+			return
+		}
+		c.FoldOpen = open
+		if c.OnFold != nil {
+			c.OnFold(open)
+		}
+		return
+	}
+	c.sizeMessage(v)
 }
 
 // sizeMessage is a message of the card's script: the height, validated

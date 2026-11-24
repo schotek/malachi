@@ -131,6 +131,9 @@ jobs:
         # Developer ID when there is one, else ad hoc.
         env:
           SIGN: ${{ steps.keychain.outputs.identity || '-' }}
+          # The built-in Google OAuth client of the daemon (the Makefile
+          # reads it); without the secret the build has none.
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: make macos-dmg SIGN="$SIGN"
 
       - name: Notarise

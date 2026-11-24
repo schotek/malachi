@@ -366,7 +366,7 @@ public final class ConversationController {
     public func needsBody(_ id: MessageID, details: Bool = false) {
         guard let s = member(id), !readsWithoutBody(s) else { return }
         let full = (details || s.hasAttachments || Bulk.wantsOffer(s) || s.invitation != nil || s.signature != nil) && !noGet.contains(id)
-        let reveal = quoted.isRevealed(id)
+        let reveal = quotedVariant(loaded[id], revealed: quoted.isRevealed(id))
         if let lm = loaded[id], lm.quotedShown == reveal, lm.bodySettled, !full || lm.msg != nil {
             return
         }
@@ -395,7 +395,8 @@ public final class ConversationController {
         }
     }
 
-    /// Whether the quoted history of the card of member `id` shows.
+    /// Whether the quoted history of the card of member `id` shows: the
+    /// whole body, or the fold of a folded one open.
     public func quotedRevealed(_ id: MessageID) -> Bool {
         quoted.isRevealed(id)
     }
@@ -413,11 +414,28 @@ public final class ConversationController {
         needsBody(id, details: details)
     }
 
+    /// The user opened (`on`) or closed the fold of the quoted history in
+    /// the HTML of the card of member `id` (`quotedFolded`): the choice
+    /// holds while the conversation is shown, so that the card's document,
+    /// loaded again (pictures, a card made live again), comes back as the
+    /// user left it. Nothing is asked for.
+    public func setFoldOpen(_ id: MessageID, _ on: Bool) {
+        guard member(id) != nil else { return }
+        quoted.set(id, on)
+    }
+
     /// The cache has news about member `id` (its `onLoaded` fan-out: the
     /// remote images, a download): the card's entry is that one from now
-    /// on. An id that is not shown is ignored.
+    /// on. An id that is not shown is ignored. The card follows the variant
+    /// the entry shows now: another view of the message (its own window)
+    /// may have revealed or hidden the quoted history of the entry both
+    /// share, and asking for the old variant on the next `needsBody` would
+    /// switch it back under that view.
     public func adopt(_ id: MessageID, _ lm: LoadedMessage) {
         guard member(id) != nil else { return }
+        if lm.body?.isQuotedFolded != true {
+            quoted.set(id, lm.quotedShown) // a folded body's reveal is the card's own fold
+        }
         loaded[id] = lm
     }
 

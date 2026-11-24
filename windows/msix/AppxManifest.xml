@@ -85,9 +85,11 @@ What the package changes for the app, and what the test is for:
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
   </Dependencies>
 
+  <!-- The languages the Store lists for the app: English and every
+       language of po/LINGUAS, written here by build-msix.ps1, so a new
+       translation reaches the package without an edit of this file. -->
   <Resources>
-    <Resource Language="en-us" />
-    <Resource Language="cs-cz" />
+{{Resources}}
   </Resources>
 
   <Applications>

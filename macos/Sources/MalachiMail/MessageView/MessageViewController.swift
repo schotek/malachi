@@ -397,7 +397,7 @@ final class MessageViewController: NSViewController {
             render(s, nil)
             return
         }
-        let reveal = quoted.isRevealed(s.id)
+        let reveal = quotedVariant(cache.loaded(s.id), revealed: quoted.isRevealed(s.id))
         if let lm = cache.loaded(s.id), lm.complete, lm.quotedShown == reveal {
             render(s, lm)
             return
@@ -469,6 +469,16 @@ final class MessageViewController: NSViewController {
     func render(_ s: MessageSummary, _ lm: LoadedMessage?) {
         _ = view
         shownLoaded = lm
+        if mode != .embedded, let lm, current?.id == s.id {
+            // The entry is shared with every other view of the message
+            // (the reading pane, the message's window, a conversation's
+            // card): follow the variant one of them switched it to, or the
+            // next `show` would ask for the old one and switch it back. A
+            // folded body's reveal is this view's own fold.
+            if lm.body?.isQuotedFolded != true {
+                quoted.set(s.id, lm.quotedShown)
+            }
+        }
         renderBulk(s, lm)
         renderCRM(s)
         renderInvitation(s, lm?.msg)
@@ -636,7 +646,9 @@ final class MessageViewController: NSViewController {
         if showsHTML(b), let b, let html = b.html {
             links = b.links
             header.hintVisible = false
-            htmlView().load(body: html, reload: picturesArrived(before, b))
+            let wv = htmlView()
+            wv.foldOpen = current.map { quoted.isRevealed($0.id) } ?? false
+            wv.load(body: html, reload: picturesArrived(before, b))
             setBodyPage(.html)
             renderRemoteBar(lm)
             renderPicturesBar(lm)
@@ -731,6 +743,12 @@ final class MessageViewController: NSViewController {
         let wv = MessageWebView(cache: cache, zoom: state.settings.textZoom, measures: true)
         wv.onLink = { [weak self] link in self?.openLink(link) }
         wv.onUnavailable = { [weak self] in self?.htmlUnavailable() }
+        // The fold of the quoted history, opened or closed in the
+        // document: the choice holds as the "•••" button's (`quoted`).
+        wv.onFoldToggle = { [weak self] open in
+            guard let self, self.mode != .embedded, let s = self.current else { return }
+            self.quoted.set(s.id, open)
+        }
         wv.onContentHeight = { [weak self] h in
             self?.htmlFit?.constant = h.map { ceil($0) } ?? Self.fillHeight
         }

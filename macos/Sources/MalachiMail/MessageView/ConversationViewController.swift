@@ -884,6 +884,14 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         controller.setQuoted(card.id, on, details: card.detailsOpen)
     }
 
+    func cardFoldOpen(_ card: ConversationCardView) -> Bool {
+        controller.quotedRevealed(card.id)
+    }
+
+    func cardSetFoldOpen(_ card: ConversationCardView, _ open: Bool) {
+        controller.setFoldOpen(card.id, open)
+    }
+
     func cardHeightChanging(_ change: () -> Void) {
         preservingAnchor(change)
     }

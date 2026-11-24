@@ -139,6 +139,7 @@ jobs:
         env:
           SIGN: ${{ steps.keychain.outputs.sign }}
           INSTALLER_SIGN: ${{ steps.keychain.outputs.installer }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: |
           make macos-mas SIGN="$SIGN" INSTALLER_SIGN="$INSTALLER_SIGN" \
             PROFILE="$RUNNER_TEMP/app.provisionprofile" MCP_PROFILE="$RUNNER_TEMP/mcp.provisionprofile" \

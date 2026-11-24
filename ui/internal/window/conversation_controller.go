@@ -480,7 +480,7 @@ func (c *conversationController) needsBody(id api.MessageID, details bool) {
 		return
 	}
 	full := (details || s.HasAttachments || wantsOffer(s) || s.Invitation != nil || s.Signature != nil) && !c.noGet[id]
-	reveal := c.quoted.IsRevealed(id)
+	reveal := quotedVariant(c.loaded[id], c.quoted.IsRevealed(id))
 	if lm := c.loaded[id]; lm != nil && lm.quotedShown == reveal && lm.bodySettled() && (!full || lm.msg != nil) {
 		return
 	}
@@ -516,6 +516,17 @@ func (c *conversationController) quotedRevealed(id api.MessageID) bool {
 	return c.quoted.IsRevealed(id)
 }
 
+// setFoldOpen: the user opened (on) or closed the fold of the quoted
+// history in the HTML of the card of member id (message.body
+// quotedFolded); the choice holds while the conversation is shown, so that
+// the card's document, loaded again (pictures, a card made live again),
+// comes back as the user left it. Nothing is asked for.
+func (c *conversationController) setFoldOpen(id api.MessageID, on bool) {
+	if _, ok := c.member(id); ok {
+		c.quoted.Set(id, on)
+	}
+}
+
 // setQuoted is the card's Show Quoted Text (on) or Hide Quoted Text: the
 // choice holds while the conversation is shown, and the card's body
 // switches to that variant (the one held, or fetched as needsBody does;
@@ -533,10 +544,25 @@ func (c *conversationController) setQuoted(id api.MessageID, on, details bool) {
 
 // adopt: the window has news about member id (its fan-out: the remote
 // images, a download), and the card's entry is lm from now on. An id that
-// is not shown is ignored.
+// is not shown is ignored. The card follows the variant the entry shows
+// now (followQuoted).
 func (c *conversationController) adopt(id api.MessageID, lm *loadedMessage) {
 	if _, ok := c.member(id); ok && lm != nil {
 		c.loaded[id] = lm
+		if !lm.folded() { // a folded body's reveal is the card's own fold
+			c.followQuoted(id, lm.quotedShown)
+		}
+	}
+}
+
+// followQuoted: another view of message id (the pane, its own window)
+// switched the cache entry the card shares to the variant on (with its
+// quoted history or without); the card follows it, or its next needsBody
+// would ask for the old variant and switch the entry back under that view.
+// An id that is not shown is ignored.
+func (c *conversationController) followQuoted(id api.MessageID, on bool) {
+	if _, ok := c.member(id); ok {
+		c.quoted.Set(id, on)
 	}
 }
 

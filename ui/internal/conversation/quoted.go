@@ -63,6 +63,15 @@ func (o QuotedOffer) Label(tr Translator) string {
 	return QuotedTextLabel(o == QuotedHide, tr)
 }
 
+// QuotedVariant is the variant of a body a view asks for when the user
+// revealed its quoted history (revealed): the whole body, unless the HTML
+// on display has the history folded in it (folded: message.body
+// quotedFolded), which the view opens in place and which stays the
+// variant asked for; the reveal of such a body is its fold's state.
+func QuotedVariant(folded, revealed bool) bool {
+	return revealed && !folded
+}
+
 // QuotedReveal is the messages whose quoted history the user revealed in
 // one view, for what that view shows now (a conversation, or a message
 // alone): another selection forgets them, an update of the same one keeps

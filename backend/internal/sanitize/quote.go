@@ -81,6 +81,9 @@ type quoteMark struct {
 type quoteScan struct {
 	body   *html.Node
 	visits int
+	// unfolded: content folded behind the quote toggle (fold.go) does not
+	// count as visible.
+	unfolded bool
 }
 
 func (s *quoteScan) spend() bool {
@@ -91,33 +94,45 @@ func (s *quoteScan) spend() bool {
 // trimQuoted removes the quoted history from the parsed body and reports
 // whether it did. body is the parser's <body> element; nil trims nothing.
 func trimQuoted(body *html.Node) bool {
-	if body == nil {
+	start := quoteStart(body)
+	if start == nil {
 		return false
+	}
+	cutFrom(start, body)
+	return true
+}
+
+// quoteStart is the first node of the quoted history of the parsed body
+// (the cut runs from it to the end of the body), or nil when there is
+// none to cut. body is the parser's <body> element; nil finds nothing.
+func quoteStart(body *html.Node) *html.Node {
+	if body == nil {
+		return nil
 	}
 	s := &quoteScan{body: body}
 	for _, m := range s.marks() {
 		if m.kind == quoteNested {
 			after, ok := s.visible(nextNode(m.n, body, false), body, nil)
 			if !ok {
-				return false
+				return nil
 			}
 			if after {
 				continue // a reply below the quoted passages
 			}
 			if mixed, ok := s.interleaved(m.n); !ok || mixed {
 				if !ok {
-					return false
+					return nil
 				}
 				continue // a reply between the quoted passages, inside Gmail's quote
 			}
 		}
 		start, ok := s.start(m)
 		if !ok {
-			return false
+			return nil
 		}
 		cut, ok := s.visible(start, body, nil)
 		if !ok {
-			return false
+			return nil
 		}
 		if !cut {
 			continue // the marker holds nothing to hide, e.g. an empty #appendonsend
@@ -127,12 +142,11 @@ func trimQuoted(body *html.Node) bool {
 		// rather than losing the outer layer to a quote further in.
 		above, ok := s.visible(body.FirstChild, body, start)
 		if !ok || !above {
-			return false
+			return nil
 		}
-		cutFrom(start, body)
-		return true
+		return start
 	}
-	return false
+	return nil
 }
 
 // interleaved reports whether a quote marker that is not a <blockquote>
@@ -378,7 +392,7 @@ func (s *quoteScan) visible(first, root, stop *html.Node) (shows, ok bool) {
 				return true, true
 			}
 		case html.ElementNode:
-			if quoteOpaque(n) {
+			if quoteOpaque(n) || (s.unfolded && folded(n)) {
 				descend = false
 			} else if n.Data == "img" {
 				return true, true
@@ -391,8 +405,9 @@ func (s *quoteScan) visible(first, root, stop *html.Node) (shows, ok bool) {
 
 // shows reports whether a sanitised tree shows anything (visible, with a
 // budget of its own; a tree too large to check counts as showing).
-func shows(root *html.Node) bool {
-	s := &quoteScan{body: root}
+// With unfolded, what the quote toggle folds away does not count.
+func shows(root *html.Node, unfolded bool) bool {
+	s := &quoteScan{body: root, unfolded: unfolded}
 	v, ok := s.visible(root.FirstChild, root, nil)
 	return v || !ok
 }

@@ -7,9 +7,10 @@ import MalachiCore
 extension Integration {
     /// The update check's banner across the top of the main window, in
     /// every mode (Mail, Board, Calendar): it follows the application's
-    /// `UpdateController`, and its buttons act through `AppState`.
+    /// `UpdateController`, and its buttons act through `AppState`. None
+    /// where the app shows no update check (`Distribution.offersUpdates`).
     func wireUpdates() {
-        guard let mainWindow else { return }
+        guard state.settings.distribution.offersUpdates, let mainWindow else { return }
         let banner = UpdateBannerView()
         let content = mainWindow.content
         content.install(banner: banner)

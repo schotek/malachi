@@ -1158,6 +1158,14 @@ type MessageBodyParams struct {
 	// was cut. The client asks again without it to show the whole message.
 	// false (the default) returns the body exactly as before.
 	TrimQuoted bool `json:"trimQuoted,omitempty"`
+	// FoldQuoted keeps the quoted history trimQuoted would cut in the HTML,
+	// folded: a <details class="malachi-quoted"> toggle stands where it
+	// starts and each of its nodes has the class malachi-quoted-more, which
+	// the client's stylesheet hides while the toggle is closed
+	// (MessageBodyResult.QuotedFolded). It takes precedence over TrimQuoted
+	// for the HTML; a body shown as text follows TrimQuoted, and with both
+	// its result carries the text that was cut (QuotedText).
+	FoldQuoted bool `json:"foldQuoted,omitempty"`
 }
 
 // BlockedContent summarises what the sanitiser removed or neutralised so the
@@ -1243,6 +1251,16 @@ type MessageBodyResult struct {
 	// whole body, nothing was found to cut or cutting would have left
 	// nothing to show.
 	QuotedTrimmed bool `json:"quotedTrimmed,omitempty"`
+	// QuotedFolded is set only when MessageBodyParams.FoldQuoted folded a
+	// quoted history in HTML: HTML, Blocked, Links, InlineParts and
+	// RemotePictures describe the whole body, Text what shows with the
+	// fold closed (cut as under TrimQuoted).
+	QuotedFolded bool `json:"quotedFolded,omitempty"`
+	// QuotedText is the quoted history TrimQuoted cut off the Text of a
+	// body shown as text (no HTML, or HTMLWithheld), set only when
+	// FoldQuoted was asked for as well: the client shows it under Text in
+	// place, without asking again. It is plain text like Text.
+	QuotedText string `json:"quotedText,omitempty"`
 }
 
 // MessagePartParams names one MIME part of a received message, by the

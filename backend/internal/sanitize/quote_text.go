@@ -30,9 +30,18 @@ import "strings"
 // blank lines. Nothing is cut when the history holds nothing or nothing
 // but blank lines would be left above it.
 func TrimQuotedText(s string) (string, bool) {
+	above, _, ok := SplitQuotedText(s)
+	return above, ok
+}
+
+// SplitQuotedText is TrimQuotedText that also returns what it cut: the
+// quoted history from its first line (the separator or the attribution)
+// to the end of the text, without the blank lines around it. Both are
+// empty parts of s itself; above is s and quoted empty when nothing is cut.
+func SplitQuotedText(s string) (above, quoted string, ok bool) {
 	lines := strings.Split(s, "\n")
 	if len(lines) > maxTextLines {
-		return s, false
+		return s, "", false
 	}
 	t := &textLines{lines: lines, lastShown: -1, lastPlain: -1, lastQuoted: -1}
 	for i := range lines {
@@ -54,13 +63,14 @@ func TrimQuotedText(s string) (string, bool) {
 		}
 	}
 	if cut < 0 {
-		return s, false
+		return s, "", false
 	}
-	above := strings.Join(lines[:cut], "\n")
+	above = strings.Join(lines[:cut], "\n")
 	if blankText(above) {
-		return s, false
+		return s, "", false
 	}
-	return strings.TrimRightFunc(above, blankRune), true
+	quoted = strings.TrimRightFunc(strings.Join(lines[cut:], "\n"), blankRune)
+	return strings.TrimRightFunc(above, blankRune), quoted, true
 }
 
 // maxTextLines bounds the lines TrimQuotedText looks at; a longer text is

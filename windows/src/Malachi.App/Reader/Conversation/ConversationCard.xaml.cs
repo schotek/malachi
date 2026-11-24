@@ -787,6 +787,10 @@ internal sealed partial class ConversationCard : UserControl
         {
             gov.Reset();
         }
+        // The fold of the quoted history as the user left it in this
+        // conversation; the view is the pool's, so both every time.
+        web.FoldOpen = pane.CardFoldOpen(this);
+        web.OnFold = open => pane.SetCardFoldOpen(this, open);
         web.Load(html, reload);
         webDoc = html;
         reload = false;

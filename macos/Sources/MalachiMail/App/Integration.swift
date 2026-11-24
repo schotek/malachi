@@ -555,7 +555,9 @@ final class Integration {
         c.integrationsPane.websiteFeatures = { window in WebsiteFeaturesDialog.show(for: window, state: state) }
         c.contactsPane.configure(state.contacts)
         c.rulesPane.configure(state.rules)
-        c.generalPane.configureUpdates(state.updates)
+        if state.settings.distribution.offersUpdates {
+            c.generalPane.configureUpdates(state.updates)
+        }
         c.securityPane.configure(state: state)
         return c
     }
@@ -588,15 +590,20 @@ final class Integration {
                 title: Cal.Prefs.addCalDAV, target: self, action: #selector(addCalDAVCalendar(_:)))
             caldav.bezelStyle = .rounded
             caldav.controlSize = .large
-            // The first run's note about the update check (updates.WizardNote).
-            let note = NSTextField(wrappingLabelWithString: Updates.wizardNote)
-            note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-            note.textColor = .secondaryLabelColor
-            note.alignment = .center
-            note.isSelectable = false
-            note.preferredMaxLayoutWidth = 360
-            note.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
-            let buttons = NSStackView(views: [button, jira, caldav, note])
+            var views: [NSView] = [button, jira, caldav]
+            // The first run's note about the update check (updates.WizardNote),
+            // only where the app checks (`Distribution.offersUpdates`).
+            if state.settings.distribution.offersUpdates {
+                let note = NSTextField(wrappingLabelWithString: Updates.wizardNote)
+                note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+                note.textColor = .secondaryLabelColor
+                note.alignment = .center
+                note.isSelectable = false
+                note.preferredMaxLayoutWidth = 360
+                note.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
+                views.append(note)
+            }
+            let buttons = NSStackView(views: views)
             buttons.orientation = .vertical
             buttons.alignment = .centerX
             buttons.spacing = 12

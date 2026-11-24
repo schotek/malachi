@@ -26,11 +26,24 @@ final class WizardBannerView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         setContentHuggingPriority(.required, for: .vertical)
         CalloutCard.show("exclamationmark.triangle.fill", .warning, in: symbolView)
-        let stack = NSStackView(views: [symbolView, label])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = CalloutCard.spacing
-        CalloutCard.install(stack, in: self)
+        // The label is pinned from the symbol to the card's trailing edge:
+        // a stack view's gravity areas let a wrapping label collapse to a
+        // narrow column and leave the rest of the card empty.
+        let content = NSView()
+        symbolView.translatesAutoresizingMaskIntoConstraints = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(symbolView)
+        content.addSubview(label)
+        NSLayoutConstraint.activate([
+            symbolView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            symbolView.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            content.heightAnchor.constraint(greaterThanOrEqualTo: symbolView.heightAnchor),
+            label.leadingAnchor.constraint(equalTo: symbolView.trailingAnchor, constant: CalloutCard.spacing),
+            label.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            label.topAnchor.constraint(equalTo: content.topAnchor),
+            label.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+        ])
+        CalloutCard.install(content, in: self)
         isHidden = true
     }
 
@@ -148,10 +161,13 @@ final class WizardStatusPageView: NSView {
         // The labels take the page's width up to 400 pt; without the
         // (active) equality a wrapping label settles on the width of its
         // first layout, which on a page not yet sized is a narrow column.
+        // The equality stays under the priority at which a window holds
+        // its size (.windowSizeStayPut): above it, the 400 pt cap pulled
+        // the whole sheet in to the labels' width.
         for label in [titleLabel, descriptionLabel] {
             label.widthAnchor.constraint(lessThanOrEqualToConstant: 400).isActive = true
             let fill = label.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24)
-            fill.priority = .defaultHigh
+            fill.priority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.windowSizeStayPut.rawValue - 10)
             fill.isActive = true
         }
         stack.translatesAutoresizingMaskIntoConstraints = false

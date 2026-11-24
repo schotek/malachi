@@ -908,6 +908,11 @@ func (c *convCard) loadWebView() {
 	if c.webDoc != c.html || c.reload {
 		c.gov.reset()
 	}
+	// The fold of the quoted history (htmlview.Folded) as the user left
+	// it in this conversation; the view is the pool's, so both every time.
+	id, ctrl := c.id, c.cv.ctrl
+	c.web.FoldOpen = ctrl.quotedRevealed(id)
+	c.web.OnFold = func(open bool) { ctrl.setFoldOpen(id, open) }
 	c.web.Load(c.html, c.reload)
 	c.webDoc = c.html
 	c.reload = false

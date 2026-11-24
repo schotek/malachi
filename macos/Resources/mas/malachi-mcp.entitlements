@@ -20,9 +20,11 @@ The registration in Claude (malachi-mcp status / install / uninstall,
 started by the app through LaunchServices, since a child with its own
 sandbox cannot run under the app's) writes only Claude Desktop's
 configuration directory, ~/.claude.json and the fixed temporary file
-beside it (setup.go tempName), and reads ~/.claude/ to see whether Claude
-Code is installed: the temporary exceptions below, nothing else of the
-home directory (Q2 (a) of the plan).
+beside it (setup.go tempName): the temporary exceptions below, nothing
+else of the home directory (Q2 (a) of the plan). Claude Code counts as
+installed when ~/.claude.json exists, which it writes at its first start;
+the ~/.claude/ directory the bridge also looks for elsewhere stays out of
+reach here.
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -42,10 +44,6 @@ home directory (Q2 (a) of the plan).
 		<string>/Library/Application Support/Claude/</string>
 		<string>/.claude.json</string>
 		<string>/..claude.json.malachi-mcp.tmp</string>
-	</array>
-	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
-	<array>
-		<string>/.claude/</string>
 	</array>
 </dict>
 </plist>

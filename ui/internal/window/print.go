@@ -261,7 +261,7 @@ func (w *Window) printSection(s api.MessageSummary, own bool, done func(string))
 			ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
 			defer cancel()
 			var res api.MessageBodyResult
-			err := w.client.Call(ctx, api.MethodMessageBody, bodyParams(s.AccountID, s.ID, true, ""), &res)
+			err := w.client.Call(ctx, api.MethodMessageBody, api.MessageBodyParams{AccountID: s.AccountID, MessageID: s.ID}, &res)
 			glib.IdleAdd(func() {
 				b := &res
 				if err != nil {

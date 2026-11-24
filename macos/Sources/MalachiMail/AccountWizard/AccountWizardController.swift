@@ -72,6 +72,9 @@ final class AccountWizardController: NSWindowController {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
+        // One size for every page of the assistant.
+        window.contentMinSize = NSSize(width: 520, height: 640)
+        window.contentMaxSize = NSSize(width: 520, height: 640)
         // Programmatic windows do not compute the Tab order by themselves.
         window.autorecalculatesKeyViewLoop = true
         window.contentViewController = root
@@ -209,6 +212,13 @@ final class WizardRootViewController: NSViewController {
             pagesHost.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             pagesHost.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             pagesHost.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            // The sheet keeps its size whatever a page holds: a window
+            // only holds its size at a middling priority, and a status
+            // page's labels (capped at 400 pt, filling above that
+            // priority) otherwise pull the whole sheet down to their
+            // width, to a sliver on the page that waits for the browser.
+            root.widthAnchor.constraint(equalToConstant: root.frame.width),
+            root.heightAnchor.constraint(equalToConstant: root.frame.height),
         ])
         view = root
         for page in [identity, servers, signIn, oauth, testing] as [NSViewController] {

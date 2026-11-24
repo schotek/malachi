@@ -51,7 +51,11 @@ LDFLAGS     := -X main.version=$(VERSION)
 # through the environment), and only the daemon gets it. Without it the
 # daemon never checks for updates (docs/plans/update-check.md U5).
 UPDATE_CHANNEL ?=
-LDFLAGS_DAEMON = $(LDFLAGS)$(if $(UPDATE_CHANNEL), -X main.updateChannel=$(UPDATE_CHANNEL))
+# The secret of the built-in Google OAuth client (docs/releasing.md); from
+# the environment in release builds, never in the tree. Without it the
+# daemon has no built-in Google client.
+GOOGLE_OAUTH_CLIENT_SECRET ?=
+LDFLAGS_DAEMON = $(LDFLAGS)$(if $(UPDATE_CHANNEL), -X main.updateChannel=$(UPDATE_CHANNEL))$(if $(GOOGLE_OAUTH_CLIENT_SECRET), -X github.com/schotek/malachi/backend/internal/auth/oauth2flow.googleClientSecret=$(GOOGLE_OAUTH_CLIENT_SECRET))
 
 # Install prefix (scripts/build.sh passes /app for Flatpak). The UI needs the
 # locale directory compiled in to find its .mo files when installed.

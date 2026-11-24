@@ -40,6 +40,14 @@ public enum Distribution: String, Sendable {
     /// link stays.
     public var allowsLocalAgents: Bool { self == .direct }
 
+    /// Whether the app shows the update check at all: the banner of a new
+    /// version, the Updates group of Settings → General, its line in the
+    /// About window and the No Accounts page's sentence about it. Not in
+    /// the App Store build: the App Store updates it, an app from there may
+    /// offer no update of its own (App Review Guideline 2.4.5(vii)), and its
+    /// daemon has no update channel, so it never checks anyway.
+    public var offersUpdates: Bool { self == .direct }
+
     /// Whether an attachment can go to Claude as a file (the attachment's
     /// "Ask the Assistant…": a Cowork session's file, Claude Code's working
     /// directory). Not in the App Store build: the file would lie in the

@@ -139,6 +139,13 @@ type Input struct {
 	// trimmed body fails, the whole body is sanitised as without it.
 	// ModeView only.
 	TrimQuoted bool
+	// FoldQuoted keeps the quoted history TrimQuoted would cut, folded
+	// behind a toggle in the HTML itself (fold.go): Output.QuotedFolded
+	// says whether anything was folded, Text describes what shows with the
+	// fold closed. It takes precedence over TrimQuoted. When nothing would
+	// show outside the fold, or the folded body fails, the whole body is
+	// sanitised as without it. ModeView only.
+	FoldQuoted bool
 }
 
 // Output is the only form of HTML that may cross the API.
@@ -157,6 +164,8 @@ type Output struct {
 	Version string
 	// QuotedTrimmed is set when Input.TrimQuoted cut a quoted history off.
 	QuotedTrimmed bool
+	// QuotedFolded is set when Input.FoldQuoted folded a quoted history.
+	QuotedFolded bool
 }
 
 // Sanitize runs the ruleset. It fails closed: on error the Output carries
@@ -172,10 +181,17 @@ func Sanitize(in Input) (Output, error) {
 // sanitize runs the ruleset, trimming the quoted history first when asked
 // and falling back to the whole body when the trimmed one cannot be shown.
 func sanitize(in Input) (Output, error) {
-	if in.TrimQuoted && in.Mode != ModeView {
+	if (in.TrimQuoted || in.FoldQuoted) && in.Mode != ModeView {
 		return Output{}, errors.New("quote trimming is for the view only")
 	}
-	out, retry, err := run(in, in.TrimQuoted)
+	q := quoteWhole
+	switch {
+	case in.FoldQuoted:
+		q = quoteFold
+	case in.TrimQuoted:
+		q = quoteTrim
+	}
+	out, retry, err := run(in, q)
 	if retry {
 		return sanitizeWhole(in)
 	}
@@ -184,14 +200,24 @@ func sanitize(in Input) (Output, error) {
 
 // sanitizeWhole sanitises the body without trimming it.
 func sanitizeWhole(in Input) (Output, error) {
-	out, _, err := run(in, false)
+	out, _, err := run(in, quoteWhole)
 	return out, err
 }
 
+// quoteMode is what run does with the quoted history.
+type quoteMode int
+
+const (
+	quoteWhole quoteMode = iota // leaves it
+	quoteTrim                   // cuts it off (quote.go)
+	quoteFold                   // folds it (fold.go)
+)
+
 // run is one pass of the ruleset, over the body with its quoted history
-// cut off when trim. retry is set when a cut was made but its output must
-// not be used: the trimmed body failed, or it shows nothing.
-func run(in Input, trim bool) (out Output, retry bool, err error) {
+// as q says. retry is set when a cut or fold was made but its output must
+// not be used: the trimmed or folded body failed, or it shows nothing
+// (outside the fold).
+func run(in Input, q quoteMode) (out Output, retry bool, err error) {
 	switch in.Mode {
 	case ModeView:
 		if in.Policy != api.RemoteBlock && in.Policy != api.RemoteAllow {
@@ -218,7 +244,14 @@ func run(in Input, trim bool) (out Output, retry bool, err error) {
 	}
 	w := &walker{in: in, view: in.Mode == ModeView, cids: make(map[string]bool)}
 	head, body := headAndBody(doc)
-	cut := trim && trimQuoted(body)
+	cut := false
+	switch q {
+	case quoteTrim:
+		cut = trimQuoted(body)
+	case quoteFold:
+		w.fold = foldQuoted(body)
+		cut = w.fold != nil
+	}
 	if head != nil {
 		// Nothing a head holds is content, but its <style> elements are
 		// hoisted and its <link>, <meta> and <base> are counted.
@@ -255,7 +288,7 @@ func run(in Input, trim bool) (out Output, retry bool, err error) {
 		return Output{}, cut, err
 	}
 
-	if cut && !shows(root) {
+	if cut && !shows(root, q == quoteFold) {
 		return Output{}, true, nil
 	}
 
@@ -270,13 +303,14 @@ func run(in Input, trim bool) (out Output, retry bool, err error) {
 	sort.Strings(cids)
 	return Output{
 		HTML:    string(markup),
-		Text:    renderText(root, max),
+		Text:    renderText(root, max, q == quoteFold && cut),
 		Blocked: w.blocked,
 		Links:   links,
 		CIDs:    cids,
 		Version: Version,
 
-		QuotedTrimmed: cut,
+		QuotedTrimmed: cut && q == quoteTrim,
+		QuotedFolded:  cut && q == quoteFold,
 	}, false, nil
 }
 

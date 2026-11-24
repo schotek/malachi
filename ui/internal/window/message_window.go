@@ -88,6 +88,8 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	mw.view.pictures = func() { w.downloadPictures(id, mw.view.say) }
 	mw.quoted.Show(string(id))
 	mw.view.onQuoted = func(on bool) { w.setWindowQuoted(mw, on) }
+	mw.view.foldOpen = mw.quoted.IsRevealed
+	mw.view.onFold = mw.quoted.Set
 
 	// The "msg" action group: the header buttons and the menu bind to it,
 	// so their sensitivity follows the actions. Moves and trash close the

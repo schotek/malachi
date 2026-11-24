@@ -33,8 +33,9 @@ const remoteFetchBudget = 10 * time.Second
 // server only (res.RemotePictures). It never returns an error: the caller
 // already has the text, and a missing formatted version is a state of the
 // result, not a failure of the call. It never contacts the mail server.
-// trim cuts the quoted history off (message.body trimQuoted).
-func (b *Backend) renderHTML(ctx context.Context, m store.Message, policy api.RemoteContentPolicy, trim bool, res *api.MessageBodyResult) {
+// trim cuts the quoted history off (message.body trimQuoted), fold folds
+// it (foldQuoted, which wins).
+func (b *Backend) renderHTML(ctx context.Context, m store.Message, policy api.RemoteContentPolicy, trim, fold bool, res *api.MessageBodyResult) {
 	accountID, id := m.AccountID, m.ID
 	f, err := b.store.OpenMessageRaw(ctx, accountID, id)
 	if err != nil {
@@ -81,7 +82,8 @@ func (b *Backend) renderHTML(ctx context.Context, m store.Message, policy api.Re
 		Policy:        policy,
 		KnownCIDs:     known,
 		MaxOutputSize: viewHTMLCap,
-		TrimQuoted:    trim,
+		TrimQuoted:    trim && !fold,
+		FoldQuoted:    fold,
 	}
 	b.sanitizeInto(ctx, id, in, partOf, res)
 	res.RemotePictures = b.remotePictures(ctx, m, cur, parsed, res.InlineParts)
@@ -155,8 +157,8 @@ func (b *Backend) withholdHTML(res *api.MessageBodyResult, id, why string, err e
 // when the sanitiser refuses it. partOf maps a Content-ID to the part number
 // InlineParts reports; nil when the caller inlined the pictures itself (an
 // attached message, embedded.go). It returns the Content-IDs whose
-// references survived. When the sanitiser cut a quoted history off, the
-// text res already holds is cut to match: by the plain-text rules when
+// references survived. When the sanitiser cut a quoted history off or
+// folded it, the text res already holds is cut to match: by the plain-text rules when
 // they find the quote in it, else replaced by the text of the trimmed HTML,
 // so that it never shows what the HTML hides.
 func (b *Backend) sanitizeInto(ctx context.Context, id string, in sanitize.Input, partOf map[string]string, res *api.MessageBodyResult) []string {
@@ -172,8 +174,9 @@ func (b *Backend) sanitizeInto(ctx context.Context, id string, in sanitize.Input
 	res.Blocked = out.Blocked
 	res.Links = out.Links
 	res.SanitizerVersion = out.Version
-	if out.QuotedTrimmed {
-		res.QuotedTrimmed = true
+	if out.QuotedTrimmed || out.QuotedFolded {
+		res.QuotedTrimmed = out.QuotedTrimmed
+		res.QuotedFolded = out.QuotedFolded
 		if text, ok := sanitize.TrimQuotedText(res.Text); ok {
 			res.Text = text
 		} else {

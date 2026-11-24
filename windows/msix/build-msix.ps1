@@ -51,6 +51,39 @@ $Here = $PSScriptRoot
 $Root = [System.IO.Path]::GetFullPath((Join-Path $Here '..\..'))
 $Utf8 = New-Object System.Text.UTF8Encoding $false
 
+# The manifest's <Resource> elements: en-us, the language of the msgids,
+# first (the package's default), then every language of po\LINGUAS, the
+# ones build.ps1 app copies to locale\. A gettext name becomes a BCP-47 tag
+# (pt_BR is pt-br); Czech stays cs-cz, the tag the Store listing was made
+# under. The Store shows these as the languages the app supports.
+function Get-ManifestResources {
+    $text = [System.IO.File]::ReadAllText((Join-Path $Root 'po\LINGUAS'), $Utf8)
+    $tags = @('en-us')
+    foreach ($line in ($text -split "`r?`n")) {
+        $line = ($line -replace '#.*$', '').Trim()
+        if (-not $line) {
+            continue
+        }
+        foreach ($language in ($line -split '\s+')) {
+            $tag = $language.Replace('_', '-').ToLowerInvariant()
+            if ($tag -eq 'cs') {
+                $tag = 'cs-cz'
+            }
+            if ($tag -notmatch '^[a-z]{2,3}(-[a-z0-9]{2,8})*$') {
+                throw "po\LINGUAS names $language, which is no language tag for the manifest"
+            }
+            if ($tags -notcontains $tag) {
+                $tags += $tag
+            }
+        }
+    }
+    $lines = @()
+    foreach ($tag in $tags) {
+        $lines += ('    <Resource Language="{0}" />' -f $tag)
+    }
+    return ($lines -join "`n")
+}
+
 # The newest Windows SDK tool for this machine (makeappx, signtool).
 function Get-SdkTool([string] $Name) {
     $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
@@ -174,6 +207,7 @@ $manifest = $manifest.Replace('{{Publisher}}', (ConvertTo-XmlText $Publisher))
 $manifest = $manifest.Replace('{{PublisherDisplayName}}', (ConvertTo-XmlText $PublisherDisplayName))
 $manifest = $manifest.Replace('{{Version}}', $packageVersion)
 $manifest = $manifest.Replace('{{Arch}}', $Arch)
+$manifest = $manifest.Replace('{{Resources}}', (Get-ManifestResources))
 if ($manifest -match '\{\{') {
     throw 'AppxManifest.xml has a token build-msix.ps1 does not fill in'
 }

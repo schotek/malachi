@@ -117,6 +117,18 @@ final class MessageWebView: NSView {
     /// height is not known yet.
     var onContentHeight: (@MainActor (CGFloat?) -> Void)?
 
+    /// The user opened (`true`) or closed the fold of the quoted history in
+    /// the document (message.body `quotedFolded`), from the view's script;
+    /// `foldOpen` follows it already.
+    var onFoldToggle: (@MainActor (Bool) -> Void)?
+
+    /// The state the fold of the next document loaded starts in: the
+    /// owner sets it before `load(body:)` from what the user chose for the
+    /// message, and the view keeps it with the user's clicks, so that the
+    /// same body loaded again (its pictures) comes back as the user left it.
+    /// A change by itself loads nothing.
+    var foldOpen = false
+
     /// The view takes the height of its document (a conversation card)
     /// instead of scrolling it in whatever height it is given.
     let sized: Bool
@@ -154,6 +166,7 @@ final class MessageWebView: NSView {
     static let hoverHandlerName = "hover"
     static let linkHandlerName = "link"
     static let sizeHandlerName = "size"
+    static let foldHandlerName = "fold"
     static let statusMaxChars = 512
 
     /// The content rule list: everything blocked, then the application's
@@ -310,6 +323,7 @@ final class MessageWebView: NSView {
             WKUserScript(source: viewerScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
         controller.add(messages, contentWorld: .defaultClient, name: hoverHandlerName)
         controller.add(messages, contentWorld: .defaultClient, name: linkHandlerName)
+        controller.add(messages, contentWorld: .defaultClient, name: foldHandlerName)
         if sized {
             controller.addUserScript(
                 WKUserScript(source: sizeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
@@ -324,7 +338,10 @@ final class MessageWebView: NSView {
     }
 
     /// The view's own script, in its own content world; the document's
-    /// scripts never run. It reports the link under the pointer
+    /// scripts never run. It reports the fold of a quoted history the user
+    /// opened or closed (`toggle` on `details.malachi-quoted`) to the
+    /// `fold` handler, swapping the toggle's tooltip and label, and the
+    /// link under the pointer
     /// (`mouseover`/`mouseout` on `a[href]`) to the `hover` handler, and
     /// takes every click on a link away from WebKit, reporting the `href`
     /// attribute as written and the URL it resolves to, to the `link`
@@ -355,6 +372,16 @@ final class MessageWebView: NSView {
         }, true);
         document.addEventListener('auxclick', function (e) {
             if (anchor(e.target)) { e.preventDefault(); e.stopPropagation(); }
+        }, true);
+        document.addEventListener('toggle', function (e) {
+            var d = e.target;
+            if (!d || !d.matches || !d.matches('details.malachi-quoted')) { return; }
+            var s = d.querySelector('summary');
+            if (s) {
+                var l = s.getAttribute(d.open ? 'data-malachi-hide' : 'data-malachi-show');
+                if (l) { s.setAttribute('title', l); s.setAttribute('aria-label', l); }
+            }
+            post('\(foldHandlerName)', !!d.open);
         }, true);
     })();
     """
@@ -438,7 +465,10 @@ final class MessageWebView: NSView {
             onContentHeight?(nil)
         }
         web.loadHTMLString(
-            viewerDocument(body: body, compact: sized, chat: chat ? Self.chatColours() : nil), baseURL: nil)
+            viewerDocument(
+                body: body, compact: sized, chat: chat ? Self.chatColours() : nil,
+                fold: chat ? nil : .labelled(open: foldOpen)),
+            baseURL: nil)
     }
 
     /// The print (docs/plans/toolbar-customization.md §8, `Printing`): a
@@ -545,6 +575,10 @@ final class MessageWebView: NSView {
         case Self.linkHandlerName:
             guard let dict = body as? [String: Any], let resolved = dict["resolved"] as? String else { return }
             linkActivated(ActivatedLink(raw: dict["raw"] as? String, resolved: resolved))
+        case Self.foldHandlerName:
+            guard let open = body as? Bool, open != foldOpen else { return }
+            foldOpen = open
+            onFoldToggle?(open)
         case Self.sizeHandlerName:
             guard sized || measures, let dict = body as? [String: Any], let h = (dict["h"] as? NSNumber)?.doubleValue else { return }
             sizeReported(css: h, viewport: (dict["v"] as? Bool) ?? false)

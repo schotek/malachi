@@ -159,6 +159,14 @@ public sealed partial class MessageView : UserControl
         Reader.Addresses.RowChanged += (_, kind) => FillAddressRow(kind);
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
+        if (mode != ReaderMode.Pane)
+        {
+            // A message's own window lays the layer under its title bar too
+            // (MessageWindow.xaml LayerBackground), so the view adds none:
+            // its own would start under the title bar and leave a darker
+            // band of Mica above it.
+            Root.Background = null;
+        }
         SignatureBadge.Attach(services, () => HostWindow);
         // The No Accounts page's note on the update check (ui/internal/updates WizardNote).
         UpdateNote.Text = Malachi.Core.Updates.UpdateCheck.WizardNote();
@@ -200,7 +208,9 @@ public sealed partial class MessageView : UserControl
             // serve now (their download ended).
             if (!closed && Reader.Html is { } html)
             {
-                EnsureWeb().Load(html, reload: true);
+                var w = EnsureWeb();
+                w.FoldOpen = Reader.FoldOpen;
+                w.Load(html, reload: true);
             }
         };
 
@@ -511,7 +521,9 @@ public sealed partial class MessageView : UserControl
             case nameof(ReaderController.Html):
                 if (Reader.Html is { } html)
                 {
-                    EnsureWeb().Load(html);
+                    var w = EnsureWeb();
+                    w.FoldOpen = Reader.FoldOpen;
+                    w.Load(html);
                 }
                 else
                 {
@@ -545,6 +557,7 @@ public sealed partial class MessageView : UserControl
                 }
                 QuotedButton.Show(Reader.QuotedOffer);
                 QuotedRow.Visibility = QuotedButton.Visibility;
+                UpdateBodyFit();
                 break;
             case nameof(ReaderController.Page):
                 if (Reader.Page != ReaderPage.Message)
@@ -700,6 +713,7 @@ public sealed partial class MessageView : UserControl
         view.LinkActivated += (_, link) => _ = services.Links.OpenAsync(link, Reader.Links, HostWindow);
         view.Unavailable += (_, _) => Reader.HtmlUnavailable();
         view.ContentHeightChanged += (_, _) => UpdateBodyFit();
+        view.OnFold = Reader.SetFoldOpen;
         HtmlSlot.Children.Add(view);
         web = view;
         return view;
@@ -707,10 +721,13 @@ public sealed partial class MessageView : UserControl
 
     // The body area's height for the page on display (message_view_fit.go
     // bodyFit.apply): the text's, the document's while it is known, the
-    // whole area otherwise; the "•••" follows it (BodyFitPanel).
+    // whole area otherwise; the "•••" follows it (BodyFitPanel). Only the
+    // native "•••" needs the fit: a document whose history is folded in its
+    // own HTML (or that has none) takes the whole area, its page to the
+    // bottom, and an opened fold scrolls inside it.
     private void UpdateBodyFit()
     {
-        var html = web?.ContentHeight;
+        var html = QuotedRow.Visibility == Visibility.Visible ? web?.ContentHeight : null;
         BodyFitArea.Mode = BodyFit.ModeFor(Reader.BodyPage, html);
         BodyFitArea.FitHeight = html ?? 0;
     }

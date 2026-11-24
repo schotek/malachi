@@ -112,6 +112,8 @@ jobs:
         # Release, with the daemon, the MCP bridge and the NativeAOT keyring
         # helper inside (ARM64 cross-built, as in windows.yml).
         working-directory: windows
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 app -Arch ${{ matrix.arch }}
 
       - name: MSIX

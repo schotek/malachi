@@ -163,7 +163,10 @@ func (s *messageService) Get(ctx context.Context, p api.MessageGetParams) (*api.
 // htmlWithheld. The pictures the HTML shows that are on the mail server
 // only are counted (remotePictures), never fetched. Under trimQuoted the
 // sanitiser cuts the quoted history off the HTML (sanitizeInto adjusts
-// the text to match), and a body shown as text only has its text cut.
+// the text to match), under foldQuoted it folds it in the HTML instead,
+// and a body shown as text only has its text cut (trimQuoted); with both,
+// the text that was cut comes along (quotedText), for the client to show
+// under the rest in place.
 func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*api.MessageBodyResult, error) {
 	if p.AccountID == "" || p.MessageID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and messageId are required")
@@ -223,14 +226,19 @@ func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*ap
 		SanitizerVersion: sanitize.Version,
 	}
 	if state == store.BodyFetched && hasHTML {
-		s.b.renderHTML(ctx, m, policy, p.TrimQuoted, res)
+		s.b.renderHTML(ctx, m, policy, p.TrimQuoted, p.FoldQuoted, res)
 	}
 	if p.TrimQuoted && state == store.BodyFetched && (!hasHTML || res.HTMLWithheld) {
-		res.Text, res.QuotedTrimmed = sanitize.TrimQuotedText(res.Text)
+		var quoted string
+		res.Text, quoted, res.QuotedTrimmed = sanitize.SplitQuotedText(res.Text)
+		if p.FoldQuoted {
+			res.QuotedText = quoted
+		}
 	}
 	s.b.log.Debug("message body", "id", m.ID, "bodyState", state, "hasHtml", hasHTML,
 		"remoteContent", policy, "htmlWithheld", res.HTMLWithheld, "blocked", res.Blocked,
-		"remotePictures", res.RemotePictures, "quotedTrimmed", res.QuotedTrimmed)
+		"remotePictures", res.RemotePictures, "quotedTrimmed", res.QuotedTrimmed,
+		"quotedFolded", res.QuotedFolded)
 	return res, nil
 }
 

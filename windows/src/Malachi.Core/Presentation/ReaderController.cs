@@ -316,7 +316,7 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         {
             DraftVisible = IsDraft?.Invoke(s) == true;
         }
-        var reveal = quoted.IsRevealed(s.Id);
+        var reveal = LoadedMessageText.QuotedVariant(cache.Loaded(s.Id), quoted.IsRevealed(s.Id));
         if (cache.Loaded(s.Id) is { Complete: true } complete && complete.QuotedShown == reveal)
         {
             Render(s, complete);
@@ -515,6 +515,18 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
             return;
         }
         renderedLoaded = lm;
+        if (Mode != ReaderMode.Embedded && lm is not null && Current?.Id == s.Id)
+        {
+            // The entry is shared with every other view of the message (the
+            // reading pane, the message's window, a conversation's card):
+            // follow the variant one of them switched it to, or the next Show
+            // would ask for the old one and switch it back. A folded body's
+            // reveal is this view's own fold.
+            if (lm.Body is not { IsQuotedFolded: true })
+            {
+                quoted.Set(s.Id, lm.QuotedShown);
+            }
+        }
         var issue = RenderHeaders(s, lm?.Msg);
         if (issue is { EventBody: { } eventBody })
         {
@@ -536,6 +548,25 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         }
         QuotedOffer = Mode == ReaderMode.Embedded || issue is { EventBody: not null } ? null : LoadedMessageText.QuotedTextOfferFor(lm);
         Rendered?.Invoke(this, new ReaderRender(s, lm));
+    }
+
+    /// <summary>
+    /// Whether the fold of the quoted history in the HTML of the message on
+    /// display is open (<see cref="MessageBodyResult.QuotedFolded"/>): the
+    /// choice the user made in this view, for a document loaded now.
+    /// </summary>
+    public bool FoldOpen => Current is { } s && quoted.IsRevealed(s.Id);
+
+    /// <summary>
+    /// The user opened or closed that fold in the document; the choice holds
+    /// until the view shows another message. Nothing is asked for.
+    /// </summary>
+    public void SetFoldOpen(bool open)
+    {
+        if (Mode != ReaderMode.Embedded && !closed && Current is { } s)
+        {
+            quoted.Set(s.Id, open);
+        }
     }
 
     /// <summary>

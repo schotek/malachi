@@ -18,7 +18,10 @@ import (
 // (OnSize), and while that fits the room the page has (html_probe), the
 // view asks for exactly that height inside html_scroll, which has no
 // minimum height of its own, so the window can still shrink; otherwise the
-// view takes the whole area and scrolls its document itself. The spinner
+// view takes the whole area and scrolls its document itself. It only fits
+// while the "•••" row stands under it (button): a body whose quoted
+// history is folded in its HTML has its toggle in the document, and takes
+// the whole area, so its white page reaches the bottom. The spinner
 // takes the whole area. The view of an attached message, whose builder has
 // no body_filler (and no "•••"), keeps the whole area always.
 type bodyFit struct {
@@ -32,6 +35,8 @@ type bodyFit struct {
 	px, room int
 	// fitted says the HTML view asks for its document's height.
 	fitted bool
+	// button says the "•••" row is under the body (showQuotedButton).
+	button bool
 	// size sets the HTML view's height request (-1 for none); nil before
 	// the view exists. asked is the request it last set.
 	size  func(px int)
@@ -78,12 +83,20 @@ func (f *bodyFit) setHTMLHeight(px int) {
 	f.apply()
 }
 
+// setButton says whether the "•••" row stands under the body.
+func (f *bodyFit) setButton(on bool) {
+	if f.button != on {
+		f.button = on
+		f.apply()
+	}
+}
+
 // apply gives the body area its height for the page on display.
 func (f *bodyFit) apply() {
 	if f.filler == nil {
 		return
 	}
-	fitted := fitsBody(f.px, f.room)
+	fitted := f.button && fitsBody(f.px, f.room)
 	ask := -1
 	if fitted {
 		ask = f.px

@@ -27,7 +27,10 @@ type walker struct {
 	cids     map[string]bool
 	styles   []*html.Node // hoisted <style> elements (view mode)
 	inlined  int          // bytes of data: URIs this walker inlined; outside the output cap
-	err      error
+	// fold is the class the walk gives each node of the folded quoted
+	// history (foldQuoted); nil when nothing is folded.
+	fold map[*html.Node]string
+	err  error
 }
 
 func (w *walker) fail(msg string) {
@@ -186,6 +189,13 @@ func (w *walker) attrs(name string, n *html.Node) ([]html.Attribute, bool) {
 		case remoteAttrs[key]:
 			w.blocked.RemoteImages++
 		case silentAttrs[key] || strings.HasPrefix(key, "data-") || strings.HasPrefix(key, "xlink:") || strings.HasPrefix(key, "xml:"):
+		case key == "class":
+			// The fold's classes are the walk's own (fold.go), added below.
+			if v, ok := cleanAttrValue(key, a.Val); ok {
+				if v, ok = foldClass(v, ""); ok {
+					out = append(out, html.Attribute{Key: key, Val: v})
+				}
+			}
 		case globalAttrs[key] || elemAttrs[name][key] || strings.HasPrefix(key, "aria-"):
 			if v, ok := cleanAttrValue(key, a.Val); ok {
 				out = append(out, html.Attribute{Key: key, Val: v})
@@ -195,10 +205,25 @@ func (w *walker) attrs(name string, n *html.Node) ([]html.Attribute, bool) {
 	if name == "img" && !hasSrc {
 		return nil, false
 	}
+	if fold := w.fold[n]; fold != "" {
+		out = withFoldClass(out, fold)
+	}
 	if name == "a" && hasHref && w.view {
 		out = append(out, html.Attribute{Key: "rel", Val: "noopener noreferrer"})
 	}
 	return out, true
+}
+
+// withFoldClass adds class fold to the attributes of an element of the
+// folded history.
+func withFoldClass(attrs []html.Attribute, fold string) []html.Attribute {
+	for i, a := range attrs {
+		if a.Key == "class" {
+			attrs[i].Val, _ = foldClass(a.Val, fold)
+			return attrs
+		}
+	}
+	return append(attrs, html.Attribute{Key: "class", Val: fold})
 }
 
 // linkHref keeps http(s): and mailto: targets. A relative reference is not

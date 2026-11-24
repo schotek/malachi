@@ -235,6 +235,28 @@ internal sealed partial class ConversationTimelineView : UserControl
     }
 
     /// <summary>
+    /// Whether the fold of the quoted history in the card's HTML is open
+    /// (<see cref="ConversationController.QuotedRevealed"/>), for a document
+    /// loaded now (macOS <c>cardFoldOpen</c>).
+    /// </summary>
+    public bool CardFoldOpen(ConversationCard card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        return ctrl.QuotedRevealed(card.Id);
+    }
+
+    /// <summary>
+    /// The user opened or closed that fold in the card's document; the
+    /// choice holds while the conversation is shown
+    /// (<see cref="ConversationController.SetFoldOpen"/>).
+    /// </summary>
+    public void SetCardFoldOpen(ConversationCard card, bool open)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        ctrl.SetFoldOpen(card.Id, open);
+    }
+
+    /// <summary>
     /// A change of the controller, from the host. While hidden the cards are
     /// only taken out when the conversation goes; what else changed waits
     /// for <see cref="SetShown"/>.

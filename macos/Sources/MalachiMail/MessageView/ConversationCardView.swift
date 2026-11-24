@@ -32,6 +32,12 @@ protocol ConversationCardHost: AnyObject {
     /// The "•••" under the card's body: its quoted history shows (`on`)
     /// or goes again; the choice holds while the conversation is shown.
     func cardSetQuoted(_ card: ConversationCardView, _ on: Bool)
+    /// Whether the fold of the quoted history in the card's HTML is open
+    /// (message.body `quotedFolded`), for a document loaded now.
+    func cardFoldOpen(_ card: ConversationCardView) -> Bool
+    /// The user opened or closed that fold in the document; the choice
+    /// holds while the conversation is shown.
+    func cardSetFoldOpen(_ card: ConversationCardView, _ open: Bool)
     /// Runs `change`, which alters the card's height, keeping what the user
     /// reads in place.
     func cardHeightChanging(_ change: () -> Void)
@@ -1003,6 +1009,7 @@ final class ConversationCardView: NSView {
     private func loadWebView() {
         guard let html, let host else { return }
         let wv = webView ?? makeWebView(host)
+        wv.foldOpen = host.cardFoldOpen(self)
         wv.load(body: html, reload: htmlReload)
         htmlReload = false
     }
@@ -1016,6 +1023,10 @@ final class ConversationCardView: NSView {
         wv.onUnavailable = { [weak self] in self?.htmlUnavailable() }
         wv.onHover = { [weak self] href in self?.host?.hover(href) }
         wv.onHeight = { [weak self] h in self?.webHeightChanged(h) }
+        wv.onFoldToggle = { [weak self] open in
+            guard let self else { return }
+            self.host?.cardSetFoldOpen(self, open)
+        }
         bodyHost.addSubview(wv)
         NSLayoutConstraint.activate([
             wv.topAnchor.constraint(equalTo: bodyHost.topAnchor),

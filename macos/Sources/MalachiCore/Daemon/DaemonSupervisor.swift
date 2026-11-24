@@ -9,9 +9,11 @@ import Foundation
 /// Process management only: it knows where the daemon binary is, which
 /// socket, config and store to hand it and whether it is still alive. It
 /// never speaks the protocol. A daemon that already answers on the socket
-/// (`make run-backend`, a debugger, one left behind by a crash) is used as is
-/// and never stopped: the supervisor only ever signals the process it
-/// started itself.
+/// (`make run-backend`, a debugger) is used as is and never stopped: the
+/// supervisor only ever signals the process it started itself. That one
+/// ends with the app even when the app does not quit cleanly (a crash, a
+/// force quit): its standard input is a pipe whose other end only this
+/// process holds (`Launch.arguments`).
 public actor DaemonSupervisor {
     /// How the daemon is launched. Arguments go to `Process` as an array,
     /// so spaces in the paths need no quoting.
@@ -39,9 +41,12 @@ public actor DaemonSupervisor {
             self.logFile = logFile
         }
 
-        /// The daemon's command line.
+        /// The daemon's command line. `--exit-on-stdin-close` ties the
+        /// daemon to the app: the supervisor holds the other end of a pipe
+        /// on its standard input (`spawn`), which closes however the app
+        /// ends, so the daemon never outlives it.
         public var arguments: [String] {
-            var args = ["--socket", socket, "--config", config, "--store", store]
+            var args = ["--socket", socket, "--config", config, "--store", store, "--exit-on-stdin-close"]
             if let logFile, !logFile.isEmpty {
                 args += ["--log-file", logFile]
             }
@@ -104,6 +109,9 @@ public actor DaemonSupervisor {
     private let launch: Launch?
     private let socket: String
     private var process: Process?
+    /// The write end of the pipe on the started daemon's standard input;
+    /// closing it stops the daemon (`--exit-on-stdin-close`).
+    private var lifeline: FileHandle?
     private var exited = false
     private var exitDescription = ""
     private var stopping = false
@@ -226,6 +234,14 @@ public actor DaemonSupervisor {
         // shuts down cleanly on SIGINT.
         p.standardOutput = FileHandle.standardError
         p.standardError = FileHandle.standardError
+        // The lifeline: the daemon reads its standard input until end of
+        // file. Only this process may hold the write end, so it is marked
+        // close-on-exec: inherited by the daemon (or any other child) it
+        // would keep the pipe open after the app is gone.
+        let pipe = Pipe()
+        let writer = pipe.fileHandleForWriting
+        _ = fcntl(writer.fileDescriptor, F_SETFD, FD_CLOEXEC)
+        p.standardInput = pipe
         p.terminationHandler = { [weak self] proc in
             let what = proc.terminationReason == .uncaughtSignal
                 ? "died of signal \(proc.terminationStatus)"
@@ -235,13 +251,23 @@ public actor DaemonSupervisor {
         do {
             try p.run()
         } catch {
+            try? writer.close()
             failures += 1
             nextTry = .now + backoff()
             throw error
         }
+        dropLifeline()
         process = p
+        lifeline = writer
         exited = false
         spawns += 1
+    }
+
+    /// Closes the lifeline of the daemon started last, which stops it if it
+    /// still runs.
+    func dropLifeline() {
+        try? lifeline?.close()
+        lifeline = nil
     }
 
     private func awaitSocket() async throws {
@@ -268,6 +294,7 @@ public actor DaemonSupervisor {
     /// then SIGKILL. Somebody else's daemon is left alone.
     public func stop() async {
         stopping = true
+        defer { dropLifeline() }
         guard let p = process, !exited, p.isRunning else { return }
         p.terminate()
         let deadline = ContinuousClock.now + Self.stopTimeout
@@ -283,6 +310,7 @@ public actor DaemonSupervisor {
     private func processExited(_ what: String) {
         exited = true
         exitDescription = what
+        dropLifeline()
     }
 
     private func noteExit() {

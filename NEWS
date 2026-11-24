@@ -1,3 +1,19 @@
+Version 0.7.0
+~~~~~~~~~~~~~
+Released: 2026-11-24
+
+Features:
+ * Gmail accounts sign in through Google in the browser, with no app
+   password and no client of your own.
+ * The quoted history under a message opens and closes in place with the
+   "•••" button, at once and without the message jumping.
+
+Bugfixes:
+ * The "•••" of a message's own window is no longer undone by the main
+   window.
+ * The account assistant on macOS keeps one width on every page.
+ * The Microsoft Store edition on Windows names every language it ships.
+
 Version 0.6.0
 ~~~~~~~~~~~~~
 Released: 2026-11-16

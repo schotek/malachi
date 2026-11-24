@@ -470,7 +470,7 @@ public sealed partial class ConversationController : IDisposable
             return;
         }
         var full = (details || s.HasAttachments || BulkReading.WantsOffer(s) || s.Invitation is not null || s.Signature is not null) && !noGet.Contains(id);
-        var reveal = quoted.IsRevealed(id);
+        var reveal = LoadedMessageText.QuotedVariant(loaded.GetValueOrDefault(id), quoted.IsRevealed(id));
         if (loaded.TryGetValue(id, out var held) && held.QuotedShown == reveal && held.BodySettled && (!full || held.Msg is not null))
         {
             return;
@@ -525,6 +525,22 @@ public sealed partial class ConversationController : IDisposable
     public bool QuotedRevealed(MessageId id) => quoted.IsRevealed(id);
 
     /// <summary>
+    /// The user opened (<paramref name="on"/>) or closed the fold of the
+    /// quoted history in the HTML of the card of member <paramref name="id"/>
+    /// (<see cref="MessageBodyResult.QuotedFolded"/>): the choice holds while
+    /// the conversation is shown, so that the card's document, loaded again
+    /// (pictures, a card made live again), comes back as the user left it.
+    /// Nothing is asked for.
+    /// </summary>
+    public void SetFoldOpen(MessageId id, bool on)
+    {
+        if (Member(id) is not null)
+        {
+            quoted.Set(id, on);
+        }
+    }
+
+    /// <summary>
     /// The card's Show Quoted Text (<paramref name="on"/>) or Hide Quoted
     /// Text: the choice holds while the conversation is shown, and the card's
     /// body switches to that variant (the one held, or fetched as
@@ -547,7 +563,11 @@ public sealed partial class ConversationController : IDisposable
     /// The cache has news about member <paramref name="id"/> (its
     /// <see cref="MessageCache.MessageLoaded"/> fan-out: the remote images, a
     /// download): the card's entry is that one from now on. An id that is
-    /// not shown is ignored.
+    /// not shown is ignored. The card follows the variant the entry shows
+    /// now: another view of the message (its own window) may have revealed
+    /// or hidden the quoted history of the entry both share, and asking for
+    /// the old variant on the next <see cref="NeedsBody"/> would switch it
+    /// back under that view.
     /// </summary>
     public void Adopt(MessageId id, LoadedMessage lm)
     {
@@ -555,6 +575,10 @@ public sealed partial class ConversationController : IDisposable
         if (Member(id) is null)
         {
             return;
+        }
+        if (lm.Body is not { IsQuotedFolded: true })
+        {
+            quoted.Set(id, lm.QuotedShown); // a folded body's reveal is the card's own fold
         }
         loaded[id] = lm;
     }

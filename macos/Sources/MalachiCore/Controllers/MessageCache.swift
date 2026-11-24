@@ -278,11 +278,14 @@ public final class MessageCache {
     }
 
     /// The message.body parameters for the variant `quoted` of the body of
-    /// `s`: without `trimQuoted` only for the whole body.
+    /// `s`: without `trimQuoted` only for the whole body. The HTML always
+    /// comes with its quoted history folded (`foldQuoted`), which the view
+    /// opens in place; the variants only matter for a body shown as text.
     private func bodyParams(
         _ s: MessageSummary, quoted: Bool, remoteContent: RemoteContentPolicy? = nil
     ) -> MessageBodyParams {
-        MessageBodyParams(accountId: s.accountId, messageId: s.id, remoteContent: remoteContent, trimQuoted: !quoted)
+        MessageBodyParams(
+            accountId: s.accountId, messageId: s.id, remoteContent: remoteContent, trimQuoted: !quoted, foldQuoted: true)
     }
 
     /// message.get for message `id` of account `accountId` into `lm` (the
@@ -621,7 +624,7 @@ public final class MessageCache {
         let shown = lm.body
         let quoted = lm.quotedShown
         let params = MessageBodyParams(
-            accountId: accountID, messageId: id, remoteContent: picturesPolicy(lm), trimQuoted: !quoted)
+            accountId: accountID, messageId: id, remoteContent: picturesPolicy(lm), trimQuoted: !quoted, foldQuoted: true)
         let client = client
         Task { [weak self] in
             let outcome: Result<MessageBodyResult, any Error>
